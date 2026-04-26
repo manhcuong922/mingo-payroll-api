@@ -1,9 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace MPS.Domain.Entities
 {
     public class PerformanceMetric
@@ -12,6 +6,8 @@ namespace MPS.Domain.Entities
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public decimal Weight { get; set; }
-        public List<Role> TargetRoles { get; set; } = new List<Role>();
+        public int TypePerformanceMetricId { get; set; }
+        public TypePerformanceMetric TypePerformanceMetric { get; set; } = null!;
+        public List<Role> TargetRoles { get; set; } = new();
     }
 }

@@ -28,6 +28,13 @@ public class PerformanceMetricEntityConfiguration : IEntityTypeConfiguration<Per
         builder.Property(e => e.Weight)
             .HasPrecision(5, 2);
 
+        builder.Property(e => e.TypePerformanceMetricId).IsRequired();
+
+        builder.HasOne(e => e.TypePerformanceMetric)
+            .WithMany(t => t.PerformanceMetrics)
+            .HasForeignKey(e => e.TypePerformanceMetricId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasMany(e => e.TargetRoles)
             .WithMany()
             .UsingEntity(join => join.ToTable("PerformanceMetricRoles"));

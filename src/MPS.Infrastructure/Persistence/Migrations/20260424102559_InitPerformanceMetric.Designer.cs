@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace MPS.Infrastructure.Persistence.Migrations
 {
-    [DbContext(typeof(ExampleDbContext))]
+    [DbContext(typeof(AppDbContext))]
     [Migration("20260424102559_InitPerformanceMetric")]
     partial class InitPerformanceMetric
     {
@@ -24,25 +24,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("MPS.Domain.Entities.ExampleEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Examples");
-                });
 
             modelBuilder.Entity("MPS.Domain.Entities.PerformanceMetric", b =>
                 {
@@ -62,6 +43,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int>("TypePerformanceMetricId")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("Weight")
                         .HasPrecision(5, 2)
                         .HasColumnType("decimal(5,2)");
@@ -69,6 +53,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Name");
+
+                    b.HasIndex("TypePerformanceMetricId");
 
                     b.ToTable("PerformanceMetrics", (string)null);
                 });

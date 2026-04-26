@@ -1,11 +1,8 @@
-﻿using MPS.Domain.Interfaces;
 using MediatR;
+using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.PerformanceMetric.Commands;
 
-/// <summary>
-/// Handler xử lý cập nhật PerformanceMetric.
-/// </summary>
 public class PerformanceMetricUpdateCommandHandler
     : IRequestHandler<PerformanceMetricUpdateCommand, bool>
 {
@@ -23,7 +20,8 @@ public class PerformanceMetricUpdateCommandHandler
             Id = request.Id,
             Name = request.Name,
             Description = request.Description,
-            Weight = request.Weight
+            Weight = request.Weight,
+            TypePerformanceMetricId = request.TypePerformanceMetricId
         };
 
         return await _repository.UpdateAsync(entity, request.TargetRoleIds, cancellationToken);

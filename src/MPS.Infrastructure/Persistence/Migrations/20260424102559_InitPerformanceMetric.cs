@@ -1,4 +1,3 @@
-﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,34 +10,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "Examples",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Examples", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "PerformanceMetrics",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    Weight = table.Column<decimal>(type: "decimal(5,2)", precision: 5, scale: 2, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PerformanceMetrics", x => x.Id);
-                });
-
             migrationBuilder.CreateTable(
                 name: "Roles",
                 columns: table => new
@@ -64,6 +35,28 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_TypePerformanceMetrics", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PerformanceMetrics",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
+                    Weight = table.Column<decimal>(type: "decimal(5,2)", precision: 5, scale: 2, nullable: false),
+                    TypePerformanceMetricId = table.Column<int>(type: "int", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PerformanceMetrics", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PerformanceMetrics_TypePerformanceMetrics_TypePerformanceMetricId",
+                        column: x => x.TypePerformanceMetricId,
+                        principalTable: "TypePerformanceMetrics",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -101,6 +94,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 column: "Name");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PerformanceMetrics_TypePerformanceMetricId",
+                table: "PerformanceMetrics",
+                column: "TypePerformanceMetricId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Roles_Name",
                 table: "Roles",
                 column: "Name",
@@ -110,20 +108,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Examples");
-
-            migrationBuilder.DropTable(
-                name: "PerformanceMetricRoles");
-
-            migrationBuilder.DropTable(
-                name: "TypePerformanceMetrics");
-
-            migrationBuilder.DropTable(
-                name: "PerformanceMetrics");
-
-            migrationBuilder.DropTable(
-                name: "Roles");
+            migrationBuilder.DropTable(name: "PerformanceMetricRoles");
+            migrationBuilder.DropTable(name: "PerformanceMetrics");
+            migrationBuilder.DropTable(name: "TypePerformanceMetrics");
+            migrationBuilder.DropTable(name: "Roles");
         }
     }
 }

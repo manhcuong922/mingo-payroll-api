@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MPS.API.Requests.PerformanceMetric;
 using MPS.Application.Features.PerformanceMetric.Commands;
 using MPS.Application.Features.PerformanceMetric.Queries;
 
@@ -40,6 +41,7 @@ public class PerformanceMetricController : ControllerBase
             request.Name,
             request.Description,
             request.Weight,
+            request.TypePerformanceMetricId,
             request.TargetRoleIds);
 
         var id = await _mediator.Send(command, cancellationToken);
@@ -57,6 +59,7 @@ public class PerformanceMetricController : ControllerBase
             request.Name,
             request.Description,
             request.Weight,
+            request.TypePerformanceMetricId,
             request.TargetRoleIds);
 
         var updated = await _mediator.Send(command, cancellationToken);
@@ -67,20 +70,9 @@ public class PerformanceMetricController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
-        var deleted = await _mediator.Send(new PerformanceMetricDeleteCommand(id), cancellationToken);
+        var deleted = await _mediator.Send(
+            new PerformanceMetricDeleteCommand(id), cancellationToken);
         if (!deleted) return NotFound();
         return NoContent();
     }
 }
-
-public sealed record CreatePerformanceMetricRequest(
-    string Name,
-    string Description,
-    decimal Weight,
-    IReadOnlyList<int> TargetRoleIds);
-
-public sealed record UpdatePerformanceMetricRequest(
-    string Name,
-    string Description,
-    decimal Weight,
-    IReadOnlyList<int> TargetRoleIds);

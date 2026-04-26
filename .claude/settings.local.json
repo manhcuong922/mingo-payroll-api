@@ -3,7 +3,9 @@
     "allow": [
       "Bash(dotnet build *)",
       "Bash(dotnet tool *)",
-      "Bash(dotnet ef *)"
+      "Bash(dotnet ef *)",
+      "PowerShell(dotnet build *)",
+      "PowerShell(dotnet ef database *)"
     ]
   }
 }

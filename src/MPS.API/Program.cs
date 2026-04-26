@@ -1,4 +1,7 @@
-﻿using MPS.Infrastructure.DependencyInjection;
+using FluentValidation;
+using MediatR;
+using MPS.Application.Behaviors;
+using MPS.Infrastructure.DependencyInjection;
 using MPS.Infrastructure.Persistence;
 using MPS.API.Middleware;
 using Microsoft.EntityFrameworkCore;
@@ -19,18 +22,24 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // ===== Application Layer =====
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(typeof(MPS.Application.Features.Example.Commands.ExampleCreateCommand).Assembly));
+var applicationAssembly = typeof(MPS.Application.Features.PerformanceMetric.Commands.PerformanceMetricCreateCommand).Assembly;
 
-builder.Services.AddAutoMapper(typeof(MPS.Application.Mappings.ExampleMappingProfile).Assembly);
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(applicationAssembly);
+    cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+});
+
+builder.Services.AddValidatorsFromAssembly(applicationAssembly);
+builder.Services.AddAutoMapper(applicationAssembly);
 
 // ===== Infrastructure Layer =====
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
 
-builder.Services.AddDbContext<ExampleDbContext>(options =>
+builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString, sql =>
-        sql.MigrationsAssembly(typeof(ExampleDbContext).Assembly.FullName)));
+        sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
 
 builder.Services.AddInfrastructure();
 
@@ -39,7 +48,11 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        var allowedOrigins = builder.Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? Array.Empty<string>();
+
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -54,11 +67,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "MPS API v1");
-        c.RoutePrefix = string.Empty; // Swagger UI at root
+        c.RoutePrefix = string.Empty;
     });
 }
 
-app.UseMiddleware<ExampleExceptionMiddleware>();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors();
 app.UseAuthorization();
 app.MapControllers();
