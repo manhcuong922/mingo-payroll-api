@@ -10,6 +10,9 @@ public static class InfrastructureServiceRegistration
     {
         services.AddScoped<IPerformanceMetricRepository, PerformanceMetricRepository>();
         services.AddScoped<ITypePerformanceMetricRepository, TypePerformanceMetricRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IEmployeeInformationRepository, EmployeeInformationRepository>();
+        services.AddScoped<IPositionRepository, PositionRepository>();
         return services;
     }
 }
