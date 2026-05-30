@@ -1,13 +1,9 @@
-﻿using FluentValidation;
+using FluentValidation;
 using MPS.Application.Features.User.Commands;
 using MPS.Domain.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MPS.Application.Features.User.Validators;
+
 public class UserCreateCommandValidator : AbstractValidator<UserCreateCommand>
 {
     public UserCreateCommandValidator(IUserRepository repository)
@@ -15,12 +11,17 @@ public class UserCreateCommandValidator : AbstractValidator<UserCreateCommand>
         RuleFor(x => x.EmployeeCode)
             .NotEmpty().WithMessage("EmployeeCode is required.")
             .MaximumLength(50).WithMessage("EmployeeCode must not exceed 50 characters.")
-            .MustAsync(async (employeeCode, ct) => !await repository.EmployeeCodeExistsAsync(employeeCode, ct))
+            .MustAsync(async (employeeCode, ct) => !await repository.EmployeeCodeExistsAsync(employeeCode, null, ct))
             .WithMessage("EmployeeCode already exists.");
 
         RuleFor(x => x.FullName)
             .NotEmpty().WithMessage("FullName is required.")
             .MaximumLength(200).WithMessage("FullName must not exceed 200 characters.");
+
+        RuleFor(x => x.RoleId)
+            .GreaterThan(0).WithMessage("RoleId is required.")
+            .MustAsync(async (roleId, ct) => await repository.RoleExistsAsync(roleId, ct))
+            .WithMessage("Role does not exist.");
 
         RuleFor(x => x.Username)
             .NotEmpty().WithMessage("Username is required.")
@@ -36,6 +37,7 @@ public class UserCreateCommandValidator : AbstractValidator<UserCreateCommand>
 
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("Password is required.")
+            .MinimumLength(8).WithMessage("Password must be at least 8 characters.")
             .MaximumLength(255).WithMessage("Password must not exceed 255 characters.");
     }
 }

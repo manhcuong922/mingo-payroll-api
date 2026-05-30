@@ -10,10 +10,12 @@ public class AppDbContext : DbContext
     public DbSet<PerformanceMetric> PerformanceMetrics => Set<PerformanceMetric>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<TypePerformanceMetric> TypePerformanceMetrics => Set<TypePerformanceMetric>();
-
     public DbSet<User> Users => Set<User>();
     public DbSet<EmployeeInformation> EmployeeInformations => Set<EmployeeInformation>();
     public DbSet<Position> Positions => Set<Position>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

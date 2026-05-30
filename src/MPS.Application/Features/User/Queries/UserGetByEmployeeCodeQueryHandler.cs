@@ -1,14 +1,10 @@
-﻿using AutoMapper;
+using AutoMapper;
 using MediatR;
 using MPS.Application.DTOs;
 using MPS.Domain.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MPS.Application.Features.User.Queries;
+
 public class UserGetByEmployeeCodeQueryHandler : IRequestHandler<UserGetByEmployeeCodeQuery, UserDto?>
 {
     private readonly IUserRepository _repository;

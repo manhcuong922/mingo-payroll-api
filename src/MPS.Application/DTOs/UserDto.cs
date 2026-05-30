@@ -1,6 +1,7 @@
-﻿namespace MPS.Application.DTOs;
+namespace MPS.Application.DTOs;
 
 public record UserDto(
+    int Id,
     string EmployeeCode,
     string FullName,
     int RoleId,
@@ -9,4 +10,5 @@ public record UserDto(
     string Email,
     DateTime Dob,
     string PhoneNo,
-    int Status);
+    int Status,
+    DateTime? LastLoginAt);

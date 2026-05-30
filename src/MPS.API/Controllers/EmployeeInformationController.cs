@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using MPS.API.Requests.EmployeeInformation;
 using MPS.Application.Features.EmployeeInformation.Commands;
@@ -38,7 +38,7 @@ public class EmployeeInformationController : ControllerBase
         CancellationToken cancellationToken)
     {
         var command = new EmployeeInformationCreateCommand(
-            request.EmployeeCode,
+            request.UserId,
             request.TaxNo,
             request.SocialNo,
             request.BankNumber,
@@ -59,7 +59,7 @@ public class EmployeeInformationController : ControllerBase
     {
         var command = new EmployeeInformationUpdateCommand(
             id,
-            request.EmployeeCode,
+            request.UserId,
             request.TaxNo,
             request.SocialNo,
             request.BankNumber,

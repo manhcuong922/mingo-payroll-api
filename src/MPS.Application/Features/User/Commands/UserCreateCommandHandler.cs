@@ -1,10 +1,9 @@
-﻿using MediatR;
+using MediatR;
 using MPS.Domain.Interfaces;
-
 
 namespace MPS.Application.Features.User.Commands;
 
-public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, string>
+public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, int>
 {
     private readonly IUserRepository _repository;
 
@@ -13,7 +12,7 @@ public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, strin
         _repository = repository;
     }
 
-    public async Task<string> Handle(UserCreateCommand request, CancellationToken cancellationToken)
+    public async Task<int> Handle(UserCreateCommand request, CancellationToken cancellationToken)
     {
         var entity = new Domain.Entities.User
         {
@@ -21,11 +20,12 @@ public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, strin
             FullName = request.FullName,
             RoleId = request.RoleId,
             Username = request.Username,
-            Password = request.Password,
+            PasswordHash = request.Password,
             Email = request.Email,
             Dob = request.Dob,
             PhoneNo = request.PhoneNo,
-            Status = request.Status
+            Status = request.Status,
+            PasswordChangedAt = DateTime.UtcNow,
         };
 
         return await _repository.AddAsync(entity, cancellationToken);

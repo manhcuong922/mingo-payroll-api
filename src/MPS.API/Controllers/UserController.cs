@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using MPS.API.Requests.User;
 using MPS.Application.Features.User.Commands;
@@ -24,7 +24,15 @@ public class UserController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("{employeeCode}")]
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UserGetByIdQuery(id), cancellationToken);
+        if (result is null) return NotFound();
+        return Ok(result);
+    }
+
+    [HttpGet("by-code/{employeeCode}")]
     public async Task<IActionResult> GetByEmployeeCode(string employeeCode, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UserGetByEmployeeCodeQuery(employeeCode), cancellationToken);
@@ -48,18 +56,19 @@ public class UserController : ControllerBase
             request.PhoneNo,
             request.Status);
 
-        var employeeCode = await _mediator.Send(command, cancellationToken);
-        return CreatedAtAction(nameof(GetByEmployeeCode), new { employeeCode }, new { employeeCode });
+        var id = await _mediator.Send(command, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
-    [HttpPut("{employeeCode}")]
+    [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(
-        string employeeCode,
+        int id,
         [FromBody] UpdateUserRequest request,
         CancellationToken cancellationToken)
     {
         var command = new UserUpdateCommand(
-            employeeCode,
+            id,
+            request.EmployeeCode,
             request.FullName,
             request.RoleId,
             request.Username,
@@ -74,10 +83,10 @@ public class UserController : ControllerBase
         return NoContent();
     }
 
-    [HttpDelete("{employeeCode}")]
-    public async Task<IActionResult> Delete(string employeeCode, CancellationToken cancellationToken)
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
-        var deleted = await _mediator.Send(new UserDeleteCommand(employeeCode), cancellationToken);
+        var deleted = await _mediator.Send(new UserDeleteCommand(id), cancellationToken);
         if (!deleted) return NotFound();
         return NoContent();
     }

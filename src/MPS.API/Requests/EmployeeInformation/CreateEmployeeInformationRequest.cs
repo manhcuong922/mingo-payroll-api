@@ -1,6 +1,7 @@
-﻿namespace MPS.API.Requests.EmployeeInformation;
+namespace MPS.API.Requests.EmployeeInformation;
+
 public sealed record CreateEmployeeInformationRequest(
-    string EmployeeCode,
+    int UserId,
     string TaxNo,
     string SocialNo,
     string BankNumber,

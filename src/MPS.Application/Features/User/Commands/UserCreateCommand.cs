@@ -1,12 +1,6 @@
-﻿using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using MediatR;
 
 namespace MPS.Application.Features.User.Commands;
-
 
 public record UserCreateCommand(
     string EmployeeCode,
@@ -17,4 +11,4 @@ public record UserCreateCommand(
     string Email,
     DateTime Dob,
     string PhoneNo,
-    int Status) : IRequest<string>;
+    int Status) : IRequest<int>;

@@ -1,12 +1,8 @@
-﻿using MediatR;
+using MediatR;
 using MPS.Domain.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MPS.Application.Features.EmployeeInformation.Commands;
+
 public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeInformationUpdateCommand, bool>
 {
     private readonly IEmployeeInformationRepository _repository;
@@ -21,7 +17,7 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
         var entity = new Domain.Entities.EmployeeInformation
         {
             Id = request.Id,
-            EmployeeCode = request.EmployeeCode,
+            UserId = request.UserId,
             TaxNo = request.TaxNo,
             SocialNo = request.SocialNo,
             BankNumber = request.BankNumber,

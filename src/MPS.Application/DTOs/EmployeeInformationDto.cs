@@ -1,8 +1,10 @@
-﻿namespace MPS.Application.DTOs;
+namespace MPS.Application.DTOs;
 
 public record EmployeeInformationDto(
     int Id,
+    int UserId,
     string EmployeeCode,
+    string FullName,
     string TaxNo,
     string SocialNo,
     string BankNumber,

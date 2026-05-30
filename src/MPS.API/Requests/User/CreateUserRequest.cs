@@ -1,4 +1,5 @@
-﻿namespace MPS.API.Requests.User;
+namespace MPS.API.Requests.User;
+
 public sealed record CreateUserRequest(
     string EmployeeCode,
     string FullName,
