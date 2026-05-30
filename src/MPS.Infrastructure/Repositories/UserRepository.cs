@@ -110,6 +110,17 @@ public class UserRepository : IUserRepository
         return true;
     }
 
+    public async Task<bool> UpdatePasswordAsync(int userId, string passwordHash, CancellationToken cancellationToken = default)
+    {
+        var existing = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (existing is null) return false;
+
+        existing.PasswordHash = passwordHash;
+        existing.PasswordChangedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         var existing = await _context.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);

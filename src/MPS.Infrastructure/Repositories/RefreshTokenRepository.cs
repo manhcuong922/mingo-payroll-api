@@ -62,4 +62,17 @@ public class RefreshTokenRepository : IRefreshTokenRepository
 
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<int> DeleteExpiredAsync(DateTime cutoff, CancellationToken cancellationToken = default)
+    {
+        var expired = await _context.RefreshTokens
+            .Where(rt => rt.ExpiresAt < cutoff)
+            .ToListAsync(cancellationToken);
+
+        if (expired.Count == 0) return 0;
+
+        _context.RefreshTokens.RemoveRange(expired);
+        await _context.SaveChangesAsync(cancellationToken);
+        return expired.Count;
+    }
 }

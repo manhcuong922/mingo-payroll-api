@@ -17,5 +17,6 @@ public interface IUserRepository
     Task<int> AddAsync(User entity, CancellationToken cancellationToken = default);
     Task<bool> UpdateAsync(User entity, CancellationToken cancellationToken = default);
     Task<bool> UpdateLastLoginAsync(int userId, DateTime loginAt, CancellationToken cancellationToken = default);
+    Task<bool> UpdatePasswordAsync(int userId, string passwordHash, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
 }

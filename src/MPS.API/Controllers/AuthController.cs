@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MPS.API.Requests.Auth;
 using MPS.API.Responses.Auth;
 using MPS.Application.Common.Models;
@@ -22,6 +23,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     public async Task<IActionResult> Login(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
@@ -33,6 +35,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-refresh")]
     public async Task<IActionResult> Refresh(
         [FromBody] RefreshTokenRequest request,
         CancellationToken cancellationToken)
@@ -50,6 +53,18 @@ public sealed class AuthController : ControllerBase
     {
         var command = new LogoutCommand(request.RefreshToken, GetClientIp());
         await _mediator.Send(command, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new ChangePasswordCommand(request.OldPassword, request.NewPassword, GetClientIp());
+        var changed = await _mediator.Send(command, cancellationToken);
+        if (!changed) return BadRequest(new { error = "Failed to change password." });
         return NoContent();
     }
 

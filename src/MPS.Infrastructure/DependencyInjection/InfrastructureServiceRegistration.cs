@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MPS.Application.Common.Interfaces;
 using MPS.Domain.Interfaces;
+using MPS.Infrastructure.BackgroundJobs;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Repositories;
 using MPS.Infrastructure.Security;
@@ -33,6 +34,9 @@ public static class InfrastructureServiceRegistration
 
         // Startup seeding
         services.AddScoped<DatabaseSeeder>();
+
+        // Background jobs
+        services.AddHostedService<RefreshTokenCleanupService>();
 
         return services;
     }
