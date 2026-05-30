@@ -6,7 +6,9 @@
       "Bash(dotnet ef *)",
       "PowerShell(dotnet build *)",
       "PowerShell(dotnet ef database *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(dotnet add *)"
     ]
   }
 }

@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.User.Commands;
@@ -6,10 +7,12 @@ namespace MPS.Application.Features.User.Commands;
 public class UserUpdateCommandHandler : IRequestHandler<UserUpdateCommand, bool>
 {
     private readonly IUserRepository _repository;
+    private readonly IPasswordHasher _passwordHasher;
 
-    public UserUpdateCommandHandler(IUserRepository repository)
+    public UserUpdateCommandHandler(IUserRepository repository, IPasswordHasher passwordHasher)
     {
         _repository = repository;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<bool> Handle(UserUpdateCommand request, CancellationToken cancellationToken)
@@ -21,7 +24,9 @@ public class UserUpdateCommandHandler : IRequestHandler<UserUpdateCommand, bool>
             FullName = request.FullName,
             RoleId = request.RoleId,
             Username = request.Username,
-            PasswordHash = request.Password ?? string.Empty,
+            PasswordHash = string.IsNullOrEmpty(request.Password)
+                ? string.Empty
+                : _passwordHasher.Hash(request.Password),
             Email = request.Email,
             Dob = request.Dob,
             PhoneNo = request.PhoneNo,

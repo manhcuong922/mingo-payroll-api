@@ -1,13 +1,18 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MPS.Application.Common.Interfaces;
 using MPS.Domain.Interfaces;
+using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Security;
 
 namespace MPS.Infrastructure.DependencyInjection;
 
 public static class InfrastructureServiceRegistration
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // Repositories
         services.AddScoped<IPerformanceMetricRepository, PerformanceMetricRepository>();
         services.AddScoped<ITypePerformanceMetricRepository, TypePerformanceMetricRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
@@ -17,6 +22,18 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+
+        // Auth & security
+        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+        services.AddMemoryCache();
+        services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
+        services.AddSingleton<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<IPermissionResolver, PermissionResolver>();
+
+        // Startup seeding
+        services.AddScoped<DatabaseSeeder>();
+
         return services;
     }
 }

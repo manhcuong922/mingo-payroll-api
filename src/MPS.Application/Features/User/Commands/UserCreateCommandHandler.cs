@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.User.Commands;
@@ -6,10 +7,12 @@ namespace MPS.Application.Features.User.Commands;
 public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, int>
 {
     private readonly IUserRepository _repository;
+    private readonly IPasswordHasher _passwordHasher;
 
-    public UserCreateCommandHandler(IUserRepository repository)
+    public UserCreateCommandHandler(IUserRepository repository, IPasswordHasher passwordHasher)
     {
         _repository = repository;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<int> Handle(UserCreateCommand request, CancellationToken cancellationToken)
@@ -20,7 +23,7 @@ public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, int>
             FullName = request.FullName,
             RoleId = request.RoleId,
             Username = request.Username,
-            PasswordHash = request.Password,
+            PasswordHash = _passwordHasher.Hash(request.Password),
             Email = request.Email,
             Dob = request.Dob,
             PhoneNo = request.PhoneNo,
