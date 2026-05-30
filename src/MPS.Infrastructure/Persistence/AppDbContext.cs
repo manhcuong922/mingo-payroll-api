@@ -11,6 +11,10 @@ public class AppDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<TypePerformanceMetric> TypePerformanceMetrics => Set<TypePerformanceMetric>();
 
+    public DbSet<User> Users => Set<User>();
+    public DbSet<EmployeeInformation> EmployeeInformations => Set<EmployeeInformation>();
+    public DbSet<Position> Positions => Set<Position>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
