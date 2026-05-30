@@ -1,8 +1,10 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MPS.API.Authorization;
 using MPS.API.Requests.Position;
 using MPS.Application.Features.Position.Commands;
 using MPS.Application.Features.Position.Queries;
+using MPS.Domain.Constants;
 
 namespace MPS.API.Controllers;
 
@@ -18,6 +20,7 @@ public class PositionController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission(Permissions.PositionReadAll)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new PositionGetAllQuery(), cancellationToken);
@@ -25,6 +28,7 @@ public class PositionController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [HasPermission(Permissions.PositionReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new PositionGetByIdQuery(id), cancellationToken);
@@ -33,6 +37,7 @@ public class PositionController : ControllerBase
     }
 
     [HttpPost]
+    [HasPermission(Permissions.PositionCreateAll)]
     public async Task<IActionResult> Create(
         [FromBody] CreatePositionRequest request,
         CancellationToken cancellationToken)
@@ -42,6 +47,7 @@ public class PositionController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [HasPermission(Permissions.PositionUpdateAll)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdatePositionRequest request,
@@ -53,6 +59,7 @@ public class PositionController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [HasPermission(Permissions.PositionDeleteAll)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var deleted = await _mediator.Send(new PositionDeleteCommand(id), cancellationToken);

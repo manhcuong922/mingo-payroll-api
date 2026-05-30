@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MPS.API.Authorization;
 using MPS.API.Requests.EmployeeInformation;
 using MPS.Application.Features.EmployeeInformation.Commands;
 using MPS.Application.Features.EmployeeInformation.Queries;
+using MPS.Domain.Constants;
 
 namespace MPS.API.Controllers;
 
@@ -18,6 +20,7 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission(Permissions.EmployeeInformationReadAll)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new EmployeeInformationGetAllQuery(), cancellationToken);
@@ -25,6 +28,7 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new EmployeeInformationGetByIdQuery(id), cancellationToken);
@@ -33,6 +37,7 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpPost]
+    [HasPermission(Permissions.EmployeeInformationCreateAll)]
     public async Task<IActionResult> Create(
         [FromBody] CreateEmployeeInformationRequest request,
         CancellationToken cancellationToken)
@@ -52,6 +57,7 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [HasAnyPermission(Permissions.EmployeeInformationUpdateAll, Permissions.EmployeeInformationUpdateSelf)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdateEmployeeInformationRequest request,
@@ -74,6 +80,7 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [HasPermission(Permissions.EmployeeInformationDeleteAll)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var deleted = await _mediator.Send(new EmployeeInformationDeleteCommand(id), cancellationToken);

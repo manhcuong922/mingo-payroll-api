@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MPS.API.Authorization;
 using MPS.API.Requests.User;
 using MPS.Application.Features.User.Commands;
 using MPS.Application.Features.User.Queries;
+using MPS.Domain.Constants;
 
 namespace MPS.API.Controllers;
 
@@ -18,6 +20,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission(Permissions.UserReadAll)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UserGetAllQuery(), cancellationToken);
@@ -25,6 +28,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [HasAnyPermission(Permissions.UserReadAll, Permissions.UserReadSelf)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UserGetByIdQuery(id), cancellationToken);
@@ -33,6 +37,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("by-code/{employeeCode}")]
+    [HasPermission(Permissions.UserReadAll)]
     public async Task<IActionResult> GetByEmployeeCode(string employeeCode, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UserGetByEmployeeCodeQuery(employeeCode), cancellationToken);
@@ -41,6 +46,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost]
+    [HasPermission(Permissions.UserCreateAll)]
     public async Task<IActionResult> Create(
         [FromBody] CreateUserRequest request,
         CancellationToken cancellationToken)
@@ -61,6 +67,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [HasAnyPermission(Permissions.UserUpdateAll, Permissions.UserUpdateSelf)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdateUserRequest request,
@@ -84,6 +91,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [HasPermission(Permissions.UserDeleteAll)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var deleted = await _mediator.Send(new UserDeleteCommand(id), cancellationToken);

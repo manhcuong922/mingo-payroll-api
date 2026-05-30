@@ -11,7 +11,7 @@ public class PerformanceMetricMappingProfile : Profile
 {
     public PerformanceMetricMappingProfile()
     {
-        CreateMap<Role, RoleDto>();
+        CreateMap<Role, RoleSummaryDto>();
         CreateMap<PerformanceMetric, PerformanceMetricDto>();
     }
 }

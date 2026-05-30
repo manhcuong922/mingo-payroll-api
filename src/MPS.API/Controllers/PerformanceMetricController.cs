@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MPS.API.Authorization;
 using MPS.API.Requests.PerformanceMetric;
 using MPS.Application.Features.PerformanceMetric.Commands;
 using MPS.Application.Features.PerformanceMetric.Queries;
+using MPS.Domain.Constants;
 
 namespace MPS.API.Controllers;
 
@@ -18,6 +20,7 @@ public class PerformanceMetricController : ControllerBase
     }
 
     [HttpGet]
+    [HasAnyPermission(Permissions.PerformanceMetricReadAll, Permissions.PerformanceMetricReadSelf)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new PerformanceMetricGetAllQuery(), cancellationToken);
@@ -25,6 +28,7 @@ public class PerformanceMetricController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [HasAnyPermission(Permissions.PerformanceMetricReadAll, Permissions.PerformanceMetricReadSelf)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new PerformanceMetricGetByIdQuery(id), cancellationToken);
@@ -33,6 +37,7 @@ public class PerformanceMetricController : ControllerBase
     }
 
     [HttpPost]
+    [HasPermission(Permissions.PerformanceMetricCreateAll)]
     public async Task<IActionResult> Create(
         [FromBody] CreatePerformanceMetricRequest request,
         CancellationToken cancellationToken)
@@ -49,6 +54,7 @@ public class PerformanceMetricController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [HasPermission(Permissions.PerformanceMetricUpdateAll)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdatePerformanceMetricRequest request,
@@ -68,6 +74,7 @@ public class PerformanceMetricController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [HasPermission(Permissions.PerformanceMetricDeleteAll)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var deleted = await _mediator.Send(

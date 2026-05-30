@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MPS.API.Authorization;
+using MPS.API.Requests.TypePerformanceMetric;
 using MPS.Application.Features.TypePerformanceMetric.Commands;
 using MPS.Application.Features.TypePerformanceMetric.Queries;
-using MPS.API.Requests.TypePerformanceMetric;
+using MPS.Domain.Constants;
 
 namespace MPS.API.Controllers;
 
@@ -18,6 +20,7 @@ public class TypePerformanceMetricController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission(Permissions.TypePerformanceMetricReadAll)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new TypePerformanceMetricGetAllQuery(), cancellationToken);
@@ -25,6 +28,7 @@ public class TypePerformanceMetricController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [HasPermission(Permissions.TypePerformanceMetricReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new TypePerformanceMetricGetByIdQuery(id), cancellationToken);
@@ -33,6 +37,7 @@ public class TypePerformanceMetricController : ControllerBase
     }
 
     [HttpPost]
+    [HasPermission(Permissions.TypePerformanceMetricCreateAll)]
     public async Task<IActionResult> Create(
         [FromBody] CreateTypePerformanceMetricRequest request,
         CancellationToken cancellationToken)
@@ -43,6 +48,7 @@ public class TypePerformanceMetricController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [HasPermission(Permissions.TypePerformanceMetricUpdateAll)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdateTypePerformanceMetricRequest request,
@@ -55,6 +61,7 @@ public class TypePerformanceMetricController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [HasPermission(Permissions.TypePerformanceMetricDeleteAll)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var deleted = await _mediator.Send(

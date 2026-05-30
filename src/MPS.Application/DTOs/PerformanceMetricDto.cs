@@ -6,6 +6,6 @@ public record PerformanceMetricDto(
     string Description,
     decimal Weight,
     int TypePerformanceMetricId,
-    IReadOnlyList<RoleDto> TargetRoles);
+    IReadOnlyList<RoleSummaryDto> TargetRoles);
 
-public record RoleDto(int Id, string Name);
+public record RoleSummaryDto(int Id, string Name);
