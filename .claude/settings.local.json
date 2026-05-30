@@ -8,7 +8,12 @@
       "PowerShell(dotnet ef database *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(dotnet add *)"
+      "Bash(dotnet add *)",
+      "Bash(dotnet list *)",
+      "Bash(curl -s \"https://api.nuget.org/v3-flatcontainer/automapper/index.json\")",
+      "Bash(dotnet new *)",
+      "Bash(dotnet sln *)",
+      "Bash(dotnet test *)"
     ]
   }
 }

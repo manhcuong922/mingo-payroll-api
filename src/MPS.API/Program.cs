@@ -64,7 +64,7 @@ builder.Services.AddMediatR(cfg =>
 });
 
 builder.Services.AddValidatorsFromAssembly(applicationAssembly);
-builder.Services.AddAutoMapper(applicationAssembly);
+builder.Services.AddAutoMapper(cfg => cfg.AddMaps(applicationAssembly));
 
 // ===== Infrastructure Layer =====
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")

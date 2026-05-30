@@ -68,6 +68,30 @@ public sealed class AuthController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _mediator.Send(new ForgotPasswordCommand(request.Email, GetClientIp()), cancellationToken);
+        return Accepted(new { message = "If the email exists, a password reset link has been sent." });
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> ResetPassword(
+        [FromBody] ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new ResetPasswordCommand(request.Token, request.NewPassword, GetClientIp());
+        var ok = await _mediator.Send(command, cancellationToken);
+        if (!ok) return BadRequest(new { error = "Failed to reset password." });
+        return NoContent();
+    }
+
     [HttpGet("me")]
     [Authorize]
     public async Task<IActionResult> Me(CancellationToken cancellationToken)

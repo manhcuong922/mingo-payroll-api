@@ -1,0 +1,73 @@
+using AutoMapper;
+using FluentAssertions;
+using Moq;
+using MPS.Application.Common.Interfaces;
+using MPS.Application.DTOs;
+using MPS.Application.Features.EmployeeInformation.Queries;
+using MPS.Domain.Constants;
+using MPS.Domain.Interfaces;
+using Xunit;
+using Entity = MPS.Domain.Entities.EmployeeInformation;
+
+namespace MPS.Application.Tests.Features.EmployeeInformation;
+
+public sealed class EmployeeInformationGetAllQueryHandlerTests
+{
+    private readonly Mock<IEmployeeInformationRepository> _repo = new();
+    private readonly Mock<IMapper> _mapper = new();
+    private readonly Mock<ICurrentUserService> _currentUser = new();
+
+    private EmployeeInformationGetAllQueryHandler CreateSut() =>
+        new(_repo.Object, _mapper.Object, _currentUser.Object);
+
+    [Fact]
+    public async Task Handle_ReturnsAll_WhenHasReadAll()
+    {
+        var entities = new List<Entity>
+        {
+            new() { Id = 1, UserId = 11 },
+            new() { Id = 2, UserId = 22 },
+        };
+        _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(true);
+        _repo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(entities);
+        _mapper.Setup(m => m.Map<IReadOnlyList<EmployeeInformationDto>>(entities))
+            .Returns(new List<EmployeeInformationDto>
+            {
+                new(1, 11, "", "", "", "", "", 1, "Pos", 0, "", ""),
+                new(2, 22, "", "", "", "", "", 1, "Pos", 0, "", ""),
+            });
+
+        var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Handle_FiltersToSelf_WhenOnlySelfPerm()
+    {
+        var own = new Entity { Id = 5, UserId = 99 };
+        _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
+        _currentUser.SetupGet(c => c.UserId).Returns(99);
+        _repo.Setup(r => r.GetByUserIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(own);
+        _mapper.Setup(m => m.Map<EmployeeInformationDto>(own))
+            .Returns(new EmployeeInformationDto(5, 99, "", "", "", "", "", 1, "Pos", 0, "", ""));
+
+        var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(99);
+        _repo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsEmpty_WhenSelfHasNoRecord()
+    {
+        _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
+        _currentUser.SetupGet(c => c.UserId).Returns(99);
+        _repo.Setup(r => r.GetByUserIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync((Entity?)null);
+
+        var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+}

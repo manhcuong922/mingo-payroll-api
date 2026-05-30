@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MPS.Application.Common.Interfaces;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.BackgroundJobs;
+using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Repositories;
 using MPS.Infrastructure.Security;
@@ -23,6 +24,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 
         // Auth & security
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -31,6 +33,7 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IPermissionResolver, PermissionResolver>();
+        services.AddScoped<IEmailSender, LoggingEmailSender>();
 
         // Startup seeding
         services.AddScoped<DatabaseSeeder>();
