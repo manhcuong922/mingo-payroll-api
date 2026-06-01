@@ -15,6 +15,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Infrastructure.DependencyInjection;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Security;
+using MPS.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,6 +76,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
 
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddHealthChecks()
+    .AddCheck<MinioHealthCheck>("minio", tags: new[] { "storage", "ready" });
 
 // ===== Authentication =====
 var jwtSection = builder.Configuration.GetSection(JwtSettings.SectionName);
@@ -184,5 +188,10 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+app.MapHealthChecks("/health/minio", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = r => r.Name == "minio",
+});
 
 app.Run();

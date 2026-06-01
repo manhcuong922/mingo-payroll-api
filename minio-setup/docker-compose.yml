@@ -1,0 +1,41 @@
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-01-31T20-20-33Z
+    container_name: mps-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: Admin123456
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: mps-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 admin Admin123456 &&
+        (mc mb -p local/mps-storage-dev || true) &&
+        mc anonymous set none local/mps-storage-dev &&
+        (mc admin user add local backend REPLACE_WITH_AT_LEAST_32_BYTE_SECRET_FROM_ENV || true) &&
+        mc admin policy create local backend-rw /policy.json || true &&
+        mc admin policy attach local backend-rw --user backend || true &&
+        echo '=== MinIO bootstrap done ==='
+      "
+    volumes:
+      - ./policy.json:/policy.json:ro
+    restart: "no"
+
+volumes:
+  minio-data:
