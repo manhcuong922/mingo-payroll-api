@@ -7,6 +7,8 @@
 > **Cập nhật lần 2 (2026-05-31):** Tách **bậc lương** (`SalaryGrades`) và **danh mục phụ cấp** (`AllowanceTypes` + `ContractAllowances` N–N) thành catalog riêng để admin tự thêm/sửa qua UI mà không cần điền tay vào HĐ. Bỏ cột `AllowanceJson` và `SalaryAmount` điền tay khỏi `Contracts`.
 >
 > **Cập nhật lần 3 (2026-05-31):** (a) Bỏ trạng thái `PENDING_SIGNATURE` khỏi `Contracts.Status` – workflow đơn giản hoá thành DRAFT → ACTIVE khi HR upload PDF đã ký; (b) tách `ContractType` thành 2 cột `ContractCategory` (DEFINITE/INDEFINITE) + `ContractSubtype` (OFFICIAL/PROBATION); (c) thêm cột `ArchivedAt` để cờ đóng băng HĐ sau 10 năm – mọi API write trên HĐ đã archive trả 409.
+>
+> **Cập nhật lần 4 (2026-06-02):** Bỏ bảng `ContractAuthorizations` và toàn bộ nghiệp vụ liên quan đến NLĐ dưới 18 tuổi – không thuộc scope dự án. Bỏ cột `EmployeeLegalGuardianUserId` và `AuthorizationId` khỏi `Contracts`. Số bảng giảm từ 11 xuống **10 bảng**.
 
 ---
 
@@ -57,7 +59,7 @@ Tôi đi từ **yêu cầu pháp lý** đến **trường dữ liệu** thay vì
 
 ## 2. Tổng quan các bảng mới
 
-> Tổng cộng **11 bảng** (8 bảng nghiệp vụ HĐ + 3 bảng catalog `SalaryGrades`, `AllowanceTypes`, `ContractAllowances`).
+> Tổng cộng **10 bảng** (7 bảng nghiệp vụ HĐ + 3 bảng catalog `SalaryGrades`, `AllowanceTypes`, `ContractAllowances`).
 
 | # | Bảng | Mục đích | Căn cứ pháp lý chính |
 |---|------|---------|----------------------|
@@ -67,11 +69,10 @@ Tôi đi từ **yêu cầu pháp lý** đến **trường dữ liệu** thay vì
 | 4 | `ContractTerminations` | Hồ sơ chấm dứt HĐLĐ + văn bản thông báo | Điều 34, 35, 36, 45 |
 | 5 | `ContractFiles` | Quản lý file PDF **đã ký** lưu trên MinIO (versioning, checksum) | Luật GDĐT 2023 (truy cập + tham chiếu được) |
 | 6 | `ContractTemplates` | Mẫu nội dung dùng để generate text HĐLĐ | (nghiệp vụ nội bộ) |
-| 7 | `ContractAuthorizations` | Lưu giấy ủy quyền (NSDLĐ ủy quyền người khác ký) hoặc văn bản đồng ý của cha mẹ (NLĐ <18) | Điều 18 khoản 3, 4 |
-| 8 | `ContractTerminationReasonRefs` | Bảng tham chiếu 13 lý do chấm dứt (Điều 34) – tách ra để query/báo cáo gọn | Điều 34 |
-| 9 | `SalaryGrades` | Catalog bậc lương cố định của công ty – admin tự thêm/sửa qua UI, HĐ chỉ gán | Điều 93 BLLĐ 2019 (NSDLĐ phải xây dựng thang lương, bảng lương) |
-| 10 | `AllowanceTypes` | Catalog danh mục phụ cấp công ty đang áp dụng – admin tự thêm | Điều 21 1đ; NĐ 145/2020 (phân loại phụ cấp tính/không tính BHXH) |
-| 11 | `ContractAllowances` | Bảng junction N–N giữa `Contracts` và `AllowanceTypes`, kèm số tiền cụ thể từng HĐ | Điều 21 1đ |
+| 7 | `ContractTerminationReasonRefs` | Bảng tham chiếu 13 lý do chấm dứt (Điều 34) – tách ra để query/báo cáo gọn | Điều 34 |
+| 8 | `SalaryGrades` | Catalog bậc lương cố định của công ty – admin tự thêm/sửa qua UI, HĐ chỉ gán | Điều 93 BLLĐ 2019 (NSDLĐ phải xây dựng thang lương, bảng lương) |
+| 9 | `AllowanceTypes` | Catalog danh mục phụ cấp công ty đang áp dụng – admin tự thêm | Điều 21 1đ; NĐ 145/2020 (phân loại phụ cấp tính/không tính BHXH) |
+| 10 | `ContractAllowances` | Bảng junction N–N giữa `Contracts` và `AllowanceTypes`, kèm số tiền cụ thể từng HĐ | Điều 21 1đ |
 
 ---
 
@@ -89,9 +90,7 @@ Tôi đi từ **yêu cầu pháp lý** đến **trường dữ liệu** thay vì
 | `Form` | VARCHAR(20) | NOT NULL | `WRITTEN` / `ELECTRONIC` / `VERBAL` (Điều 14). `VERBAL` chỉ cho HĐ <1 tháng |
 | `EmployeeId` | INT | FK→Users.Id, NOT NULL | NLĐ |
 | `EmployerPartyId` | INT | FK→ContractParties.Id, NOT NULL | Snapshot bên NSDLĐ tại thời điểm ký |
-| `EmployerSignerUserId` | INT | FK→Users.Id, NOT NULL | Người ký phía NSDLĐ (phải thuộc Điều 18 k.3) |
-| `EmployeeLegalGuardianUserId` | INT | FK→Users.Id, NULL | Bắt buộc khi NLĐ <15 hoặc 15–<18 (Điều 18 k.4) |
-| `AuthorizationId` | INT | FK→ContractAuthorizations.Id, NULL | Khi người ký không phải đại diện pháp luật |
+| `EmployerSignerUserId` | INT | FK→Users.Id, NOT NULL | Người ký phía NSDLĐ |
 | `PositionId` | INT | FK→Positions.Id, NOT NULL | Chức danh (Điều 21 1c, 1đ) |
 | `JobDescription` | NVARCHAR(MAX) | NOT NULL | Mô tả công việc (Điều 21 1c) |
 | `WorkLocation` | NVARCHAR(500) | NOT NULL | Địa điểm làm việc (Điều 21 1c) |
@@ -142,7 +141,6 @@ Tôi đi từ **yêu cầu pháp lý** đến **trường dữ liệu** thay vì
 - **Tổ hợp `ContractCategory=INDEFINITE` + `ContractSubtype=PROBATION` không hợp lệ** – thử việc luôn phải có thời hạn xác định (Điều 25 quy định số ngày tối đa).
 - HĐ <1 tháng cũ (alias `SEASONAL_UNDER_1M`) ⇒ map vào `ContractCategory=DEFINITE` + `ContractSubtype=OFFICIAL` với `EffectiveTo - EffectiveFrom < 30 ngày`.
 - Không cho phép ký HĐ XĐ thời hạn (`DEFINITE + OFFICIAL`) lần thứ 3 với cùng 1 NLĐ (Điều 20 k.2c), trừ ngoại lệ Giám đốc DNNN / cao tuổi / cán bộ công đoàn không chuyên trách / lao động nước ngoài.
-- Nếu `EmployeeId.User.Dob` < 18 tuổi ⇒ bắt buộc `EmployeeLegalGuardianUserId` (Điều 18 k.4).
 - `Form=VERBAL` chỉ khi thời hạn HĐ <1 tháng (Điều 14 k.2).
 - `HasProbation=1` ⇒ 5 trường `Probation*` bắt buộc (trừ `ProbationCancelledByParty`); không cho phép `HasProbation=1` khi thời hạn HĐ <1 tháng (Điều 24 k.3). Dùng cho cách (a): thử việc nhúng trong HĐLĐ chính (`ContractSubtype=OFFICIAL`).
 - Trường hợp ký **HĐ thử việc riêng** (Điều 24 k.1 cách b): tạo 1 dòng `Contracts` với `ContractSubtype=PROBATION` (`ContractCategory=DEFINITE`), các trường lương/thời gian chính chính là dữ liệu thử việc; khi PASSED thì tạo HĐLĐ chính thức mới (`ContractSubtype=OFFICIAL`) và link qua `ParentContractId`.
@@ -263,28 +261,7 @@ Tôi đi từ **yêu cầu pháp lý** đến **trường dữ liệu** thay vì
 
 ---
 
-### 3.7. `ContractAuthorizations` – Giấy ủy quyền & văn bản đồng ý của người giám hộ
-Phục vụ 2 nghiệp vụ:
-- NSDLĐ ủy quyền cho người khác ký (Điều 18 k.3 – và **không được ủy quyền lại**).
-- NLĐ 15–<18 tuổi cần “văn bản đồng ý của người đại diện theo pháp luật” (Điều 18 k.4).
-
-| Trường | Kiểu | Ràng buộc | Ghi chú |
-|--------|------|-----------|---------|
-| `Id` | INT | PK | |
-| `AuthorizationType` | VARCHAR(40) | NOT NULL | `EMPLOYER_DELEGATION` / `MINOR_GUARDIAN_CONSENT` / `EMPLOYEE_GROUP_DELEGATION` |
-| `GrantorUserId` | INT | FK→Users.Id, NOT NULL | Người ủy quyền / cha mẹ |
-| `GranteeUserId` | INT | FK→Users.Id, NOT NULL | Người được ủy quyền |
-| `ValidFrom` | DATETIME | NOT NULL | |
-| `ValidTo` | DATETIME | NULL | |
-| `ScopeDescription` | NVARCHAR(1000) | NOT NULL | |
-| `DocumentFileId` | INT | FK→ContractFiles.Id, NOT NULL | Bản scan PDF giấy ủy quyền |
-| `CanReDelegate` | BIT | NOT NULL default 0 | Phải = 0 cho `EMPLOYER_DELEGATION` (Điều 18 k.3 cuối) |
-| `RevokedAt` | DATETIME | NULL | |
-| `CreatedAt` | DATETIME | NOT NULL | |
-
----
-
-### 3.8. `ContractTerminationReasonRefs` – Lookup 13 lý do Điều 34
+### 3.7. `ContractTerminationReasonRefs` – Lookup 13 lý do Điều 34
 Pre-seed sẵn 13 dòng tương ứng 13 khoản của Điều 34 BLLĐ 2019. Lý do tách bảng: nhiều báo cáo HR đếm theo lý do; nếu lưu enum string sẽ khó i18n và khó update khi luật sửa đổi.
 
 | Trường | Kiểu | Ràng buộc | Ghi chú |
@@ -296,7 +273,7 @@ Pre-seed sẵn 13 dòng tương ứng 13 khoản của Điều 34 BLLĐ 2019. L�
 
 ---
 
-### 3.9. `SalaryGrades` – Catalog bậc lương
+### 3.8. `SalaryGrades` – Catalog bậc lương
 **Mục đích:** Admin/HR build sẵn thang/bậc lương của công ty qua UI (vd `SE-1`, `SE-2`, `SE-3`, `MANAGER-1`…). Khi tạo HĐLĐ, chỉ chọn bậc từ dropdown, hệ thống tự snapshot `BaseSalary` vào `Contracts.SalaryAmountSnapshot`. **Căn cứ:** Điều 93 BLLĐ 2019 yêu cầu NSDLĐ xây dựng thang lương, bảng lương làm cơ sở tuyển dụng, sử dụng lao động.
 
 | Trường | Kiểu | Ràng buộc | Ghi chú |
@@ -320,7 +297,7 @@ Pre-seed sẵn 13 dòng tương ứng 13 khoản của Điều 34 BLLĐ 2019. L�
 
 ---
 
-### 3.10. `AllowanceTypes` – Catalog phụ cấp
+### 3.9. `AllowanceTypes` – Catalog phụ cấp
 **Mục đích:** Admin/HR khai báo các loại phụ cấp công ty đang áp dụng (vd "Phụ cấp ăn trưa", "Phụ cấp xăng xe", "Phụ cấp điện thoại", "Phụ cấp trách nhiệm"…). HR có thể thêm/sửa tự do qua UI mà không cần dev migration. **Căn cứ:** Điều 21 1đ BLLĐ 2019 (phụ cấp lương phải ghi rõ trong HĐLĐ); NĐ 145/2020 (phân loại phụ cấp tính/không tính lương đóng BHXH).
 
 | Trường | Kiểu | Ràng buộc | Ghi chú |
@@ -342,7 +319,7 @@ Pre-seed sẵn 13 dòng tương ứng 13 khoản của Điều 34 BLLĐ 2019. L�
 
 ---
 
-### 3.11. `ContractAllowances` – Junction N–N giữa HĐ và phụ cấp
+### 3.10. `ContractAllowances` – Junction N–N giữa HĐ và phụ cấp
 **Mục đích:** Một HĐ có nhiều phụ cấp; một loại phụ cấp xuất hiện trong nhiều HĐ với số tiền khác nhau.
 
 | Trường | Kiểu | Ràng buộc | Ghi chú |
@@ -368,22 +345,19 @@ Pre-seed sẵn 13 dòng tương ứng 13 khoản của Điều 34 BLLĐ 2019. L�
 ## 4. Sơ đồ quan hệ tổng quan
 
 ```
-Users (đã có) ─┬──< Contracts >── ContractParties
-               │        │            (1 pháp nhân → vài dòng, version theo EffectiveFrom)
-               │        │
-               │        ├── SalaryGrades       (catalog bậc lương; HĐ snapshot BaseSalary)
-               │        ├──< ContractAllowances >── AllowanceTypes   (N–N catalog phụ cấp)
-               │        ├──< ContractAppendices
-               │        └──< ContractTerminations >── ContractTerminationReasonRefs
-               │              │
-               │              └──> ContractFiles (WrittenNoticeFile)
-               │
-               └──< ContractAuthorizations
-                        └──> ContractFiles
+Users (đã có) ───< Contracts >── ContractParties
+                       │            (1 pháp nhân → vài dòng, version theo EffectiveFrom)
+                       │
+                       ├── SalaryGrades       (catalog bậc lương; HĐ snapshot BaseSalary)
+                       ├──< ContractAllowances >── AllowanceTypes   (N–N catalog phụ cấp)
+                       ├──< ContractAppendices
+                       └──< ContractTerminations >── ContractTerminationReasonRefs
+                                 │
+                                 └──> ContractFiles (WrittenNoticeFile)
 
 Positions (đã có) ──< SalaryGrades   (optional – gán bậc lương theo chức danh)
 
-Contracts, Appendices, Terminations, Authorizations  ──< ContractFiles
+Contracts, Appendices, Terminations  ──< ContractFiles
    (polymorphic qua TargetType+TargetId, multi-version, lưu PDF đã ký từ module ký bên ngoài)
 
 ContractTemplates >── Contracts  (optional template reference)
@@ -400,8 +374,7 @@ ContractTemplates >── Contracts  (optional template reference)
 1. HR chọn `ContractTemplate` phù hợp → app render text → tạo `Contracts` (`Status=DRAFT`), tham chiếu `ContractParties` đang hiệu lực (dòng có `EffectiveTo IS NULL`).
 2. **Chọn bậc lương:** HR chọn `SalaryGradeId` từ catalog (filter theo `PositionId` nếu có). Hệ thống điền tạm `SalaryAmountSnapshot` = `SalaryGrades.BaseSalary` để preview – chưa đóng băng.
 3. **Chọn phụ cấp:** HR add nhiều dòng `ContractAllowances`, mỗi dòng pick 1 `AllowanceTypeId` + nhập `Amount` (mặc định bằng `AllowanceTypes.DefaultAmount`, có thể sửa).
-4. Nếu người ký bên NSDLĐ không phải đại diện pháp luật → tạo `ContractAuthorizations` + upload PDF giấy ủy quyền vào `ContractFiles` (`TargetType=AUTHORIZATION`).
-5. **HR upload PDF đã ký** (PDF được sinh ra/ký bởi module khác – ngoài phạm vi module này): tạo `ContractFiles` (Version=1, IsCurrent=1); đóng băng snapshot lương (re-read `SalaryGrades.BaseSalary` + `Currency` ghi vào `Contracts.SalaryAmountSnapshot/SalaryCurrencySnapshot`); set `Contracts.SignedAt`, `SignedPlace`, `Status=ACTIVE`. Module hợp đồng chỉ verify SHA-256 của blob; không validate chữ ký số bên trong PDF.
+4. **HR upload PDF đã ký** (PDF được sinh ra/ký bởi module khác – ngoài phạm vi module này): tạo `ContractFiles` (Version=1, IsCurrent=1); đóng băng snapshot lương (re-read `SalaryGrades.BaseSalary` + `Currency` ghi vào `Contracts.SalaryAmountSnapshot/SalaryCurrencySnapshot`); set `Contracts.SignedAt`, `SignedPlace`, `Status=ACTIVE`. Module hợp đồng chỉ verify SHA-256 của blob; không validate chữ ký số bên trong PDF.
 
 ### 5.2. Sửa đổi qua phụ lục (Điều 33)
 1. Một bên gửi yêu cầu sửa đổi → app tạo bản nháp `ContractAppendices` (`Status=DRAFT`), set `NoticeSentAt=NOW()`.
@@ -457,6 +430,8 @@ ContractTemplates >── Contracts  (optional template reference)
 | Lưu PDF đã ký + checksum + version | ✅ | ❌ |
 | Verify SHA-256 blob khi tải về | ✅ | ❌ |
 
+> **Ngoài scope:** Giấy ủy quyền ký hợp đồng và nghiệp vụ NLĐ dưới 18 tuổi – không thuộc phạm vi dự án.
+
 ---
 
 ## 7. Câu hỏi & xác nhận
@@ -472,6 +447,7 @@ ContractTemplates >── Contracts  (optional template reference)
 | 7 | **State machine HĐ** | ✅ Đã trả lời | Bỏ `PENDING_SIGNATURE` – workflow chỉ còn `DRAFT → ACTIVE` (khi HR upload PDF đã ký). State machine 5 trạng thái: `DRAFT/ACTIVE/EXPIRED/TERMINATED/CANCELLED`. Tương tự cho `ContractAppendices.Status`. |
 | 8 | **Tách `ContractType`** | ✅ Đã trả lời | Thay 1 cột enum 4 giá trị bằng 2 cột: `ContractCategory` (DEFINITE/INDEFINITE) × `ContractSubtype` (OFFICIAL/PROBATION). Tổ hợp `INDEFINITE+PROBATION` không hợp lệ – validate ở app. |
 | 9 | **Retention enforcement** | ✅ Đã trả lời | Thêm cột `Contracts.ArchivedAt`. Scheduled job set sau 10 năm từ ngày chấm dứt/hết hạn. Middleware chặn mọi write trên HĐ + bản con khi `ArchivedAt IS NOT NULL` → trả `409 Conflict`. |
+| 10 | **NLĐ dưới 18 tuổi & giấy ủy quyền** | ✅ Đã trả lời | **Ngoài scope dự án** – bỏ bảng `ContractAuthorizations`, bỏ cột `EmployeeLegalGuardianUserId` và `AuthorizationId` khỏi `Contracts`. Hệ thống chỉ hỗ trợ NLĐ ≥18 tuổi. |
 
 ---
 
@@ -510,11 +486,9 @@ ContractTemplates >── Contracts  (optional template reference)
 ### A.2. Thẩm quyền giao kết (Điều 18)
 | Hằng số | Giá trị | Ghi chú |
 |---------|---------|---------|
-| `EMPLOYEE_FULL_CAPACITY_AGE` | 18 | ≥18 tuổi: tự ký HĐLĐ |
-| `EMPLOYEE_GUARDIAN_CONSENT_MIN_AGE` | 15 | 15–<18: tự ký nhưng cần văn bản đồng ý của người đại diện theo PL |
-| `EMPLOYEE_GUARDIAN_CO_SIGN_MAX_AGE` | 15 | <15 tuổi: cả bé và cha mẹ cùng ký |
-| `SEASONAL_GROUP_DELEGATION_MAX_MONTHS` | 12 | HĐ mùa vụ <12 tháng: nhóm NLĐ ≥18 có thể uỷ quyền cho 1 người trong nhóm ký thay |
-| `RE_DELEGATION_ALLOWED` | false | Người được uỷ quyền KHÔNG được uỷ quyền lại |
+| `EMPLOYEE_FULL_CAPACITY_AGE` | 18 | NLĐ phải ≥18 tuổi (scope dự án chỉ hỗ trợ NLĐ đủ năng lực hành vi) |
+
+> **Loại khỏi scope:** Uỷ quyền ký HĐ, NLĐ 15–<18 tuổi và NLĐ <15 tuổi – không thuộc phạm vi dự án.
 
 ### A.3. Loại HĐLĐ (Điều 20)
 | Hằng số | Giá trị | Ghi chú |
@@ -630,10 +604,7 @@ public static class LaborLawConstants
 
     public static class SigningAuthority
     {
-        public const int EmployeeFullCapacityAge = 18;
-        public const int EmployeeGuardianConsentMinAge = 15;
-        public const int SeasonalGroupDelegationMaxMonths = 12;
-        public const bool ReDelegationAllowed = false;
+        public const int EmployeeFullCapacityAge = 18; // NLĐ phải ≥18 tuổi
     }
 
     public static class ContractDuration

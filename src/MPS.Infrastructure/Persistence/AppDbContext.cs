@@ -18,6 +18,18 @@ public class AppDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
+    // Contract module
+    public DbSet<ContractParty> ContractParties => Set<ContractParty>();
+    public DbSet<ContractTemplate> ContractTemplates => Set<ContractTemplate>();
+    public DbSet<ContractTerminationReasonRef> ContractTerminationReasonRefs => Set<ContractTerminationReasonRef>();
+    public DbSet<SalaryGrade> SalaryGrades => Set<SalaryGrade>();
+    public DbSet<AllowanceType> AllowanceTypes => Set<AllowanceType>();
+    public DbSet<ContractFile> ContractFiles => Set<ContractFile>();
+    public DbSet<Contract> Contracts => Set<Contract>();
+    public DbSet<ContractAllowance> ContractAllowances => Set<ContractAllowance>();
+    public DbSet<ContractAppendix> ContractAppendices => Set<ContractAppendix>();
+    public DbSet<ContractTermination> ContractTerminations => Set<ContractTermination>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
