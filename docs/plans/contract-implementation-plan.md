@@ -3,7 +3,9 @@
 **Status:** 📋 **PLANNED** (chưa bắt đầu code)
 **Project:** mingo-payroll-api (.NET 8, Clean Architecture, EF Core Code-First, MediatR CQRS)
 **Branch dự kiến:** `feature/CON01-contract-management`
-**Last updated:** 2026-05-31
+**Last updated:** 2026-06-02
+
+> **Cập nhật 2026-06-02:** Đồng bộ với `CONTRACT_DB_PLAN.md` (Cập nhật lần 4) – bỏ bảng `ContractAuthorizations` và toàn bộ nghiệp vụ NLĐ dưới 18 tuổi / giấy uỷ quyền (ngoài scope dự án). Số bảng giảm từ **11 → 10**; số entity / config / DbSet và các deliverable phase 1-2 cập nhật tương ứng. Phase 6 không còn endpoint authorization.
 
 ---
 
@@ -13,7 +15,7 @@
 
 | Tài liệu | Mục đích |
 |----------|----------|
-| `CONTRACT_DB_PLAN.md` | Thiết kế DB chi tiết (11 bảng, business rules theo BLLĐ 2019) |
+| `CONTRACT_DB_PLAN.md` | Thiết kế DB chi tiết (10 bảng, business rules theo BLLĐ 2019) |
 | `docs/plans/auth-implementation-plan.md` | Pattern shipped trước đó: CQRS + MediatR + FluentValidation + permission-based authz + `Resource.Action.Scope` |
 | `docs/auth/README.md` | Permission matrix hiện tại (32 perms, 7 system roles) |
 | `src/MPS.Domain/Constants/Permissions.cs` | Constants pattern – cần extend cho module này |
@@ -38,6 +40,7 @@
 - Payroll calculation từ HĐ → module payroll riêng
 - Full-text search HĐ → có thể thêm Elastic ở phase sau, scope này chỉ dùng SQL Server FTS nếu cần
 - Đa pháp nhân → chỉ 1 `ContractParty` active mỗi thời điểm
+- **NLĐ dưới 18 tuổi & giấy uỷ quyền ký HĐ** → không thuộc scope dự án; hệ thống chỉ hỗ trợ NLĐ đủ năng lực hành vi (≥18 tuổi). Bảng `ContractAuthorizations` đã bị loại; không có cột `EmployeeLegalGuardianUserId` / `AuthorizationId` trong `Contracts`.
 
 ### 0.3. Tiền đề kỹ thuật cần xác nhận trước Phase 1
 
@@ -108,7 +111,7 @@ Theo deviation #3 của auth module: list endpoint khi user chỉ có `.Self` �
 
 ## 2. Phase 1 — Domain entities + LaborLawConstants
 
-**Mục tiêu:** Có đầy đủ 11 entity classes + constants file, build được, chưa cần migration.
+**Mục tiêu:** Có đầy đủ 10 entity classes + constants file, build được, chưa cần migration.
 
 ### 2.1. Entities cần tạo trong `src/MPS.Domain/Entities/`
 
@@ -118,11 +121,10 @@ Theo deviation #3 của auth module: list endpoint khi user chỉ có `.Self` �
 4. `ContractTermination.cs` – §3.4
 5. `ContractFile.cs` – §3.5 (polymorphic via `TargetType`+`TargetId`)
 6. `ContractTemplate.cs` – §3.6
-7. `ContractAuthorization.cs` – §3.7
-8. `ContractTerminationReasonRef.cs` – §3.8 (seed-only lookup)
-9. `SalaryGrade.cs` – §3.9
-10. `AllowanceType.cs` – §3.10
-11. `ContractAllowance.cs` – §3.11 (junction)
+7. `ContractTerminationReasonRef.cs` – §3.7 (seed-only lookup)
+8. `SalaryGrade.cs` – §3.8
+9. `AllowanceType.cs` – §3.9
+10. `ContractAllowance.cs` – §3.10 (junction)
 
 ### 2.2. Enums (`src/MPS.Domain/Enums/Contract/`)
 
@@ -137,8 +139,7 @@ ProbationResultStatus{ InProgress, Passed, Failed, Cancelled }
 AppendixType         { Detail, Amendment }
 AppendixStatus       { Draft, Active, Superseded }
 TerminationParty     { Employee, Employer, Mutual, AutoExpiry, ByLaw }
-FileTargetType       { Contract, Appendix, Termination, Authorization }
-AuthorizationType    { EmployerDelegation, MinorGuardianConsent, EmployeeGroupDelegation }
+FileTargetType       { Contract, Appendix, Termination }
 ```
 
 > Lưu enum dưới dạng **string** trong DB (`HasConversion<string>()`) – dễ debug, dễ migrate khi luật sửa đổi mà không phải đổi int code.
@@ -153,7 +154,7 @@ Append 27 perms mới vào `Permissions.cs` + `PermissionIds.cs` (IDs 33–59). 
 
 ### 2.5. Deliverables Phase 1
 
-- [ ] 11 entity files + 12 enum files + `LaborLawConstants.cs`
+- [ ] 10 entity files + 11 enum files + `LaborLawConstants.cs`
 - [ ] `Permissions.cs` extend (32 → 59 perms)
 - [ ] `dotnet build` pass 0 errors 0 warnings
 - [ ] **CHƯA** tạo migration (sẽ làm ở Phase 2)
@@ -162,11 +163,11 @@ Append 27 perms mới vào `Permissions.cs` + `PermissionIds.cs` (IDs 33–59). 
 
 ## 3. Phase 2 — EF configurations + migration + seed
 
-**Mục tiêu:** Migration mới tạo 11 bảng + seed lookup data + 27 permission rows + 50+ role-permission mappings.
+**Mục tiêu:** Migration mới tạo 10 bảng + seed lookup data + 27 permission rows + 50+ role-permission mappings.
 
 ### 3.1. Entity configurations (`src/MPS.Infrastructure/Persistence/Configurations/`)
 
-Tạo 11 file `*EntityConfiguration.cs` theo pattern hiện có. Lưu ý:
+Tạo 10 file `*EntityConfiguration.cs` theo pattern hiện có. Lưu ý:
 
 - **`Contract`**: index `(EmployeeId, Status)`, unique `(ContractNo)`, index `(EffectiveFrom, EffectiveTo)` cho báo cáo HĐ sắp hết hạn, index `(ArchivedAt)` filter cho job + middleware
 - **`ContractFile`**: index `(TargetType, TargetId, IsCurrent)` cho lookup file hiện hành
@@ -219,11 +220,11 @@ dotnet ef migrations add AddContractModule \
 
 ### 3.5. Deliverables Phase 2
 
-- [ ] 11 entity config files
+- [ ] 10 entity config files
 - [ ] Migration `AddContractModule` apply sạch trên DB rỗng
 - [ ] Seed 13 termination reasons + 27 perms + role-perm mappings
 - [ ] Verify bằng query: SELECT từ mỗi bảng mới đều OK
-- [ ] `DbContext` exposed 11 `DbSet<>` mới
+- [ ] `DbContext` exposed 10 `DbSet<>` mới
 
 ---
 
@@ -340,7 +341,6 @@ Secret keys (`AccessKey`, `SecretKey`) → User Secrets dev / env var prod (theo
 | Contract | `contracts/{year}/{month}/{contractNo}/v{version}.pdf` |
 | Appendix | `appendices/{contractNo}/A{appendixNo}-v{version}.pdf` |
 | Termination notice | `terminations/{contractNo}/notice-v{version}.pdf` |
-| Authorization | `authorizations/{authId}/v{version}.pdf` |
 
 ### 5.5. Deliverables Phase 4
 
@@ -385,8 +385,7 @@ Secret keys (`AccessKey`, `SecretKey`) → User Secrets dev / env var prod (theo
 
 **Handler level (cần I/O):**
 - `EmployeeId` tồn tại + `User.Status == Active`
-- `Employee.User.Dob` < 18 → bắt buộc `EmployeeLegalGuardianUserId`
-- `Employee.User.Dob` < 15 → cảnh báo (Phase 1 chưa block – cần xác nhận có business case này không)
+- `Employee.User.Dob` ⇒ tuổi ≥ 18 tại `EffectiveFrom` (Điều 18 BLLĐ + scope dự án). Nếu <18 → reject với error code `EMPLOYEE_UNDER_AGE` (không phải warning) – module không hỗ trợ NLĐ chưa thành niên.
 - `EmployerPartyId` đang active (`EffectiveTo IS NULL`)
 - `SalaryGradeId` `IsActive=true`
 - `AllowanceTypeId` mỗi loại `IsActive=true`, không trùng
@@ -432,21 +431,7 @@ ContractListItemResponse (slim), ContractAllowanceRequest/Response
 6. Set `Status=Active`, `SignedAt`, `SignedPlace`, `UpdatedAt=NOW()`.
 7. Transaction commit.
 
-### 7.3. Authorization flow (ContractAuthorizations)
-
-Nếu `Contract.AuthorizationId` có giá trị:
-- Validate `ContractAuthorization.RevokedAt IS NULL` và `ValidFrom ≤ NOW() ≤ ValidTo`
-- Validate `CanReDelegate=false` nếu `AuthorizationType=EmployerDelegation`
-
-CRUD endpoint riêng cho `ContractAuthorizations`:
-
-| Method | Route | Permission |
-|--------|-------|-----------|
-| POST | `/api/contract-authorizations` (upload kèm PDF giấy ủy quyền) | `Contract.Create.All` |
-| GET | `/api/contract-authorizations?grantorUserId=&type=` | `Contract.Read.All` |
-| POST | `/api/contract-authorizations/{id}/revoke` | `Contract.Cancel.All` |
-
-### 7.4. Re-upload (sửa sai sau khi đã ký)
+### 7.3. Re-upload (sửa sai sau khi đã ký)
 
 Trường hợp HR phát hiện PDF sai sau khi activate → endpoint riêng:
 
@@ -456,9 +441,9 @@ Trường hợp HR phát hiện PDF sai sau khi activate → endpoint riêng:
 
 Flow: upload version mới, set `Version=N+1, IsCurrent=1`; row cũ `IsCurrent=0` (giữ history). **Không** cho phép nếu `Status=Archived`.
 
-### 7.5. Deliverables Phase 6
+### 7.4. Deliverables Phase 6
 
-- [ ] 1 activate endpoint + 3 authorization endpoint + 1 replace endpoint
+- [ ] 1 activate endpoint + 1 replace endpoint
 - [ ] Stream upload (không buffer full PDF vào RAM)
 - [ ] Rate limit 5 upload/phút/user (theo pattern rate limit ở auth module)
 - [ ] Integration test full flow: create draft → activate → verify snapshot frozen + state Active + ContractFile exists
@@ -662,7 +647,7 @@ Phase 4 (MinIO infra) ─────┤
    ↓                       │
 Phase 5 (Contract Draft) ──┘
    ↓
-Phase 6 (Activate + Authorization)
+Phase 6 (Activate signed PDF)
    ↓
 Phase 7 (Appendix)
    ↓
@@ -689,6 +674,7 @@ Phase 3, 4, 5 có thể song song nếu đủ người (3 và 4 độc lập; 5 
 | 6 | Soft-delete catalog hay hard-delete? | Soft (set `IsActive=0`) nếu có HĐ tham chiếu, hard nếu chưa từng dùng. |
 | 7 | Multi-tenant tương lai? | Không Phase 1-10. Schema giữ 1 pháp nhân. |
 | 8 | Lưu lịch sử `SalaryGrade.BaseSalary` khi update không? | Không – HĐ đã snapshot tại thời điểm activate, đủ. Nếu cần phân tích trend lương → BI job đọc audit log riêng (out of scope). |
+| 9 | Có hỗ trợ NLĐ <18 tuổi không? | **Không** – ngoài scope dự án (theo CONTRACT_DB_PLAN §7 Q10). Validate tuổi ≥ 18 ở handler create/update, reject với code `EMPLOYEE_UNDER_AGE`. Không có bảng `ContractAuthorizations`. |
 
 ---
 
@@ -708,7 +694,7 @@ Phase 3, 4, 5 có thể song song nếu đủ người (3 và 4 độc lập; 5 
 
 ## 15. Success criteria
 
-- [ ] DB schema 11 bảng tạo sạch + 13 termination reason refs + 27 perm + role-perm mapping seed
+- [ ] DB schema 10 bảng tạo sạch + 13 termination reason refs + 27 perm + role-perm mapping seed
 - [ ] HR/Admin tạo được catalog (≥ 5 grade, ≥ 5 allowance, ≥ 1 template, 1 party active)
 - [ ] HR tạo HĐ Draft → upload PDF → Active + snapshot frozen
 - [ ] HR ký phụ lục với 3-day notice rule, không sửa thời hạn

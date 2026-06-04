@@ -16,9 +16,9 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(e => e.ContractNo).HasMaxLength(50).IsRequired();
         builder.HasIndex(e => e.ContractNo).IsUnique();
 
-        builder.Property(e => e.ContractCategory).HasMaxLength(20).IsRequired();
-        builder.Property(e => e.ContractSubtype).HasMaxLength(20).IsRequired();
-        builder.Property(e => e.Form).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.ContractCategory).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.ContractSubtype).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.Form).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.JobDescription).IsRequired();
         builder.Property(e => e.WorkLocation).HasMaxLength(500).IsRequired();
         builder.Property(e => e.EffectiveFrom).IsRequired();
@@ -26,8 +26,8 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
 
         builder.Property(e => e.SalaryAmountSnapshot).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.SalaryCurrencySnapshot).HasMaxLength(3).IsRequired();
-        builder.Property(e => e.SalaryFormType).HasMaxLength(20).IsRequired();
-        builder.Property(e => e.SalaryPayCycle).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.SalaryFormType).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.SalaryPayCycle).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.PromotionPolicy);
         builder.Property(e => e.WorkingTimeJson).IsRequired();
         builder.Property(e => e.PpePolicy).HasMaxLength(1000);
@@ -37,14 +37,14 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(e => e.TrainingPolicy);
         builder.Property(e => e.ConfidentialityClause);
         builder.Property(e => e.ContractText).IsRequired();
-        builder.Property(e => e.Status).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.ConvertedFromDefiniteFlag).IsRequired().HasDefaultValue(false);
 
         builder.Property(e => e.HasProbation).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.ProbationStartDate);
         builder.Property(e => e.ProbationEndDate);
         builder.Property(e => e.ProbationSalary).HasColumnType("decimal(18,2)");
-        builder.Property(e => e.ProbationResultStatus).HasMaxLength(20);
+        builder.Property(e => e.ProbationResultStatus).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.ProbationResultNotifiedAt);
         builder.Property(e => e.ProbationCancelledByParty).HasMaxLength(10);
 
@@ -56,6 +56,7 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
 
         builder.HasIndex(e => new { e.EmployeeId, e.Status });
         builder.HasIndex(e => new { e.EffectiveFrom, e.EffectiveTo });
+        builder.HasIndex(e => e.ArchivedAt);
 
         builder.HasOne(e => e.Employee)
             .WithMany()

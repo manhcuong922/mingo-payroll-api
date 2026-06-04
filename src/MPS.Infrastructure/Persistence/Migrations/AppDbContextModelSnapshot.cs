@@ -250,6 +250,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ArchivedAt");
+
                     b.HasIndex("ContractNo")
                         .IsUnique();
 
@@ -640,6 +642,99 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ContractTerminationReasonRefs", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Code = "ART34_C1_EXPIRY",
+                            Description = "Hết hạn HĐLĐ (trừ k.4 Điều 177).",
+                            RequiresWrittenNotice = true
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Code = "ART34_C2_WORK_COMPLETED",
+                            Description = "Đã hoàn thành công việc theo HĐLĐ.",
+                            RequiresWrittenNotice = true
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Code = "ART34_C3_MUTUAL_AGREEMENT",
+                            Description = "Hai bên thỏa thuận chấm dứt HĐLĐ.",
+                            RequiresWrittenNotice = true
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Code = "ART34_C4_CRIMINAL_SENTENCE",
+                            Description = "NLĐ bị kết án tù không hưởng án treo / tử hình / cấm làm công việc.",
+                            RequiresWrittenNotice = false
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Code = "ART34_C5_FOREIGNER_DEPORTED",
+                            Description = "NLĐ là người nước ngoài bị trục xuất.",
+                            RequiresWrittenNotice = false
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Code = "ART34_C6_EMPLOYEE_DEATH_OR_INCAPACITY",
+                            Description = "NLĐ chết / Tòa tuyên mất năng lực hành vi / mất tích / đã chết.",
+                            RequiresWrittenNotice = false
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Code = "ART34_C7_EMPLOYER_DEATH_OR_DISSOLVED",
+                            Description = "NSDLĐ cá nhân chết / mất năng lực hành vi; tổ chức chấm dứt hoạt động.",
+                            RequiresWrittenNotice = false
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Code = "ART34_C8_DISCIPLINARY_DISMISSAL",
+                            Description = "NLĐ bị xử lý kỷ luật sa thải.",
+                            RequiresWrittenNotice = false
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Code = "ART34_C9_EMPLOYEE_UNILATERAL",
+                            Description = "NLĐ đơn phương chấm dứt HĐLĐ (Điều 35).",
+                            RequiresWrittenNotice = true
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Code = "ART34_C10_EMPLOYER_UNILATERAL",
+                            Description = "NSDLĐ đơn phương chấm dứt HĐLĐ (Điều 36).",
+                            RequiresWrittenNotice = true
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Code = "ART34_C11_EMPLOYER_LAYOFF",
+                            Description = "NSDLĐ cho NLĐ thôi việc (Điều 42, 43).",
+                            RequiresWrittenNotice = true
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Code = "ART34_C12_WORK_PERMIT_EXPIRED",
+                            Description = "Giấy phép lao động hết hiệu lực (Điều 156).",
+                            RequiresWrittenNotice = true
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Code = "ART34_C13_PROBATION_FAILED",
+                            Description = "Thỏa thuận thử việc không đạt / một bên hủy thỏa thuận thử việc.",
+                            RequiresWrittenNotice = true
+                        });
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.EmployeeInformation", b =>
@@ -1097,6 +1192,294 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "Force logout user khác.",
                             Resource = "RefreshToken",
                             Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 33,
+                            Action = "Read",
+                            Code = "Contract.Read.All",
+                            Description = "Xem tất cả HĐLĐ.",
+                            Resource = "Contract",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 34,
+                            Action = "Read",
+                            Code = "Contract.Read.Self",
+                            Description = "Xem HĐLĐ của chính mình.",
+                            Resource = "Contract",
+                            Scope = "Self"
+                        },
+                        new
+                        {
+                            Id = 35,
+                            Action = "Create",
+                            Code = "Contract.Create.All",
+                            Description = "Tạo HĐLĐ mới (DRAFT).",
+                            Resource = "Contract",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 36,
+                            Action = "Update",
+                            Code = "Contract.Update.All",
+                            Description = "Cập nhật HĐLĐ ở trạng thái DRAFT.",
+                            Resource = "Contract",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 37,
+                            Action = "Delete",
+                            Code = "Contract.Delete.All",
+                            Description = "Xóa HĐLĐ DRAFT.",
+                            Resource = "Contract",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 38,
+                            Action = "Activate",
+                            Code = "Contract.Activate.All",
+                            Description = "Upload PDF đã ký và kích hoạt HĐLĐ (DRAFT → ACTIVE).",
+                            Resource = "Contract",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 39,
+                            Action = "Cancel",
+                            Code = "Contract.Cancel.All",
+                            Description = "Hủy HĐLĐ DRAFT (DRAFT → CANCELLED).",
+                            Resource = "Contract",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 40,
+                            Action = "Read",
+                            Code = "ContractAppendix.Read.All",
+                            Description = "Xem phụ lục HĐLĐ của bất kỳ HĐ nào.",
+                            Resource = "ContractAppendix",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 41,
+                            Action = "Read",
+                            Code = "ContractAppendix.Read.Self",
+                            Description = "Xem phụ lục HĐLĐ của chính mình.",
+                            Resource = "ContractAppendix",
+                            Scope = "Self"
+                        },
+                        new
+                        {
+                            Id = 42,
+                            Action = "Create",
+                            Code = "ContractAppendix.Create.All",
+                            Description = "Tạo phụ lục HĐLĐ (DRAFT).",
+                            Resource = "ContractAppendix",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 43,
+                            Action = "Activate",
+                            Code = "ContractAppendix.Activate.All",
+                            Description = "Upload PDF phụ lục đã ký và áp dụng thay đổi.",
+                            Resource = "ContractAppendix",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 44,
+                            Action = "Read",
+                            Code = "ContractTermination.Read.All",
+                            Description = "Xem hồ sơ chấm dứt HĐLĐ của bất kỳ HĐ nào.",
+                            Resource = "ContractTermination",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 45,
+                            Action = "Read",
+                            Code = "ContractTermination.Read.Self",
+                            Description = "Xem hồ sơ chấm dứt HĐLĐ của chính mình.",
+                            Resource = "ContractTermination",
+                            Scope = "Self"
+                        },
+                        new
+                        {
+                            Id = 46,
+                            Action = "Create",
+                            Code = "ContractTermination.Create.All",
+                            Description = "Tạo hồ sơ chấm dứt HĐLĐ.",
+                            Resource = "ContractTermination",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 47,
+                            Action = "Read",
+                            Code = "ContractFile.Read.All",
+                            Description = "Tải file HĐ/phụ lục/thông báo của bất kỳ HĐ nào.",
+                            Resource = "ContractFile",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 48,
+                            Action = "Read",
+                            Code = "ContractFile.Read.Self",
+                            Description = "Tải file HĐ của chính mình.",
+                            Resource = "ContractFile",
+                            Scope = "Self"
+                        },
+                        new
+                        {
+                            Id = 49,
+                            Action = "Upload",
+                            Code = "ContractFile.Upload.All",
+                            Description = "Upload file PDF đã ký lên MinIO.",
+                            Resource = "ContractFile",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 50,
+                            Action = "Delete",
+                            Code = "ContractFile.Delete.All",
+                            Description = "Xóa file HĐ trên MinIO (chỉ SystemAdmin).",
+                            Resource = "ContractFile",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 51,
+                            Action = "Read",
+                            Code = "SalaryGrade.Read.All",
+                            Description = "Xem catalog bậc lương.",
+                            Resource = "SalaryGrade",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 52,
+                            Action = "Create",
+                            Code = "SalaryGrade.Create.All",
+                            Description = "Tạo bậc lương.",
+                            Resource = "SalaryGrade",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 53,
+                            Action = "Update",
+                            Code = "SalaryGrade.Update.All",
+                            Description = "Cập nhật bậc lương.",
+                            Resource = "SalaryGrade",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 54,
+                            Action = "Delete",
+                            Code = "SalaryGrade.Delete.All",
+                            Description = "Xóa bậc lương (soft nếu đã được HĐ tham chiếu).",
+                            Resource = "SalaryGrade",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 55,
+                            Action = "Read",
+                            Code = "AllowanceType.Read.All",
+                            Description = "Xem catalog phụ cấp.",
+                            Resource = "AllowanceType",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 56,
+                            Action = "Create",
+                            Code = "AllowanceType.Create.All",
+                            Description = "Tạo loại phụ cấp.",
+                            Resource = "AllowanceType",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 57,
+                            Action = "Update",
+                            Code = "AllowanceType.Update.All",
+                            Description = "Cập nhật loại phụ cấp.",
+                            Resource = "AllowanceType",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 58,
+                            Action = "Delete",
+                            Code = "AllowanceType.Delete.All",
+                            Description = "Xóa loại phụ cấp (soft nếu đã được HĐ tham chiếu).",
+                            Resource = "AllowanceType",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 59,
+                            Action = "Read",
+                            Code = "ContractTemplate.Read.All",
+                            Description = "Xem mẫu HĐLĐ.",
+                            Resource = "ContractTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 60,
+                            Action = "Create",
+                            Code = "ContractTemplate.Create.All",
+                            Description = "Tạo mẫu HĐLĐ.",
+                            Resource = "ContractTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 61,
+                            Action = "Update",
+                            Code = "ContractTemplate.Update.All",
+                            Description = "Cập nhật mẫu HĐLĐ (bump Version).",
+                            Resource = "ContractTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 62,
+                            Action = "Delete",
+                            Code = "ContractTemplate.Delete.All",
+                            Description = "Xóa mẫu HĐLĐ (soft).",
+                            Resource = "ContractTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 63,
+                            Action = "Read",
+                            Code = "ContractParty.Read.All",
+                            Description = "Xem pháp nhân NSDLĐ.",
+                            Resource = "ContractParty",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 64,
+                            Action = "Create",
+                            Code = "ContractParty.Create.All",
+                            Description = "Tạo phiên bản pháp nhân NSDLĐ mới (append-only).",
+                            Resource = "ContractParty",
+                            Scope = "All"
                         });
                 });
 
@@ -1438,6 +1821,166 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 1,
+                            PermissionId = 33
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 34
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 35
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 36
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 37
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 38
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 39
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 40
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 41
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 42
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 43
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 44
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 45
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 46
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 47
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 48
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 49
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 50
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 51
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 52
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 53
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 54
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 55
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 56
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 57
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 58
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 59
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 60
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 61
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 62
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 63
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 64
+                        },
+                        new
+                        {
                             RoleId = 2,
                             PermissionId = 1
                         },
@@ -1533,6 +2076,131 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 2,
+                            PermissionId = 33
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 35
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 36
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 37
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 38
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 39
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 40
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 42
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 43
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 44
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 46
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 47
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 49
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 51
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 52
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 53
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 54
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 55
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 56
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 57
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 58
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 59
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 60
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 61
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 62
+                        },
+                        new
+                        {
                             RoleId = 3,
                             PermissionId = 2
                         },
@@ -1560,6 +2228,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 3,
                             PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 33
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 40
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 44
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 47
                         },
                         new
                         {
@@ -1805,6 +2493,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionId = 23
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 34
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 41
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 45
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 48
                         });
                 });
 

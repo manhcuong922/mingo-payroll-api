@@ -29,6 +29,12 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 
+        // Contract module — catalog repositories
+        services.AddScoped<ISalaryGradeRepository, SalaryGradeRepository>();
+        services.AddScoped<IAllowanceTypeRepository, AllowanceTypeRepository>();
+        services.AddScoped<IContractTemplateRepository, ContractTemplateRepository>();
+        services.AddScoped<IContractPartyRepository, ContractPartyRepository>();
+
         // Auth & security
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddMemoryCache();

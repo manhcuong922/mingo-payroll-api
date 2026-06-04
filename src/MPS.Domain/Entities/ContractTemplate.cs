@@ -1,11 +1,13 @@
+using ContractEnums = MPS.Domain.Enums.Contract;
+
 namespace MPS.Domain.Entities;
 
 public class ContractTemplate
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string ContractCategory { get; set; } = string.Empty;
-    public string ContractSubtype { get; set; } = string.Empty;
+    public ContractEnums.ContractCategory ContractCategory { get; set; }
+    public ContractEnums.ContractSubtype ContractSubtype { get; set; }
     public string TemplateBody { get; set; } = string.Empty;
     public int Version { get; set; }
     public bool IsActive { get; set; }

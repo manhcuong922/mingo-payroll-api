@@ -40,6 +40,48 @@ public static class Permissions
     public const string RoleManagePermissionsAll = "Role.ManagePermissions.All";
 
     public const string RefreshTokenRevokeAll = "RefreshToken.Revoke.All";
+
+    // ===== Contract module (Phase 1) =====
+
+    public const string ContractReadAll = "Contract.Read.All";
+    public const string ContractReadSelf = "Contract.Read.Self";
+    public const string ContractCreateAll = "Contract.Create.All";
+    public const string ContractUpdateAll = "Contract.Update.All";
+    public const string ContractDeleteAll = "Contract.Delete.All";
+    public const string ContractActivateAll = "Contract.Activate.All";
+    public const string ContractCancelAll = "Contract.Cancel.All";
+
+    public const string ContractAppendixReadAll = "ContractAppendix.Read.All";
+    public const string ContractAppendixReadSelf = "ContractAppendix.Read.Self";
+    public const string ContractAppendixCreateAll = "ContractAppendix.Create.All";
+    public const string ContractAppendixActivateAll = "ContractAppendix.Activate.All";
+
+    public const string ContractTerminationReadAll = "ContractTermination.Read.All";
+    public const string ContractTerminationReadSelf = "ContractTermination.Read.Self";
+    public const string ContractTerminationCreateAll = "ContractTermination.Create.All";
+
+    public const string ContractFileReadAll = "ContractFile.Read.All";
+    public const string ContractFileReadSelf = "ContractFile.Read.Self";
+    public const string ContractFileUploadAll = "ContractFile.Upload.All";
+    public const string ContractFileDeleteAll = "ContractFile.Delete.All";
+
+    public const string SalaryGradeReadAll = "SalaryGrade.Read.All";
+    public const string SalaryGradeCreateAll = "SalaryGrade.Create.All";
+    public const string SalaryGradeUpdateAll = "SalaryGrade.Update.All";
+    public const string SalaryGradeDeleteAll = "SalaryGrade.Delete.All";
+
+    public const string AllowanceTypeReadAll = "AllowanceType.Read.All";
+    public const string AllowanceTypeCreateAll = "AllowanceType.Create.All";
+    public const string AllowanceTypeUpdateAll = "AllowanceType.Update.All";
+    public const string AllowanceTypeDeleteAll = "AllowanceType.Delete.All";
+
+    public const string ContractTemplateReadAll = "ContractTemplate.Read.All";
+    public const string ContractTemplateCreateAll = "ContractTemplate.Create.All";
+    public const string ContractTemplateUpdateAll = "ContractTemplate.Update.All";
+    public const string ContractTemplateDeleteAll = "ContractTemplate.Delete.All";
+
+    public const string ContractPartyReadAll = "ContractParty.Read.All";
+    public const string ContractPartyCreateAll = "ContractParty.Create.All";
 }
 
 public static class PermissionIds
@@ -82,4 +124,46 @@ public static class PermissionIds
     public const int RoleManagePermissionsAll = 31;
 
     public const int RefreshTokenRevokeAll = 32;
+
+    // ===== Contract module (Phase 1) — IDs 33–64 (reserved range 33–100) =====
+
+    public const int ContractReadAll = 33;
+    public const int ContractReadSelf = 34;
+    public const int ContractCreateAll = 35;
+    public const int ContractUpdateAll = 36;
+    public const int ContractDeleteAll = 37;
+    public const int ContractActivateAll = 38;
+    public const int ContractCancelAll = 39;
+
+    public const int ContractAppendixReadAll = 40;
+    public const int ContractAppendixReadSelf = 41;
+    public const int ContractAppendixCreateAll = 42;
+    public const int ContractAppendixActivateAll = 43;
+
+    public const int ContractTerminationReadAll = 44;
+    public const int ContractTerminationReadSelf = 45;
+    public const int ContractTerminationCreateAll = 46;
+
+    public const int ContractFileReadAll = 47;
+    public const int ContractFileReadSelf = 48;
+    public const int ContractFileUploadAll = 49;
+    public const int ContractFileDeleteAll = 50;
+
+    public const int SalaryGradeReadAll = 51;
+    public const int SalaryGradeCreateAll = 52;
+    public const int SalaryGradeUpdateAll = 53;
+    public const int SalaryGradeDeleteAll = 54;
+
+    public const int AllowanceTypeReadAll = 55;
+    public const int AllowanceTypeCreateAll = 56;
+    public const int AllowanceTypeUpdateAll = 57;
+    public const int AllowanceTypeDeleteAll = 58;
+
+    public const int ContractTemplateReadAll = 59;
+    public const int ContractTemplateCreateAll = 60;
+    public const int ContractTemplateUpdateAll = 61;
+    public const int ContractTemplateDeleteAll = 62;
+
+    public const int ContractPartyReadAll = 63;
+    public const int ContractPartyCreateAll = 64;
 }

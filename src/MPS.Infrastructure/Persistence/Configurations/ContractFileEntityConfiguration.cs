@@ -13,7 +13,7 @@ public class ContractFileEntityConfiguration : IEntityTypeConfiguration<Contract
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id).UseIdentityColumn();
 
-        builder.Property(e => e.TargetType).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.TargetType).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.TargetId).IsRequired();
         builder.Property(e => e.FileName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.MinioBucket).HasMaxLength(100).IsRequired();

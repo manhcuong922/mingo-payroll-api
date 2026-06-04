@@ -1,0 +1,10 @@
+using MediatR;
+using MPS.Application.DTOs;
+using MPS.Domain.Enums.Contract;
+
+namespace MPS.Application.Features.ContractTemplate.Queries;
+
+public sealed record ContractTemplateGetAllQuery(
+    ContractCategory? Category,
+    ContractSubtype? Subtype,
+    bool? IsActive) : IRequest<IReadOnlyList<ContractTemplateDto>>;

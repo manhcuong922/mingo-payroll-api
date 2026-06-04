@@ -29,6 +29,7 @@ public sealed class DatabaseSeeder
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         await SeedDefaultAdminAsync(cancellationToken);
+        await SeedDefaultContractPartyAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)
@@ -74,5 +75,53 @@ public sealed class DatabaseSeeder
         await _context.Users.AddAsync(admin, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded default system admin user '{Username}'.", username);
+    }
+
+    private async Task SeedDefaultContractPartyAsync(CancellationToken cancellationToken)
+    {
+        var partyExists = await _context.ContractParties
+            .AsNoTracking()
+            .AnyAsync(cancellationToken);
+
+        if (partyExists)
+        {
+            _logger.LogDebug("ContractParty already seeded; skipping.");
+            return;
+        }
+
+        var section = _configuration.GetSection("ContractParty");
+        var legalName = section["LegalName"];
+        var taxCode = section["TaxCode"];
+        var address = section["Address"];
+        var repFullName = section["RepresentativeFullName"];
+        var repTitle = section["RepresentativeTitle"];
+
+        if (string.IsNullOrWhiteSpace(legalName)
+            || string.IsNullOrWhiteSpace(taxCode)
+            || string.IsNullOrWhiteSpace(address)
+            || string.IsNullOrWhiteSpace(repFullName)
+            || string.IsNullOrWhiteSpace(repTitle))
+        {
+            _logger.LogWarning(
+                "ContractParty config is missing required fields; skipping default ContractParty seed. " +
+                "Admin must create the active employer party via API before any contract can be created.");
+            return;
+        }
+
+        var party = new ContractParty
+        {
+            LegalName = legalName,
+            TaxCode = taxCode,
+            Address = address,
+            RepresentativeFullName = repFullName,
+            RepresentativeTitle = repTitle,
+            EffectiveFrom = DateTime.UtcNow,
+            EffectiveTo = null,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        await _context.ContractParties.AddAsync(party, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded default ContractParty '{LegalName}'.", legalName);
     }
 }

@@ -67,6 +67,48 @@ public class PermissionEntityConfiguration : IEntityTypeConfiguration<Permission
         P(PermissionIds.RoleManagePermissionsAll, Permissions.RoleManagePermissionsAll, "Role", "ManagePermissions", PermissionScope.All, "Gán/sửa permission của role."),
 
         P(PermissionIds.RefreshTokenRevokeAll, Permissions.RefreshTokenRevokeAll, "RefreshToken", "Revoke", PermissionScope.All, "Force logout user khác."),
+
+        // ===== Contract module (Phase 2) — IDs 33–64 =====
+
+        P(PermissionIds.ContractReadAll, Permissions.ContractReadAll, "Contract", "Read", PermissionScope.All, "Xem tất cả HĐLĐ."),
+        P(PermissionIds.ContractReadSelf, Permissions.ContractReadSelf, "Contract", "Read", PermissionScope.Self, "Xem HĐLĐ của chính mình."),
+        P(PermissionIds.ContractCreateAll, Permissions.ContractCreateAll, "Contract", "Create", PermissionScope.All, "Tạo HĐLĐ mới (DRAFT)."),
+        P(PermissionIds.ContractUpdateAll, Permissions.ContractUpdateAll, "Contract", "Update", PermissionScope.All, "Cập nhật HĐLĐ ở trạng thái DRAFT."),
+        P(PermissionIds.ContractDeleteAll, Permissions.ContractDeleteAll, "Contract", "Delete", PermissionScope.All, "Xóa HĐLĐ DRAFT."),
+        P(PermissionIds.ContractActivateAll, Permissions.ContractActivateAll, "Contract", "Activate", PermissionScope.All, "Upload PDF đã ký và kích hoạt HĐLĐ (DRAFT → ACTIVE)."),
+        P(PermissionIds.ContractCancelAll, Permissions.ContractCancelAll, "Contract", "Cancel", PermissionScope.All, "Hủy HĐLĐ DRAFT (DRAFT → CANCELLED)."),
+
+        P(PermissionIds.ContractAppendixReadAll, Permissions.ContractAppendixReadAll, "ContractAppendix", "Read", PermissionScope.All, "Xem phụ lục HĐLĐ của bất kỳ HĐ nào."),
+        P(PermissionIds.ContractAppendixReadSelf, Permissions.ContractAppendixReadSelf, "ContractAppendix", "Read", PermissionScope.Self, "Xem phụ lục HĐLĐ của chính mình."),
+        P(PermissionIds.ContractAppendixCreateAll, Permissions.ContractAppendixCreateAll, "ContractAppendix", "Create", PermissionScope.All, "Tạo phụ lục HĐLĐ (DRAFT)."),
+        P(PermissionIds.ContractAppendixActivateAll, Permissions.ContractAppendixActivateAll, "ContractAppendix", "Activate", PermissionScope.All, "Upload PDF phụ lục đã ký và áp dụng thay đổi."),
+
+        P(PermissionIds.ContractTerminationReadAll, Permissions.ContractTerminationReadAll, "ContractTermination", "Read", PermissionScope.All, "Xem hồ sơ chấm dứt HĐLĐ của bất kỳ HĐ nào."),
+        P(PermissionIds.ContractTerminationReadSelf, Permissions.ContractTerminationReadSelf, "ContractTermination", "Read", PermissionScope.Self, "Xem hồ sơ chấm dứt HĐLĐ của chính mình."),
+        P(PermissionIds.ContractTerminationCreateAll, Permissions.ContractTerminationCreateAll, "ContractTermination", "Create", PermissionScope.All, "Tạo hồ sơ chấm dứt HĐLĐ."),
+
+        P(PermissionIds.ContractFileReadAll, Permissions.ContractFileReadAll, "ContractFile", "Read", PermissionScope.All, "Tải file HĐ/phụ lục/thông báo của bất kỳ HĐ nào."),
+        P(PermissionIds.ContractFileReadSelf, Permissions.ContractFileReadSelf, "ContractFile", "Read", PermissionScope.Self, "Tải file HĐ của chính mình."),
+        P(PermissionIds.ContractFileUploadAll, Permissions.ContractFileUploadAll, "ContractFile", "Upload", PermissionScope.All, "Upload file PDF đã ký lên MinIO."),
+        P(PermissionIds.ContractFileDeleteAll, Permissions.ContractFileDeleteAll, "ContractFile", "Delete", PermissionScope.All, "Xóa file HĐ trên MinIO (chỉ SystemAdmin)."),
+
+        P(PermissionIds.SalaryGradeReadAll, Permissions.SalaryGradeReadAll, "SalaryGrade", "Read", PermissionScope.All, "Xem catalog bậc lương."),
+        P(PermissionIds.SalaryGradeCreateAll, Permissions.SalaryGradeCreateAll, "SalaryGrade", "Create", PermissionScope.All, "Tạo bậc lương."),
+        P(PermissionIds.SalaryGradeUpdateAll, Permissions.SalaryGradeUpdateAll, "SalaryGrade", "Update", PermissionScope.All, "Cập nhật bậc lương."),
+        P(PermissionIds.SalaryGradeDeleteAll, Permissions.SalaryGradeDeleteAll, "SalaryGrade", "Delete", PermissionScope.All, "Xóa bậc lương (soft nếu đã được HĐ tham chiếu)."),
+
+        P(PermissionIds.AllowanceTypeReadAll, Permissions.AllowanceTypeReadAll, "AllowanceType", "Read", PermissionScope.All, "Xem catalog phụ cấp."),
+        P(PermissionIds.AllowanceTypeCreateAll, Permissions.AllowanceTypeCreateAll, "AllowanceType", "Create", PermissionScope.All, "Tạo loại phụ cấp."),
+        P(PermissionIds.AllowanceTypeUpdateAll, Permissions.AllowanceTypeUpdateAll, "AllowanceType", "Update", PermissionScope.All, "Cập nhật loại phụ cấp."),
+        P(PermissionIds.AllowanceTypeDeleteAll, Permissions.AllowanceTypeDeleteAll, "AllowanceType", "Delete", PermissionScope.All, "Xóa loại phụ cấp (soft nếu đã được HĐ tham chiếu)."),
+
+        P(PermissionIds.ContractTemplateReadAll, Permissions.ContractTemplateReadAll, "ContractTemplate", "Read", PermissionScope.All, "Xem mẫu HĐLĐ."),
+        P(PermissionIds.ContractTemplateCreateAll, Permissions.ContractTemplateCreateAll, "ContractTemplate", "Create", PermissionScope.All, "Tạo mẫu HĐLĐ."),
+        P(PermissionIds.ContractTemplateUpdateAll, Permissions.ContractTemplateUpdateAll, "ContractTemplate", "Update", PermissionScope.All, "Cập nhật mẫu HĐLĐ (bump Version)."),
+        P(PermissionIds.ContractTemplateDeleteAll, Permissions.ContractTemplateDeleteAll, "ContractTemplate", "Delete", PermissionScope.All, "Xóa mẫu HĐLĐ (soft)."),
+
+        P(PermissionIds.ContractPartyReadAll, Permissions.ContractPartyReadAll, "ContractParty", "Read", PermissionScope.All, "Xem pháp nhân NSDLĐ."),
+        P(PermissionIds.ContractPartyCreateAll, Permissions.ContractPartyCreateAll, "ContractParty", "Create", PermissionScope.All, "Tạo phiên bản pháp nhân NSDLĐ mới (append-only)."),
     };
 
     private static Permission P(int id, string code, string resource, string action, string scope, string description) => new()

@@ -1,3 +1,5 @@
+using ContractEnums = MPS.Domain.Enums.Contract;
+
 namespace MPS.Domain.Entities;
 
 public class ContractTermination
@@ -8,7 +10,7 @@ public class ContractTermination
     public DateTime TerminationDate { get; set; }
     public int ReasonRefId { get; set; }
     public ContractTerminationReasonRef ReasonRef { get; set; } = null!;
-    public string TerminationParty { get; set; } = string.Empty;
+    public ContractEnums.TerminationParty TerminationParty { get; set; }
     public string LegalBasis { get; set; } = string.Empty;
     public DateTime? NoticeSentAt { get; set; }
     public int? NoticeDaysAhead { get; set; }

@@ -14,14 +14,14 @@ public class ContractAppendixEntityConfiguration : IEntityTypeConfiguration<Cont
         builder.Property(e => e.Id).UseIdentityColumn();
 
         builder.Property(e => e.AppendixNo).HasMaxLength(50).IsRequired();
-        builder.Property(e => e.AppendixType).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.AppendixType).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.Title).HasMaxLength(300).IsRequired();
         builder.Property(e => e.ChangedClausesJson).IsRequired();
         builder.Property(e => e.AppendixText).IsRequired();
         builder.Property(e => e.NoticeSentAt);
         builder.Property(e => e.EffectiveFrom).IsRequired();
         builder.Property(e => e.SignedAt);
-        builder.Property(e => e.Status).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
 
         builder.HasOne(e => e.Contract)

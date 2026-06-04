@@ -14,7 +14,7 @@ public class ContractTerminationEntityConfiguration : IEntityTypeConfiguration<C
         builder.Property(e => e.Id).UseIdentityColumn();
 
         builder.Property(e => e.TerminationDate).IsRequired();
-        builder.Property(e => e.TerminationParty).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.TerminationParty).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.LegalBasis).HasMaxLength(200).IsRequired();
         builder.Property(e => e.NoticeSentAt);
         builder.Property(e => e.NoticeDaysAhead);

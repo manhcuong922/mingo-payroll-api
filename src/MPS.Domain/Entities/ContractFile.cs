@@ -1,9 +1,11 @@
+using ContractEnums = MPS.Domain.Enums.Contract;
+
 namespace MPS.Domain.Entities;
 
 public class ContractFile
 {
     public int Id { get; set; }
-    public string TargetType { get; set; } = string.Empty;
+    public ContractEnums.FileTargetType TargetType { get; set; }
     public int TargetId { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string MinioBucket { get; set; } = string.Empty;

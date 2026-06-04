@@ -1,12 +1,14 @@
+using ContractEnums = MPS.Domain.Enums.Contract;
+
 namespace MPS.Domain.Entities;
 
 public class Contract
 {
     public int Id { get; set; }
     public string ContractNo { get; set; } = string.Empty;
-    public string ContractCategory { get; set; } = string.Empty;
-    public string ContractSubtype { get; set; } = string.Empty;
-    public string Form { get; set; } = string.Empty;
+    public ContractEnums.ContractCategory ContractCategory { get; set; }
+    public ContractEnums.ContractSubtype ContractSubtype { get; set; }
+    public ContractEnums.ContractForm Form { get; set; }
 
     public int EmployeeId { get; set; }
     public User Employee { get; set; } = null!;
@@ -29,8 +31,8 @@ public class Contract
     public SalaryGrade SalaryGrade { get; set; } = null!;
     public decimal SalaryAmountSnapshot { get; set; }
     public string SalaryCurrencySnapshot { get; set; } = "VND";
-    public string SalaryFormType { get; set; } = string.Empty;
-    public string SalaryPayCycle { get; set; } = string.Empty;
+    public ContractEnums.SalaryFormType SalaryFormType { get; set; }
+    public ContractEnums.SalaryPayCycle SalaryPayCycle { get; set; }
     public string? PromotionPolicy { get; set; }
     public string WorkingTimeJson { get; set; } = string.Empty;
     public string? PpePolicy { get; set; }
@@ -44,7 +46,7 @@ public class Contract
     public int? TemplateId { get; set; }
     public ContractTemplate? Template { get; set; }
 
-    public string Status { get; set; } = string.Empty;
+    public ContractEnums.ContractStatus Status { get; set; }
 
     public int? ParentContractId { get; set; }
     public Contract? ParentContract { get; set; }
@@ -55,7 +57,7 @@ public class Contract
     public DateTime? ProbationStartDate { get; set; }
     public DateTime? ProbationEndDate { get; set; }
     public decimal? ProbationSalary { get; set; }
-    public string? ProbationResultStatus { get; set; }
+    public ContractEnums.ProbationResultStatus? ProbationResultStatus { get; set; }
     public DateTime? ProbationResultNotifiedAt { get; set; }
     public string? ProbationCancelledByParty { get; set; }
 

@@ -45,6 +45,19 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.PositionUpdateAll, PermissionIds.PositionDeleteAll,
                 PermissionIds.PerformanceMetricReadAll, PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.TypePerformanceMetricReadAll,
+                // Contract module (HRManager + HRStaff perms collapsed onto single HR role)
+                PermissionIds.ContractReadAll, PermissionIds.ContractCreateAll, PermissionIds.ContractUpdateAll,
+                PermissionIds.ContractDeleteAll, PermissionIds.ContractActivateAll, PermissionIds.ContractCancelAll,
+                PermissionIds.ContractAppendixReadAll, PermissionIds.ContractAppendixCreateAll,
+                PermissionIds.ContractAppendixActivateAll,
+                PermissionIds.ContractTerminationReadAll, PermissionIds.ContractTerminationCreateAll,
+                PermissionIds.ContractFileReadAll, PermissionIds.ContractFileUploadAll,
+                PermissionIds.SalaryGradeReadAll, PermissionIds.SalaryGradeCreateAll,
+                PermissionIds.SalaryGradeUpdateAll, PermissionIds.SalaryGradeDeleteAll,
+                PermissionIds.AllowanceTypeReadAll, PermissionIds.AllowanceTypeCreateAll,
+                PermissionIds.AllowanceTypeUpdateAll, PermissionIds.AllowanceTypeDeleteAll,
+                PermissionIds.ContractTemplateReadAll, PermissionIds.ContractTemplateCreateAll,
+                PermissionIds.ContractTemplateUpdateAll, PermissionIds.ContractTemplateDeleteAll,
             }),
 
             (SystemRoles.AccountantId, new[]
@@ -53,6 +66,11 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.EmployeeInformationReadAll, PermissionIds.EmployeeInformationReadSelf,
                 PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
+                // Contract: read-only để chạy payroll
+                PermissionIds.ContractReadAll,
+                PermissionIds.ContractAppendixReadAll,
+                PermissionIds.ContractTerminationReadAll,
+                PermissionIds.ContractFileReadAll,
             }),
 
             (SystemRoles.DirectorId, new[]
@@ -98,6 +116,11 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.PositionReadAll,
                 PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.TypePerformanceMetricReadAll,
+                // Contract: chỉ xem HĐ của chính mình (self-scope)
+                PermissionIds.ContractReadSelf,
+                PermissionIds.ContractAppendixReadSelf,
+                PermissionIds.ContractTerminationReadSelf,
+                PermissionIds.ContractFileReadSelf,
             }),
         };
 
@@ -122,5 +145,22 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
         PermissionIds.RoleReadAll, PermissionIds.RoleCreateAll, PermissionIds.RoleUpdateAll,
         PermissionIds.RoleDeleteAll, PermissionIds.RoleManagePermissionsAll,
         PermissionIds.RefreshTokenRevokeAll,
+        // Contract module
+        PermissionIds.ContractReadAll, PermissionIds.ContractReadSelf, PermissionIds.ContractCreateAll,
+        PermissionIds.ContractUpdateAll, PermissionIds.ContractDeleteAll, PermissionIds.ContractActivateAll,
+        PermissionIds.ContractCancelAll,
+        PermissionIds.ContractAppendixReadAll, PermissionIds.ContractAppendixReadSelf,
+        PermissionIds.ContractAppendixCreateAll, PermissionIds.ContractAppendixActivateAll,
+        PermissionIds.ContractTerminationReadAll, PermissionIds.ContractTerminationReadSelf,
+        PermissionIds.ContractTerminationCreateAll,
+        PermissionIds.ContractFileReadAll, PermissionIds.ContractFileReadSelf,
+        PermissionIds.ContractFileUploadAll, PermissionIds.ContractFileDeleteAll,
+        PermissionIds.SalaryGradeReadAll, PermissionIds.SalaryGradeCreateAll,
+        PermissionIds.SalaryGradeUpdateAll, PermissionIds.SalaryGradeDeleteAll,
+        PermissionIds.AllowanceTypeReadAll, PermissionIds.AllowanceTypeCreateAll,
+        PermissionIds.AllowanceTypeUpdateAll, PermissionIds.AllowanceTypeDeleteAll,
+        PermissionIds.ContractTemplateReadAll, PermissionIds.ContractTemplateCreateAll,
+        PermissionIds.ContractTemplateUpdateAll, PermissionIds.ContractTemplateDeleteAll,
+        PermissionIds.ContractPartyReadAll, PermissionIds.ContractPartyCreateAll,
     };
 }
