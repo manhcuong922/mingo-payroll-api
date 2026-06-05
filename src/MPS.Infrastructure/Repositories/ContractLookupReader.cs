@@ -1,0 +1,57 @@
+using Microsoft.EntityFrameworkCore;
+using MPS.Domain.Interfaces;
+using MPS.Infrastructure.Persistence;
+
+namespace MPS.Infrastructure.Repositories;
+
+/// <summary>
+/// Read-only typed lookups required by Contract handlers. Lets the Application layer
+/// validate FKs and project lightweight snapshots without ever touching EF Core.
+/// </summary>
+internal sealed class ContractLookupReader : IContractLookupReader
+{
+    private readonly AppDbContext _context;
+
+    public ContractLookupReader(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task<UserSnapshot?> GetUserSnapshotAsync(int userId, CancellationToken cancellationToken) =>
+        _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new UserSnapshot(u.Id, u.Status, u.Dob, u.FullName))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<bool> IsActiveUserAsync(int userId, CancellationToken cancellationToken) =>
+        _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && u.Status == 1, cancellationToken);
+
+    public Task<bool> IsActiveContractPartyAsync(int partyId, CancellationToken cancellationToken) =>
+        _context.ContractParties.AsNoTracking()
+            .AnyAsync(p => p.Id == partyId && p.EffectiveTo == null, cancellationToken);
+
+    public Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken) =>
+        _context.Positions.AsNoTracking().AnyAsync(p => p.Id == positionId, cancellationToken);
+
+    public Task<SalaryGradeSnapshot?> GetSalaryGradeSnapshotAsync(int salaryGradeId, CancellationToken cancellationToken) =>
+        _context.SalaryGrades
+            .AsNoTracking()
+            .Where(s => s.Id == salaryGradeId)
+            .Select(s => new SalaryGradeSnapshot(s.Id, s.BaseSalary, s.Currency, s.IsActive))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<int>> GetActiveAllowanceTypeIdsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0) return Array.Empty<int>();
+        return await _context.AllowanceTypes
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.Id) && a.IsActive)
+            .Select(a => a.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<bool> IsActiveAllowanceTypeAsync(int allowanceTypeId, CancellationToken cancellationToken) =>
+        _context.AllowanceTypes.AsNoTracking()
+            .AnyAsync(a => a.Id == allowanceTypeId && a.IsActive, cancellationToken);
+}

@@ -1,0 +1,38 @@
+using MPS.Domain.Enums.Contract;
+
+namespace MPS.API.Requests.Contract;
+
+public sealed record CreateContractRequest(
+    string ContractNo,
+    ContractCategory ContractCategory,
+    ContractSubtype ContractSubtype,
+    ContractForm Form,
+    int EmployeeId,
+    int EmployerPartyId,
+    int EmployerSignerUserId,
+    int PositionId,
+    string JobDescription,
+    string WorkLocation,
+    DateTime EffectiveFrom,
+    DateTime? EffectiveTo,
+    int SalaryGradeId,
+    SalaryFormType SalaryFormType,
+    SalaryPayCycle SalaryPayCycle,
+    string? PromotionPolicy,
+    string WorkingTimeJson,
+    string? PpePolicy,
+    bool SocialInsuranceFlag,
+    bool HealthInsuranceFlag,
+    bool UnemploymentInsuranceFlag,
+    string? TrainingPolicy,
+    string? ConfidentialityClause,
+    string ContractText,
+    int? TemplateId,
+    bool HasProbation,
+    DateTime? ProbationStartDate,
+    DateTime? ProbationEndDate,
+    decimal? ProbationSalary,
+    ProbationResultStatus? ProbationResultStatus,
+    int? ParentContractId,
+    IReadOnlyList<ContractAllowanceItemRequest>? Allowances,
+    bool ForceAllowThirdDefinite = false);

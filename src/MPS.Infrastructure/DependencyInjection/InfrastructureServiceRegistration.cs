@@ -35,6 +35,11 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IContractTemplateRepository, ContractTemplateRepository>();
         services.AddScoped<IContractPartyRepository, ContractPartyRepository>();
 
+        // Contract module — core
+        services.AddScoped<IContractRepository, ContractRepository>();
+        services.AddScoped<IContractLookupReader, ContractLookupReader>();
+        services.AddScoped<MPS.Application.Features.Contract.Common.ContractPreflightChecker>();
+
         // Auth & security
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddMemoryCache();
