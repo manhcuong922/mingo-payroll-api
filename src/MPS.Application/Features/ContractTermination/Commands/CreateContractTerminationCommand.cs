@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 using ContractEnums = MPS.Domain.Enums.Contract;
 
 namespace MPS.Application.Features.ContractTermination.Commands;
@@ -17,4 +18,4 @@ public sealed record CreateContractTerminationCommand(
     bool NoNoticeRequired,
     int? WrittenNoticeFileId,
     string LegalBasis,
-    string? Notes) : IRequest<int>;
+    string? Notes) : IRequest<int>, IContractScopedCommand;

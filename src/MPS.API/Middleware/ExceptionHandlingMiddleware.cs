@@ -30,6 +30,17 @@ public class ExceptionHandlingMiddleware
             var errors = vex.Errors.Select(e => e.ErrorMessage).ToList();
             await context.Response.WriteAsync(JsonSerializer.Serialize(new { errors }));
         }
+        catch (ContractArchivedException caex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = ContractArchivedException.ErrorCode,
+                error = caex.Message,
+                contractId = caex.ContractId,
+            }));
+        }
         catch (DomainValidationException dvex)
         {
             context.Response.StatusCode = (int)HttpStatusCode.BadRequest;

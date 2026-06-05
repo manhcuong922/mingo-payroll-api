@@ -62,6 +62,18 @@ public static class InfrastructureServiceRegistration
         // Background jobs
         services.AddHostedService<RefreshTokenCleanupService>();
 
+        // Contract module — Phase 9: clock + background jobs.
+        // Đăng ký singleton trước rồi cùng instance dùng làm IHostedService → controller có thể
+        // inject jobs để gọi RunOnceAsync manual.
+        services.AddSingleton<MPS.Application.Common.Interfaces.IClock, MPS.Infrastructure.Time.SystemClock>();
+
+        services.AddSingleton<ContractAutoConvertJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<ContractAutoConvertJob>());
+        services.AddSingleton<ContractExpiryJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<ContractExpiryJob>());
+        services.AddSingleton<ContractArchiveJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<ContractArchiveJob>());
+
         // Storage (MinIO)
         services.AddOptions<MinioOptions>()
             .Bind(configuration.GetSection(MinioOptions.SectionName))

@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 using ContractEnums = MPS.Domain.Enums.Contract;
 
 namespace MPS.Application.Features.ContractAppendix.Commands;
@@ -14,4 +15,4 @@ public sealed record CreateContractAppendixCommand(
     string Title,
     string ChangedClausesJson,
     string AppendixText,
-    DateTime EffectiveFrom) : IRequest<int>;
+    DateTime EffectiveFrom) : IRequest<int>, IContractScopedCommand;

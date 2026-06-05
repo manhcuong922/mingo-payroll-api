@@ -98,4 +98,39 @@ public interface IContractRepository
         int contractId,
         ContractFile file,
         CancellationToken cancellationToken = default);
+
+    // ===== Phase 9 — Background jobs =====
+
+    /// <summary>
+    /// Quick read for the archive guard pipeline behavior: returns <c>ArchivedAt</c>
+    /// (null if not archived). Returns null tuple if contract not found — caller decides
+    /// how to handle absence (typically downstream handler will throw 4xx itself).
+    /// </summary>
+    Task<DateTime?> GetArchivedAtAsync(int contractId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Điều 20 k.2.b BLLĐ 2019 — HĐ Definite + Status=Active mà
+    /// <c>EffectiveTo + 30 ngày &lt; nowUtc</c> thì phải auto-convert sang Indefinite
+    /// (set <c>ConvertedFromDefiniteFlag=1</c>, <c>Category=Indefinite</c>,
+    /// <c>EffectiveTo=null</c>, <c>UpdatedAt=nowUtc</c>).
+    /// </summary>
+    /// <returns>Số HĐ đã chuyển đổi.</returns>
+    Task<int> AutoConvertExpiredDefiniteAsync(DateTime nowUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HĐ Status=Active có <c>EffectiveTo &lt; nowUtc</c> mà KHÔNG bị
+    /// <see cref="AutoConvertExpiredDefiniteAsync"/> bắt (đã có HĐ con — quan hệ
+    /// <c>ParentContractId</c>) → set Status=Expired, UpdatedAt=nowUtc.
+    /// </summary>
+    /// <returns>Số HĐ đã expire.</returns>
+    Task<int> ExpireOverdueContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Set <c>ArchivedAt = nowUtc</c> cho:
+    ///  - HĐ Terminated mà <c>ContractTermination.TerminationDate ≤ nowUtc - 10y</c>
+    ///  - HĐ Expired mà <c>EffectiveTo ≤ nowUtc - 10y</c>
+    /// (Điều 7 NĐ 152/2020 + Luật Lưu trữ — lưu HĐLĐ 10 năm sau khi chấm dứt).
+    /// </summary>
+    /// <returns>Số HĐ đã archive.</returns>
+    Task<int> ArchiveOldContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default);
 }

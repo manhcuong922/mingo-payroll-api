@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 
 namespace MPS.Application.Features.Contract.Commands;
 
@@ -13,4 +14,4 @@ public sealed record ReplaceContractFileCommand(
     long FileSizeBytes,
     string FileName,
     string ContentType,
-    string? SignedBySource) : IRequest<int>;
+    string? SignedBySource) : IRequest<int>, IContractScopedCommand;

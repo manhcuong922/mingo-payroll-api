@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 
 namespace MPS.Application.Features.Contract.Commands;
 
@@ -14,4 +15,4 @@ public sealed record ActivateContractCommand(
     string ContentType,
     DateTime SignedAt,
     string SignedPlace,
-    string? SignedBySource) : IRequest<int>;
+    string? SignedBySource) : IRequest<int>, IContractScopedCommand;

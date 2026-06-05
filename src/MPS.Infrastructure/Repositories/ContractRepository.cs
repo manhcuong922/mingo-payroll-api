@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
+using MPS.Domain.Constants;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
@@ -351,6 +352,107 @@ public class ContractRepository : IContractRepository
         await _context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return file.Id;
+    }
+
+    public Task<DateTime?> GetArchivedAtAsync(int contractId, CancellationToken cancellationToken = default) =>
+        _context.Contracts
+            .AsNoTracking()
+            .Where(c => c.Id == contractId)
+            .Select(c => c.ArchivedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<int> AutoConvertExpiredDefiniteAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        // Cutoff = nowUtc - 30 ngày: HĐ Definite kết thúc ≥ 30 ngày trước mà vẫn Active = phải convert.
+        // (Điều 20 k.2.b BLLĐ 2019: nếu sau 30 ngày kể từ EffectiveTo mà chưa ký HĐ mới thì
+        // tự động trở thành Indefinite.)
+        var cutoff = nowUtc.AddDays(-LaborLawConstants.ContractDuration.AutoConvertToIndefiniteAfterDays);
+
+        var candidates = await _context.Contracts
+            .Where(c => c.Status == ContractStatus.Active
+                && c.ContractCategory == ContractCategory.Definite
+                && c.EffectiveTo != null
+                && c.EffectiveTo.Value < cutoff
+                && c.ConvertedFromDefiniteFlag == false)
+            .ToListAsync(cancellationToken);
+
+        foreach (var contract in candidates)
+        {
+            contract.ContractCategory = ContractCategory.Indefinite;
+            contract.EffectiveTo = null;
+            contract.ConvertedFromDefiniteFlag = true;
+            contract.UpdatedAt = nowUtc;
+        }
+
+        if (candidates.Count > 0)
+            await _context.SaveChangesAsync(cancellationToken);
+        return candidates.Count;
+    }
+
+    public async Task<int> ExpireOverdueContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        // HĐ Active có EffectiveTo < nowUtc AND có HĐ con (ParentContractId trỏ về nó)
+        // → expire ngay. Không có HĐ con → để AutoConvertJob xử lý sau 30 ngày.
+        // (Logic này tránh expire HĐ trong "vùng đệm 30 ngày" — Điều 20 k.2 cho phép gia hạn ngầm.)
+        var query = _context.Contracts
+            .Where(c => c.Status == ContractStatus.Active
+                && c.EffectiveTo != null
+                && c.EffectiveTo.Value < nowUtc);
+
+        var candidates = await query.ToListAsync(cancellationToken);
+
+        // Filter: chỉ giữ HĐ có HĐ con (đã ký tiếp).
+        var parentIds = candidates.Select(c => c.Id).ToHashSet();
+        var hasChild = await _context.Contracts
+            .AsNoTracking()
+            .Where(c => c.ParentContractId.HasValue && parentIds.Contains(c.ParentContractId.Value))
+            .Select(c => c.ParentContractId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var hasChildSet = hasChild.ToHashSet();
+
+        var toExpire = candidates.Where(c => hasChildSet.Contains(c.Id)).ToList();
+        foreach (var contract in toExpire)
+        {
+            contract.Status = ContractStatus.Expired;
+            contract.UpdatedAt = nowUtc;
+        }
+
+        if (toExpire.Count > 0)
+            await _context.SaveChangesAsync(cancellationToken);
+        return toExpire.Count;
+    }
+
+    public async Task<int> ArchiveOldContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        var cutoff = nowUtc.AddYears(-LaborLawConstants.Retention.ContractRetentionYearsAfterTermination);
+
+        // (a) Terminated ≥ 10y: dựa vào ContractTermination.TerminationDate.
+        var terminatedCandidates = await _context.Contracts
+            .Where(c => c.ArchivedAt == null
+                && c.Status == ContractStatus.Terminated
+                && c.ContractTermination != null
+                && c.ContractTermination.TerminationDate <= cutoff)
+            .ToListAsync(cancellationToken);
+
+        // (b) Expired ≥ 10y: dựa vào EffectiveTo.
+        var expiredCandidates = await _context.Contracts
+            .Where(c => c.ArchivedAt == null
+                && c.Status == ContractStatus.Expired
+                && c.EffectiveTo != null
+                && c.EffectiveTo.Value <= cutoff)
+            .ToListAsync(cancellationToken);
+
+        var all = terminatedCandidates.Concat(expiredCandidates).DistinctBy(c => c.Id).ToList();
+        foreach (var contract in all)
+        {
+            contract.ArchivedAt = nowUtc;
+            contract.UpdatedAt = nowUtc;
+        }
+
+        if (all.Count > 0)
+            await _context.SaveChangesAsync(cancellationToken);
+        return all.Count;
     }
 
     private static void ApplyScalarFields(Domain.Entities.Contract tracked, Domain.Entities.Contract source)

@@ -33,7 +33,7 @@ public sealed class ContractAppendixFlowIntegrationTests
         var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         // Seed thêm allowance type "TRANSPORT" để phụ lục có thể add.
-        var transport = new AllowanceType
+        var transport = new MPS.Domain.Entities.AllowanceType
         {
             Code = "TRANSPORT",
             Name = "Phụ cấp đi lại",

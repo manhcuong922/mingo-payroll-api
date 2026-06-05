@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 
 namespace MPS.Application.Features.ContractTermination.Commands;
 
@@ -14,4 +15,4 @@ public sealed record UploadTerminationNoticeCommand(
     long FileSizeBytes,
     string FileName,
     string ContentType,
-    string? SignedBySource) : IRequest<int>;
+    string? SignedBySource) : IRequest<int>, IContractScopedCommand;

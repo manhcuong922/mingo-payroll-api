@@ -61,6 +61,9 @@ var applicationAssembly = typeof(MPS.Application.Features.PerformanceMetric.Comm
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(applicationAssembly);
+    // Archive guard chạy TRƯỚC ValidationBehavior để fail-fast khi HĐ archived,
+    // tránh waste validation cost trên request chắc chắn bị 409.
+    cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ArchivedContractGuardBehavior<,>));
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 });
 

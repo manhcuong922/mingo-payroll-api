@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
 using MPS.Domain.Enums.Contract;
 
 namespace MPS.Application.Features.Contract.Commands;
@@ -37,4 +38,7 @@ public sealed record UpdateContractCommand(
     ProbationResultStatus? ProbationResultStatus,
     int? ParentContractId,
     IReadOnlyList<ContractAllowanceInput> Allowances,
-    bool ForceAllowThirdDefinite = false) : IRequest<bool>;
+    bool ForceAllowThirdDefinite = false) : IRequest<bool>, IContractScopedCommand
+{
+    int IContractScopedCommand.ContractId => Id;
+}
