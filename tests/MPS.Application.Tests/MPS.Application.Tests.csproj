@@ -26,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MPS.Application\MPS.Application.csproj" />
     <ProjectReference Include="..\..\src\MPS.Domain\MPS.Domain.csproj" />
+    <ProjectReference Include="..\..\src\MPS.Infrastructure\MPS.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

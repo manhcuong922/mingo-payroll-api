@@ -8,7 +8,7 @@ namespace MPS.Infrastructure.Repositories;
 /// Read-only typed lookups required by Contract handlers. Lets the Application layer
 /// validate FKs and project lightweight snapshots without ever touching EF Core.
 /// </summary>
-internal sealed class ContractLookupReader : IContractLookupReader
+public sealed class ContractLookupReader : IContractLookupReader
 {
     private readonly AppDbContext _context;
 
