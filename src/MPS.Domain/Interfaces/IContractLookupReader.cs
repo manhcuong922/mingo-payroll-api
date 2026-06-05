@@ -14,8 +14,12 @@ public interface IContractLookupReader
     Task<SalaryGradeSnapshot?> GetSalaryGradeSnapshotAsync(int salaryGradeId, CancellationToken cancellationToken);
     Task<IReadOnlyList<int>> GetActiveAllowanceTypeIdsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken);
     Task<bool> IsActiveAllowanceTypeAsync(int allowanceTypeId, CancellationToken cancellationToken);
+
+    Task<TerminationReasonRefSnapshot?> GetTerminationReasonRefAsync(int reasonRefId, CancellationToken cancellationToken);
 }
 
 public sealed record UserSnapshot(int Id, int Status, DateTime Dob, string FullName);
 
 public sealed record SalaryGradeSnapshot(int Id, decimal BaseSalary, string Currency, bool IsActive);
+
+public sealed record TerminationReasonRefSnapshot(int Id, string Code, bool RequiresWrittenNotice);

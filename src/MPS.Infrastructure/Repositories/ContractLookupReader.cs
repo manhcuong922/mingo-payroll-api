@@ -54,4 +54,11 @@ public sealed class ContractLookupReader : IContractLookupReader
     public Task<bool> IsActiveAllowanceTypeAsync(int allowanceTypeId, CancellationToken cancellationToken) =>
         _context.AllowanceTypes.AsNoTracking()
             .AnyAsync(a => a.Id == allowanceTypeId && a.IsActive, cancellationToken);
+
+    public Task<TerminationReasonRefSnapshot?> GetTerminationReasonRefAsync(int reasonRefId, CancellationToken cancellationToken) =>
+        _context.ContractTerminationReasonRefs
+            .AsNoTracking()
+            .Where(r => r.Id == reasonRefId)
+            .Select(r => new TerminationReasonRefSnapshot(r.Id, r.Code, r.RequiresWrittenNotice))
+            .FirstOrDefaultAsync(cancellationToken);
 }

@@ -40,6 +40,13 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IContractLookupReader, ContractLookupReader>();
         services.AddScoped<MPS.Application.Features.Contract.Common.ContractPreflightChecker>();
 
+        // Contract module — appendix (Phase 7)
+        services.AddScoped<IContractAppendixRepository, ContractAppendixRepository>();
+        services.AddScoped<MPS.Application.Features.ContractAppendix.Common.AppendixApplier>();
+
+        // Contract module — termination (Phase 8)
+        services.AddScoped<IContractTerminationRepository, ContractTerminationRepository>();
+
         // Auth & security
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddMemoryCache();

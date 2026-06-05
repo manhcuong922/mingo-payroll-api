@@ -228,6 +228,131 @@ public class ContractRepository : IContractRepository
         return true;
     }
 
+    public async Task<int> ActivateDraftAsync(
+        int contractId,
+        decimal snapshotAmount,
+        string snapshotCurrency,
+        DateTime signedAtUtc,
+        string signedPlace,
+        ContractFile file,
+        CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var tracked = await _context.Contracts.FirstOrDefaultAsync(c => c.Id == contractId, cancellationToken)
+            ?? throw new DomainValidationException($"Contract {contractId} not found.");
+
+        if (tracked.ArchivedAt is not null)
+            throw new DomainValidationException($"CONTRACT_ARCHIVED: Contract {contractId} is archived and read-only.");
+
+        if (tracked.Status != ContractStatus.Draft)
+            throw new DomainValidationException(
+                $"Cannot activate contract {contractId}: status is {tracked.Status}, only Draft can be activated.");
+
+        // Freeze snapshot + activate
+        tracked.SalaryAmountSnapshot = snapshotAmount;
+        tracked.SalaryCurrencySnapshot = snapshotCurrency;
+        tracked.SignedAt = signedAtUtc;
+        tracked.SignedPlace = signedPlace;
+        tracked.Status = ContractStatus.Active;
+        tracked.UpdatedAt = DateTime.UtcNow;
+
+        // Insert ContractFile (V1, IsCurrent)
+        file.TargetId = contractId;
+        file.TargetType = FileTargetType.Contract;
+        file.Version = 1;
+        file.IsCurrent = true;
+        await _context.ContractFiles.AddAsync(file, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return file.Id;
+    }
+
+    public Task<ContractFile?> GetCurrentFileAsync(
+        int contractId,
+        FileTargetType targetType,
+        CancellationToken cancellationToken = default) =>
+        _context.ContractFiles
+            .AsNoTracking()
+            .Where(f => f.TargetType == targetType && f.TargetId == contractId && f.IsCurrent)
+            .OrderByDescending(f => f.Version)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<int> ReplaceCurrentFileAsync(
+        int contractId,
+        FileTargetType targetType,
+        ContractFile newFile,
+        CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var contract = await _context.Contracts
+            .FirstOrDefaultAsync(c => c.Id == contractId, cancellationToken)
+            ?? throw new DomainValidationException($"Contract {contractId} not found.");
+
+        if (contract.ArchivedAt is not null)
+            throw new DomainValidationException($"CONTRACT_ARCHIVED: Contract {contractId} is archived and read-only.");
+
+        var currents = await _context.ContractFiles
+            .Where(f => f.TargetType == targetType && f.TargetId == contractId && f.IsCurrent)
+            .ToListAsync(cancellationToken);
+
+        var nextVersion = 1;
+        foreach (var existing in currents)
+        {
+            existing.IsCurrent = false;
+            if (existing.Version >= nextVersion) nextVersion = existing.Version + 1;
+        }
+
+        newFile.TargetId = contractId;
+        newFile.TargetType = targetType;
+        newFile.Version = nextVersion;
+        newFile.IsCurrent = true;
+        await _context.ContractFiles.AddAsync(newFile, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return newFile.Id;
+    }
+
+    public async Task<int> AddContractFileForActiveContractAsync(
+        int contractId,
+        ContractFile file,
+        CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var contract = await _context.Contracts.FirstOrDefaultAsync(c => c.Id == contractId, cancellationToken)
+            ?? throw new DomainValidationException($"Contract {contractId} not found.");
+
+        if (contract.ArchivedAt is not null)
+            throw new DomainValidationException($"CONTRACT_ARCHIVED: Contract {contractId} is archived and read-only.");
+
+        if (contract.Status != ContractStatus.Active)
+            throw new DomainValidationException(
+                $"Cannot upload notice for contract {contractId}: status is {contract.Status}, expected Active.");
+
+        var currents = await _context.ContractFiles
+            .Where(f => f.TargetType == file.TargetType && f.TargetId == file.TargetId && f.IsCurrent)
+            .ToListAsync(cancellationToken);
+
+        var nextVersion = 1;
+        foreach (var existing in currents)
+        {
+            existing.IsCurrent = false;
+            if (existing.Version >= nextVersion) nextVersion = existing.Version + 1;
+        }
+
+        file.Version = nextVersion;
+        file.IsCurrent = true;
+        await _context.ContractFiles.AddAsync(file, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return file.Id;
+    }
+
     private static void ApplyScalarFields(Domain.Entities.Contract tracked, Domain.Entities.Contract source)
     {
         tracked.ContractNo = source.ContractNo;

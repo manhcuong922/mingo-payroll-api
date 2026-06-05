@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MPS.API.Authorization;
 using MPS.API.Requests.Contract;
 using MPS.Application.Features.Contract.Commands;
@@ -201,5 +202,83 @@ public class ContractController : ControllerBase
         var ok = await _mediator.Send(new RemoveContractAllowanceCommand(id, allowanceTypeId), cancellationToken);
         if (!ok) return NotFound();
         return NoContent();
+    }
+
+    // --- Phase 6: Activation + file replace ---
+
+    /// <summary>
+    /// Upload signed PDF and transition the contract DRAFT → ACTIVE. Freezes the salary snapshot.
+    /// Rate-limited (5/min/user) to avoid abuse since each call writes to MinIO.
+    /// </summary>
+    [HttpPost("{id:int}/activate")]
+    [HasPermission(Permissions.ContractActivateAll)]
+    [EnableRateLimiting("contract-upload")]
+    [RequestSizeLimit(25 * 1024 * 1024)] // 25 MB hard cap at Kestrel; handler enforces 20 MB business limit.
+    public async Task<IActionResult> Activate(
+        int id,
+        [FromForm] ActivateContractRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length <= 0)
+            return BadRequest(new { errors = new[] { "File is required." } });
+
+        await using var stream = request.File.OpenReadStream();
+        var seekableStream = await EnsureSeekableAsync(stream, request.File.Length, cancellationToken);
+
+        var contractFileId = await _mediator.Send(new ActivateContractCommand(
+            ContractId: id,
+            PdfStream: seekableStream,
+            FileSizeBytes: request.File.Length,
+            FileName: request.File.FileName,
+            ContentType: request.File.ContentType ?? string.Empty,
+            SignedAt: request.SignedAt,
+            SignedPlace: request.SignedPlace,
+            SignedBySource: request.SignedBySource), cancellationToken);
+
+        return Ok(new { contractFileId });
+    }
+
+    /// <summary>
+    /// Replace the current signed PDF after activation. Old row keeps history (IsCurrent=false),
+    /// new row is Version=N+1, IsCurrent=true. Rejected if contract is archived.
+    /// </summary>
+    [HttpPost("{id:int}/files/replace")]
+    [HasPermission(Permissions.ContractActivateAll)]
+    [EnableRateLimiting("contract-upload")]
+    [RequestSizeLimit(25 * 1024 * 1024)]
+    public async Task<IActionResult> ReplaceFile(
+        int id,
+        [FromForm] ReplaceContractFileRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length <= 0)
+            return BadRequest(new { errors = new[] { "File is required." } });
+
+        await using var stream = request.File.OpenReadStream();
+        var seekableStream = await EnsureSeekableAsync(stream, request.File.Length, cancellationToken);
+
+        var contractFileId = await _mediator.Send(new ReplaceContractFileCommand(
+            ContractId: id,
+            PdfStream: seekableStream,
+            FileSizeBytes: request.File.Length,
+            FileName: request.File.FileName,
+            ContentType: request.File.ContentType ?? string.Empty,
+            SignedBySource: request.SignedBySource), cancellationToken);
+
+        return Ok(new { contractFileId });
+    }
+
+    /// <summary>
+    /// Form-file streams from Kestrel/IIS are usually non-seekable; PdfStreamValidator and
+    /// the SHA-256 hashing in the storage layer both need to seek/read+rewind. Buffer into
+    /// a small MemoryStream when needed (file is already bounded by RequestSizeLimit).
+    /// </summary>
+    private static async Task<Stream> EnsureSeekableAsync(Stream source, long expectedLength, CancellationToken ct)
+    {
+        if (source.CanSeek) return source;
+        var ms = new MemoryStream(capacity: (int)Math.Min(expectedLength, int.MaxValue));
+        await source.CopyToAsync(ms, ct);
+        ms.Position = 0;
+        return ms;
     }
 }

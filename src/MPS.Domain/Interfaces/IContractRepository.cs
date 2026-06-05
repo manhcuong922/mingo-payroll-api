@@ -47,4 +47,55 @@ public interface IContractRepository
     Task<bool> AddAllowanceAsync(int contractId, ContractAllowance allowance, CancellationToken cancellationToken = default);
     Task<bool> UpdateAllowanceAmountAsync(int contractId, int allowanceTypeId, decimal amount, string currency, string? note, CancellationToken cancellationToken = default);
     Task<bool> RemoveAllowanceAsync(int contractId, int allowanceTypeId, CancellationToken cancellationToken = default);
+
+    // ===== Phase 6 — Activation + File replace =====
+
+    /// <summary>
+    /// Atomically transition a DRAFT contract → ACTIVE. Persists the supplied
+    /// <see cref="ContractFile"/> row (Version=1, IsCurrent=true) and freezes
+    /// snapshot lương + signedAt/signedPlace onto the contract.
+    /// </summary>
+    /// <returns>The new ContractFile.Id.</returns>
+    /// <exception cref="DomainValidationException">If contract not Draft, archived, or not found.</exception>
+    Task<int> ActivateDraftAsync(
+        int contractId,
+        decimal snapshotAmount,
+        string snapshotCurrency,
+        DateTime signedAtUtc,
+        string signedPlace,
+        ContractFile file,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get the current (IsCurrent=true) ContractFile for the given contract+target.
+    /// Returns null if none exists.
+    /// </summary>
+    Task<ContractFile?> GetCurrentFileAsync(
+        int contractId,
+        Domain.Enums.Contract.FileTargetType targetType,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically replace the current file: set existing IsCurrent=false, insert
+    /// <paramref name="newFile"/> with Version=oldVersion+1 and IsCurrent=true.
+    /// Rejects if contract is archived.
+    /// </summary>
+    /// <returns>The new ContractFile.Id.</returns>
+    Task<int> ReplaceCurrentFileAsync(
+        int contractId,
+        Domain.Enums.Contract.FileTargetType targetType,
+        ContractFile newFile,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Phase 8 — Upload văn bản (vd: thông báo chấm dứt HĐLĐ — Điều 45 BLLĐ 2019)
+    /// gắn với HĐ Active mà chưa có record nghiệp vụ tham chiếu (TargetId = contractId).
+    /// Đặt prior IsCurrent=true (cùng TargetType+TargetId) thành false rồi insert
+    /// <paramref name="file"/> với Version=oldMax+1, IsCurrent=true.
+    /// Reject nếu HĐ archived hoặc Status != Active.
+    /// </summary>
+    Task<int> AddContractFileForActiveContractAsync(
+        int contractId,
+        ContractFile file,
+        CancellationToken cancellationToken = default);
 }
