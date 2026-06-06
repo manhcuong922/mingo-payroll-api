@@ -317,6 +317,18 @@ public class ContractRepository : IContractRepository
         return newFile.Id;
     }
 
+    public async Task<IReadOnlyList<ContractFile>> GetFilesByTargetAsync(
+        FileTargetType targetType,
+        int targetId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.ContractFiles
+            .AsNoTracking()
+            .Where(f => f.TargetType == targetType && f.TargetId == targetId)
+            .OrderByDescending(f => f.Version)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<int> AddContractFileForActiveContractAsync(
         int contractId,
         ContractFile file,

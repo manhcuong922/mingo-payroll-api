@@ -65,6 +65,18 @@ public class ContractAppendixController : ControllerBase
     }
 
     /// <summary>
+    /// GET /api/contract-appendices/{id}/files — list PDF của phụ lục (TargetType=Appendix),
+    /// kèm presigned download URL TTL 15 phút. Self-scope check ở handler qua Contract.EmployeeId.
+    /// </summary>
+    [HttpGet("api/contract-appendices/{id:int}/files")]
+    [HasAnyPermission(Permissions.ContractFileReadAll, Permissions.ContractFileReadSelf)]
+    public async Task<IActionResult> GetFiles(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAppendixFilesQuery(id), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// POST /api/contract-appendices/{id}/activate — upload PDF + apply ChangedClausesJson lên HĐ.
     /// Re-uses the "contract-upload" rate-limit policy (5/min/user).
     /// </summary>

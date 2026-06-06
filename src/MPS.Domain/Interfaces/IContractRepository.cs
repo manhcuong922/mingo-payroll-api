@@ -99,6 +99,15 @@ public interface IContractRepository
         ContractFile file,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Lấy tất cả ContractFile match (TargetType, TargetId), sort Version DESC.
+    /// Trả empty list nếu không có file (không throw).
+    /// </summary>
+    Task<IReadOnlyList<ContractFile>> GetFilesByTargetAsync(
+        Domain.Enums.Contract.FileTargetType targetType,
+        int targetId,
+        CancellationToken cancellationToken = default);
+
     // ===== Phase 9 — Background jobs =====
 
     /// <summary>

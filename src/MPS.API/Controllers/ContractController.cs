@@ -204,6 +204,34 @@ public class ContractController : ControllerBase
         return NoContent();
     }
 
+    // --- Files (download via presigned URL) ---
+
+    /// <summary>
+    /// GET /api/contracts/{id}/files — list all PDF versions của HĐ (TargetType=Contract),
+    /// kèm presigned download URL TTL 15 phút. Self-scope check ở handler.
+    /// </summary>
+    [HttpGet("{id:int}/files")]
+    [HasAnyPermission(Permissions.ContractFileReadAll, Permissions.ContractFileReadSelf)]
+    public async Task<IActionResult> GetFiles(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetContractFilesQuery(id), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// GET /api/contracts/{id}/termination/files — list all termination notice PDF versions
+    /// (TargetType=Termination). Có thể trống nếu HĐ chưa terminate.
+    /// </summary>
+    [HttpGet("{id:int}/termination/files")]
+    [HasAnyPermission(Permissions.ContractFileReadAll, Permissions.ContractFileReadSelf)]
+    public async Task<IActionResult> GetTerminationFiles(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new MPS.Application.Features.ContractTermination.Queries.GetTerminationFilesQuery(id),
+            cancellationToken);
+        return Ok(result);
+    }
+
     // --- Phase 6: Activation + file replace ---
 
     /// <summary>
