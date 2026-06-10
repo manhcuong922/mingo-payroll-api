@@ -20,6 +20,7 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 **Fix dữ liệu seed (P0):**
 - Lương tối thiểu vùng III: 4,130,000 → **4,140,000**; vùng IV: 3,690,000 → **3,700,000** (NĐ 293/2025/NĐ-CP)
 - `EmployerSocialPercent`: 17.00 → **17.50** (3% ÔĐ-TS + 14% HT-TT + 0.5% TNLĐ-BNN theo Luật BHXH 2024 Điều 33–34)
+
 - Seed **2 version** `SocialInsuranceRateVersion`:
   - `2025-07-01` (Luật BHXH 41/2024 hiệu lực) — mức tham chiếu 2,340,000
   - `2026-07-01` (NĐ 161/2026/NĐ-CP) — mức tham chiếu 2,530,000
@@ -84,7 +85,7 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 - Effective-dating: version record với `ValidFrom`/`ValidTo`. Engine tra cứu theo `payDate`
 - Auto-close overlap (DC-12) trong cùng transaction `Serializable`
 - Filtered unique index `(ValidTo IS NULL)` enforce DC-12 ở DB level
-- `IComplianceLookupService` — read-side immutable snapshot + cache scoped per request
+- `IComplianceLookupService` — read-side immutable snapshot + cache shared toàn app (IMemoryCache Singleton, TTL 15 phút, invalidate khi có write)
 - Soft delete (`IsArchived = true`) — không hard delete record đã từng active
 - Seed bộ luật **2 version BHXH** (2025-07-01 + 2026-07-01) + 1 version PIT/OT/MinWage + 3 allowance threshold trong `DatabaseSeeder` (idempotent)
 - Permission-based authz cho HR Manager (admin), SystemAdmin / Chief Accountant / Auditor (read-only)
@@ -112,12 +113,12 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 | 3 | **Build `IComplianceLookupService` ngay** | Engine sẽ inject ngay, không refactor; cache scoped + invalidate qua MediatR notification |
 | 4 | **Tách FT-26 thành 2 entity** (`OtRateVersion` + `MinimumWageVersion`) | OT rates (BLLĐ 2019, ít đổi) vs Min wage (Nghị định, đổi hàng năm) chu kỳ luật khác nhau |
 | 5 | **`AllowanceType` entity giữ nguyên** | Threshold versioned riêng (FK → AllowanceType); không nhét cột threshold vào catalog |
-| 6 | **Enum lưu dạng string** | Đúng convention Contract module (`HasConversion<string>()`) |
+| 6 | **Không dùng enum cho bất kỳ giá trị nào liên quan luật** | Enum bị compile-time → mọi thay đổi buộc redeploy (vi phạm NFR-M05). Thay bằng `string` + static constants class: `RegionCodes`, `ThresholdModes`, `OtRateTypes`. Validator dùng `*.All` / `*.Required` / `*.MinimumRates` để cross-check. EF map string trực tiếp, không cần `HasConversion<string>()`. |
 | 7 | **`ValidFrom` allow back-date max 30d / forward-date max 365d** | Configurable `appsettings:Compliance:{MaxBackdateDays, MaxForwardDays}` |
 | 8 | **Inject `IClock` mọi handler/repo** | Unit test mock được; chuẩn convention dự án |
 | 9 | **Soft delete (`IsArchived = true`) thay hard delete** | Record đã active có thể đã được snapshot vào `PayrollItem` tương lai → không bao giờ thực sự xoá |
 | 10 | **Snapshot là `record` immutable**, expose tất cả field nghiệp vụ kế toán cần (gồm `EmployerOccupationalDiseasePercent`) | Engine copy nguyên trạng vào `PayrollItem` |
-| 11 | **`IComplianceLookupService` cache** scoped + `IMemoryCache` key `(type, payDate.Date)`; invalidate qua MediatR `INotification` từ Command handler | 1 kỳ lương × 1000 nhân viên × 5 method = 5000 query nếu không cache |
+| 11 | **`IComplianceLookupService` cache** dùng `IMemoryCache` (Singleton, shared toàn app); key `(type, payDate.Date)`; TTL 15 phút sliding; invalidate qua MediatR `INotification` từ Command handler | 1 kỳ lương × 1000 nhân viên × 5 method = 5000 query nếu không cache. **Không phải scoped per request** — cache share giữa tất cả request, `ComplianceLookupService` có thể Scoped nhưng `IMemoryCache` là Singleton |
 | 12 | **Wrap `DbUpdateException` → 409 Conflict** trong middleware | Race condition concurrent insert: filtered unique index hit → user nhận 409 đẹp thay vì 500 |
 | 13 | **`ThresholdMode` + `AppliesToTax`/`AppliesToSocial`** trong threshold entity | Phụ cấp ăn ca miễn cả BHXH + TNCN; xăng xe/điện thoại chỉ miễn TNCN |
 
@@ -169,22 +170,24 @@ AllowanceExemptThresholdVersion.cs
 | Cột | Type | Note |
 |---|---|---|
 | Id | int | PK identity |
-| ValidFrom | DateTime (date) | Required |
-| ValidTo | DateTime? (date) | Null = open |
+| ValidFrom | **DateOnly** | Required. Maps to SQL `date` column — không có time component, tránh hoàn toàn vấn đề timezone |
+| ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` column |
 | IsArchived | bool | Soft delete flag; default false |
 | EmployeeSocialPercent | decimal(5,2) | NLĐ BHXH, vd **8.00** |
-| EmployerSocialPercent | decimal(5,2) | NSDLĐ BHXH **tổng**, vd **17.50** (3% ÔĐ-TS + 14% HT-TT + 0.5% TNLĐ-BNN) |
+| EmployerSocialPercent | decimal(5,2) | NSDLĐ BHXH thuần, vd **17.50** (3% ÔĐ-TS + 14% HT-TT + 0.5% TNLĐ-BNN). Tổng NSDLĐ phải đóng = 17.5% BHXH + 3% BHYT + 1% BHTN + 2% công đoàn = **23.50%** |
 | EmployerOccupationalDiseasePercent | decimal(5,2) | Phần TNLĐ-BNN trong tổng EmployerSocial, vd **0.50** (kế toán tách chi phí) |
-| EmployeeHealthPercent | decimal(5,2) | vd 1.50 |
-| EmployerHealthPercent | decimal(5,2) | vd 3.00 |
-| EmployeeUnemploymentPercent | decimal(5,2) | vd 1.00 |
-| EmployerUnemploymentPercent | decimal(5,2) | vd 1.00 |
-| EmployerUnionFundPercent | decimal(5,2) | Kinh phí công đoàn, vd 2.00 |
+| EmployeeHealthPercent | decimal(5,2) | NLĐ BHYT, vd **1.50** |
+| EmployerHealthPercent | decimal(5,2) | NSDLĐ BHYT, vd **3.00** |
+| EmployeeUnemploymentPercent | decimal(5,2) | NLĐ BHTN, vd **1.00** |
+| EmployerUnemploymentPercent | decimal(5,2) | NSDLĐ BHTN, vd **1.00** |
+| EmployerUnionFundPercent | decimal(5,2) | Kinh phí công đoàn, vd **2.00** |
 | **ReferenceAmount** | decimal(18,2) | "Mức tham chiếu" (Luật BHXH 2024 đổi tên từ "lương cơ sở"). Trần BHXH/BHYT = 20× ReferenceAmount |
 | SocialCapMultiplier | int | Mặc định 20 |
 | LegalReference | string(500) | vd "Luật BHXH 41/2024/QH15 + NĐ 158/2025/NĐ-CP" |
 | Note | string(2000)? | |
-| CreatedAt, CreatedByUserId, UpdatedAt | audit | |
+| CreatedAt | **DateTime UTC** | `_clock.UtcNow` — kind = Utc, maps to SQL `datetime2` |
+| CreatedByUserId | int | |
+| UpdatedAt | **DateTime? UTC** | `_clock.UtcNow` — kind = Utc, maps to SQL `datetime2` |
 
 > **Bỏ `UnemploymentCapMultiplier`**: trần BHTN = 20× min wage vùng, luật không có precedent thay đổi → hardcode 20 trong snapshot.
 
@@ -194,7 +197,10 @@ AllowanceExemptThresholdVersion.cs
 
 | Cột | Type | Note |
 |---|---|---|
-| Id, ValidFrom, ValidTo, IsArchived | | |
+| Id | int | PK identity |
+| ValidFrom | **DateOnly** | Maps to SQL `date` |
+| ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` |
+| IsArchived | bool | default false |
 | PersonalDeductionAmount | decimal(18,2) | vd 15,500,000 |
 | DependentDeductionAmount | decimal(18,2) | vd 6,200,000 |
 | LegalReference, Note | | |
@@ -212,17 +218,35 @@ AllowanceExemptThresholdVersion.cs
 | UpperBound | decimal(18,2)? | Exclusive. Bracket cuối = null (vô cực) |
 | Rate | decimal(5,4) | vd 0.0500 (5%), 0.3500 (35%) |
 
-#### 2.1.3. `OtRateVersion`
+#### 2.1.3. `OtRateVersion` + `OtRateEntry`
+
+> **Rev 3 — thay đổi thiết kế:** 4 cột cứng (`WeekdayRate`, `WeekendRate`, `HolidayRate`, `NightShiftRate`) bị **bỏ**. Thay bằng bảng con `OtRateEntry` (key-value per loại OT) để khi luật bổ sung loại OT mới không cần migration thêm cột + redeploy (NFR-M05).
+
+`OtRateVersion`:
 
 | Cột | Type | Note |
 |---|---|---|
-| Id, ValidFrom, ValidTo, IsArchived | | |
-| WeekdayRate | decimal(5,2) | Ngày thường, vd **1.50** (luật yêu cầu ≥ 1.50) |
-| WeekendRate | decimal(5,2) | Cuối tuần, vd **2.00** (≥ 2.00) |
-| HolidayRate | decimal(5,2) | Ngày lễ, vd **3.00** (≥ 3.00) |
-| **NightShiftRate** | decimal(5,2) | Ban đêm 22:00–06:00, vd **1.30** (BLLĐ Điều 98 khoản 2). Default 1.30 ngay cả khi DN không có OT đêm — cheap, engine quyết định dùng |
+| Id | int | PK identity |
+| ValidFrom | **DateOnly** | Maps to SQL `date` |
+| ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` |
+| IsArchived | bool | default false |
 | LegalReference, Note | | |
 | audit | | |
+| Entries | nav | `ICollection<OtRateEntry>` — phải có đủ 4 loại Required |
+
+`OtRateEntry`:
+
+| Cột | Type | Note |
+|---|---|---|
+| Id | int | PK |
+| OtRateVersionId | int | FK → OtRateVersion |
+| OtType | string(50) | Loại OT, vd "Weekday", "Weekend", "Holiday", "NightShift". Tham chiếu `OtRateTypes.*` constants. Không dùng enum |
+| Label | string(100) | Nhãn hiển thị cho HR, vd "Ngày thường" |
+| Rate | decimal(5,2) | Hệ số nhân lương. Validator kiểm tra floor per OtType theo `OtRateTypes.MinimumRates` |
+
+Constants trong `OtRateTypes` (thay enum):
+- `OtRateTypes.Required = ["Weekday", "Weekend", "Holiday", "NightShift"]`
+- `OtRateTypes.MinimumRates = { Weekday: 1.50, Weekend: 2.00, Holiday: 3.00, NightShift: 1.30 }`
 
 > Cộng dồn OT ban đêm (Điều 98 khoản 3 — phụ trội 20%) là **engine concern**, không lưu thành rate riêng vì là công thức tính dựa trên các rate sẵn có.
 
@@ -232,7 +256,10 @@ AllowanceExemptThresholdVersion.cs
 
 | Cột | Type | Note |
 |---|---|---|
-| Id, ValidFrom, ValidTo, IsArchived | | |
+| Id | int | PK identity |
+| ValidFrom | **DateOnly** | Maps to SQL `date` |
+| ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` |
+| IsArchived | bool | default false |
 | LegalReference, Note | | |
 | audit | | |
 | Regions | nav | `ICollection<MinimumWageRegion>` — phải có đủ 4 row I/II/III/IV |
@@ -243,7 +270,7 @@ AllowanceExemptThresholdVersion.cs
 |---|---|---|
 | Id | int | PK |
 | MinimumWageVersionId | int | FK |
-| RegionCode | enum string | I / II / III / IV |
+| RegionCode | string(10) | "I" / "II" / "III" / "IV". Không dùng enum — tham chiếu `RegionCodes.*` constants. Validator dùng `RegionCodes.All` để cross-check |
 | AmountPerMonth | decimal(18,2) | vd 5,310,000 |
 
 > Không có `AmountPerHour` — scope chỉ lương tháng 8h/ngày, engine tính đơn giá giờ theo công thức NĐ 145/2020.
@@ -252,23 +279,31 @@ AllowanceExemptThresholdVersion.cs
 
 | Cột | Type | Note |
 |---|---|---|
-| Id, ValidFrom, ValidTo, IsArchived | | |
+| Id | int | PK identity |
+| ValidFrom | **DateOnly** | Maps to SQL `date` |
+| ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` |
+| IsArchived | bool | default false |
 | AllowanceTypeId | int | FK → `AllowanceTypes` |
-| ThresholdMode | enum string | `FixedAmount` / `ActualAllocation` |
+| ThresholdMode | string(30) | "FixedAmount" / "ActualAllocation". Không dùng enum — tham chiếu `ThresholdModes.*` constants. Validator dùng `ThresholdModes.All` để cross-check |
 | MonthlyExemptAmount | decimal(18,2)? | Null khi mode = ActualAllocation |
 | **AppliesToTax** | bool | True nếu miễn TNCN |
 | **AppliesToSocial** | bool | True nếu miễn BHXH/BHYT/BHTN |
 | LegalReference, Note | | |
 | audit | | |
 
-### 2.2. Enums (`src/MPS.Domain/Enums/Compliance/`)
+### 2.2. Constants thay Enums (`src/MPS.Domain/Enums/Compliance/`)
+
+> **Rev 3 — thay đổi thiết kế:** Không dùng `enum` cho bất kỳ giá trị nào liên quan luật. Dùng `static class` constants + string field trong entity. EF map string trực tiếp không cần `HasConversion`.
 
 ```
-RegionCode     { I, II, III, IV }
-ThresholdMode  { FixedAmount, ActualAllocation }
+RegionCodes     — "I", "II", "III", "IV" + IReadOnlyList<string> All
+ThresholdModes  — "FixedAmount", "ActualAllocation" + IReadOnlyList<string> All
+OtRateTypes     — "Weekday", "Weekend", "Holiday", "NightShift"
+                  + IReadOnlyList<string> Required
+                  + IReadOnlyDictionary<string, decimal> MinimumRates
 ```
 
-`.HasConversion<string>().HasMaxLength(30)` trong EF config.
+EF config: `.HasMaxLength(10)` cho RegionCode, `.HasMaxLength(30)` cho ThresholdMode, `.HasMaxLength(50)` cho OtType.
 
 ### 2.3. Repository interfaces (`src/MPS.Domain/Interfaces/`)
 
@@ -287,16 +322,16 @@ Method chung:
 ```csharp
 Task<TEntity?> GetByIdAsync(int id, CancellationToken ct);
 Task<IReadOnlyList<TEntity>> GetAllAsync(bool includeArchived, CancellationToken ct);
-Task<TEntity?> GetActiveAtAsync(DateTime date, CancellationToken ct);
+Task<TEntity?> GetActiveAtAsync(DateOnly date, CancellationToken ct);
 Task<int> AddAsync(TEntity entity, CancellationToken ct);    // Serializable tx + auto-close current open
-Task<bool> UpdateAsync(TEntity entity, CancellationToken ct); // chỉ open hoặc future-dated, chưa archived
+Task<bool> UpdateAsync(TEntity entity, CancellationToken ct); // chỉ future-dated (ValidFrom > today UTC), chưa archived
 Task<bool> ArchiveAsync(int id, CancellationToken ct);        // soft delete: set IsArchived = true
 ```
 
 `IAllowanceExemptThresholdRepository` extra:
 ```csharp
 Task<AllowanceExemptThresholdVersion?> GetActiveForAllowanceTypeAsync(
-    int allowanceTypeId, DateTime date, CancellationToken ct);
+    int allowanceTypeId, DateOnly date, CancellationToken ct);
 ```
 
 ### 2.4. Permission constants extend
@@ -318,6 +353,8 @@ Append 20 perms vào `Permissions.cs` + `PermissionIds.cs` (IDs 65–84).
 ### 3.1. Entity configurations (`src/MPS.Infrastructure/Persistence/Configurations/Compliance/`)
 
 #### 3.1.1. Effective-dating constraints
+
+> **DateOnly → SQL `date`:** EF Core 8 map `DateOnly` trực tiếp sang SQL Server `date` column mà không cần `.HasConversion()`. `ValidFrom` và `ValidTo` **không cần** `.HasColumnType("date")` thủ công — EF Core 8 tự suy ra. Lợi ích: không có time component, tránh hoàn toàn vấn đề timezone.
 
 - Unique index `(ValidFrom)` cho mọi version table
 - **Filtered unique index** `(WHERE ValidTo IS NULL AND IsArchived = 0)` — chỉ 1 record open + chưa archived mỗi loại:
@@ -389,10 +426,32 @@ LegalReference = "NĐ 161/2026/NĐ-CP (mức tham chiếu mới 2,530,000 từ 0
 
 > Tỷ lệ không đổi giữa 2 row — chỉ `ReferenceAmount` khác. Seed manually thay vì gọi `AddAsync` để tránh auto-close logic; tự set `ValidTo` của row 1.
 
-#### 3.2.3. `PitRegulationVersion` + 5 `PitBracket` — 1 row
+#### 3.2.3. `PitRegulationVersion` + `PitBracket` — **2 rows**
 
+> ⚠️ **BUG FIX:** Nếu chỉ seed từ 2026-01-01, engine sẽ throw `InvalidOperationException` khi tính lương backfill kỳ 2025 (không có PIT active). Seed thêm row biểu thuế cũ (Luật TNCN 2007 sửa đổi 2012) để cover kỳ lương từ 2020.
+
+**Row 1** (Biểu thuế cũ — Luật TNCN 2007 sửa đổi, dùng cho kỳ lương 2020–2025):
+```
+ValidFrom = 2020-01-01
+ValidTo = 2025-12-31   (auto-set khi seed row 2)
+PersonalDeductionAmount = 11,000,000
+DependentDeductionAmount = 4,400,000
+LegalReference = "Luật TNCN 04/2007/QH12 sửa đổi 2012 + NQ 954/2020/UBTVQH14 — giảm trừ 11tr/4.4tr"
+
+Brackets:
+  Order=1, Lower=0,           Upper=5,000,000,   Rate=0.0500
+  Order=2, Lower=5,000,000,   Upper=10,000,000,  Rate=0.1000
+  Order=3, Lower=10,000,000,  Upper=18,000,000,  Rate=0.1500
+  Order=4, Lower=18,000,000,  Upper=32,000,000,  Rate=0.2000
+  Order=5, Lower=32,000,000,  Upper=52,000,000,  Rate=0.2500
+  Order=6, Lower=52,000,000,  Upper=80,000,000,  Rate=0.3000
+  Order=7, Lower=80,000,000,  Upper=NULL,        Rate=0.3500
+```
+
+**Row 2** (Luật TNCN 109/2025/QH15, áp dụng từ kỳ 2026):
 ```
 ValidFrom = 2026-01-01
+ValidTo = NULL
 PersonalDeductionAmount = 15,500,000
 DependentDeductionAmount = 6,200,000
 LegalReference = "Luật TNCN 109/2025/QH15 + NQ 110/2025/UBTVQH15 — áp dụng từ kỳ tính thuế 2026 (từ 01/01/2026, dù toàn luật hiệu lực 01/07/2026)"
@@ -473,7 +532,7 @@ public DbSet<AllowanceExemptThresholdVersion> AllowanceExemptThresholdVersions =
 - [ ] `AppDbContext` thêm 7 DbSet
 - [ ] `DatabaseSeeder.SeedDefaultComplianceAsync` + `SeedDefaultAllowanceTypesAsync`
 - [ ] Migration `ComplianceModule` applied trên dev DB
-- [ ] Seed verified: 2 BHXH rows + 1 PIT + 1 OT + 1 MinWage + 3 allowance + thresholds
+- [ ] Seed verified: 2 BHXH rows + **2 PIT rows** (2020 + 2026) + 1 OT + 1 MinWage + 3 allowance + thresholds
 - [ ] `dotnet build` pass
 
 ---
@@ -498,7 +557,7 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     {
         entity.ValidTo = null;
         entity.IsArchived = false;
-        entity.CreatedAt = _clock.UtcNow;
+        entity.CreatedAt = _clock.UtcNow;  // DateTime UTC (Kind = Utc)
 
         await using var tx = await _context.Database.BeginTransactionAsync(
             System.Data.IsolationLevel.Serializable, ct);
@@ -514,8 +573,8 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
                 throw new ConflictException(
                     $"New ValidFrom ({entity.ValidFrom:yyyy-MM-dd}) must be after current open record's ValidFrom ({current.ValidFrom:yyyy-MM-dd}).");
 
-            current.ValidTo = entity.ValidFrom.AddDays(-1);
-            current.UpdatedAt = _clock.UtcNow;
+            current.ValidTo = entity.ValidFrom.AddDays(-1);  // DateOnly.AddDays — không có timezone issue
+            current.UpdatedAt = _clock.UtcNow;  // DateTime UTC
         }
 
         await _context.SocialInsuranceRateVersions.AddAsync(entity, ct);
@@ -531,28 +590,50 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
 
 ### 4.2. `UpdateAsync` rules
 
-- Chỉ cho phép update record với (`ValidTo IS NULL` OR `ValidFrom > _clock.UtcNow`) **AND** `IsArchived = false`
-- Không cho phép sửa `ValidFrom` của record đã close (đang là `ValidTo` của record cũ)
+- **Chỉ cho phép update record `future-dated`**: `ValidFrom > DateOnly.FromDateTime(_clock.UtcNow)` **AND** `IsArchived = false`
+- **KHÔNG cho phép sửa record đang active** (`ValidFrom <= DateOnly.FromDateTime(_clock.UtcNow)` dù `ValidTo IS NULL`) — muốn thay đổi hiệu lực ngay phải POST tạo version mới
+- Không cho phép sửa `ValidFrom` thành ngày ≤ `DateOnly.FromDateTime(_clock.UtcNow)` (sẽ vi phạm rule trên)
 - Reject với `ConflictException` nếu vi phạm
+
+> ⚠️ **Lý do cấm sửa record active:** Nếu kỳ lương đã tính dựa trên tỷ lệ hiện tại, việc sửa record nguồn sẽ khiến `PayrollItem.snapshot` không còn khớp `GetActiveAt(payDate)` khi audit → vi phạm DC-10 ngầm. Muốn đổi tỷ lệ → tạo version mới với `ValidFrom` trong tương lai, hệ thống tự auto-close version hiện tại.
 
 ### 4.3. `ArchiveAsync` (soft delete)
 
 - Chỉ cho phép archive record với `ValidTo IS NULL` AND `IsArchived = false`
-- Set `IsArchived = true`, `UpdatedAt = _clock.UtcNow`
-- Trong cùng tx: **reset** `ValidTo` của record liền trước (nếu có) về NULL — phục hồi nó thành "open"
 - Nếu record đã đóng (`ValidTo NOT NULL`) → reject 409 "Cannot archive closed historical record — historical immutable"
+- Nếu record đã archived → reject 409
+
+**Thứ tự bắt buộc trong transaction (QUAN TRỌNG — sai thứ tự gây unique index exception):**
+
+1. Load record cần archive + record liền trước (nếu có) trong cùng tx
+2. **Bước 1:** Set `target.IsArchived = true`, `target.UpdatedAt = _clock.UtcNow` (DateTime UTC)
+3. **Bước 2:** Nếu có `previous` (record liền trước, `ValidTo = target.ValidFrom.AddDays(-1)` — DateOnly): set `previous.ValidTo = null` — phục hồi nó thành "open"
+4. `SaveChangesAsync` → `CommitAsync`
+
+> ⚠️ **Không được** reset `previous.ValidTo` trước bước 1. Nếu làm ngược: tại thời điểm `previous.ValidTo = null`, filtered unique index `WHERE ValidTo IS NULL AND IsArchived = 0` sẽ thấy 2 record open (`target` vẫn chưa archived + `previous` vừa mở lại) → `DbUpdateException` trong transaction → archive bị rollback.
 
 ### 4.4. `GetActiveAtAsync(date)`
 
 ```csharp
+// date: DateOnly — EF Core 8 hỗ trợ DateOnly trực tiếp trong LINQ với SQL Server, map sang SQL date column
 return await _context.Set<TVersion>()
     .Include(/* children: PitBrackets, Regions */)
     .Where(x => !x.IsArchived
                 && x.ValidFrom <= date
-                && (x.ValidTo == null || x.ValidTo >= date))
+                && (x.ValidTo == null || x.ValidTo >= date))  // >= INCLUSIVE, không dùng >
     .OrderByDescending(x => x.ValidFrom)
     .FirstOrDefaultAsync(ct);
 ```
+
+> ⚠️ **Boundary phải là `>=` (inclusive), KHÔNG phải `>`.**
+> `ValidTo` được set bằng `entity.ValidFrom.AddDays(-1)` (DateOnly) — ngày cuối version cũ còn hiệu lực. Ví dụ:
+> - Row 1: `ValidFrom = 2025-07-01`, `ValidTo = 2026-06-30`
+> - Row 2: `ValidFrom = 2026-07-01`, `ValidTo = null`
+>
+> Query `GetActiveAt(2026-06-30)`: Row 1 match vì `ValidTo(2026-06-30) >= 2026-06-30` ✅ — **không có gap**.
+> Nếu dùng `>`: `ValidTo(2026-06-30) > 2026-06-30` = false → không tìm ra record nào → engine crash.
+>
+> **Caller** truyền vào `DateOnly.FromDateTime(_clock.UtcNow)` (không dùng `DateTime.UtcNow.Date` vì `.Date` trả `DateTime` với `Kind = Unspecified`).
 
 ### 4.5. Register vào `InfrastructureServiceRegistration`
 
@@ -564,20 +645,37 @@ services.AddScoped<IMinimumWageRepository, MinimumWageRepository>();
 services.AddScoped<IAllowanceExemptThresholdRepository, AllowanceExemptThresholdRepository>();
 ```
 
-### 4.6. Map `DbUpdateException` → 409 trong `ExceptionHandlingMiddleware`
+### 4.6. Map `DbUpdateException` → 409 tại Compliance Repository layer
 
-Bổ sung handler trong middleware hiện có (`src/MPS.API/Middleware/ExceptionHandlingMiddleware.cs`):
+**KHÔNG** bắt ở global `ExceptionHandlingMiddleware` — sẽ catch nhầm unique violation của tất cả module khác (User, Role, Contract...) và trả message sai ngữ cảnh.
+
+Thay vào đó, bắt **trong mỗi compliance repository** tại `AddAsync` và `UpdateAsync`:
 
 ```csharp
+try
+{
+    await _context.SaveChangesAsync(ct);
+    await tx.CommitAsync(ct);
+}
 catch (DbUpdateException dbEx) when (IsUniqueIndexViolation(dbEx))
 {
-    await WriteProblemDetails(context, StatusCodes.Status409Conflict,
-        "Conflict",
-        "Another compliance record with the same effective scope already exists. Please refresh and retry.");
+    await tx.RollbackAsync(ct);
+    throw new ConflictException(
+        "A compliance version with the same effective date scope already exists. " +
+        "Another request may have submitted concurrently. Please refresh and retry.");
 }
 ```
 
-Helper `IsUniqueIndexViolation`: check inner `SqlException.Number ∈ {2601, 2627}` (SQL Server unique violation codes).
+Helper `IsUniqueIndexViolation` (private trong mỗi repo hoặc shared `ComplianceRepositoryHelper`):
+```csharp
+private static bool IsUniqueIndexViolation(DbUpdateException ex)
+{
+    var inner = ex.InnerException as SqlException;
+    return inner is not null && (inner.Number == 2601 || inner.Number == 2627);
+}
+```
+
+> ✅ **Tại sao bắt ở repo, không ở middleware:** Global middleware không biết context đang xử lý module nào. Bắt tại repo giúp message chính xác, không ảnh hưởng unique violation của User/Role/Contract. `ConflictException` sau đó được middleware map thành 409 như bình thường.
 
 ### 4.7. Deliverables Phase 3
 
@@ -607,7 +705,7 @@ Mỗi sub-feature có 6 file Command/Query (Create/Update/Archive/GetAll/GetById
 
 | Validator | Rule |
 |---|---|
-| **All Create** | `ValidFrom >= _clock.UtcNow.Date.AddDays(-MaxBackdateDays)` (default 30) AND `ValidFrom <= _clock.UtcNow.Date.AddDays(MaxForwardDays)` (default 365) |
+| **All Create** | `ValidFrom >= DateOnly.FromDateTime(_clock.UtcNow).AddDays(-MaxBackdateDays)` (default 30) AND `ValidFrom <= DateOnly.FromDateTime(_clock.UtcNow).AddDays(MaxForwardDays)` (default 365) |
 | **SocialInsurance** | Mọi percent ∈ [0, 100]; `EmployerOccupationalDiseasePercent ≤ EmployerSocialPercent`; `ReferenceAmount > 0`; `SocialCapMultiplier ∈ [1, 100]` |
 | **PitRegulation** | `PersonalDeductionAmount > 0`, `DependentDeductionAmount > 0`; **brackets sequence**: `Order` consecutive starting 1; `LowerBound[0] = 0`; `LowerBound[i+1] = UpperBound[i]`; bracket cuối `UpperBound = null`; **rate ascending**: `Rate[i] ≥ Rate[i-1]` ; mọi rate ∈ [0, 1] |
 | **OtRate** | `WeekdayRate ≥ 1.50` ; `WeekendRate ≥ 2.00` ; `HolidayRate ≥ 3.00` ; `NightShiftRate ≥ 1.30` ; mọi rate ≤ 10 (sanity cap) |
@@ -672,7 +770,7 @@ Endpoints chuẩn:
 |---|---|---|---|
 | GET | `/?includeArchived=false` | `Read.All` | List all versions |
 | GET | `/{id}` | `Read.All` | Get by id |
-| GET | `/active?date=yyyy-MM-dd` | `Read.All` | Get version active at date (default = today VN) |
+| GET | `/active?date=yyyy-MM-dd` | `Read.All` | Get version active at date (default = today UTC) |
 | POST | `/` | `Create.All` | Create (auto-close current) |
 | PUT | `/{id}` | `Update.All` | Update (chỉ open hoặc future, chưa archived) |
 | DELETE | `/{id}` | `Delete.All` | Soft delete (`IsArchived = true`) |
@@ -707,12 +805,12 @@ Endpoints chuẩn:
 /// </summary>
 public interface IComplianceLookupService
 {
-    Task<SocialInsuranceRateSnapshot> GetSocialInsuranceAt(DateTime payDate, CancellationToken ct);
-    Task<PitRegulationSnapshot> GetPitAt(DateTime payDate, CancellationToken ct);
-    Task<OtRateSnapshot> GetOtRatesAt(DateTime payDate, CancellationToken ct);
-    Task<MinimumWageSnapshot> GetMinimumWageAt(DateTime payDate, CancellationToken ct);
+    Task<SocialInsuranceRateSnapshot> GetSocialInsuranceAt(DateOnly payDate, CancellationToken ct);
+    Task<PitRegulationSnapshot> GetPitAt(DateOnly payDate, CancellationToken ct);
+    Task<OtRateSnapshot> GetOtRatesAt(DateOnly payDate, CancellationToken ct);
+    Task<MinimumWageSnapshot> GetMinimumWageAt(DateOnly payDate, CancellationToken ct);
     Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAt(
-        int allowanceTypeId, DateTime payDate, CancellationToken ct);
+        int allowanceTypeId, DateOnly payDate, CancellationToken ct);
 }
 ```
 
@@ -720,7 +818,7 @@ public interface IComplianceLookupService
 
 ```csharp
 public sealed record SocialInsuranceRateSnapshot(
-    DateTime ValidFrom,
+    DateOnly ValidFrom,
     decimal EmployeeSocialPercent,
     decimal EmployerSocialPercent,
     decimal EmployerOccupationalDiseasePercent,   // expose để kế toán tách chi phí TNLĐ-BNN
@@ -738,14 +836,14 @@ public sealed record PitBracketSnapshot(
     int Order, decimal LowerBound, decimal? UpperBound, decimal Rate);
 
 public sealed record PitRegulationSnapshot(
-    DateTime ValidFrom,
+    DateOnly ValidFrom,
     decimal PersonalDeductionAmount,
     decimal DependentDeductionAmount,
     IReadOnlyList<PitBracketSnapshot> Brackets,
     string LegalReference);
 
 public sealed record OtRateSnapshot(
-    DateTime ValidFrom,
+    DateOnly ValidFrom,
     decimal WeekdayRate,
     decimal WeekendRate,
     decimal HolidayRate,
@@ -755,7 +853,7 @@ public sealed record OtRateSnapshot(
 public sealed record MinimumWageRegionSnapshot(string RegionCode, decimal AmountPerMonth);
 
 public sealed record MinimumWageSnapshot(
-    DateTime ValidFrom,
+    DateOnly ValidFrom,
     IReadOnlyList<MinimumWageRegionSnapshot> Regions,
     string LegalReference)
 {
@@ -765,7 +863,7 @@ public sealed record MinimumWageSnapshot(
 }
 
 public sealed record AllowanceExemptThresholdSnapshot(
-    DateTime ValidFrom,
+    DateOnly ValidFrom,
     int AllowanceTypeId,
     string AllowanceTypeCode,
     string ThresholdMode,
@@ -777,10 +875,10 @@ public sealed record AllowanceExemptThresholdSnapshot(
 
 ### 7.3. Implementation (`src/MPS.Infrastructure/Services/ComplianceLookupService.cs`)
 
-- Inject 5 repository + `IMemoryCache`
+- Inject 5 repository + `IMemoryCache` (Singleton — shared toàn app, không phải scoped per request)
 - **Cache key**: `$"compliance:{type}:{payDate:yyyyMMdd}"` (cho allowance thì kèm `allowanceTypeId`)
-- **Cache duration**: 15 phút sliding hoặc invalidate qua MediatR notification
-- Mỗi method gọi `GetActiveAtAsync(date)` → map sang snapshot → cache
+- **Cache duration**: 15 phút sliding **hoặc** invalidate sớm qua MediatR notification khi có POST/PUT/DELETE
+- Mỗi method gọi `GetActiveAtAsync(date)` → map sang snapshot → set vào cache với `CancellationChangeToken` của type tương ứng
 - **Throw** `InvalidOperationException` nếu không có record active tại date (engine bắt và reject toàn kỳ — không tính bằng default)
 - `GetAllowanceThresholdAt`: return `null` nếu không có threshold cho allowance type đó
 
@@ -945,7 +1043,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 - [ ] `dotnet build` 0 errors 0 warnings
 - [ ] `dotnet test` all green, coverage ≥ 80%
 - [ ] Swagger smoke happy + 409 conflict + soft delete path
-- [ ] Migration applied trên dev DB + seeded (2 BHXH rows + 1 PIT + 1 OT + 1 MinWage + 3 allowance + thresholds)
+- [ ] Migration applied trên dev DB + seeded (2 BHXH rows + **2 PIT rows** + 1 OT + 1 MinWage + 3 allowance + thresholds)
 - [ ] Verify số liệu seed cross-check pháp lý (NSDLĐ BHXH = 17.5, Region III = 4,140,000, Region IV = 3,700,000, ReferenceAmount 2,340,000 / 2,530,000)
 - [ ] `Permissions.cs` extend đúng IDs 65–84
 - [ ] Role-permission seed cấp đủ cho HRManager + read cho SystemAdmin/Accountant/Auditor
