@@ -24,6 +24,8 @@ public class SocialInsuranceRateVersion
     public decimal ReferenceAmount { get; set; }
     // Trần đóng BHXH/BHYT = SocialCapMultiplier × ReferenceAmount
     public int SocialCapMultiplier { get; set; } = 20;
+    // Trần đóng BHTN = UnemploymentCapMultiplier × MinimumWage vùng
+    public int UnemploymentCapMultiplier { get; set; } = 20;
 
     public string LegalReference { get; set; } = string.Empty;
     public string? Note { get; set; }
@@ -31,4 +33,5 @@ public class SocialInsuranceRateVersion
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public int? UpdatedByUserId { get; set; }
 }

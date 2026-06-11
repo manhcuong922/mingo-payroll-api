@@ -124,6 +124,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<DateOnly>("ValidFrom")
                         .HasColumnType("date");
 
@@ -131,6 +134,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
 
                     b.HasIndex("AllowanceTypeId", "ValidFrom")
                         .IsUnique();
@@ -140,6 +147,83 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasFilter("[ValidTo] IS NULL AND [IsArchived] = 0");
 
                     b.ToTable("AllowanceExemptThresholdVersions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.LaborLawConstantsVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AnnualLeaveMinDays")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("NightShiftSurchargePercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<decimal>("OvertimeMaxHoursPerDay")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<int>("OvertimeMaxHoursPerYear")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ProbationSalaryMinPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("StandardWorkingDaysPerMonth")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<decimal>("StandardWorkingHoursPerDay")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ValidFrom")
+                        .IsUnique();
+
+                    b.HasIndex("ValidTo")
+                        .IsUnique()
+                        .HasFilter("[ValidTo] IS NULL AND [IsArchived] = 0");
+
+                    b.ToTable("LaborLawConstantsVersions", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageRegion", b =>
@@ -203,6 +287,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<DateOnly>("ValidFrom")
                         .HasColumnType("date");
 
@@ -210,6 +297,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
 
                     b.HasIndex("ValidFrom")
                         .IsUnique();
@@ -287,6 +378,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<DateOnly>("ValidFrom")
                         .HasColumnType("date");
 
@@ -294,6 +388,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
 
                     b.HasIndex("ValidFrom")
                         .IsUnique();
@@ -380,6 +478,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<DateOnly>("ValidFrom")
                         .HasColumnType("date");
 
@@ -387,6 +488,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
 
                     b.HasIndex("ValidFrom")
                         .IsUnique();
@@ -458,8 +563,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(20);
 
+                    b.Property<int>("UnemploymentCapMultiplier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(20);
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
 
                     b.Property<DateOnly>("ValidFrom")
                         .HasColumnType("date");
@@ -468,6 +581,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
 
                     b.HasIndex("ValidFrom")
                         .IsUnique();
@@ -3092,7 +3209,32 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AllowanceType");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.LaborLawConstantsVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageRegion", b =>
@@ -3106,6 +3248,20 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("MinimumWageVersion");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.OtRateEntry", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.Compliance.OtRateVersion", "OtRateVersion")
@@ -3117,6 +3273,20 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("OtRateVersion");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.OtRateVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitBracket", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.Compliance.PitRegulationVersion", "PitRegulationVersion")
@@ -3126,6 +3296,34 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("PitRegulationVersion");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitRegulationVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceRateVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Contract", b =>

@@ -109,6 +109,11 @@ public static class Permissions
     public const string AllowanceExemptThresholdCreateAll = "AllowanceExemptThreshold.Create.All";
     public const string AllowanceExemptThresholdUpdateAll = "AllowanceExemptThreshold.Update.All";
     public const string AllowanceExemptThresholdDeleteAll = "AllowanceExemptThreshold.Delete.All";
+
+    public const string LaborLawConstantsReadAll = "LaborLawConstants.Read.All";
+    public const string LaborLawConstantsCreateAll = "LaborLawConstants.Create.All";
+    public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
+    public const string LaborLawConstantsDeleteAll = "LaborLawConstants.Delete.All";
 }
 
 public static class PermissionIds
@@ -220,4 +225,9 @@ public static class PermissionIds
     public const int AllowanceExemptThresholdCreateAll = 82;
     public const int AllowanceExemptThresholdUpdateAll = 83;
     public const int AllowanceExemptThresholdDeleteAll = 84;
+
+    public const int LaborLawConstantsReadAll = 85;
+    public const int LaborLawConstantsCreateAll = 86;
+    public const int LaborLawConstantsUpdateAll = 87;
+    public const int LaborLawConstantsDeleteAll = 88;
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using MPS.Domain.Entities;
 using MPS.Domain.Entities.Compliance;
 
 namespace MPS.Infrastructure.Persistence.Configurations.Compliance;
@@ -28,6 +29,7 @@ public class SocialInsuranceRateVersionEntityConfiguration : IEntityTypeConfigur
         builder.Property(e => e.EmployerUnionFundPercent).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.ReferenceAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.SocialCapMultiplier).IsRequired().HasDefaultValue(20);
+        builder.Property(e => e.UnemploymentCapMultiplier).IsRequired().HasDefaultValue(20);
 
         builder.Property(e => e.LegalReference).HasMaxLength(500).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(2000);
@@ -35,6 +37,18 @@ public class SocialInsuranceRateVersionEntityConfiguration : IEntityTypeConfigur
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.CreatedByUserId).IsRequired();
         builder.Property(e => e.UpdatedAt);
+        builder.Property(e => e.UpdatedByUserId);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(e => e.CreatedByUserId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(e => e.UpdatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Chỉ 1 record open (ValidTo IS NULL) + chưa archived mỗi thời điểm
         builder.HasIndex(e => e.ValidFrom).IsUnique();

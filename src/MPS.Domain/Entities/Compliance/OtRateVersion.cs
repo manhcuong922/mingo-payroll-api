@@ -21,6 +21,7 @@ public class OtRateVersion
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public int? UpdatedByUserId { get; set; }
 
     /// <summary>
     /// Danh sách các loại OT và hệ số tương ứng.

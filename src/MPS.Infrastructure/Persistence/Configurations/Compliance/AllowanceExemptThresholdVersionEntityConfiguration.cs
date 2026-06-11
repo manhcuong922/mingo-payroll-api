@@ -31,6 +31,18 @@ public class AllowanceExemptThresholdVersionEntityConfiguration : IEntityTypeCon
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.CreatedByUserId).IsRequired();
         builder.Property(e => e.UpdatedAt);
+        builder.Property(e => e.UpdatedByUserId);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(e => e.CreatedByUserId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(e => e.UpdatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Scoped per AllowanceType: chỉ 1 record open per AllowanceTypeId
         builder.HasIndex(e => new { e.AllowanceTypeId, e.ValidFrom }).IsUnique();

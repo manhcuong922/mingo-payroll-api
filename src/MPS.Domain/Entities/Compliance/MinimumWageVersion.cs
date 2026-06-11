@@ -13,6 +13,7 @@ public class MinimumWageVersion
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public int? UpdatedByUserId { get; set; }
 
     // Phải có đủ 4 vùng I/II/III/IV
     public ICollection<MinimumWageRegion> Regions { get; set; } = new List<MinimumWageRegion>();

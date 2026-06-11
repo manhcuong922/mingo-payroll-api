@@ -7,50 +7,30 @@
 **SRS mapping:** FT-24, FT-25, FT-26, FT-27
 **Priority:** Must
 **Primary actor:** HR Manager
-**Last updated:** 2026-06-08 (**Rev 2** — compliance data review applied)
+**Last updated:** 2026-06-11 (**Rev 5** — full flex: LaborLawConstantsVersion + UnemploymentCapMultiplier DB + exception classes)
 
 ---
 
 ## Changelog
 
-### Rev 2 (2026-06-08) — Compliance data review
+### Rev 5 (2026-06-11) — Full flex: không còn magic number trong engine
 
-Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lương tháng, 8h/ngày, chính thức/thử việc), các thay đổi sau đã apply:
+- Thêm `LaborLawConstantsVersion` entity (mục 2.1.6) — tập trung 85% thử việc, 20% phụ trội đêm, 8h/ngày, 26 ngày/tháng, giới hạn OT/năm vào DB versioned
+- Thêm `UnemploymentCapMultiplier int` vào `SocialInsuranceRateVersion` — đưa từ hardcode snapshot → cột DB
+- `ArchiveAsync` tìm previous bằng timeline query, không dùng `AddDays(-1)` (lỗi logic Rev 4)
+- Seed `OtRateVersion` dùng `Entries` list đúng cấu trúc bảng con (lỗi logic Rev 4)
+- `ComplianceCacheInvalidator` bắt buộc `oldCts.Dispose()` trước khi gán CTS mới (memory leak Rev 4)
+- Thêm `NotFoundException` + `ConflictException` vào `MPS.Domain/Exceptions/` + handler middleware
+- Thêm method `GetLaborLawConstantsAt()` vào `IComplianceLookupService`
 
-**Fix dữ liệu seed (P0):**
-- Lương tối thiểu vùng III: 4,130,000 → **4,140,000**; vùng IV: 3,690,000 → **3,700,000** (NĐ 293/2025/NĐ-CP)
-- `EmployerSocialPercent`: 17.00 → **17.50** (3% ÔĐ-TS + 14% HT-TT + 0.5% TNLĐ-BNN theo Luật BHXH 2024 Điều 33–34)
+### Rev 4 (2026-06-11) — Audit trail + no-enum + data review
 
-- Seed **2 version** `SocialInsuranceRateVersion`:
-  - `2025-07-01` (Luật BHXH 41/2024 hiệu lực) — mức tham chiếu 2,340,000
-  - `2026-07-01` (NĐ 161/2026/NĐ-CP) — mức tham chiếu 2,530,000
-
-**Schema changes (P0/P1):**
-- Rename `BaseSalaryAmount` → **`ReferenceAmount`** (Luật BHXH 2024 đổi thuật ngữ "lương cơ sở" → "mức tham chiếu")
-- Bỏ `UnemploymentCapMultiplier` khỏi `SocialInsuranceRateVersion` (hardcode 20 trong snapshot, luật không có precedent thay đổi)
-- Thêm `NightShiftRate` vào `OtRateVersion` (BLLĐ 2019 Điều 98 khoản 2 — 130%)
-- Thêm `AppliesToTax`, `AppliesToSocial` vào `AllowanceExemptThresholdVersion` (phụ cấp ăn ca miễn cả 2; điện thoại/xăng xe chỉ miễn TNCN)
-- Thêm `IsArchived` cho soft delete (replace hard delete)
-
-**Validator fixes (P1):**
-- `OtRate`: `WeekdayRate ≥ 1.50`, `WeekendRate ≥ 2.00`, `HolidayRate ≥ 3.00`, `NightShiftRate ≥ 1.30`
-- `PitRegulation`: thêm check **rate ascending** (`Rate[i] ≥ Rate[i-1]`) — chống nhập sai lũy tiến
-- Thêm `MaxForwardDays` (default 365) — chặn HR tạo version 2050 ghi đè version hiện tại
-
-**Code quality (P2):**
-- `AddAsync` inject `IClock` thay `DateTime.UtcNow` — unit test mock được
-- Transaction `IsolationLevel.Serializable` — chống race condition concurrent insert
-- Wrap `DbUpdateException` từ filtered unique index → **409 Conflict** (ExceptionMiddleware)
-- `IComplianceLookupService`: thêm `IMemoryCache` scoped per request + invalidate qua MediatR notification khi POST/PUT/DELETE
-
-**Snapshot expose thêm:**
-- `EmployerOccupationalDiseasePercent` (0.5%) — kế toán tách chi phí TNLĐ-BNN
-
-**Scope clarification (lương tháng + 8h/ngày):**
-- **BỎ** `AmountPerHour` ở `MinimumWageRegion` — engine tự tính `LươngTháng ÷ (24 × 8)` theo NĐ 145/2020 Điều 54
-- `NightShiftRate` vẫn add (cheap, an toàn) nhưng default 1.30, engine quyết định dùng hay không
-- `IComplianceLookupService` doc comment: **publish rates only — eligibility (vd thử việc < 1 tháng có đóng BHXH không) là engine concern**
-- Hằng số 85% lương thử việc (BLLĐ Điều 26) defer — note ở Risks
+- `UpdatedByUserId int?` + navigation `CreatedByUser`/`UpdatedByUser` vào tất cả version entities
+- Không dùng enum cho giá trị liên quan luật — dùng static constants class
+- Fix seed data: Region III=4,140,000, IV=3,700,000; EmployerSocialPercent=17.50
+- `OtRateVersion` tách thành bảng con `OtRateEntry` (key-value per loại OT)
+- Seed 2 version BHXH (2025-07-01 + 2026-07-01), 2 version PIT (2020 + 2026)
+- Rename `BaseSalaryAmount` → `ReferenceAmount`
 
 ---
 
@@ -60,9 +40,9 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 
 | Tài liệu | Mục đích |
 |----------|----------|
-| FE-06 spec (chat) | 4 sub-feature + biểu thuế/tỷ lệ/hệ số/ngưỡng + luồng 4.1–4.3 |
+| FE-06 spec (chat) | 5 sub-feature + biểu thuế/tỷ lệ/hệ số/ngưỡng/hằng số lao động + luồng 4.1–4.3 |
 | `docs/plans/contract-implementation-plan.md` | Pattern shipped: CQRS + MediatR + FluentValidation + permission-based authz + Seeder + IClock |
-| `src/MPS.Domain/Constants/Permissions.cs` | Permission constants — extend IDs 65–84 |
+| `src/MPS.Domain/Constants/Permissions.cs` | Permission constants — extend IDs 65–88 |
 | `src/MPS.Infrastructure/Persistence/DatabaseSeeder.cs` | Pattern seed idempotent từ config |
 | `src/MPS.Application/Common/Interfaces/IClock.cs` | Time abstraction |
 | Luật BHXH 41/2024/QH15 (hiệu lực 1/7/2025) | Tỷ lệ BHXH NLĐ 8% / NSDLĐ 17.5% + mức tham chiếu |
@@ -81,7 +61,7 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 **Clarification scope (rev 2):** Module này chỉ phục vụ tính lương cho **HĐLĐ chính thức + thử việc**, nhân sự **hưởng lương tháng, 8h/ngày**. **Không** hỗ trợ lương sản phẩm/khoán, không hỗ trợ part-time/lương giờ.
 
 ✅ **Trong scope:**
-- 4 sub-feature CRUD admin: Social Insurance (FT-24), PIT (FT-25), OT Rate + Min Wage (FT-26), Allowance Threshold (FT-27)
+- 5 sub-feature CRUD admin: Social Insurance (FT-24), PIT (FT-25), OT Rate + Min Wage (FT-26), Allowance Threshold (FT-27), **Labor Law Constants (FT-28)**
 - Effective-dating: version record với `ValidFrom`/`ValidTo`. Engine tra cứu theo `payDate`
 - Auto-close overlap (DC-12) trong cùng transaction `Serializable`
 - Filtered unique index `(ValidTo IS NULL)` enforce DC-12 ở DB level
@@ -97,8 +77,7 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 - **Dependent entity với status `Complete`** (DC-13): thuộc FT-01; FE-06 publish *mức* giảm trừ/người, engine count
 - **Contract ↔ Region mapping**: thuộc FT-03 / engine; FE-06 publish bảng 4 vùng
 - **Lương sản phẩm/khoán, part-time, lương giờ**: ngoài scope dự án
-- **`AmountPerHour` cho min wage**: engine tự tính `LươngTháng ÷ (24 × 8)` theo NĐ 145/2020 Điều 54
-- **Hằng số 85% lương thử việc** (BLLĐ Điều 26): defer; xem Risks
+- **`AmountPerHour` cho min wage**: engine tra cứu `StandardWorkingHoursPerDay` + `StandardWorkingDaysPerMonth` từ `LaborLawConstantsVersion` để tính đơn giá giờ — không hardcode `24 × 8`
 - **Notification "luật đổi"**: TODO; chỉ có `IEmailSender` log-only
 - **Audit log table riêng**: dùng pattern `CreatedAt/CreatedByUserId/UpdatedAt`
 - **UI screen**: frontend repo
@@ -121,6 +100,7 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 | 11 | **`IComplianceLookupService` cache** dùng `IMemoryCache` (Singleton, shared toàn app); key `(type, payDate.Date)`; TTL 15 phút sliding; invalidate qua MediatR `INotification` từ Command handler | 1 kỳ lương × 1000 nhân viên × 5 method = 5000 query nếu không cache. **Không phải scoped per request** — cache share giữa tất cả request, `ComplianceLookupService` có thể Scoped nhưng `IMemoryCache` là Singleton |
 | 12 | **Wrap `DbUpdateException` → 409 Conflict** trong middleware | Race condition concurrent insert: filtered unique index hit → user nhận 409 đẹp thay vì 500 |
 | 13 | **`ThresholdMode` + `AppliesToTax`/`AppliesToSocial`** trong threshold entity | Phụ cấp ăn ca miễn cả BHXH + TNCN; xăng xe/điện thoại chỉ miễn TNCN |
+| 14 | **`LaborLawConstantsVersion` entity riêng** cho các hằng số luật lao động | Tập trung tất cả magic number (85% thử việc, 20% phụ trội đêm, 26 ngày/tháng, 8h/ngày...) vào 1 bảng versioned — HR điều chỉnh được, không hardcode trong engine |
 
 ---
 
@@ -128,7 +108,7 @@ Sau khi cross-check với văn bản pháp lý gốc + clarification scope (lư�
 
 ### 1.1. Naming convention (`Resource.Action.Scope`)
 
-Thêm **20 permissions mới** vào `MPS.Domain.Constants.Permissions` + `PermissionIds` (IDs **65–84**, range reserved 33–100 vẫn dư):
+Thêm **24 permissions mới** vào `MPS.Domain.Constants.Permissions` + `PermissionIds` (IDs **65–88**, range reserved 33–100 vẫn dư):
 
 | Resource | Permissions | Permission IDs |
 |----------|-------------|----------------|
@@ -137,6 +117,7 @@ Thêm **20 permissions mới** vào `MPS.Domain.Constants.Permissions` + `Permis
 | `OtRate` | `Read.All`, `Create.All`, `Update.All`, `Delete.All` | 73–76 |
 | `MinimumWage` | `Read.All`, `Create.All`, `Update.All`, `Delete.All` | 77–80 |
 | `AllowanceExemptThreshold` | `Read.All`, `Create.All`, `Update.All`, `Delete.All` | 81–84 |
+| `LaborLawConstants` | `Read.All`, `Create.All`, `Update.All`, `Delete.All` | 85–88 |
 
 > `Update`/`Delete` chỉ áp được lên record **chưa archived** + **chưa đóng** (`ValidTo IS NULL`) hoặc **future-dated** (`ValidFrom > today`). Record đã active trong quá khứ là immutable history.
 
@@ -144,8 +125,8 @@ Thêm **20 permissions mới** vào `MPS.Domain.Constants.Permissions` + `Permis
 
 | Permission group | SystemAdmin | HRManager | HRStaff | Manager | Employee | Accountant | Auditor |
 |------------------|:-----------:|:---------:|:-------:|:-------:|:--------:|:----------:|:-------:|
-| `*.Read.All` (5 perms) | ✅ | ✅ | – | – | – | ✅ | ✅ |
-| `*.{Create/Update/Delete}.All` (15 perms) | ✅ | ✅ | – | – | – | – | – |
+| `*.Read.All` (6 perms) | ✅ | ✅ | – | – | – | ✅ | ✅ |
+| `*.{Create/Update/Delete}.All` (18 perms) | ✅ | ✅ | – | – | – | – | – |
 
 > HR Staff KHÔNG có quyền compliance — đúng spec ("Primary Actor: HR Manager"). Chief Accountant + Auditor read-only.
 
@@ -181,15 +162,17 @@ AllowanceExemptThresholdVersion.cs
 | EmployeeUnemploymentPercent | decimal(5,2) | NLĐ BHTN, vd **1.00** |
 | EmployerUnemploymentPercent | decimal(5,2) | NSDLĐ BHTN, vd **1.00** |
 | EmployerUnionFundPercent | decimal(5,2) | Kinh phí công đoàn, vd **2.00** |
-| **ReferenceAmount** | decimal(18,2) | "Mức tham chiếu" (Luật BHXH 2024 đổi tên từ "lương cơ sở"). Trần BHXH/BHYT = 20× ReferenceAmount |
-| SocialCapMultiplier | int | Mặc định 20 |
+| **ReferenceAmount** | decimal(18,2) | "Mức tham chiếu" (Luật BHXH 2024 đổi tên từ "lương cơ sở") |
+| SocialCapMultiplier | int | Mặc định 20. Trần BHXH/BHYT = SocialCapMultiplier × ReferenceAmount |
+| UnemploymentCapMultiplier | int | Mặc định 20. Trần BHTN = UnemploymentCapMultiplier × min wage vùng. Lưu DB thay vì hardcode — HR điều chỉnh được khi luật đổi |
 | LegalReference | string(500) | vd "Luật BHXH 41/2024/QH15 + NĐ 158/2025/NĐ-CP" |
 | Note | string(2000)? | |
 | CreatedAt | **DateTime UTC** | `_clock.UtcNow` — kind = Utc, maps to SQL `datetime2` |
-| CreatedByUserId | int | |
+| CreatedByUserId | int | FK → Users. Người tạo version, không bao giờ null |
+| CreatedByUser | nav | `User` — navigation property |
 | UpdatedAt | **DateTime? UTC** | `_clock.UtcNow` — kind = Utc, maps to SQL `datetime2` |
-
-> **Bỏ `UnemploymentCapMultiplier`**: trần BHTN = 20× min wage vùng, luật không có precedent thay đổi → hardcode 20 trong snapshot.
+| **UpdatedByUserId** | int? | FK → Users. Người thực hiện PUT hoặc Archive. Null khi mới tạo |
+| **UpdatedByUser** | nav | `User?` — navigation property |
 
 #### 2.1.2. `PitRegulationVersion` + `PitBracket`
 
@@ -201,10 +184,16 @@ AllowanceExemptThresholdVersion.cs
 | ValidFrom | **DateOnly** | Maps to SQL `date` |
 | ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` |
 | IsArchived | bool | default false |
-| PersonalDeductionAmount | decimal(18,2) | vd 15,500,000 |
-| DependentDeductionAmount | decimal(18,2) | vd 6,200,000 |
-| LegalReference, Note | | |
-| audit | | |
+| PersonalDeductionAmount | decimal(18,2) | Giảm trừ bản thân |
+| DependentDeductionAmount | decimal(18,2) | Giảm trừ người phụ thuộc |
+| LegalReference | string(500) | |
+| Note | string(2000)? | |
+| CreatedAt | DateTime UTC | |
+| CreatedByUserId | int | FK → Users. Người tạo |
+| CreatedByUser | nav | `User` |
+| UpdatedAt | DateTime? UTC | |
+| **UpdatedByUserId** | int? | FK → Users. Người PUT/Archive |
+| **UpdatedByUser** | nav | `User?` |
 | Brackets | nav | `ICollection<PitBracket>` |
 
 `PitBracket`:
@@ -220,7 +209,7 @@ AllowanceExemptThresholdVersion.cs
 
 #### 2.1.3. `OtRateVersion` + `OtRateEntry`
 
-> **Rev 3 — thay đổi thiết kế:** 4 cột cứng (`WeekdayRate`, `WeekendRate`, `HolidayRate`, `NightShiftRate`) bị **bỏ**. Thay bằng bảng con `OtRateEntry` (key-value per loại OT) để khi luật bổ sung loại OT mới không cần migration thêm cột + redeploy (NFR-M05).
+Dùng bảng con `OtRateEntry` (key-value per loại OT) — không hardcode cột cứng. Khi luật bổ sung loại OT mới không cần migration + redeploy (NFR-M05).
 
 `OtRateVersion`:
 
@@ -230,8 +219,14 @@ AllowanceExemptThresholdVersion.cs
 | ValidFrom | **DateOnly** | Maps to SQL `date` |
 | ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` |
 | IsArchived | bool | default false |
-| LegalReference, Note | | |
-| audit | | |
+| LegalReference | string(500) | |
+| Note | string(2000)? | |
+| CreatedAt | DateTime UTC | |
+| CreatedByUserId | int | FK → Users. Người tạo |
+| CreatedByUser | nav | `User` |
+| UpdatedAt | DateTime? UTC | |
+| **UpdatedByUserId** | int? | FK → Users. Người PUT/Archive |
+| **UpdatedByUser** | nav | `User?` |
 | Entries | nav | `ICollection<OtRateEntry>` — phải có đủ 4 loại Required |
 
 `OtRateEntry`:
@@ -248,7 +243,7 @@ Constants trong `OtRateTypes` (thay enum):
 - `OtRateTypes.Required = ["Weekday", "Weekend", "Holiday", "NightShift"]`
 - `OtRateTypes.MinimumRates = { Weekday: 1.50, Weekend: 2.00, Holiday: 3.00, NightShift: 1.30 }`
 
-> Cộng dồn OT ban đêm (Điều 98 khoản 3 — phụ trội 20%) là **engine concern**, không lưu thành rate riêng vì là công thức tính dựa trên các rate sẵn có.
+> Cộng dồn OT ban đêm (Điều 98 khoản 3 — phụ trội 20%) là **engine concern**. Con số 20% không hardcode trong engine mà lấy từ `LaborLawConstantsSnapshot.NightShiftSurchargePercent` để HR điều chỉnh được khi luật đổi.
 
 #### 2.1.4. `MinimumWageVersion` + `MinimumWageRegion`
 
@@ -260,9 +255,15 @@ Constants trong `OtRateTypes` (thay enum):
 | ValidFrom | **DateOnly** | Maps to SQL `date` |
 | ValidTo | **DateOnly?** | Null = open. Maps to SQL `date` |
 | IsArchived | bool | default false |
-| LegalReference, Note | | |
-| audit | | |
-| Regions | nav | `ICollection<MinimumWageRegion>` — phải có đủ 4 row I/II/III/IV |
+| LegalReference | string(500) | |
+| Note | string(2000)? | |
+| CreatedAt | DateTime UTC | |
+| CreatedByUserId | int | FK → Users. Người tạo |
+| CreatedByUser | nav | `User` |
+| UpdatedAt | DateTime? UTC | |
+| **UpdatedByUserId** | int? | FK → Users. Người PUT/Archive |
+| **UpdatedByUser** | nav | `User?` |
+| Regions | nav | `ICollection<MinimumWageRegion>` — validator yêu cầu đủ các vùng trong `RegionCodes.All` |
 
 `MinimumWageRegion`:
 
@@ -273,7 +274,7 @@ Constants trong `OtRateTypes` (thay enum):
 | RegionCode | string(10) | "I" / "II" / "III" / "IV". Không dùng enum — tham chiếu `RegionCodes.*` constants. Validator dùng `RegionCodes.All` để cross-check |
 | AmountPerMonth | decimal(18,2) | vd 5,310,000 |
 
-> Không có `AmountPerHour` — scope chỉ lương tháng 8h/ngày, engine tính đơn giá giờ theo công thức NĐ 145/2020.
+> Không có `AmountPerHour` — engine tính đơn giá giờ từ `LaborLawConstantsSnapshot.StandardWorkingHoursPerDay` + `StandardWorkingDaysPerMonth`, không hardcode.
 
 #### 2.1.5. `AllowanceExemptThresholdVersion`
 
@@ -288,12 +289,46 @@ Constants trong `OtRateTypes` (thay enum):
 | MonthlyExemptAmount | decimal(18,2)? | Null khi mode = ActualAllocation |
 | **AppliesToTax** | bool | True nếu miễn TNCN |
 | **AppliesToSocial** | bool | True nếu miễn BHXH/BHYT/BHTN |
-| LegalReference, Note | | |
-| audit | | |
+| LegalReference | string(500) | |
+| Note | string(2000)? | |
+| CreatedAt | DateTime UTC | |
+| CreatedByUserId | int | FK → Users. Người tạo |
+| CreatedByUser | nav | `User` |
+| UpdatedAt | DateTime? UTC | |
+| **UpdatedByUserId** | int? | FK → Users. Người PUT/Archive |
+| **UpdatedByUser** | nav | `User?` |
+
+#### 2.1.6. `LaborLawConstantsVersion`
+
+Entity này tập trung tất cả **hằng số luật lao động** có khả năng thay đổi khi Chính phủ ban hành Nghị định/Thông tư mới. Không hardcode bất kỳ con số nào trong engine.
+
+| Cột | Type | Note |
+|---|---|---|
+| Id | int | PK identity |
+| ValidFrom | DateOnly | |
+| ValidTo | DateOnly? | Null = open |
+| IsArchived | bool | default false |
+| ProbationSalaryMinPercent | decimal(5,2) | % lương tối thiểu khi thử việc. Mặc định **85.00** (BLLĐ 2019 Điều 26) |
+| NightShiftSurchargePercent | decimal(5,2) | % phụ trội OT ban đêm cộng dồn. Mặc định **20.00** (BLLĐ Điều 98 khoản 3) |
+| StandardWorkingHoursPerDay | decimal(4,2) | Giờ làm việc chuẩn/ngày. Mặc định **8.00** (NĐ 145/2020 Điều 54) |
+| StandardWorkingDaysPerMonth | decimal(4,2) | Ngày làm việc chuẩn/tháng. Mặc định **26.00** (NĐ 145/2020 Điều 54) |
+| AnnualLeaveMinDays | int | Số ngày nghỉ phép tối thiểu/năm. Mặc định **12** (BLLĐ Điều 113) |
+| OvertimeMaxHoursPerDay | decimal(4,2) | Giờ OT tối đa/ngày. Mặc định **4.00** (BLLĐ Điều 107) |
+| OvertimeMaxHoursPerYear | int | Giờ OT tối đa/năm. Mặc định **300** (BLLĐ Điều 107 — trường hợp đặc biệt) |
+| LegalReference | string(500) | |
+| Note | string(2000)? | |
+| CreatedAt | DateTime UTC | |
+| CreatedByUserId | int | FK → Users |
+| CreatedByUser | nav | `User` |
+| UpdatedAt | DateTime? UTC | |
+| UpdatedByUserId | int? | FK → Users |
+| UpdatedByUser | nav | `User?` |
+
+> **Snapshot tương ứng:** `LaborLawConstantsSnapshot` — engine inject để tính lương thử việc, phụ trội đêm, đơn giá giờ mà không hardcode bất kỳ con số nào.
 
 ### 2.2. Constants thay Enums (`src/MPS.Domain/Enums/Compliance/`)
 
-> **Rev 3 — thay đổi thiết kế:** Không dùng `enum` cho bất kỳ giá trị nào liên quan luật. Dùng `static class` constants + string field trong entity. EF map string trực tiếp không cần `HasConversion`.
+Không dùng `enum` cho giá trị liên quan luật. Dùng `static class` constants + string field trong entity. EF map string trực tiếp không cần `HasConversion`.
 
 ```
 RegionCodes     — "I", "II", "III", "IV" + IReadOnlyList<string> All
@@ -336,14 +371,19 @@ Task<AllowanceExemptThresholdVersion?> GetActiveForAllowanceTypeAsync(
 
 ### 2.4. Permission constants extend
 
-Append 20 perms vào `Permissions.cs` + `PermissionIds.cs` (IDs 65–84).
+Append 24 perms vào `Permissions.cs` + `PermissionIds.cs` (IDs 65–88).
 
 ### 2.5. Deliverables Phase 1
 
-- [ ] 7 entity files trong `Entities/Compliance/`
-- [ ] 2 enum files trong `Enums/Compliance/`
-- [ ] 5 repo interface files
-- [ ] `Permissions.cs` extend
+- [x] 7 entity files trong `Entities/Compliance/` *(done)*
+- [x] 3 constants files trong `Enums/Compliance/` (`RegionCodes`, `ThresholdModes`, `OtRateTypes`) *(done)*
+- [x] 5 repo interface files *(done)*
+- [x] `Permissions.cs` extend IDs 65–84 *(done)*
+- [ ] Thêm `LaborLawConstantsVersion.cs` entity + `ILaborLawConstantsRepository.cs`
+- [ ] Thêm `UpdatedByUserId int?` + navigation `CreatedByUser`/`UpdatedByUser` vào 6 version entities
+- [ ] Thêm `UnemploymentCapMultiplier int` vào `SocialInsuranceRateVersion`
+- [ ] Dọn comment hardcode số tiền/tỷ lệ trong entity files
+- [ ] `Permissions.cs` extend thêm IDs 85–88 cho `LaborLawConstants`
 - [ ] `dotnet build` pass
 
 ---
@@ -404,6 +444,7 @@ EmployerUnemploymentPercent = 1.00
 EmployerUnionFundPercent = 2.00
 ReferenceAmount = 2,340,000
 SocialCapMultiplier = 20
+UnemploymentCapMultiplier = 20
 LegalReference = "Luật BHXH 41/2024/QH15 + NĐ 158/2025/NĐ-CP (mức tham chiếu cũ — lương cơ sở 2,340,000)"
 ```
 
@@ -421,6 +462,7 @@ EmployerUnemploymentPercent = 1.00
 EmployerUnionFundPercent = 2.00
 ReferenceAmount = 2,530,000
 SocialCapMultiplier = 20
+UnemploymentCapMultiplier = 20
 LegalReference = "NĐ 161/2026/NĐ-CP (mức tham chiếu mới 2,530,000 từ 01/07/2026)"
 ```
 
@@ -466,13 +508,20 @@ Brackets:
 
 #### 3.2.4. `OtRateVersion` — 1 row
 
+> ⚠️ **Rev 5 fix:** Seed phải dùng bảng con `OtRateEntry` (thiết kế Rev 3), KHÔNG dùng cột cứng trên entity cha — các cột đó đã bị bỏ.
+
 ```
 ValidFrom = 2021-01-01    (BLLĐ 2019 hiệu lực)
-WeekdayRate = 1.50
-WeekendRate = 2.00
-HolidayRate = 3.00
-NightShiftRate = 1.30
+ValidTo = NULL
+IsArchived = false
 LegalReference = "BLLĐ 2019, Điều 98"
+
+Entries = [
+  { OtType = "Weekday",   Label = "Ngày thường",  Rate = 1.50 },
+  { OtType = "Weekend",   Label = "Cuối tuần",     Rate = 2.00 },
+  { OtType = "Holiday",   Label = "Ngày lễ/Tết",  Rate = 3.00 },
+  { OtType = "NightShift",Label = "Ban đêm",       Rate = 1.30 }
+]
 ```
 
 #### 3.2.5. `MinimumWageVersion` + 4 `MinimumWageRegion` — 1 row
@@ -506,6 +555,21 @@ Threshold seed:
 | FUEL | 2013-10-01 | ActualAllocation | null | ✅ | ❌ | TT 111/2013/TT-BTC |
 | PHONE | 2013-10-01 | ActualAllocation | null | ✅ | ❌ | TT 111/2013/TT-BTC |
 
+#### 3.2.7. `LaborLawConstantsVersion` — 1 row
+
+```
+ValidFrom = 2021-01-01    (BLLĐ 2019 hiệu lực)
+ValidTo = NULL
+ProbationSalaryMinPercent = 85.00
+NightShiftSurchargePercent = 20.00
+StandardWorkingHoursPerDay = 8.00
+StandardWorkingDaysPerMonth = 26.00
+AnnualLeaveMinDays = 12
+OvertimeMaxHoursPerDay = 4.00
+OvertimeMaxHoursPerYear = 300
+LegalReference = "BLLĐ 2019 Điều 26, 98, 107, 113 + NĐ 145/2020 Điều 54"
+```
+
 ### 3.3. Migration
 
 ```
@@ -524,15 +588,17 @@ public DbSet<OtRateVersion> OtRateVersions => Set<OtRateVersion>();
 public DbSet<MinimumWageVersion> MinimumWageVersions => Set<MinimumWageVersion>();
 public DbSet<MinimumWageRegion> MinimumWageRegions => Set<MinimumWageRegion>();
 public DbSet<AllowanceExemptThresholdVersion> AllowanceExemptThresholdVersions => Set<AllowanceExemptThresholdVersion>();
+public DbSet<OtRateEntry> OtRateEntries => Set<OtRateEntry>();
+public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLawConstantsVersion>();
 ```
 
 ### 3.5. Deliverables Phase 2
 
-- [ ] 7 EntityTypeConfiguration files
-- [ ] `AppDbContext` thêm 7 DbSet
+- [ ] 8 EntityTypeConfiguration files (thêm `LaborLawConstantsVersion`)
+- [ ] `AppDbContext` thêm 9 DbSet
 - [ ] `DatabaseSeeder.SeedDefaultComplianceAsync` + `SeedDefaultAllowanceTypesAsync`
 - [ ] Migration `ComplianceModule` applied trên dev DB
-- [ ] Seed verified: 2 BHXH rows + **2 PIT rows** (2020 + 2026) + 1 OT + 1 MinWage + 3 allowance + thresholds
+- [ ] Seed verified: 2 BHXH rows + 2 PIT rows + 1 OT (Entries) + 1 MinWage + 3 allowance + thresholds + 1 LaborLawConstants
 - [ ] `dotnet build` pass
 
 ---
@@ -605,10 +671,18 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
 
 **Thứ tự bắt buộc trong transaction (QUAN TRỌNG — sai thứ tự gây unique index exception):**
 
-1. Load record cần archive + record liền trước (nếu có) trong cùng tx
-2. **Bước 1:** Set `target.IsArchived = true`, `target.UpdatedAt = _clock.UtcNow` (DateTime UTC)
-3. **Bước 2:** Nếu có `previous` (record liền trước, `ValidTo = target.ValidFrom.AddDays(-1)` — DateOnly): set `previous.ValidTo = null` — phục hồi nó thành "open"
-4. `SaveChangesAsync` → `CommitAsync`
+1. Load `target` cần archive trong cùng tx
+2. **Tìm `previous`** bằng cách quét timeline thực tế — KHÔNG dùng công thức `AddDays(-1)`:
+   ```csharp
+   var previous = await _context.Set<TVersion>()
+       .Where(x => x.ValidFrom < target.ValidFrom && !x.IsArchived)
+       .OrderByDescending(x => x.ValidFrom)
+       .FirstOrDefaultAsync(ct);
+   ```
+   > ⚠️ **Rev 5 fix — lý do bỏ `AddDays(-1)`:** Công thức cũ tra cứu theo giá trị cột `ValidTo`, dễ bốc nhầm bản ghi đã `IsArchived = true` có `ValidTo` trùng công thức, hoặc trả về `null` nếu có GAP ngày giữa 2 version → luật bị archive mà không có luật nào mở lại → engine crash kỳ lương tiếp theo.
+3. **Bước 1:** Set `target.IsArchived = true`, `target.UpdatedAt = _clock.UtcNow` (DateTime UTC)
+4. **Bước 2:** Nếu có `previous`: set `previous.ValidTo = null` — phục hồi nó thành "open"
+5. `SaveChangesAsync` → `CommitAsync`
 
 > ⚠️ **Không được** reset `previous.ValidTo` trước bước 1. Nếu làm ngược: tại thời điểm `previous.ValidTo = null`, filtered unique index `WHERE ValidTo IS NULL AND IsArchived = 0` sẽ thấy 2 record open (`target` vẫn chưa archived + `previous` vừa mở lại) → `DbUpdateException` trong transaction → archive bị rollback.
 
@@ -677,11 +751,46 @@ private static bool IsUniqueIndexViolation(DbUpdateException ex)
 
 > ✅ **Tại sao bắt ở repo, không ở middleware:** Global middleware không biết context đang xử lý module nào. Bắt tại repo giúp message chính xác, không ảnh hưởng unique violation của User/Role/Contract. `ConflictException` sau đó được middleware map thành 409 như bình thường.
 
-### 4.7. Deliverables Phase 3
+### 4.7. Exception classes cần tạo mới
 
-- [ ] 5 repository class trong `Infrastructure/Repositories/Compliance/`
-- [ ] `ExceptionHandlingMiddleware` extend wrap `DbUpdateException` → 409
-- [ ] DI registration
+Trước khi implement repository, cần tạo 2 class exception trong `src/MPS.Domain/Exceptions/`:
+
+```csharp
+// NotFoundException.cs — dùng khi GetById trả null
+public sealed class NotFoundException(string message) : Exception(message);
+
+// ConflictException.cs — dùng khi vi phạm timeline, unique index, hoặc business rule
+public sealed class ConflictException(string message) : Exception(message);
+```
+
+Sau đó thêm 2 handler vào `ExceptionHandlingMiddleware` (ngay sau `catch (ValidationException)`):
+
+```csharp
+catch (NotFoundException nfex)
+{
+    context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+    context.Response.ContentType = "application/json";
+    await context.Response.WriteAsync(
+        JsonSerializer.Serialize(new { error = nfex.Message }));
+}
+catch (ConflictException cfex)
+{
+    context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+    context.Response.ContentType = "application/json";
+    await context.Response.WriteAsync(
+        JsonSerializer.Serialize(new { error = cfex.Message }));
+}
+```
+
+> **Lý do throw ở Repository, không ở Middleware:** Middleware không có context nghiệp vụ để phân biệt `DbUpdateException` đến từ bảng nào (User, Contract hay Compliance). Repository dịch lỗi hạ tầng → Domain Exception có message rõ ràng; Middleware chỉ map HTTP status.
+
+### 4.8. Deliverables Phase 3
+
+- [ ] `NotFoundException.cs` + `ConflictException.cs` trong `MPS.Domain/Exceptions/`
+- [ ] `ExceptionHandlingMiddleware` thêm 2 catch block (`NotFoundException` → 404, `ConflictException` → 409)
+- [ ] 6 repository class trong `Infrastructure/Repositories/Compliance/` (thêm `LaborLawConstantsRepository`)
+- [ ] `DbUpdateException` SQL 2601/2627 wrap → `ConflictException` trong mỗi repo (không phải middleware)
+- [ ] DI registration 6 repo
 - [ ] `dotnet build` pass
 
 ---
@@ -692,11 +801,12 @@ private static bool IsUniqueIndexViolation(DbUpdateException ex)
 
 ```
 src/MPS.Application/Features/Compliance/
-  SocialInsuranceRate/  { Commands, Queries, Validators }
-  PitRegulation/        { Commands, Queries, Validators }
-  OtRate/               { Commands, Queries, Validators }
-  MinimumWage/          { Commands, Queries, Validators }
+  SocialInsuranceRate/      { Commands, Queries, Validators }
+  PitRegulation/            { Commands, Queries, Validators }
+  OtRate/                   { Commands, Queries, Validators }
+  MinimumWage/              { Commands, Queries, Validators }
   AllowanceExemptThreshold/ { Commands, Queries, Validators }
+  LaborLawConstants/        { Commands, Queries, Validators }
 ```
 
 Mỗi sub-feature có 6 file Command/Query (Create/Update/Archive/GetAll/GetById/GetActiveAt) + 2 validator (Create/Update).
@@ -762,6 +872,7 @@ PitRegulationController               /api/compliance/pit-regulations
 OtRateController                      /api/compliance/ot-rates
 MinimumWageController                 /api/compliance/minimum-wages
 AllowanceExemptThresholdController    /api/compliance/allowance-exempt-thresholds
+LaborLawConstantsController           /api/compliance/labor-law-constants
 ```
 
 Endpoints chuẩn:
@@ -777,12 +888,12 @@ Endpoints chuẩn:
 
 ### 6.2. Request DTOs (`src/MPS.API/Requests/Compliance/`)
 
-10 file (Create + Update per resource).
+12 file (Create + Update per resource × 6 sub-feature).
 
 ### 6.3. Deliverables Phase 5
 
-- [ ] 5 controller
-- [ ] ~10 request DTO
+- [ ] 6 controller
+- [ ] ~12 request DTO
 - [ ] Swagger UI verify
 - [ ] `dotnet build` pass
 
@@ -811,6 +922,7 @@ public interface IComplianceLookupService
     Task<MinimumWageSnapshot> GetMinimumWageAt(DateOnly payDate, CancellationToken ct);
     Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAt(
         int allowanceTypeId, DateOnly payDate, CancellationToken ct);
+    Task<LaborLawConstantsSnapshot> GetLaborLawConstantsAt(DateOnly payDate, CancellationToken ct);
 }
 ```
 
@@ -829,7 +941,7 @@ public sealed record SocialInsuranceRateSnapshot(
     decimal EmployerUnionFundPercent,
     decimal ReferenceAmount,
     int SocialCapMultiplier,
-    int UnemploymentCapMultiplier,                 // hardcode 20 — luật không có precedent thay đổi
+    int UnemploymentCapMultiplier,                 // lấy từ DB — HR điều chỉnh được, không hardcode
     string LegalReference);
 
 public sealed record PitBracketSnapshot(
@@ -871,6 +983,17 @@ public sealed record AllowanceExemptThresholdSnapshot(
     bool AppliesToTax,
     bool AppliesToSocial,
     string LegalReference);
+
+public sealed record LaborLawConstantsSnapshot(
+    DateOnly ValidFrom,
+    decimal ProbationSalaryMinPercent,       // 85% — lương tối thiểu thử việc (BLLĐ Điều 26)
+    decimal NightShiftSurchargePercent,      // 20% — phụ trội OT ban đêm cộng dồn (BLLĐ Điều 98 khoản 3)
+    decimal StandardWorkingHoursPerDay,      // 8h  — chuẩn tính đơn giá giờ (NĐ 145/2020 Điều 54)
+    decimal StandardWorkingDaysPerMonth,     // 26 ngày — chuẩn tính đơn giá ngày
+    int AnnualLeaveMinDays,                  // 12 ngày — nghỉ phép tối thiểu (BLLĐ Điều 113)
+    decimal OvertimeMaxHoursPerDay,          // 4h — OT tối đa/ngày (BLLĐ Điều 107)
+    int OvertimeMaxHoursPerYear,             // 300h — OT tối đa/năm
+    string LegalReference);
 ```
 
 ### 7.3. Implementation (`src/MPS.Infrastructure/Services/ComplianceLookupService.cs`)
@@ -904,6 +1027,17 @@ public sealed class ComplianceCacheInvalidator : INotificationHandler<Compliance
 ```
 
 Implementation note: dùng `CancellationTokenSource` per compliance type. Khi notification fire → `Cancel()` token → mọi entry cache với token đó tự eject. Pattern chuẩn .NET.
+
+> ⚠️ **Rev 5 fix — bắt buộc `.Dispose()` để tránh memory leak:**
+> `CancellationTokenSource` giữ tài nguyên OS. Nếu chỉ gán đè `_cts = new CancellationTokenSource()` mà không dispose cái cũ, các "xác chết" CTS tích lũy trên RAM theo thời gian → OOM.
+>
+> Pattern đúng trong `ComplianceCacheInvalidator`:
+> ```csharp
+> var oldCts = _tokenSources[n.ComplianceType];
+> _tokenSources[n.ComplianceType] = new CancellationTokenSource();
+> oldCts.Cancel();
+> oldCts.Dispose();   // BẮT BUỘC — không được bỏ
+> ```
 
 ### 7.5. DI registration
 
@@ -993,7 +1127,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 | DC-12 | Không overlap effective date | DB filtered unique index + handler Serializable tx + auto-close (Phase 2 + 3) |
 | DC-10 | Snapshot bất biến vào PayrollItem | `IComplianceLookupService` snapshot records immutable (Phase 6) — engine copy |
 | BR-04 | Tỷ lệ BHXH/BHYT/BHTN theo Luật 41/2024 + NĐ 158/2025 | Seed data Phase 2 (NLĐ 8% / NSDLĐ **17.5%**) |
-| BR-05 | Trần BHXH = 20× ReferenceAmount, trần BHTN = 20× min wage vùng | `SocialCapMultiplier` cột + `UnemploymentCapMultiplier` hardcode 20 trong snapshot |
+| BR-05 | Trần BHXH = SocialCapMultiplier × ReferenceAmount, trần BHTN = UnemploymentCapMultiplier × min wage vùng | Cả 2 multiplier đều là cột DB trong `SocialInsuranceRateVersion` — HR nhập, không hardcode |
 | BR-07 | Giảm trừ dependent chỉ tính khi status = Complete | **Out of scope FE-06** — engine concern, FT-01 cung cấp status |
 | BR-08 | Phụ cấp ăn ca > 730k → phần vượt chịu BHXH + TNCN | `AllowanceExemptThresholdVersion.MEAL` với `AppliesToTax = true`, `AppliesToSocial = true` |
 | NFR-M05 | Compliance config qua data entry, không cần redeploy | Toàn module |
@@ -1013,10 +1147,11 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 | Audit log diff trước/sau khi đổi version chưa chi tiết | Defer; có thể thêm `ComplianceChangeLog` ở module Audit |
 | HR nhập ValidFrom quá khứ ghi đè kỳ lương closed | `MaxBackdateDays = 30` + warning UI. Engine khi lookup tại payDate phải so snapshot trong PayrollItem với current GetActiveAt — nếu khác → cảnh báo cần re-calculate |
 | FK constraint `AllowanceExemptThresholdVersion ↔ AllowanceType`: HR xoá AllowanceType có threshold | Restrict delete; HR phải archive threshold trước hoặc system soft-deactivate cả threshold cùng |
-| Hằng số 85% lương thử việc (BLLĐ Điều 26) chưa có nơi configurable | Defer. 3 lựa chọn tương lai: (a) hard-code engine (vi phạm NFR-M05), (b) thêm vào SocialInsurance (sai context), (c) tạo `LaborLawConstantsVersion` riêng cho các hằng số luật lao động. Khuyến nghị (c) khi module Contract validate lương thử việc |
+| Hằng số luật lao động (85% thử việc, 20% phụ trội đêm, 8h/ngày, 26 ngày/tháng...) | **Đã xử lý — Rev 5:** Tất cả đưa vào `LaborLawConstantsVersion` entity + `LaborLawConstantsSnapshot`. Engine inject qua `IComplianceLookupService.GetLaborLawConstantsAt(payDate)` — không còn hardcode trong code. |
 | Eligibility BHXH thử việc < 1 tháng | Lookup service publish rate, không xét eligibility. Doc comment rõ. Engine dựa trên FT-03 Contract.SubType + duration |
 | Cache invalidation token-based memory leak | Khi notification fire, dispose old `CancellationTokenSource`, tạo mới. Pattern chuẩn .NET. |
 | Race condition multi-instance (scale-out): filtered unique index chỉ chống per-DB | Hiện hệ thống single-instance. Khi scale → DB level vẫn enforce, ứng dụng layer chỉ thêm UX 409. |
+| **Background service tự động archive version hết hạn** | **Không có trong scope FE-06.** `ValidTo` chỉ được set bởi `AddAsync` (auto-close) hoặc HR thủ công. Không có job chạy định kỳ để kiểm tra `ValidTo < today` rồi set `IsArchived = true`. Lý do: `ValidTo` đã đủ để `GetActiveAt` bỏ qua record hết hạn — không cần archive tự động. Nếu tương lai cần (vd audit trail rõ ràng hơn), tạo `IHostedService` riêng, không thuộc FE-06. |
 
 ---
 
@@ -1024,17 +1159,17 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 
 | Phase | Effort | Cộng dồn |
 |---|---|---|
-| 0 Permissions + role mapping | 1h | 1h |
-| 1 Domain entities + interfaces | 3h | 4h |
-| 2 EF config + migration + seed (multi-version) | 4h | 8h |
-| 3 Repositories + Serializable + 409 wrap | 4h | 12h |
-| 4 Application CQRS + validators + DTOs + mappings | 6h | 18h |
-| 5 Controllers + requests | 2h | 20h |
-| 6 IComplianceLookupService + cache + invalidator | 3h | 23h |
-| 7 Tests (mở rộng race + cache + multi-version seed) | 6h | 29h |
-| 8 Build verify + Swagger smoke | 1h | 30h |
+| 0 Permissions + role mapping (24 perms) | 1h | 1h |
+| 1 Domain entities + interfaces (6 version entities) | 4h | 5h |
+| 2 EF config + migration + seed | 4h | 9h |
+| 3 Repositories + Serializable + exception wrap | 5h | 14h |
+| 4 Application CQRS + validators + DTOs + mappings | 7h | 21h |
+| 5 Controllers + requests (6 controllers) | 2h | 23h |
+| 6 IComplianceLookupService + cache + invalidator | 3h | 26h |
+| 7 Tests (race + cache + multi-version seed) | 6h | 32h |
+| 8 Build verify + Swagger smoke | 1h | 33h |
 
-**Tổng: ~30h ≈ 4 ngày làm việc** (tăng từ 26h ở rev 1 do thêm cache/invalidator, multi-version seed, race tests).
+**Tổng: ~33h ≈ 4–5 ngày làm việc**
 
 ---
 
@@ -1043,11 +1178,11 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 - [ ] `dotnet build` 0 errors 0 warnings
 - [ ] `dotnet test` all green, coverage ≥ 80%
 - [ ] Swagger smoke happy + 409 conflict + soft delete path
-- [ ] Migration applied trên dev DB + seeded (2 BHXH rows + **2 PIT rows** + 1 OT + 1 MinWage + 3 allowance + thresholds)
-- [ ] Verify số liệu seed cross-check pháp lý (NSDLĐ BHXH = 17.5, Region III = 4,140,000, Region IV = 3,700,000, ReferenceAmount 2,340,000 / 2,530,000)
-- [ ] `Permissions.cs` extend đúng IDs 65–84
+- [ ] Migration applied trên dev DB + seeded (2 BHXH rows + 2 PIT rows + 1 OT Entries + 1 MinWage + 3 allowance + thresholds + 1 LaborLawConstants)
+- [ ] Verify số liệu seed cross-check pháp lý (NSDLĐ BHXH = 17.5, Region III = 4,140,000, Region IV = 3,700,000, ReferenceAmount 2,340,000 / 2,530,000, ProbationSalaryMinPercent = 85.00)
+- [ ] `Permissions.cs` extend đúng IDs 65–88 (thêm LaborLawConstants 85–88)
 - [ ] Role-permission seed cấp đủ cho HRManager + read cho SystemAdmin/Accountant/Auditor
 - [ ] `appsettings.json` có section `Compliance` với MaxBackdate/Forward
 - [ ] `IComplianceLookupService` doc comment "publish rates only — eligibility is engine concern"
-- [ ] PR description liệt kê file thay đổi + spec mapping (FT-24 → FT-27) + reference Rev 2 changelog
+- [ ] PR description liệt kê file thay đổi + spec mapping (FT-24 → FT-28)
 - [ ] Code review pass (security-reviewer + csharp-reviewer agents)

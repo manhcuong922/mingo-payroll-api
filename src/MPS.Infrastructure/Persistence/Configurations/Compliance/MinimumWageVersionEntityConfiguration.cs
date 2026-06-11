@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using MPS.Domain.Entities;
 using MPS.Domain.Entities.Compliance;
 
 namespace MPS.Infrastructure.Persistence.Configurations.Compliance;
@@ -23,6 +24,18 @@ public class MinimumWageVersionEntityConfiguration : IEntityTypeConfiguration<Mi
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.CreatedByUserId).IsRequired();
         builder.Property(e => e.UpdatedAt);
+        builder.Property(e => e.UpdatedByUserId);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(e => e.CreatedByUserId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(e => e.UpdatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(e => e.ValidFrom).IsUnique();
         builder.HasIndex(e => e.ValidTo)

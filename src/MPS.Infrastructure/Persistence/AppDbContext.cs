@@ -40,6 +40,7 @@ public class AppDbContext : DbContext
     public DbSet<MinimumWageVersion> MinimumWageVersions => Set<MinimumWageVersion>();
     public DbSet<MinimumWageRegion> MinimumWageRegions => Set<MinimumWageRegion>();
     public DbSet<AllowanceExemptThresholdVersion> AllowanceExemptThresholdVersions => Set<AllowanceExemptThresholdVersion>();
+    public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLawConstantsVersion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -18,6 +18,7 @@ public class PitRegulationVersion
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public int? UpdatedByUserId { get; set; }
 
     public ICollection<PitBracket> Brackets { get; set; } = new List<PitBracket>();
 }
