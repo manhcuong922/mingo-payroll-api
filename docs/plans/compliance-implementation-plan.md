@@ -1534,8 +1534,49 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 - [ ] `ComplianceActivationJob` registered + unit test idempotent pass
 - [ ] `IComplianceVersion` marker interface implemented trên 5 version entities (`SocialInsuranceRateVersion`, `PitRegulationVersion`, `OtRateVersion`, `MinimumWageVersion`, `LaborLawConstantsVersion`) — **không kể `AllowanceExemptThresholdVersion`** (scoped per AllowanceTypeId, không có background job activation; HR dùng `applyImmediately=true`)
 - [ ] `Permissions.cs` extend đúng IDs 65–88 (thêm LaborLawConstants 85–88)
-- [ ] Role-permission seed cấp đủ cho `HR` (CRUD) + read cho `SystemAdmin`/`Accountant`/`Director`
+- [x] **`RolePermissions` seed 24 compliance perms cho 4 roles** — migration `20260612100000_ComplianceRolePermissions` (xem mục 14)
 - [ ] `appsettings.json` có section `Compliance` với `MaxForwardDays` (không có MaxBackdateDays — đã bị xóa Rev 10)
 - [ ] `IComplianceLookupService` doc comment "publish rates only — eligibility is engine concern"
 - [ ] PR description liệt kê file thay đổi + spec mapping (FT-24 → FT-28)
 - [ ] Code review pass (security-reviewer + csharp-reviewer agents)
+
+---
+
+## 14. Test Accounts (Dev Only)
+
+### 14.1. Tài khoản seed sẵn
+
+> ⚠️ **Chỉ dùng cho môi trường dev/test.** Password được cấu hình qua `appsettings.json → DefaultRoleUsers:Password`.
+> Seeder chạy tự động khi app khởi động (`DatabaseSeeder.SeedDefaultRoleUsersAsync`). Idempotent — skip nếu username đã tồn tại.
+
+| Role | Username | Password | EmployeeCode | Quyền hạn |
+|------|----------|----------|-------------|-----------|
+| **SystemAdmin** | `admin` | `ChangeMe!2026` | ADMIN001 | Full quyền toàn hệ thống |
+| **HR** | `hr` | `Test@1234` | HR001 | Full CRUD compliance (24 perms) |
+| **Accountant** | `accountant` | `Test@1234` | ACC001 | Read-only compliance (6 perms) |
+| **Director** | `director` | `Test@1234` | DIR001 | Read-only compliance (6 perms) |
+| **DepartmentManager** | `deptmanager` | `Test@1234` | DM001 | Không có quyền compliance |
+| **ProjectManager** | `projmanager` | `Test@1234` | PM001 | Không có quyền compliance |
+| **Employee** | `employee` | `Test@1234` | EMP001 | Không có quyền compliance |
+
+### 14.2. Role-Permission mapping Compliance (phân quyền đã fix)
+
+> **Root cause 403:** Migration `ComplianceAuditTrail` chỉ insert bảng `Permissions` (ID 65–88) nhưng **bỏ sót** `RolePermissions`.
+> **Fix:** Migration `20260612100000_ComplianceRolePermissions` insert 60 rows vào `RolePermissions`.
+
+| Permission group | SystemAdmin | HR | Accountant | Director | DeptMgr | ProjMgr | Employee |
+|---|:-----------:|:--:|:----------:|:--------:|:-------:|:-------:|:--------:|
+| `*.Read.All` (65,69,73,77,81,85) | ✅ | ✅ | ✅ | ✅ | – | – | – |
+| `*.Create.All` (66,70,74,78,82,86) | ✅ | ✅ | – | – | – | – | – |
+| `*.Update.All` (67,71,75,79,83,87) | ✅ | ✅ | – | – | – | – | – |
+| `*.Delete.All` (68,72,76,80,84,88) | ✅ | ✅ | – | – | – | – | – |
+
+### 14.3. Postman collection
+
+File: `docs/postman/Compliance-API.postman_collection.json`
+
+**Workflow test nhanh:**
+1. Gọi `Auth/Login` với `hr` / `Test@1234` → token tự lưu vào collection variable
+2. Test CRUD compliance với role HR (có đầy đủ quyền)
+3. Đổi sang `accountant` / `Test@1234` → chỉ GET được, POST/PUT/DELETE trả 403
+4. Đổi sang `deptmanager` → mọi compliance endpoint trả 403

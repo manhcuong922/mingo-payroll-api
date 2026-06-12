@@ -31,6 +31,7 @@ public sealed class DatabaseSeeder
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         await SeedDefaultAdminAsync(cancellationToken);
+        await SeedDefaultRoleUsersAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
@@ -79,6 +80,71 @@ public sealed class DatabaseSeeder
         await _context.Users.AddAsync(admin, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded default system admin user '{Username}'.", username);
+    }
+
+    private async Task SeedDefaultRoleUsersAsync(CancellationToken cancellationToken)
+    {
+        // Seed 1 tài khoản test cho mỗi role (HR, Accountant, Director, DepartmentManager, ProjectManager, Employee)
+        // Skip nếu tài khoản đã tồn tại (idempotent theo Username)
+        var section = _configuration.GetSection("DefaultRoleUsers");
+        var password = section["Password"];
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            _logger.LogWarning("DefaultRoleUsers:Password not configured; skipping role user seed.");
+            return;
+        }
+
+        var candidates = new[]
+        {
+            (RoleId: SystemRoles.HrId,                Code: "HR001",   Username: "hr",         Email: "hr@mingo.local",         FullName: "HR Manager"),
+            (RoleId: SystemRoles.AccountantId,        Code: "ACC001",  Username: "accountant",  Email: "accountant@mingo.local", FullName: "Chief Accountant"),
+            (RoleId: SystemRoles.DirectorId,          Code: "DIR001",  Username: "director",    Email: "director@mingo.local",   FullName: "Director"),
+            (RoleId: SystemRoles.DepartmentManagerId, Code: "DM001",   Username: "deptmanager", Email: "deptmgr@mingo.local",    FullName: "Department Manager"),
+            (RoleId: SystemRoles.ProjectManagerId,    Code: "PM001",   Username: "projmanager", Email: "projmgr@mingo.local",    FullName: "Project Manager"),
+            (RoleId: SystemRoles.EmployeeId,          Code: "EMP001",  Username: "employee",    Email: "employee@mingo.local",   FullName: "Employee User"),
+        };
+
+        var existingUsernames = (await _context.Users
+            .AsNoTracking()
+            .Select(u => u.Username)
+            .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var now = DateTime.UtcNow;
+        var toAdd = new List<User>();
+
+        foreach (var (roleId, code, username, email, fullName) in candidates)
+        {
+            if (existingUsernames.Contains(username))
+                continue;
+
+            toAdd.Add(new User
+            {
+                EmployeeCode = code,
+                FullName = fullName,
+                RoleId = roleId,
+                Username = username,
+                PasswordHash = _passwordHasher.Hash(password),
+                Email = email,
+                Dob = new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                PhoneNo = "0000000000",
+                Status = 1,
+                PasswordChangedAt = now,
+            });
+        }
+
+        if (toAdd.Count > 0)
+        {
+            await _context.Users.AddRangeAsync(toAdd, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Seeded {Count} default role user(s): {Names}.",
+                toAdd.Count, string.Join(", ", toAdd.Select(u => u.Username)));
+        }
+        else
+        {
+            _logger.LogDebug("All default role users already exist; skipping.");
+        }
     }
 
     private async Task SeedDefaultContractPartyAsync(CancellationToken cancellationToken)
