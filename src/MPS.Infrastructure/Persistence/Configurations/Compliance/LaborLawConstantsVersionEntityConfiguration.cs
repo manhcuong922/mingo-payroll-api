@@ -15,7 +15,7 @@ public class LaborLawConstantsVersionEntityConfiguration : IEntityTypeConfigurat
         builder.Property(e => e.Id).UseIdentityColumn();
 
         builder.Property(e => e.ValidFrom).IsRequired();
-        builder.Property(e => e.ValidTo);
+        builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.IsArchived).IsRequired().HasDefaultValue(false);
 
         builder.Property(e => e.ProbationSalaryMinPercent).HasColumnType("decimal(5,2)").IsRequired();
@@ -34,21 +34,20 @@ public class LaborLawConstantsVersionEntityConfiguration : IEntityTypeConfigurat
         builder.Property(e => e.UpdatedAt);
         builder.Property(e => e.UpdatedByUserId);
 
-        builder.HasOne<User>()
+        builder.HasOne(e => e.CreatedByUser)
             .WithMany()
             .HasForeignKey(e => e.CreatedByUserId)
             .IsRequired()
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<User>()
+        builder.HasOne(e => e.UpdatedByUser)
             .WithMany()
             .HasForeignKey(e => e.UpdatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Chỉ 1 record open (ValidTo IS NULL) + chưa archived mỗi thời điểm
         builder.HasIndex(e => e.ValidFrom).IsUnique();
-        builder.HasIndex(e => e.ValidTo)
-            .HasFilter("[ValidTo] IS NULL AND [IsArchived] = 0")
+        builder.HasIndex(e => e.IsActive)
+            .HasFilter("[IsActive] = 1 AND [IsArchived] = 0")
             .IsUnique();
     }
 }

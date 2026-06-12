@@ -6,28 +6,9 @@ public interface IAllowanceExemptThresholdRepository
 {
     Task<AllowanceExemptThresholdVersion?> GetByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyList<AllowanceExemptThresholdVersion>> GetAllAsync(bool includeArchived, CancellationToken ct);
-    Task<AllowanceExemptThresholdVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct);
-
-    /// <summary>
-    /// Tra cứu threshold active tại date theo AllowanceTypeId.
-    /// Scoped per AllowanceType — auto-close chỉ trong cùng AllowanceTypeId.
-    /// </summary>
-    Task<AllowanceExemptThresholdVersion?> GetActiveForAllowanceTypeAsync(
-        int allowanceTypeId, DateOnly date, CancellationToken ct);
-
-    /// <summary>
-    /// Thêm version mới trong transaction Serializable.
-    /// Auto-close chỉ record open cùng AllowanceTypeId hiện tại.
-    /// </summary>
-    Task<int> AddAsync(AllowanceExemptThresholdVersion entity, CancellationToken ct);
-
-    /// <summary>
-    /// Chỉ cho phép update record future-dated (ValidFrom > today) và chưa archived.
-    /// </summary>
+    Task<AllowanceExemptThresholdVersion?> GetActiveForAllowanceTypeAsync(int allowanceTypeId, CancellationToken ct);
+    Task<AllowanceExemptThresholdVersion?> GetActiveAtForAllowanceTypeAsync(int allowanceTypeId, DateOnly date, CancellationToken ct);
+    Task<int> AddAsync(AllowanceExemptThresholdVersion entity, bool applyImmediately, CancellationToken ct);
     Task<bool> UpdateAsync(AllowanceExemptThresholdVersion entity, CancellationToken ct);
-
-    /// <summary>
-    /// Soft delete: set IsArchived = true. Phục hồi record liền trước cùng AllowanceTypeId thành open nếu có.
-    /// </summary>
-    Task<bool> ArchiveAsync(int id, CancellationToken ct);
+    Task<bool> DeletePendingAsync(int id, CancellationToken ct);
 }

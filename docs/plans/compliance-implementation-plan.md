@@ -4,14 +4,38 @@
 **Project:** mingo-payroll-api (.NET 8, Clean Architecture, EF Core Code-First, MediatR CQRS)
 **Branch dự kiến:** `feature/FE06-compliance-management`
 **Module ID:** FE-06 (Quản Lý Các Số Theo Luật)
-**SRS mapping:** FT-24, FT-25, FT-26, FT-27
+**SRS mapping:** FT-24, FT-25, FT-26, FT-27, FT-28
 **Priority:** Must
 **Primary actor:** HR Manager
-**Last updated:** 2026-06-12 (**Rev 9** — redesign: bỏ ValidTo, thêm IsActive bool; multiple pending versions song song; chỉ pending được sửa/xóa; active/historical read-only; background job kích hoạt pending; MinimumWage validator dùng RegionCodes.All thay vì hardcode 4 vùng)
+**Last updated:** 2026-06-12 (**Rev 11** — fix 12 lỗi tiềm ẩn: seed BHXH IsActive logic; checklist MaxBackdate; AllowanceThreshold activation; NightShiftRate warning; GetActiveAtAsync edge case; BackgroundJob skip risk; pending tx lock; IComplianceVersion IsArchived setter; audit payDate future; validate-on-start pattern; phase numbering; OtRate convenience accessor warning)
 
 ---
 
 ## Changelog
+
+### Rev 11 (2026-06-12) — Fix 12 lỗi tiềm ẩn sau review toàn file
+
+- **Lỗi 1 (CRITICAL)** Mục 3.2.2: Seed BHXH Row 2 `ValidFrom = 2026-07-01` không được `IsActive = true` khi seed vào ngày 2026-06-12 (chưa đến ngày hiệu lực). Sửa: cả 2 row seed `IsActive = false`; thêm note giải thích seeder phải gọi `ComplianceActivationJob` logic sau khi seed hoặc tự set `IsActive = true` chỉ khi `ValidFrom <= seedDate`.
+- **Lỗi 2 (CRITICAL)** Mục 13 checklist dòng cuối: `"MaxBackdate/Forward"` → `"MaxForwardDays"` (MaxBackdateDays đã bị xóa từ Rev 10).
+- **Lỗi 3 (HIGH)** Mục 4.4: Thêm note edge case `GetActiveAtAsync` — khi `date < ValidFrom của active version hiện tại`, bước 1 trả null, bước 2 fallback đúng nhưng cần exclude các record pending đã bị archived; bổ sung điều kiện `IsArchived = false` rõ ràng trong fallback.
+- **Lỗi 4 (HIGH)** Mục 4.5: Thêm note risk "job bị ngủ nhiều ngày" — trade-off chấp nhận được vì mỗi lần job chạy chỉ skip lên version mới nhất ≤ today; thêm note audit integrity: historical versions vẫn tồn tại đủ để replay `GetActiveAtAsync(specificDate)`.
+- **Lỗi 5 (HIGH)** Mục 4.5 + 13 checklist: `AllowanceExemptThresholdVersion` bị loại khỏi job generic → pending threshold không bao giờ auto-activate. Quyết định: **HR bắt buộc dùng `applyImmediately = true` cho AllowanceThreshold**; validator reject `applyImmediately = false` cho endpoint này; thêm note vào Phase 5 controller.
+- **Lỗi 6 (HIGH)** Mục 4.1: Transaction mở rồi nhưng isolation level `Serializable` chỉ cần cho nhánh `applyImmediately = true`; nhánh pending chỉ cần `ReadCommitted` (default). Tách transaction scope để tránh unnecessary lock.
+- **Lỗi 7 (MEDIUM)** Mục 3.2.3: Thêm note seed 2 PIT version có `Order` reset về 1 trong mỗi version — unique constraint là `(PitRegulationVersionId, Order)` nên OK, nhưng cần verify khi seed không trùng PK.
+- **Lỗi 8 (MEDIUM)** Mục 7.2 `OtRateSnapshot`: Thêm warning comment — `NightShiftRate` (1.30) là **hệ số lương base OT ban đêm standalone**; khi OT ban đêm ngày thường, engine phải cộng `WeekdayRate + NightShiftSurchargePercent` từ `LaborLawConstantsSnapshot`, không chỉ dùng `NightShiftRate` đơn thuần.
+- **Lỗi 9 (MEDIUM)** Mục 4.5 `IComplianceVersion`: `IsArchived { get; }` → `IsArchived { get; set; }` — nhất quán với các property khác; job generic có thể cần set trong tương lai.
+- **Lỗi 10 (MEDIUM)** Mục 7.1 `IComplianceLookupService`: Thêm note — `GetXxxAt(payDate)` không validate `payDate > today`; đây là intentional (engine có thể tính lương kỳ tương lai để preview). Clarify trong doc comment.
+- **Lỗi 11 (LOW)** Mục 5.3 `ComplianceOptions`: Thêm pattern cụ thể validate-on-start dùng `.ValidateDataAnnotations().ValidateOnStart()`.
+- **Lỗi 12 (LOW)** Mục 12 effort table: Phase 0 đổi thành "Phase 0 (Pre)" để phân biệt với Phase 1–8; không ảnh hưởng tổng effort.
+
+### Rev 10 (2026-06-12) — Fix 6 lỗi sau review Rev 9
+
+- Header: thêm `FT-28` vào SRS mapping
+- Mục 0.3 decision #7: bỏ "back-date 30d" — pending versions bắt buộc `ValidFrom > today`, không còn back-date
+- Mục 1.2: sửa tên role khớp `SystemRoles.cs` — `HRManager` → `HR`, `HRStaff` xóa, `Manager` xóa, `Auditor` xóa, `ChiefAccountant` → `Accountant`; thêm `Director` read-only
+- Mục 2.3: xóa `ArchiveAsync` legacy khỏi repo interface — không có caller, dead method
+- Mục 4.4: fix `GetActiveAtAsync` audit replay — ưu tiên `IsActive = true` tại date, fallback lấy version `ValidFrom <= date` mới nhất (tránh trả nhầm pending chưa active)
+- Mục 5.3 + Phase 9: xóa `MaxBackdateDays` khỏi `ComplianceOptions` + `appsettings.json`
 
 ### Rev 9 (2026-06-12) — Redesign version lifecycle: IsActive thay ValidTo
 
@@ -130,7 +154,7 @@
 | 4 | **Tách FT-26 thành 2 entity** (`OtRateVersion` + `MinimumWageVersion`) | OT rates (BLLĐ 2019, ít đổi) vs Min wage (Nghị định, đổi hàng năm) chu kỳ luật khác nhau |
 | 5 | **`AllowanceType` entity giữ nguyên** | Threshold versioned riêng (FK → AllowanceType); không nhét cột threshold vào catalog |
 | 6 | **Không dùng enum cho bất kỳ giá trị nào liên quan luật** | Enum bị compile-time → mọi thay đổi buộc redeploy (vi phạm NFR-M05). Thay bằng `string` + static constants class: `RegionCodes`, `ThresholdModes`, `OtRateTypes`. Validator dùng `*.All` / `*.Required` / `*.MinimumRates` để cross-check. EF map string trực tiếp, không cần `HasConversion<string>()`. |
-| 7 | **`ValidFrom` allow back-date max 30d / forward-date max 365d** | Configurable `appsettings:Compliance:{MaxBackdateDays, MaxForwardDays}` |
+| 7 | **`ValidFrom` forward-date max 365d** (pending only) | Configurable `appsettings:Compliance:{MaxForwardDays}`. Không cho phép back-date khi tạo pending — `ValidFrom` phải strictly > today. `ApplyImmediately = true` override ValidFrom = today, không cần validate |
 | 8 | **Inject `IClock` mọi handler/repo** | Unit test mock được; chuẩn convention dự án |
 | 9 | **Soft delete (`IsArchived = true`) thay hard delete** | Record đã active có thể đã được snapshot vào `PayrollItem` tương lai → không bao giờ thực sự xoá |
 | 10 | **Snapshot là `record` immutable**, expose tất cả field nghiệp vụ kế toán cần (gồm `EmployerOccupationalDiseasePercent`) | Engine copy nguyên trạng vào `PayrollItem` |
@@ -160,12 +184,17 @@ Thêm **24 permissions mới** vào `MPS.Domain.Constants.Permissions` + `Permis
 
 ### 1.2. Role-permission seed mapping
 
-| Permission group | SystemAdmin | HRManager | HRStaff | Manager | Employee | ChiefAccountant | Auditor |
-|------------------|:-----------:|:---------:|:-------:|:-------:|:--------:|:---------------:|:-------:|
-| `*.Read.All` (6 perms) | ✅ | ✅ | – | – | – | ✅ | ✅ |
+Roles khớp `SystemRoles.cs`: `SystemAdmin`, `HR`, `Accountant`, `Director`, `DepartmentManager`, `ProjectManager`, `Employee`.
+
+| Permission group | SystemAdmin | HR | Accountant | Director | DepartmentManager | ProjectManager | Employee |
+|------------------|:-----------:|:--:|:----------:|:--------:|:-----------------:|:--------------:|:--------:|
+| `*.Read.All` (6 perms) | ✅ | ✅ | ✅ | ✅ | – | – | – |
 | `*.{Create/Update/Delete}.All` (18 perms) | ✅ | ✅ | – | – | – | – | – |
 
-> HR Staff KHÔNG có quyền compliance — đúng spec ("Primary Actor: HR Manager"). ChiefAccountant + Auditor read-only.
+> - **HR** — Primary Actor, full CRUD
+> - **Accountant** — đọc để kiểm tra tỷ lệ khi quyết toán lương; read-only
+> - **Director** — nhận notification "luật đổi" (spec 4.1), cần đọc để phê duyệt; read-only
+> - `DepartmentManager`, `ProjectManager`, `Employee` — không liên quan compliance admin
 
 ---
 
@@ -404,7 +433,6 @@ Task<int> AddAsync(TEntity entity, bool applyImmediately, CancellationToken ct);
 // applyImmediately = false → ValidFrom phải > today, IsActive = false (pending, background job activate)
 Task<bool> UpdateAsync(TEntity entity, CancellationToken ct); // chỉ pending (IsActive=false, ValidFrom>today, IsArchived=false)
 Task<bool> DeletePendingAsync(int id, CancellationToken ct);  // chỉ pending version; active/historical → 409
-Task<bool> ArchiveAsync(int id, CancellationToken ct);        // legacy soft delete cho records không pending
 ```
 
 `IAllowanceExemptThresholdRepository` extra:
@@ -475,10 +503,16 @@ Pattern hiện tại — append HasData hoặc seed runtime idempotent.
 
 #### 3.2.2. `SocialInsuranceRateVersion` — **2 rows** (multi-version)
 
+> ⚠️ **Quy tắc seed `IsActive`:** Seeder tự set `IsActive` thủ công (không gọi `AddAsync` để tránh side-effect background-job). Rule: `IsActive = true` **chỉ** khi `ValidFrom <= seedDate` (ngày chạy seed). Nếu `ValidFrom > seedDate`, set `IsActive = false` — background job `ComplianceActivationJob` sẽ activate vào đúng ngày. Vi phạm rule này làm version "active trước ngày hiệu lực", phá vỡ invariant business rule.
+>
+> **Seed date hiện tại: 2026-06-12.** Row 1 (ValidFrom 2025-07-01 ≤ 2026-06-12) → `IsActive = false` (historical, đã bị Row 2 replace). Row 2 (ValidFrom 2026-07-01 > 2026-06-12) → `IsActive = false` (pending, chưa đến ngày). **Không có row nào `IsActive = true` lúc seed** — background job activate Row 2 vào ngày 01/07/2026.
+>
+> **Consequence cho môi trường dev:** Để test ngay sau seed, dev phải chạy `ComplianceActivationJob` thủ công hoặc tạm thời đổi `ValidFrom = 2025-07-01, IsActive = true` cho Row 1 trong môi trường dev. Không thay đổi production seed.
+
 **Row 1** (Luật BHXH 2024 hiệu lực, mức tham chiếu cũ — historical):
 ```
 ValidFrom = 2025-07-01
-IsActive = false    (historical — đã bị thay thế bởi row 2 khi seed)
+IsActive = false    (historical — ValidFrom <= seedDate, nhưng đã bị Row 2 replace; set false để nhất quán)
 IsArchived = false
 EmployeeSocialPercent = 8.00
 EmployerSocialPercent = 17.50
@@ -494,10 +528,10 @@ UnemploymentCapMultiplier = 20
 LegalReference = "Luật BHXH 41/2024/QH15 + NĐ 158/2025/NĐ-CP (mức tham chiếu cũ — lương cơ sở 2,340,000)"
 ```
 
-**Row 2** (NĐ 161/2026, mức tham chiếu mới — active):
+**Row 2** (NĐ 161/2026, mức tham chiếu mới — pending, hiệu lực 01/07/2026):
 ```
 ValidFrom = 2026-07-01
-IsActive = true     (current active)
+IsActive = false    (pending — ValidFrom > seedDate 2026-06-12; background job activate vào 01/07/2026)
 IsArchived = false
 EmployeeSocialPercent = 8.00
 EmployerSocialPercent = 17.50
@@ -513,18 +547,20 @@ UnemploymentCapMultiplier = 20
 LegalReference = "NĐ 161/2026/NĐ-CP (mức tham chiếu mới 2,530,000 từ 01/07/2026)"
 ```
 
-> Tỷ lệ không đổi giữa 2 row — chỉ `ReferenceAmount` khác. Seed manually thay vì gọi `AddAsync` để tránh background-job logic; tự set `IsActive` thủ công.
+> Tỷ lệ không đổi giữa 2 row — chỉ `ReferenceAmount` khác. **Lưu ý:** Sau khi seed, `GetActiveAsync()` trả `null` cho BHXH vì cả 2 row `IsActive = false`. Dev test cần chạy job hoặc seed thêm row `ValidFrom = 2025-07-01, IsActive = true` trong dev fixture riêng.
 
 #### 3.2.3. `PitRegulationVersion` + `PitBracket` — **2 rows**
 
 > ⚠️ **BUG FIX:** Nếu chỉ seed từ 2026-01-01, engine sẽ throw `InvalidOperationException` khi tính lương backfill kỳ 2025 (không có PIT active). Seed thêm row biểu thuế cũ (Luật TNCN 2007 sửa đổi 2012) để cover kỳ lương từ 2020.
 
-> ⚠️ **Lưu ý seed:** Seed 2 PIT row theo thứ tự: row 1 `IsActive = false` (historical), row 2 `IsActive = true` (current). Background job không chạy lúc seed — set `IsActive` thủ công.
+> ⚠️ **Lưu ý seed:** Seed 2 PIT row theo thứ tự: row 1 `IsActive = true` (ValidFrom=2020-01-01 ≤ seedDate → active), row 2 `IsActive = false` (ValidFrom=2026-01-01 ≤ seedDate nhưng đây là version thay thế row 1 — seeder phải deactivate row 1 trước khi set row 2 IsActive=true, hoặc seed theo thứ tự: row 1 IsActive=true, sau đó row 2 set row1.IsActive=false rồi row2.IsActive=true). Background job không chạy lúc seed — set `IsActive` thủ công. **Quy tắc chung**: version nào có `ValidFrom` mới nhất ≤ seedDate thì `IsActive = true`; các version cũ hơn `IsActive = false`.
+
+> ⚠️ **`PitBracket.Order` là per-version:** Unique constraint `(PitRegulationVersionId, Order)` đảm bảo Order reset về 1 cho mỗi version — Row 1 có Order 1–7, Row 2 có Order 1–5, không trùng PK vì scope theo `PitRegulationVersionId`. Seeder phải seed brackets sau khi có `PitRegulationVersionId` (EF identity insert hoặc HasData với explicit Id).
 
 **Row 1** (Biểu thuế cũ — Luật TNCN 2007 sửa đổi, dùng cho kỳ lương 2020–2025 — historical):
 ```
 ValidFrom = 2020-01-01
-IsActive = false    (historical)
+IsActive = false    (historical — ValidFrom <= seedDate nhưng đã bị Row 2 replace; seeder set false sau khi set Row 2 IsActive=true)
 PersonalDeductionAmount = 11,000,000
 DependentDeductionAmount = 4,400,000
 LegalReference = "Luật TNCN 04/2007/QH12 sửa đổi 2012 + NQ 954/2020/UBTVQH14 — giảm trừ 11tr/4.4tr"
@@ -542,7 +578,7 @@ Brackets:
 **Row 2** (Luật TNCN 109/2025/QH15, áp dụng từ kỳ 2026 — active):
 ```
 ValidFrom = 2026-01-01
-IsActive = true     (current active)
+IsActive = true     (current active — ValidFrom=2026-01-01 <= seedDate 2026-06-12; seeder deactivate Row 1 trước)
 PersonalDeductionAmount = 15,500,000
 DependentDeductionAmount = 6,200,000
 LegalReference = "Luật TNCN 109/2025/QH15 + NQ 110/2025/UBTVQH15 — áp dụng từ kỳ tính thuế 2026 (từ 01/01/2026, dù toàn luật hiệu lực 01/07/2026)"
@@ -650,7 +686,7 @@ public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLaw
 - [ ] `AppDbContext` thêm 9 DbSet (khớp danh sách mục 3.4)
 - [ ] `DatabaseSeeder.SeedDefaultComplianceAsync` + `SeedDefaultAllowanceTypesAsync`
 - [ ] Migration `ComplianceModule` applied trên dev DB
-- [ ] Seed verified: 2 BHXH rows (row1 IsActive=false, row2 IsActive=true) + 2 PIT rows (row1 IsActive=false, row2 IsActive=true) + 1 OT (IsActive=true, Entries) + 1 MinWage (IsActive=true) + 3 allowance + thresholds + 1 LaborLawConstants (IsActive=true)
+- [ ] Seed verified: 2 BHXH rows (row1 ValidFrom=2025-07-01 IsActive=false historical, row2 ValidFrom=2026-07-01 IsActive=false pending — background job activate 01/07/2026) + 2 PIT rows (row1 ValidFrom=2020-01-01 IsActive=false historical, row2 ValidFrom=2026-01-01 IsActive=true current) + 1 OT (IsActive=true, Entries) + 1 MinWage (IsActive=true) + 3 allowance + thresholds (applyImmediately=true) + 1 LaborLawConstants (IsActive=true)
 - [ ] `dotnet build` pass
 
 ---
@@ -678,25 +714,41 @@ public async Task<int> AddAsync(SocialInsuranceRateVersion entity, bool applyImm
         entity.IsActive = false;  // pending; background job sẽ activate
     }
 
-    await using var tx = await _context.Database.BeginTransactionAsync(
-        System.Data.IsolationLevel.Serializable, ct);
-
     if (applyImmediately)
     {
-        // Deactivate version đang active (nếu có) trước khi add mới
-        var current = await _context.SocialInsuranceRateVersions
-            .Where(x => x.IsActive && !x.IsArchived)
-            .FirstOrDefaultAsync(ct);
-
-        if (current is not null)
+        // applyImmediately=true: cần Serializable để tránh race condition 2 request đồng thời
+        // cùng deactivate active record và insert mới → filtered unique index IsActive=1 vẫn là lưới cuối
+        await using var tx = await _context.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, ct);
+        try
         {
-            current.IsActive = false;
-            current.UpdatedAt = _clock.UtcNow;
+            // Deactivate version đang active (nếu có) trước khi add mới
+            var current = await _context.SocialInsuranceRateVersions
+                .Where(x => x.IsActive && !x.IsArchived)
+                .FirstOrDefaultAsync(ct);
+
+            if (current is not null)
+            {
+                current.IsActive = false;
+                current.UpdatedAt = _clock.UtcNow;
+            }
+
+            await _context.SocialInsuranceRateVersions.AddAsync(entity, ct);
+            await _context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateException dbEx) when (IsUniqueIndexViolation(dbEx))
+        {
+            await tx.RollbackAsync(ct);
+            throw new ConflictException(
+                "A compliance version with this effective date scope already exists. Please refresh and retry.");
         }
     }
     else
     {
-        // Pending: chỉ check ValidFrom không trùng với version khác
+        // applyImmediately=false (pending): không cần Serializable — không chạm IsActive.
+        // Chỉ cần ReadCommitted (default) + unique index (ValidFrom) bắt duplicate ở DB level.
+        // Application-layer check trước để trả message thân thiện; DB index là lưới cuối.
         var duplicate = await _context.SocialInsuranceRateVersions
             .Where(x => x.ValidFrom == entity.ValidFrom && !x.IsArchived)
             .AnyAsync(ct);
@@ -704,29 +756,26 @@ public async Task<int> AddAsync(SocialInsuranceRateVersion entity, bool applyImm
         if (duplicate)
             throw new ConflictException(
                 $"A pending version with ValidFrom={entity.ValidFrom:yyyy-MM-dd} already exists.");
-    }
 
-    await _context.SocialInsuranceRateVersions.AddAsync(entity, ct);
-
-    try
-    {
-        await _context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-    }
-    catch (DbUpdateException dbEx) when (IsUniqueIndexViolation(dbEx))
-    {
-        await tx.RollbackAsync(ct);
-        throw new ConflictException(
-            "A compliance version with this effective date scope already exists. Please refresh and retry.");
+        await _context.SocialInsuranceRateVersions.AddAsync(entity, ct);
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException dbEx) when (IsUniqueIndexViolation(dbEx))
+        {
+            throw new ConflictException(
+                "A pending version with this ValidFrom already exists (concurrent insert). Please retry.");
+        }
     }
 
     return entity.Id;
 }
 ```
 
-> **Filtered unique index** là lưới cuối chống race condition: 2 request "apply immediately" đồng thời → request thứ 2 hit unique index `WHERE IsActive = 1 AND IsArchived = 0` → 409 Conflict.
->
-> **Tại sao không Serializable cho pending?** Pending versions không giữ unique index `IsActive`, chỉ có unique index `ValidFrom`. Duplicate `ValidFrom` check ở application layer trước, nếu race qua được thì unique index `(ValidFrom)` bắt ở DB.
+> **Tại sao tách transaction scope theo nhánh:**
+> - `applyImmediately=true`: cần `Serializable` để lock row active trong read-modify-write cycle. Filtered unique index `IsActive=1 AND IsArchived=0` là lưới cuối chống race condition.
+> - `applyImmediately=false` (pending): chỉ cần `ReadCommitted` (default EF). Không chạm `IsActive` nên không cần lock cao. Unique index `(ValidFrom)` ở DB bắt duplicate nếu race qua application check. Dùng `Serializable` cho pending sẽ tạo unnecessary range lock, tăng deadlock risk trong môi trường concurrent cao.
 
 ### 4.2. `UpdateAsync` rules
 
@@ -798,20 +847,40 @@ public async Task<TVersion?> GetActiveAsync(CancellationToken ct)
         .Where(x => x.IsActive && !x.IsArchived)
         .FirstOrDefaultAsync(ct);
 
-// GetActiveAtAsync — dùng cho snapshot replay/audit (tìm version active tại ngày payDate)
-// Vì không còn ValidTo, phải tìm version gần nhất có ValidFrom <= date và IsActive=false (historical)
-// HOẶC IsActive=true. Lấy version có ValidFrom lớn nhất không vượt quá date.
+// GetActiveAtAsync — dùng cho snapshot replay/audit (tìm version nào đang active tại ngày payDate)
+// Logic: ưu tiên IsActive=true có ValidFrom<=date; nếu không có (payDate trước ValidFrom của active version hiện tại)
+// thì fallback lấy historical version (IsActive=false AND ValidFrom<=date AND IsArchived=false) mới nhất.
+// Tránh trả nhầm pending version (ValidFrom>today, IsActive=false) cho audit replay.
+//
+// QUAN TRỌNG: payDate không bị validate > today — intentional, engine có thể tính lương kỳ tương lai
+// để preview. Xem doc comment IComplianceLookupService.GetXxxAt().
 public async Task<TVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct)
-    => await _context.Set<TVersion>()
+{
+    // Bước 1: tìm version IsActive=true có ValidFrom <= date (chính xác nhất cho ngày hiện tại/tương lai gần)
+    var active = await _context.Set<TVersion>()
         .Include(/* children */)
-        .Where(x => !x.IsArchived && x.ValidFrom <= date)
+        .Where(x => x.IsActive && !x.IsArchived && x.ValidFrom <= date)
+        .FirstOrDefaultAsync(ct);
+
+    if (active is not null) return active;
+
+    // Bước 2: fallback — lấy historical version mới nhất có ValidFrom <= date
+    // Điều kiện !x.IsArchived bắt buộc — tránh trả về record đã soft-delete.
+    // Điều kiện ValidFrom <= date đã loại hết pending (pending luôn có ValidFrom > today >= date-quá-khứ).
+    // Edge case: nếu date là tương lai xa (vd 2030-01-01) và active version có ValidFrom=2026-07-01 <= date,
+    // bước 1 đã trả về đúng. Bước 2 chỉ kích hoạt khi date < ValidFrom của mọi active/historical version
+    // (vd tính lương backfill trước khi có bất kỳ version nào) — trả null là đúng trong trường hợp này.
+    return await _context.Set<TVersion>()
+        .Include(/* children */)
+        .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
         .OrderByDescending(x => x.ValidFrom)
         .FirstOrDefaultAsync(ct);
+}
 ```
 
-> **`GetActiveAtAsync` logic mới:** Không còn `ValidTo`, nên "version active tại ngày X" = version có `ValidFrom <= X` mới nhất (kể cả historical). Background job đảm bảo chỉ version có `ValidFrom <= today` mới có `IsActive = true` — nhưng để audit replay backdate, lấy version có `ValidFrom` gần X nhất là đúng về mặt lịch sử.
+> **Tại sao 2 bước?** Pending versions có `IsActive = false AND ValidFrom > today`. Nếu `date` là ngày trong quá khứ, điều kiện `ValidFrom <= date` đã loại hết pending — fallback an toàn. Nếu `date` là hôm nay/tương lai, bước 1 trả về active version đúng. Không bao giờ trả nhầm pending chưa được activate.
 >
-> **Caller** truyền vào `DateOnly.FromDateTime(_clock.UtcNow)` (không dùng `DateTime.UtcNow.Date` vì `.Date` trả `DateTime` với `Kind = Unspecified`).
+> **Caller** truyền `payDate` từ kỳ lương (không dùng `DateTime.UtcNow.Date` vì `.Date` trả `DateTime` với `Kind = Unspecified`; dùng `DateOnly.FromDateTime(_clock.UtcNow)` nếu cần ngày hôm nay).
 
 ### 4.5. Background job `ComplianceActivationJob` (IHostedService)
 
@@ -851,7 +920,7 @@ public sealed class ComplianceActivationJob : BackgroundService
         await ActivateForTypeAsync<OtRateVersion>(db, clock, publisher, today, ct);
         await ActivateForTypeAsync<MinimumWageVersion>(db, clock, publisher, today, ct);
         await ActivateForTypeAsync<LaborLawConstantsVersion>(db, clock, publisher, today, ct);
-        // AllowanceExemptThreshold: scoped per AllowanceTypeId — xử lý riêng nếu cần
+        // AllowanceExemptThreshold: KHÔNG xử lý trong job generic — xem note bên dưới.
     }
 
     private static async Task ActivateForTypeAsync<TVersion>(
@@ -859,6 +928,7 @@ public sealed class ComplianceActivationJob : BackgroundService
         where TVersion : class, IComplianceVersion
     {
         // Tìm pending version mới nhất có ValidFrom <= today
+        // LƯU Ý: chỉ lấy version mới nhất (OrderByDescending + First) — xem note "trade-off skip" bên dưới
         var toActivate = await db.Set<TVersion>()
             .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= today)
             .OrderByDescending(x => x.ValidFrom)
@@ -899,7 +969,7 @@ public interface IComplianceVersion
     int Id { get; }
     DateOnly ValidFrom { get; set; }
     bool IsActive { get; set; }
-    bool IsArchived { get; }
+    bool IsArchived { get; set; }   // setter cần thiết cho soft-delete trong DeletePendingAsync và tương lai
     DateTime? UpdatedAt { get; set; }
 }
 ```
@@ -909,7 +979,9 @@ public interface IComplianceVersion
 services.AddHostedService<ComplianceActivationJob>();
 ```
 
-> **Tại sao chỉ lấy version có `ValidFrom` mới nhất?** Nếu HR tạo nhiều pending versions (vd 2027-01-01, 2027-06-01, 2027-12-01), job sẽ activate từng cái theo thứ tự khi đến ngày. Mỗi đêm job chỉ nhảy lên version mới nhất ≤ today — tránh skip version giữa nếu HR tạo nhiều version tương lai xa.
+> **Trade-off "skip" khi job bị dừng nhiều ngày:** Nếu HR tạo 3 pending (2027-02-01, 2027-04-01, 2027-06-01) và server tắt từ tháng 1 đến tháng 6, khi khởi động lại job chỉ activate version 2027-06-01 (mới nhất ≤ today), bỏ qua 2027-02-01 và 2027-04-01. **Trade-off này được chấp nhận** vì: (1) các version bị skip vẫn tồn tại dưới dạng historical records (`IsActive=false`, `IsArchived=false`) — audit trail không mất; (2) `GetActiveAtAsync(specificDate)` vẫn replay đúng version tại bất kỳ ngày nào; (3) thiết kế tránh complexity của "activate tuần tự từng ngày". **Mitigaton:** Monitoring alert khi server downtime > 1 ngày trước `ValidFrom` của pending version.
+>
+> **`AllowanceExemptThresholdVersion` KHÔNG có trong job generic** vì scoped per `AllowanceTypeId` — filtered unique index là `(AllowanceTypeId, IsActive=1 AND IsArchived=0)`, không thể dùng generic `ActivateForTypeAsync`. **Quyết định thiết kế (Rev 11):** HR bắt buộc dùng `applyImmediately = true` cho AllowanceThreshold; `applyImmediately = false` bị validator **reject** với message `"AllowanceExemptThreshold does not support future-dated pending versions. Use applyImmediately=true."`. Lý do: complexity activation per-AllowanceTypeId không đáng so với use case thực tế (ngưỡng phụ cấp thay đổi ít hơn nhiều so với BHXH/PIT).
 
 ### 4.6. Register vào `InfrastructureServiceRegistration`
 
@@ -1029,7 +1101,7 @@ Mỗi sub-feature có 6 file Command/Query (Create/Update/DeletePending/GetAll/G
 | **PitRegulation** | `PersonalDeductionAmount > 0`, `DependentDeductionAmount > 0`; **brackets sequence**: `Order` consecutive starting 1; `LowerBound[0] = 0`; `LowerBound[i+1] = UpperBound[i]`; bracket cuối `UpperBound = null`; **rate ascending**: `Rate[i] ≥ Rate[i-1]` ; mọi rate ∈ [0, 1] |
 | **OtRate** | `Entries` phải có đủ 4 `OtType` trong `OtRateTypes.Required`; unique `OtType` trong list; duyệt từng entry: rate ≥ `OtRateTypes.MinimumRates[OtType]` (Weekday≥1.50, Weekend≥2.00, Holiday≥3.00, NightShift≥1.30); mọi rate ≤ 10 (sanity cap) |
 | **MinimumWage** | Phải có đủ tất cả `RegionCode` trong `RegionCodes.All` (không hardcode số vùng — forward-compatible khi Nghị định bổ sung vùng mới); unique RegionCode; mọi amount > 0; amount theo thứ tự giảm dần theo index trong `RegionCodes.All` (`Amount[0] ≥ Amount[1] ≥ ... ≥ Amount[N]`) |
-| **AllowanceExemptThreshold** | `AllowanceTypeId` tồn tại + `IsActive`; nếu `ThresholdMode = FixedAmount` thì `MonthlyExemptAmount > 0`; nếu `ActualAllocation` thì `MonthlyExemptAmount` phải null; ít nhất 1 trong `AppliesToTax`/`AppliesToSocial` = true |
+| **AllowanceExemptThreshold** | `AllowanceTypeId` tồn tại + `IsActive`; nếu `ThresholdMode = FixedAmount` thì `MonthlyExemptAmount > 0`; nếu `ActualAllocation` thì `MonthlyExemptAmount` phải null; ít nhất 1 trong `AppliesToTax`/`AppliesToSocial` = true; **`ApplyImmediately` phải luôn `true`** — `false` bị reject với message `"AllowanceExemptThreshold does not support future-dated pending versions. Use applyImmediately=true."` (lý do: không có background job activation cho type này — xem mục 4.5) |
 | **LaborLawConstants** | `ProbationSalaryMinPercent` ∈ (0, 100]; `NightShiftSurchargePercent` ∈ (0, 100]; `StandardWorkingHoursPerDay` ∈ (0, 24]; `StandardWorkingDaysPerMonth` ∈ (0, 31]; `AnnualLeaveMinDays` ≥ 1; `OvertimeMaxHoursPerDay` ∈ (0, 24]; `OvertimeMaxHoursPerYear` ≥ 1. Tất cả percent **đơn vị 0–100**, engine chia 100 khi tính |
 
 Inject `IClock` vào validator (FluentValidation hỗ trợ DI).
@@ -1040,12 +1112,19 @@ Inject `IClock` vào validator (FluentValidation hỗ trợ DI).
 public sealed class ComplianceOptions
 {
     public const string SectionName = "Compliance";
-    public int MaxBackdateDays { get; init; } = 30;
+
+    [Range(1, 3650)]
     public int MaxForwardDays { get; init; } = 365;
 }
 ```
 
-Bind từ `appsettings.json` section `Compliance`. Validate on start.
+Bind và validate on start — pattern cụ thể trong `ApplicationServiceRegistration`:
+```csharp
+services.AddOptions<ComplianceOptions>()
+    .BindConfiguration(ComplianceOptions.SectionName)
+    .ValidateDataAnnotations()   // kiểm tra [Range] attribute
+    .ValidateOnStart();          // fail-fast khi khởi động nếu config sai, không chờ đến request đầu tiên
+```
 
 ### 5.4. DTOs (`src/MPS.Application/DTOs/Compliance/`)
 
@@ -1135,6 +1214,15 @@ Endpoints chuẩn:
 /// Việc QUYẾT ĐỊNH ÁP DỤNG rate cho ai (vd thử việc &lt; 1 tháng có đóng BHXH không,
 /// nhân viên ở vùng nào, dependent nào tính giảm trừ) là ENGINE CONCERN
 /// dựa trên FT-01 (Employee), FT-03 (Contract), FT-25 (Dependent status).
+///
+/// VỀ payDate trong GetXxxAt():
+/// - payDate KHÔNG bị validate &gt; today — intentional.
+/// - Engine có thể truyền payDate tương lai để preview kỳ lương sắp tới.
+/// - Nếu payDate là tương lai và có pending version sẽ được activate trước payDate,
+///   GetActiveAtAsync trả version active hiện tại (không phải pending) — vì pending
+///   chưa có IsActive=true. Engine nên biết điều này khi preview.
+/// - Nếu không có version nào có ValidFrom &lt;= payDate, service throw InvalidOperationException.
+///   Engine bắt và reject toàn kỳ — không tính bằng default.
 /// </summary>
 public interface IComplianceLookupService
 {
@@ -1201,6 +1289,14 @@ public sealed record OtRateSnapshot(
     public decimal WeekdayRate    => GetRate(OtRateTypes.Weekday);
     public decimal WeekendRate    => GetRate(OtRateTypes.Weekend);
     public decimal HolidayRate    => GetRate(OtRateTypes.Holiday);
+
+    // ⚠️ CẢNH BÁO ENGINE: NightShiftRate (1.30) là hệ số cho ca đêm STANDALONE (không OT).
+    // Khi OT ban đêm ngày thường, engine PHẢI tính:
+    //   totalRate = WeekdayRate + (NightShiftSurchargePercent / 100)
+    //             = 1.50 + 0.20 = 1.70
+    // KHÔNG dùng NightShiftRate đơn thuần — sẽ tính thiếu 20% phụ trội.
+    // NightShiftSurchargePercent lấy từ LaborLawConstantsSnapshot, không hardcode 0.20.
+    // Tham chiếu: BLLĐ 2019 Điều 98 khoản 2 (hệ số OT) + khoản 3 (cộng thêm 20% đêm).
     public decimal NightShiftRate => GetRate(OtRateTypes.NightShift);
 }
 // Engine gọi snapshot.WeekdayRate hoặc snapshot.GetRate("Weekday") — cả 2 đều được.
@@ -1308,7 +1404,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 
 | File | Test cases |
 |---|---|
-| `SocialInsuranceRateCreateCommandValidatorTests` | Percent > 100 fail; ReferenceAmount ≤ 0 fail; ValidFrom > today + 365 fail; ValidFrom < today - 30 fail; OccupationalDisease > EmployerSocial fail; happy path 17.50/0.50 pass |
+| `SocialInsuranceRateCreateCommandValidatorTests` | Percent > 100 fail; ReferenceAmount ≤ 0 fail; ValidFrom > today + 365 fail (applyImmediately=false); ValidFrom = today fail (applyImmediately=false, must be strictly future); OccupationalDisease > EmployerSocial fail; applyImmediately=true bỏ qua ValidFrom validation pass; happy path 17.50/0.50 pass |
 | `PitRegulationCreateCommandValidatorTests` | Brackets out-of-order fail; gap fail; last bracket UpperBound NOT null fail; **rate descending fail** (Rev 2); rate > 1 fail; happy path 5 brackets ascending pass |
 | `OtRateCreateCommandValidatorTests` | **Weekday < 1.5 fail** (Rev 2); **Weekend < 2.0 fail**; **Holiday < 3.0 fail**; **NightShift < 1.3 fail**; rate > 10 fail (sanity); happy path 1.5/2.0/3.0/1.3 pass |
 | `MinimumWageCreateCommandValidatorTests` | Missing any region in `RegionCodes.All` fail; duplicate region fail; amount descending order violated fail; happy path pass with all `RegionCodes.All` regions (verify seed data 5310/4730/4140/3700) |
@@ -1339,7 +1435,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 
 ### 8.4. Seeder smoke test
 
-`DatabaseSeederComplianceTests`: chạy seed 2 lần idempotent; verify đúng 2 BHXH rows (row1 IsActive=false, row2 IsActive=true); verify 2 PIT rows (row1 IsActive=false, row2 IsActive=true); verify 1 OT + 1 MinWage + 1 LaborLawConstants (IsActive=true).
+`DatabaseSeederComplianceTests`: chạy seed 2 lần idempotent; verify đúng 2 BHXH rows (row1 ValidFrom=2025-07-01 IsActive=false, row2 ValidFrom=2026-07-01 IsActive=false — không có row nào IsActive=true sau seed thuần); verify 2 PIT rows (row1 ValidFrom=2020-01-01 IsActive=false, row2 ValidFrom=2026-01-01 IsActive=true); verify 1 OT + 1 MinWage + 1 LaborLawConstants (IsActive=true); verify `GetActiveAsync()` cho BHXH trả null ngay sau seed (expected — chưa có active version).
 
 ### 8.5. Deliverables Phase 7
 
@@ -1353,7 +1449,8 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 - [ ] `dotnet build` 0 errors 0 warnings
 - [ ] `dotnet test` all pass
 - [ ] Swagger smoke:
-  - GET `/api/compliance/social-insurance-rates/active` → IsActive=true record, ReferenceAmount = 2,530,000
+  - Trước khi smoke: chạy `ComplianceActivationJob` thủ công (hoặc gọi endpoint debug) để activate pending BHXH Row 2 nếu ngày test ≥ 2026-07-01; nếu test trước 2026-07-01 thì Row 1 (2025-07-01) phải được set `IsActive=true` trong dev fixture.
+  - GET `/api/compliance/social-insurance-rates/active` → IsActive=true record (Row 1 nếu trước 01/07/2026, Row 2 nếu sau)
   - GET `/api/compliance/social-insurance-rates/active-at?date=2025-12-01` → historical row (ValidFrom=2025-07-01), ReferenceAmount = 2,340,000
   - GET `/api/compliance/minimum-wages/active` → Region III = 4,140,000, IV = 3,700,000
   - POST `{ applyImmediately: false, validFrom: "2027-01-01", ... }` → 201, IsActive=false (pending)
@@ -1367,7 +1464,6 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 - [ ] Update `appsettings.json` thêm section `Compliance`:
   ```json
   "Compliance": {
-    "MaxBackdateDays": 30,
     "MaxForwardDays": 365
   }
   ```
@@ -1399,13 +1495,14 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 | Engine payroll khi đến cần snapshot field chưa expose | Snapshot record immutable, thêm field là non-breaking. Engine reviewer ký off trước khi merge module Payroll |
 | Notification "luật đổi" cho Director (spec 4.1) chưa có service | TODO comment; ticket follow-up module Notification |
 | Audit log diff trước/sau khi đổi version chưa chi tiết | Defer; có thể thêm `ComplianceChangeLog` ở module Audit |
-| HR nhập ValidFrom quá khứ ghi đè kỳ lương closed | `MaxBackdateDays = 30` + warning UI. Engine khi lookup tại payDate phải so snapshot trong PayrollItem với current GetActiveAt — nếu khác → cảnh báo cần re-calculate |
+| HR tạo version mới áp dụng luôn làm thay đổi lương kỳ đang tính | `applyImmediately = true` deactivate version cũ ngay lập tức. Engine nên dùng `VersionId` đã snapshot trong `PayrollItem` để replay — không lookup lại `GetActiveAsync()` khi audit kỳ cũ |
 | FK constraint `AllowanceExemptThresholdVersion ↔ AllowanceType`: HR xoá AllowanceType có threshold | Restrict delete; HR phải archive threshold trước hoặc system soft-deactivate cả threshold cùng |
 | Hằng số luật lao động (85% thử việc, 20% phụ trội đêm, 8h/ngày, 26 ngày/tháng...) | **Đã xử lý — Rev 5:** Tất cả đưa vào `LaborLawConstantsVersion` entity + `LaborLawConstantsSnapshot`. Engine inject qua `IComplianceLookupService.GetLaborLawConstantsAt(payDate)` — không còn hardcode trong code. |
 | Eligibility BHXH thử việc < 1 tháng | Lookup service publish rate, không xét eligibility. Doc comment rõ. Engine dựa trên FT-03 Contract.SubType + duration |
 | Cache invalidation token-based memory leak | Khi notification fire, dispose old `CancellationTokenSource`, tạo mới. Pattern chuẩn .NET. |
 | Race condition multi-instance (scale-out): filtered unique index chỉ chống per-DB | Hiện hệ thống single-instance. Khi scale → DB level vẫn enforce, ứng dụng layer chỉ thêm UX 409. |
-| **Background job activate pending versions** | **Trong scope FE-06.** `ComplianceActivationJob` (BackgroundService) chạy nửa đêm UTC, activate pending versions có `ValidFrom <= today`. Nếu job fail (server restart), pending vẫn ở `IsActive=false` đến khi job chạy lại — payroll engine dùng `GetActiveAsync()` vẫn trả version cũ cho đến khi job thành công. **Không mất data**, chỉ delay activation tới lần job chạy tiếp theo. |
+| **Background job activate pending versions** | **Trong scope FE-06.** `ComplianceActivationJob` (BackgroundService) chạy nửa đêm UTC, activate pending versions có `ValidFrom <= today`. Nếu job fail (server restart), pending vẫn ở `IsActive=false` đến khi job chạy lại — payroll engine dùng `GetActiveAsync()` vẫn trả version cũ cho đến khi job thành công. **Không mất data**, chỉ delay activation tới lần job chạy tiếp theo. Job chỉ áp dụng cho 5 loại (BHXH, PIT, OT, MinWage, LaborLawConstants); AllowanceThreshold không có pending — HR dùng `applyImmediately=true`. |
+| **Job skip nhiều pending khi server downtime > 1 ngày** | Trade-off chấp nhận được: job activate version mới nhất ≤ today, các version giữa vẫn tồn tại làm historical record. Audit `GetActiveAtAsync(specificDate)` vẫn replay đúng. Mitigation: monitoring alert khi pending version sắp đến ngày hiệu lực. |
 
 ---
 
@@ -1413,7 +1510,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 
 | Phase | Effort | Cộng dồn |
 |---|---|---|
-| 0 Permissions + role mapping (24 perms) | 1h | 1h |
+| 0 (Pre) Permissions + role mapping (24 perms) | 1h | 1h |
 | 1 Domain entities + interfaces (6 version entities) | 4h | 5h |
 | 2 EF config + migration + seed | 4h | 9h |
 | 3 Repositories + Serializable + exception wrap + background job | 6h | 15h |
@@ -1432,13 +1529,13 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 - [ ] `dotnet build` 0 errors 0 warnings
 - [ ] `dotnet test` all green, coverage ≥ 80%
 - [ ] Swagger smoke happy + 409 conflict + soft delete path
-- [ ] Migration applied trên dev DB + seeded (2 BHXH rows row1 IsActive=false / row2 IsActive=true + 2 PIT rows + 1 OT Entries IsActive=true + 1 MinWage IsActive=true + 3 allowance + thresholds + 1 LaborLawConstants IsActive=true)
+- [ ] Migration applied trên dev DB + seeded (2 BHXH rows: row1 ValidFrom=2025-07-01 IsActive=false, row2 ValidFrom=2026-07-01 IsActive=false pending; 2 PIT rows: row1 ValidFrom=2020-01-01 IsActive=false, row2 ValidFrom=2026-01-01 IsActive=true; 1 OT IsActive=true Entries; 1 MinWage IsActive=true; 3 allowance + thresholds applyImmediately=true; 1 LaborLawConstants IsActive=true)
 - [ ] Verify số liệu seed cross-check pháp lý (NSDLĐ BHXH = 17.5, Region III = 4,140,000, Region IV = 3,700,000, ReferenceAmount 2,340,000 / 2,530,000, ProbationSalaryMinPercent = 85.00)
 - [ ] `ComplianceActivationJob` registered + unit test idempotent pass
-- [ ] `IComplianceVersion` marker interface implemented trên 5 version entities (không kể AllowanceExemptThreshold — scoped per AllowanceTypeId)
+- [ ] `IComplianceVersion` marker interface implemented trên 5 version entities (`SocialInsuranceRateVersion`, `PitRegulationVersion`, `OtRateVersion`, `MinimumWageVersion`, `LaborLawConstantsVersion`) — **không kể `AllowanceExemptThresholdVersion`** (scoped per AllowanceTypeId, không có background job activation; HR dùng `applyImmediately=true`)
 - [ ] `Permissions.cs` extend đúng IDs 65–88 (thêm LaborLawConstants 85–88)
-- [ ] Role-permission seed cấp đủ cho HRManager + read cho SystemAdmin/Accountant/Auditor
-- [ ] `appsettings.json` có section `Compliance` với MaxBackdate/Forward
+- [ ] Role-permission seed cấp đủ cho `HR` (CRUD) + read cho `SystemAdmin`/`Accountant`/`Director`
+- [ ] `appsettings.json` có section `Compliance` với `MaxForwardDays` (không có MaxBackdateDays — đã bị xóa Rev 10)
 - [ ] `IComplianceLookupService` doc comment "publish rates only — eligibility is engine concern"
 - [ ] PR description liệt kê file thay đổi + spec mapping (FT-24 → FT-28)
 - [ ] Code review pass (security-reviewer + csharp-reviewer agents)
