@@ -18,7 +18,7 @@ public class ContractTemplateGetByIdQueryHandler : IRequestHandler<ContractTempl
 
     public async Task<ContractTemplateDto?> Handle(ContractTemplateGetByIdQuery request, CancellationToken cancellationToken)
     {
-        var entity = await _repository.GetByIdAsync(request.Id, cancellationToken);
+        var entity = await _repository.GetWithFileAsync(request.Id, cancellationToken);
         return entity is null ? null : _mapper.Map<ContractTemplateDto>(entity);
     }
 }

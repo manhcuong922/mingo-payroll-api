@@ -20,6 +20,10 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
     private EmployeeInformationGetAllQueryHandler CreateSut() =>
         new(_repo.Object, _mapper.Object, _currentUser.Object);
 
+    private static EmployeeInformationDto MakeDto(int id, int? userId) =>
+        new(id, userId, null, "Test", new DateTime(1990, 1, 1), "Male", $"0{id:D11}",
+            null, null, "Hà Nội", null, null, null, null, 1, "Pos", 0, null, null, null);
+
     [Fact]
     public async Task Handle_ReturnsAll_WhenHasReadAll()
     {
@@ -31,11 +35,7 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(true);
         _repo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(entities);
         _mapper.Setup(m => m.Map<IReadOnlyList<EmployeeInformationDto>>(entities))
-            .Returns(new List<EmployeeInformationDto>
-            {
-                new(1, 11, "", "", "", "", "", 1, "Pos", 0, "", ""),
-                new(2, 22, "", "", "", "", "", 1, "Pos", 0, "", ""),
-            });
+            .Returns(new List<EmployeeInformationDto> { MakeDto(1, 11), MakeDto(2, 22) });
 
         var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
 
@@ -49,8 +49,7 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
         _currentUser.SetupGet(c => c.UserId).Returns(99);
         _repo.Setup(r => r.GetByUserIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(own);
-        _mapper.Setup(m => m.Map<EmployeeInformationDto>(own))
-            .Returns(new EmployeeInformationDto(5, 99, "", "", "", "", "", 1, "Pos", 0, "", ""));
+        _mapper.Setup(m => m.Map<EmployeeInformationDto>(own)).Returns(MakeDto(5, 99));
 
         var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
 

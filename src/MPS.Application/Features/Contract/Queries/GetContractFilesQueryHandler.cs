@@ -43,7 +43,7 @@ public class GetContractFilesQueryHandler : IRequestHandler<GetContractFilesQuer
         {
             var callerId = _currentUser.UserId
                 ?? throw new ForbiddenAccessException("Authenticated user context is required.");
-            if (contract.EmployeeId != callerId)
+            if (contract.EmployeeInformation?.UserId != callerId)
                 throw new ForbiddenAccessException("Caller may only read files of their own contracts.");
         }
 

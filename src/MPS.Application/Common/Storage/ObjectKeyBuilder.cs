@@ -30,6 +30,15 @@ public static class ObjectKeyBuilder
         return key;
     }
 
+    public static string ForTemplate(int templateId, int version)
+    {
+        if (templateId <= 0) throw new ArgumentOutOfRangeException(nameof(templateId));
+        if (version <= 0) throw new ArgumentOutOfRangeException(nameof(version));
+        var key = $"templates/{templateId}/v{version}.docx";
+        ValidateLength(key);
+        return key;
+    }
+
     public static string ForEmployeeAvatar(int employeeId, string fileExtension)
     {
         if (string.IsNullOrWhiteSpace(fileExtension))

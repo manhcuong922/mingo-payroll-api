@@ -15,6 +15,12 @@ public interface IUserRepository
     Task<bool> RoleExistsAsync(int roleId, CancellationToken cancellationToken = default);
 
     Task<int> AddAsync(User entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tạo User mới + gán EI.UserId = newUser.Id trong 1 transaction.
+    /// Caller đã validate EI tồn tại, UserId IS NULL, và có Active contract.
+    /// </summary>
+    Task<int> AddWithEmployeeInfoLinkAsync(User user, int employeeInformationId, CancellationToken cancellationToken = default);
     Task<bool> UpdateAsync(User entity, CancellationToken cancellationToken = default);
     Task<bool> UpdateLastLoginAsync(int userId, DateTime loginAt, CancellationToken cancellationToken = default);
     Task<bool> UpdatePasswordAsync(int userId, string passwordHash, CancellationToken cancellationToken = default);

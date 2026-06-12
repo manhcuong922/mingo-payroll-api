@@ -46,14 +46,12 @@ public class SalaryGradeController : ControllerBase
         CancellationToken cancellationToken)
     {
         var id = await _mediator.Send(new SalaryGradeCreateCommand(
-            request.Code,
             request.Name,
             request.PositionId,
             request.Level,
             request.BaseSalary,
             request.Currency,
-            request.Description,
-            request.IsActive), cancellationToken);
+            request.Description), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -66,10 +64,7 @@ public class SalaryGradeController : ControllerBase
     {
         var updated = await _mediator.Send(new SalaryGradeUpdateCommand(
             id,
-            request.Code,
             request.Name,
-            request.PositionId,
-            request.Level,
             request.BaseSalary,
             request.Currency,
             request.Description,

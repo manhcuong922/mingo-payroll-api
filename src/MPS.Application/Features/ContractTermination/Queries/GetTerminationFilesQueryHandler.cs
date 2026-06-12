@@ -42,7 +42,7 @@ public class GetTerminationFilesQueryHandler : IRequestHandler<GetTerminationFil
         {
             var callerId = _currentUser.UserId
                 ?? throw new ForbiddenAccessException("Authenticated user context is required.");
-            if (contract.EmployeeId != callerId)
+            if (contract.EmployeeInformation?.UserId != callerId)
                 throw new ForbiddenAccessException("Caller may only read termination files of their own contracts.");
         }
 

@@ -105,10 +105,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<string>("ContractText")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<bool>("ConvertedFromDefiniteFlag")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -126,13 +122,13 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("EffectiveTo")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("EmployeeId")
+                    b.Property<int>("EmployeeInformationId")
                         .HasColumnType("int");
 
                     b.Property<int>("EmployerPartyId")
                         .HasColumnType("int");
 
-                    b.Property<int>("EmployerSignerUserId")
+                    b.Property<int?>("EmployerSignerUserId")
                         .HasColumnType("int");
 
                     b.Property<string>("Form")
@@ -271,7 +267,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EffectiveFrom", "EffectiveTo");
 
-                    b.HasIndex("EmployeeId", "Status");
+                    b.HasIndex("EmployeeInformationId", "Status");
 
                     b.ToTable("Contracts", (string)null);
                 });
@@ -539,14 +535,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("TemplateBody")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int?>("TemplateFileId")
+                        .HasColumnType("int");
 
                     b.Property<int>("Version")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TemplateFileId");
 
                     b.ToTable("ContractTemplates", (string)null);
                 });
@@ -745,13 +742,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
                     b.Property<string>("BankNumber")
-                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
@@ -760,31 +751,74 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<DateTime?>("CitizenIssuedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CitizenIssuedPlace")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ContactAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<int>("DependentsNo")
                         .HasColumnType("int");
+
+                    b.Property<DateTime>("Dob")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EducationLevel")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Gender")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("PermanentAddress")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("PhoneNo")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<int>("PositionId")
                         .HasColumnType("int");
 
                     b.Property<string>("SocialNo")
-                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("TaxNo")
-                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<int>("UserId")
+                    b.Property<int?>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CitizenId")
+                        .IsUnique();
+
                     b.HasIndex("PositionId");
 
                     b.HasIndex("UserId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL");
 
                     b.ToTable("EmployeeInformations", (string)null);
                 });
@@ -1491,12 +1525,20 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
 
                     b.ToTable("Positions", (string)null);
                 });
@@ -2551,7 +2593,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<int?>("Level")
+                    b.Property<int>("Level")
                         .HasColumnType("int");
 
                     b.Property<string>("Name")
@@ -2559,7 +2601,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int?>("PositionId")
+                    b.Property<int>("PositionId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -2567,10 +2609,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.HasIndex("PositionId");
+                    b.HasIndex("PositionId", "Level")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SalaryGrades_PositionId_Level_Active")
+                        .HasFilter("[IsActive] = 1");
 
                     b.ToTable("SalaryGrades", (string)null);
                 });
@@ -2689,9 +2731,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("MPS.Domain.Entities.User", "Employee")
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
                         .WithMany()
-                        .HasForeignKey("EmployeeId")
+                        .HasForeignKey("EmployeeInformationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -2704,8 +2746,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasOne("MPS.Domain.Entities.User", "EmployerSignerUser")
                         .WithMany()
                         .HasForeignKey("EmployerSignerUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("MPS.Domain.Entities.Contract", "ParentContract")
                         .WithMany("ChildContracts")
@@ -2731,7 +2772,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Navigation("CreatedByUser");
 
-                    b.Navigation("Employee");
+                    b.Navigation("EmployeeInformation");
 
                     b.Navigation("EmployerParty");
 
@@ -2795,6 +2836,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("UploadedByUser");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.ContractTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.ContractFile", "TemplateFile")
+                        .WithMany()
+                        .HasForeignKey("TemplateFileId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("TemplateFile");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.ContractTermination", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.Contract", "Contract")
@@ -2840,8 +2891,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasOne("MPS.Domain.Entities.User", "User")
                         .WithOne("EmployeeInformation")
                         .HasForeignKey("MPS.Domain.Entities.EmployeeInformation", "UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Position");
 
@@ -2905,7 +2955,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasOne("MPS.Domain.Entities.Position", "Position")
                         .WithMany()
                         .HasForeignKey("PositionId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Position");
                 });

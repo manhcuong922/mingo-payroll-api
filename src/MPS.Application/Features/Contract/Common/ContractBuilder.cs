@@ -6,11 +6,13 @@ namespace MPS.Application.Features.Contract.Common;
 /// <summary>
 /// Pure mapping from command record → entity. Snapshot fields (SalaryAmountSnapshot,
 /// SalaryCurrencySnapshot) must be supplied by caller (handler reads from SalaryGrade).
+/// Form and SalaryFormType are hardcoded: Written and Time (only values used by Mingo).
 /// </summary>
 internal static class ContractBuilder
 {
     public static Domain.Entities.Contract FromCreate(
         CreateContractCommand cmd,
+        string contractNo,
         decimal salaryAmountSnapshot,
         string salaryCurrencySnapshot,
         int createdByUserId,
@@ -18,11 +20,11 @@ internal static class ContractBuilder
     {
         return new Domain.Entities.Contract
         {
-            ContractNo = cmd.ContractNo.Trim(),
+            ContractNo = contractNo,
             ContractCategory = cmd.ContractCategory,
             ContractSubtype = cmd.ContractSubtype,
-            Form = cmd.Form,
-            EmployeeId = cmd.EmployeeId,
+            Form = Domain.Enums.Contract.ContractForm.Written,
+            EmployeeInformationId = cmd.EmployeeInformationId,
             EmployerPartyId = cmd.EmployerPartyId,
             EmployerSignerUserId = cmd.EmployerSignerUserId,
             PositionId = cmd.PositionId,
@@ -33,7 +35,7 @@ internal static class ContractBuilder
             SalaryGradeId = cmd.SalaryGradeId,
             SalaryAmountSnapshot = salaryAmountSnapshot,
             SalaryCurrencySnapshot = salaryCurrencySnapshot,
-            SalaryFormType = cmd.SalaryFormType,
+            SalaryFormType = Domain.Enums.Contract.SalaryFormType.Time,
             SalaryPayCycle = cmd.SalaryPayCycle,
             PromotionPolicy = cmd.PromotionPolicy,
             WorkingTimeJson = cmd.WorkingTimeJson,
@@ -43,7 +45,6 @@ internal static class ContractBuilder
             UnemploymentInsuranceFlag = cmd.UnemploymentInsuranceFlag,
             TrainingPolicy = cmd.TrainingPolicy,
             ConfidentialityClause = cmd.ConfidentialityClause,
-            ContractText = cmd.ContractText,
             TemplateId = cmd.TemplateId,
             Status = Domain.Enums.Contract.ContractStatus.Draft,
             ParentContractId = cmd.ParentContractId,
@@ -67,11 +68,10 @@ internal static class ContractBuilder
         string salaryCurrencySnapshot,
         DateTime nowUtc)
     {
-        entity.ContractNo = cmd.ContractNo.Trim();
         entity.ContractCategory = cmd.ContractCategory;
         entity.ContractSubtype = cmd.ContractSubtype;
-        entity.Form = cmd.Form;
-        entity.EmployeeId = cmd.EmployeeId;
+        entity.Form = Domain.Enums.Contract.ContractForm.Written;
+        entity.EmployeeInformationId = cmd.EmployeeInformationId;
         entity.EmployerPartyId = cmd.EmployerPartyId;
         entity.EmployerSignerUserId = cmd.EmployerSignerUserId;
         entity.PositionId = cmd.PositionId;
@@ -82,7 +82,7 @@ internal static class ContractBuilder
         entity.SalaryGradeId = cmd.SalaryGradeId;
         entity.SalaryAmountSnapshot = salaryAmountSnapshot;
         entity.SalaryCurrencySnapshot = salaryCurrencySnapshot;
-        entity.SalaryFormType = cmd.SalaryFormType;
+        entity.SalaryFormType = Domain.Enums.Contract.SalaryFormType.Time;
         entity.SalaryPayCycle = cmd.SalaryPayCycle;
         entity.PromotionPolicy = cmd.PromotionPolicy;
         entity.WorkingTimeJson = cmd.WorkingTimeJson;
@@ -92,7 +92,6 @@ internal static class ContractBuilder
         entity.UnemploymentInsuranceFlag = cmd.UnemploymentInsuranceFlag;
         entity.TrainingPolicy = cmd.TrainingPolicy;
         entity.ConfidentialityClause = cmd.ConfidentialityClause;
-        entity.ContractText = cmd.ContractText;
         entity.TemplateId = cmd.TemplateId;
         entity.ParentContractId = cmd.ParentContractId;
         entity.HasProbation = cmd.HasProbation;

@@ -28,8 +28,7 @@ public class UpdateContractCommandHandler : IRequestHandler<UpdateContractComman
 
         var (snapshotAmount, snapshotCurrency) = await _preflight.RunAsync(
             new ContractCheckInput(
-                ContractNo: request.ContractNo,
-                EmployeeId: request.EmployeeId,
+                EmployeeInformationId: request.EmployeeInformationId,
                 EmployerPartyId: request.EmployerPartyId,
                 EmployerSignerUserId: request.EmployerSignerUserId,
                 PositionId: request.PositionId,

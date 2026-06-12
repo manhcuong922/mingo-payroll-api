@@ -22,7 +22,7 @@ public class ContractMappingProfile : Profile
             .ForCtorParam(nameof(ContractSummaryDto.Status),
                 opt => opt.MapFrom(src => src.Status.ToString()))
             .ForCtorParam(nameof(ContractSummaryDto.EmployeeFullName),
-                opt => opt.MapFrom(src => src.Employee != null ? src.Employee.FullName : null));
+                opt => opt.MapFrom(src => src.EmployeeInformation != null ? src.EmployeeInformation.FullName : null));
 
         CreateMap<Contract, ContractDetailDto>()
             .ForCtorParam(nameof(ContractDetailDto.ContractCategory),
@@ -40,7 +40,7 @@ public class ContractMappingProfile : Profile
             .ForCtorParam(nameof(ContractDetailDto.ProbationResultStatus),
                 opt => opt.MapFrom(src => src.ProbationResultStatus.HasValue ? src.ProbationResultStatus.Value.ToString() : null))
             .ForCtorParam(nameof(ContractDetailDto.EmployeeFullName),
-                opt => opt.MapFrom(src => src.Employee != null ? src.Employee.FullName : null))
+                opt => opt.MapFrom(src => src.EmployeeInformation != null ? src.EmployeeInformation.FullName : null))
             .ForCtorParam(nameof(ContractDetailDto.SalaryGradeCode),
                 opt => opt.MapFrom(src => src.SalaryGrade != null ? src.SalaryGrade.Code : null))
             .ForCtorParam(nameof(ContractDetailDto.Allowances),

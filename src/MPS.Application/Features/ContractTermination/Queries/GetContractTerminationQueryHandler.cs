@@ -43,7 +43,7 @@ public class GetContractTerminationQueryHandler : IRequestHandler<GetContractTer
         {
             var callerId = _currentUser.UserId
                 ?? throw new ForbiddenAccessException("Authenticated user context is required.");
-            if (contract.EmployeeId != callerId)
+            if (contract.EmployeeInformation?.UserId != callerId)
                 throw new ForbiddenAccessException("Caller may only read termination of their own contracts.");
         }
 

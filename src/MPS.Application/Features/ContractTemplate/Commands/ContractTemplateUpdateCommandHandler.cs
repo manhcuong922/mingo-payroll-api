@@ -20,7 +20,6 @@ public class ContractTemplateUpdateCommandHandler : IRequestHandler<ContractTemp
             Name = request.Name.Trim(),
             ContractCategory = request.ContractCategory,
             ContractSubtype = request.ContractSubtype,
-            TemplateBody = request.TemplateBody,
             IsActive = request.IsActive,
         };
         return await _repository.UpdateAsync(entity, cancellationToken);

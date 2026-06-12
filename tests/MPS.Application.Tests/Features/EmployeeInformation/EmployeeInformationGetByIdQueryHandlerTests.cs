@@ -21,6 +21,10 @@ public sealed class EmployeeInformationGetByIdQueryHandlerTests
     private EmployeeInformationGetByIdQueryHandler CreateSut() =>
         new(_repo.Object, _mapper.Object, _currentUser.Object);
 
+    private static EmployeeInformationDto MakeDto(int id, int? userId) =>
+        new(id, userId, "EC", "FullName", new DateTime(1990, 1, 1), "Male", $"0{id:D11}",
+            null, null, "Hà Nội", null, null, null, null, 1, "Pos", 0, null, null, null);
+
     [Fact]
     public async Task Handle_ReturnsNull_WhenNotFound()
     {
@@ -52,8 +56,7 @@ public sealed class EmployeeInformationGetByIdQueryHandlerTests
         _repo.Setup(r => r.GetByIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(entity);
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
         _currentUser.SetupGet(c => c.UserId).Returns(99);
-        _mapper.Setup(m => m.Map<EmployeeInformationDto>(entity))
-            .Returns(new EmployeeInformationDto(7, 99, "EC", "F", "", "", "", 1, "Pos", 0, "", ""));
+        _mapper.Setup(m => m.Map<EmployeeInformationDto>(entity)).Returns(MakeDto(7, 99));
 
         var result = await CreateSut().Handle(new EmployeeInformationGetByIdQuery(7), CancellationToken.None);
 

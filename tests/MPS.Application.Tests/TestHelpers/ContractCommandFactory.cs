@@ -13,8 +13,7 @@ internal static class ContractCommandFactory
     public static CreateContractCommand ValidCreate(
         ContractCategory category = ContractCategory.Definite,
         ContractSubtype subtype = ContractSubtype.Official,
-        ContractForm form = ContractForm.Written,
-        int employeeId = 100,
+        int employeeInformationId = 100,
         int employerPartyId = 1,
         int employerSignerUserId = 1,
         int positionId = 1,
@@ -32,11 +31,9 @@ internal static class ContractCommandFactory
             to = from.AddYears(1);
 
         return new CreateContractCommand(
-            ContractNo: "HDLD-2026-0001",
             ContractCategory: category,
             ContractSubtype: subtype,
-            Form: form,
-            EmployeeId: employeeId,
+            EmployeeInformationId: employeeInformationId,
             EmployerPartyId: employerPartyId,
             EmployerSignerUserId: employerSignerUserId,
             PositionId: positionId,
@@ -45,7 +42,6 @@ internal static class ContractCommandFactory
             EffectiveFrom: from,
             EffectiveTo: to,
             SalaryGradeId: salaryGradeId,
-            SalaryFormType: SalaryFormType.Time,
             SalaryPayCycle: SalaryPayCycle.Monthly,
             PromotionPolicy: null,
             WorkingTimeJson: "{\"hoursPerDay\":8,\"daysPerWeek\":5}",
@@ -55,7 +51,6 @@ internal static class ContractCommandFactory
             UnemploymentInsuranceFlag: true,
             TrainingPolicy: null,
             ConfidentialityClause: null,
-            ContractText: "Toàn văn HĐ ...",
             TemplateId: null,
             HasProbation: hasProbation,
             ProbationStartDate: hasProbation ? from : null,

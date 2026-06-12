@@ -6,6 +6,7 @@ using MPS.Application.Features.ContractTemplate.Commands;
 using MPS.Application.Features.ContractTemplate.Queries;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Contract;
+using MPS.Domain.Exceptions;
 
 namespace MPS.API.Controllers;
 
@@ -51,7 +52,6 @@ public class ContractTemplateController : ControllerBase
             request.Name,
             request.ContractCategory,
             request.ContractSubtype,
-            request.TemplateBody,
             request.IsActive), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
@@ -68,7 +68,6 @@ public class ContractTemplateController : ControllerBase
             request.Name,
             request.ContractCategory,
             request.ContractSubtype,
-            request.TemplateBody,
             request.IsActive), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
@@ -81,5 +80,49 @@ public class ContractTemplateController : ControllerBase
         var deleted = await _mediator.Send(new ContractTemplateDeleteCommand(id), cancellationToken);
         if (!deleted) return NotFound();
         return NoContent();
+    }
+
+    [HttpGet("{id:int}/download")]
+    [HasPermission(Permissions.ContractTemplateReadAll)]
+    public async Task<IActionResult> Download(int id, CancellationToken cancellationToken)
+    {
+        ContractTemplateDownloadResult result;
+        try
+        {
+            result = await _mediator.Send(new GetContractTemplateDownloadQuery(id), cancellationToken);
+        }
+        catch (DomainValidationException ex) when (
+            ex.Message.StartsWith("TEMPLATE_NOT_FOUND") ||
+            ex.Message.StartsWith("TEMPLATE_FILE_NOT_FOUND"))
+        {
+            return NotFound(new { error = ex.Message });
+        }
+
+        return File(result.DocxStream, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", result.FileName);
+    }
+
+    [HttpPost("{id:int}/upload")]
+    [HasPermission(Permissions.ContractTemplateCreateAll)]
+    [RequestSizeLimit(5_242_880)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadFile(int id, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "FILE_REQUIRED" });
+
+        try
+        {
+            var fileId = await _mediator.Send(new UploadContractTemplateCommand(
+                TemplateId: id,
+                FileStream: file.OpenReadStream(),
+                FileName: file.FileName,
+                FileSizeBytes: file.Length), cancellationToken);
+
+            return Ok(new { fileId });
+        }
+        catch (DomainValidationException ex) when (ex.Message.StartsWith("TEMPLATE_NOT_FOUND"))
+        {
+            return NotFound(new { error = ex.Message });
+        }
     }
 }

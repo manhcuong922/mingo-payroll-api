@@ -36,7 +36,6 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(e => e.UnemploymentInsuranceFlag).IsRequired().HasDefaultValue(true);
         builder.Property(e => e.TrainingPolicy);
         builder.Property(e => e.ConfidentialityClause);
-        builder.Property(e => e.ContractText).IsRequired();
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.ConvertedFromDefiniteFlag).IsRequired().HasDefaultValue(false);
 
@@ -54,13 +53,13 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(e => e.UpdatedAt);
         builder.Property(e => e.ArchivedAt);
 
-        builder.HasIndex(e => new { e.EmployeeId, e.Status });
+        builder.HasIndex(e => new { e.EmployeeInformationId, e.Status });
         builder.HasIndex(e => new { e.EffectiveFrom, e.EffectiveTo });
         builder.HasIndex(e => e.ArchivedAt);
 
-        builder.HasOne(e => e.Employee)
+        builder.HasOne(e => e.EmployeeInformation)
             .WithMany()
-            .HasForeignKey(e => e.EmployeeId)
+            .HasForeignKey(e => e.EmployeeInformationId)
             .IsRequired()
             .OnDelete(DeleteBehavior.Restrict);
 
@@ -73,7 +72,7 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
         builder.HasOne(e => e.EmployerSignerUser)
             .WithMany()
             .HasForeignKey(e => e.EmployerSignerUserId)
-            .IsRequired()
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(e => e.Position)

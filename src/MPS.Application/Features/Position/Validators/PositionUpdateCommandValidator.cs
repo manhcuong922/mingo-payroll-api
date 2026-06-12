@@ -1,19 +1,22 @@
-﻿using FluentValidation;
+using FluentValidation;
 using MPS.Application.Features.Position.Commands;
 using MPS.Domain.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MPS.Application.Features.Position.Validators;
+
 public class PositionUpdateCommandValidator : AbstractValidator<PositionUpdateCommand>
 {
     public PositionUpdateCommandValidator(IPositionRepository repository)
     {
         RuleFor(x => x.Id)
             .GreaterThan(0).WithMessage("Id must be greater than 0.");
+
+        RuleFor(x => x.Code)
+            .NotEmpty().WithMessage("Code is required.")
+            .MaximumLength(20).WithMessage("Code must not exceed 20 characters.")
+            .Matches("^[A-Za-z0-9_\\-]+$").WithMessage("Code may only contain letters, digits, hyphen and underscore.")
+            .MustAsync(async (cmd, code, ct) => !await repository.CodeExistsAsync(code.Trim().ToUpperInvariant(), cmd.Id, ct))
+            .WithMessage("Position code already exists.");
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")

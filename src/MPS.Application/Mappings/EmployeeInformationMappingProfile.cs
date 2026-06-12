@@ -9,8 +9,11 @@ public class EmployeeInformationMappingProfile : Profile
     public EmployeeInformationMappingProfile()
     {
         CreateMap<EmployeeInformation, EmployeeInformationDto>()
-            .ForCtorParam(nameof(EmployeeInformationDto.EmployeeCode), opt => opt.MapFrom(src => src.User.EmployeeCode))
-            .ForCtorParam(nameof(EmployeeInformationDto.FullName), opt => opt.MapFrom(src => src.User.FullName))
-            .ForCtorParam(nameof(EmployeeInformationDto.PositionName), opt => opt.MapFrom(src => src.Position.Name));
+            .ForCtorParam(nameof(EmployeeInformationDto.EmployeeCode),
+                opt => opt.MapFrom(src => src.User != null ? src.User.EmployeeCode : null))
+            .ForCtorParam(nameof(EmployeeInformationDto.Gender),
+                opt => opt.MapFrom(src => src.Gender.ToString()))
+            .ForCtorParam(nameof(EmployeeInformationDto.PositionName),
+                opt => opt.MapFrom(src => src.Position.Name));
     }
 }

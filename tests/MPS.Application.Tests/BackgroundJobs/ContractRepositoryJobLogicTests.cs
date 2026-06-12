@@ -27,11 +27,10 @@ public sealed class ContractRepositoryJobLogicTests
     public async Task AutoConvert_Converts_Definite_Active_Past_30_Day_Cutoff()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
-        // Setup: HĐ Definite Active, EffectiveTo = Now - 31 ngày → đủ rule auto-convert.
         var contract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Definite,
             effectiveFrom: Now.AddYears(-2),
             effectiveTo: Now.AddDays(-31));
@@ -58,10 +57,10 @@ public sealed class ContractRepositoryJobLogicTests
     public async Task AutoConvert_Skips_Definite_Active_Within_30_Day_Grace()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var contract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Definite,
             effectiveFrom: Now.AddYears(-1),
             effectiveTo: Now.AddDays(-10));
@@ -84,10 +83,10 @@ public sealed class ContractRepositoryJobLogicTests
     public async Task AutoConvert_Skips_Indefinite_Contract()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var contract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Indefinite,
             effectiveFrom: Now.AddYears(-3),
             effectiveTo: null);
@@ -107,10 +106,10 @@ public sealed class ContractRepositoryJobLogicTests
     public async Task Expire_Sets_Status_Expired_When_Has_Child_Contract()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var parentContract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Definite,
             effectiveFrom: Now.AddYears(-2),
             effectiveTo: Now.AddDays(-5));
@@ -118,9 +117,8 @@ public sealed class ContractRepositoryJobLogicTests
         await fx.Db.Contracts.AddAsync(parentContract);
         await fx.Db.SaveChangesAsync();
 
-        // HĐ con — ký sau khi HĐ cha kết thúc.
         var childContract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Definite,
             effectiveFrom: Now.AddDays(-4),
             effectiveTo: Now.AddYears(1));
@@ -148,10 +146,10 @@ public sealed class ContractRepositoryJobLogicTests
     public async Task Expire_Skips_Contract_Without_Child_Even_If_EffectiveTo_Past()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var contract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Definite,
             effectiveFrom: Now.AddYears(-1),
             effectiveTo: Now.AddDays(-5));
@@ -167,19 +165,15 @@ public sealed class ContractRepositoryJobLogicTests
         saved.Status.Should().Be(ContractStatus.Active);
     }
 
-    /// <summary>
-    /// Archive: Terminated &gt; 10y → set ArchivedAt.
-    /// </summary>
+    /// <summary>Archive: Terminated &gt; 10y → set ArchivedAt.</summary>
     [Fact]
     public async Task Archive_Archives_Terminated_Contract_Older_Than_10_Years()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
-        // Seed reason ref C6 to be deterministic FK (đã có sẵn từ HasData seed nhưng cần lookup
-        // Id thật trong InMemory — Id seed luôn 1..13).
         var contract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Indefinite,
             effectiveFrom: Now.AddYears(-15),
             effectiveTo: null);
@@ -190,7 +184,7 @@ public sealed class ContractRepositoryJobLogicTests
         var termination = new ContractTermination
         {
             ContractId = contract.Id,
-            TerminationDate = Now.AddYears(-11), // > 10 năm
+            TerminationDate = Now.AddYears(-11),
             ReasonRefId = 6,
             TerminationParty = TerminationParty.ByLaw,
             LegalBasis = "Điều 34 k.6",
@@ -214,10 +208,10 @@ public sealed class ContractRepositoryJobLogicTests
     public async Task Archive_Archives_Expired_Contract_Older_Than_10_Years()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var contract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Definite,
             effectiveFrom: Now.AddYears(-12),
             effectiveTo: Now.AddYears(-11));
@@ -239,10 +233,10 @@ public sealed class ContractRepositoryJobLogicTests
     public async Task Archive_Skips_Contract_Younger_Than_10_Years()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var contract = NewActiveContract(
-            employee.Id, party.Id, actor.Id, position.Id, grade.Id,
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
             ContractCategory.Definite,
             effectiveFrom: Now.AddYears(-5),
             effectiveTo: Now.AddYears(-3));
@@ -257,7 +251,7 @@ public sealed class ContractRepositoryJobLogicTests
     }
 
     private static Contract NewActiveContract(
-        int employeeId, int partyId, int signerId, int positionId, int gradeId,
+        int employeeInformationId, int partyId, int signerId, int positionId, int gradeId,
         ContractCategory category, DateTime effectiveFrom, DateTime? effectiveTo)
         => new()
         {
@@ -265,7 +259,7 @@ public sealed class ContractRepositoryJobLogicTests
             ContractCategory = category,
             ContractSubtype = ContractSubtype.Official,
             Form = ContractForm.Written,
-            EmployeeId = employeeId,
+            EmployeeInformationId = employeeInformationId,
             EmployerPartyId = partyId,
             EmployerSignerUserId = signerId,
             PositionId = positionId,
@@ -279,7 +273,6 @@ public sealed class ContractRepositoryJobLogicTests
             SalaryFormType = SalaryFormType.Time,
             SalaryPayCycle = SalaryPayCycle.Monthly,
             WorkingTimeJson = "{}",
-            ContractText = "x",
             Status = ContractStatus.Active,
             CreatedAt = effectiveFrom,
             CreatedByUserId = signerId,

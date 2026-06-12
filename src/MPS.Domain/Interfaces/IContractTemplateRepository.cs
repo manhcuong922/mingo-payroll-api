@@ -18,4 +18,15 @@ public interface IContractTemplateRepository
     /// Hard delete nếu không có Contract tham chiếu; ngược lại set IsActive=false (soft).
     /// </summary>
     Task<bool> DeleteOrDeactivateAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gắn file DOCX mới vào template: set IsCurrent=false cho file cũ (nếu có),
+    /// insert <paramref name="file"/>, set template.TemplateFileId = newFile.Id, increment template.Version.
+    /// </summary>
+    Task<int> AttachTemplateFileAsync(int templateId, ContractFile file, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Load template kèm TemplateFile (MinioObjectKey để download).
+    /// </summary>
+    Task<ContractTemplate?> GetWithFileAsync(int id, CancellationToken cancellationToken = default);
 }

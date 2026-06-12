@@ -11,6 +11,7 @@ using MPS.Application.Tests.TestHelpers;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Contract;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Services;
 
 namespace MPS.Application.Tests.Features.ContractAppendix.Queries;
 
@@ -24,7 +25,7 @@ public sealed class GetAppendixFilesQueryHandlerTests
     public async Task Returns_Appendix_Files_With_Presigned_Url()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -40,7 +41,7 @@ public sealed class GetAppendixFilesQueryHandlerTests
         // Setup: tạo HĐ Active → tạo + activate appendix (sẽ tạo ContractFile target=Appendix).
         var contractId = await CreateActiveContractAsync(
             fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createApdx = new CreateContractAppendixCommandHandler(appendixRepo, repo, currentUser.Object);
         var appendixId = await createApdx.Handle(new CreateContractAppendixCommand(
@@ -97,12 +98,12 @@ public sealed class GetAppendixFilesQueryHandlerTests
     private static async Task<int> CreateActiveContractAsync(
         ContractIntegrationFixture fx, ContractRepository repo, ContractLookupReader lookup,
         ContractPreflightChecker preflight, FakeFileStorageService storage, ICurrentUserService currentUser,
-        int actorId, int employeeId, int partyId, int positionId, int gradeId)
+        int actorId, int employeeInformationId, int partyId, int positionId, int gradeId)
     {
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(
             ContractCommandFactory.ValidCreate(
-                employeeId: employeeId, employerPartyId: partyId,
+                employeeInformationId: employeeInformationId, employerPartyId: partyId,
                 employerSignerUserId: actorId, positionId: positionId, salaryGradeId: gradeId),
             CancellationToken.None);
 

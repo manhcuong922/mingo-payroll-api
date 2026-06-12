@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Exceptions.Storage;
 using MPS.Domain.Exceptions;
 
@@ -102,6 +104,16 @@ public class ExceptionHandlingMiddleware
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(
                 JsonSerializer.Serialize(new { error = "A storage error occurred." }));
+        }
+        catch (DbUpdateException dbex)
+        {
+            _logger.LogError(dbex,
+                "Database update failed for {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(
+                JsonSerializer.Serialize(new { error = "A database error occurred." }));
         }
         catch (Exception ex)
         {

@@ -26,7 +26,7 @@ public class ContractController : ControllerBase
     [HttpGet]
     [HasAnyPermission(Permissions.ContractReadAll, Permissions.ContractReadSelf)]
     public async Task<IActionResult> GetAll(
-        [FromQuery] int? employeeId,
+        [FromQuery] int? employeeInformationId,
         [FromQuery] ContractStatus? status,
         [FromQuery] ContractCategory? category,
         [FromQuery] int page = 1,
@@ -34,7 +34,7 @@ public class ContractController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(
-            new GetContractsQuery(employeeId, status, category, page, size),
+            new GetContractsQuery(employeeInformationId, status, category, page, size),
             cancellationToken);
         return Ok(result);
     }
@@ -55,11 +55,9 @@ public class ContractController : ControllerBase
         CancellationToken cancellationToken)
     {
         var cmd = new CreateContractCommand(
-            request.ContractNo,
             request.ContractCategory,
             request.ContractSubtype,
-            request.Form,
-            request.EmployeeId,
+            request.EmployeeInformationId,
             request.EmployerPartyId,
             request.EmployerSignerUserId,
             request.PositionId,
@@ -68,7 +66,6 @@ public class ContractController : ControllerBase
             request.EffectiveFrom,
             request.EffectiveTo,
             request.SalaryGradeId,
-            request.SalaryFormType,
             request.SalaryPayCycle,
             request.PromotionPolicy,
             request.WorkingTimeJson,
@@ -78,7 +75,6 @@ public class ContractController : ControllerBase
             request.UnemploymentInsuranceFlag,
             request.TrainingPolicy,
             request.ConfidentialityClause,
-            request.ContractText,
             request.TemplateId,
             request.HasProbation,
             request.ProbationStartDate,
@@ -104,11 +100,9 @@ public class ContractController : ControllerBase
     {
         var cmd = new UpdateContractCommand(
             id,
-            request.ContractNo,
             request.ContractCategory,
             request.ContractSubtype,
-            request.Form,
-            request.EmployeeId,
+            request.EmployeeInformationId,
             request.EmployerPartyId,
             request.EmployerSignerUserId,
             request.PositionId,
@@ -117,7 +111,6 @@ public class ContractController : ControllerBase
             request.EffectiveFrom,
             request.EffectiveTo,
             request.SalaryGradeId,
-            request.SalaryFormType,
             request.SalaryPayCycle,
             request.PromotionPolicy,
             request.WorkingTimeJson,
@@ -127,7 +120,6 @@ public class ContractController : ControllerBase
             request.UnemploymentInsuranceFlag,
             request.TrainingPolicy,
             request.ConfidentialityClause,
-            request.ContractText,
             request.TemplateId,
             request.HasProbation,
             request.ProbationStartDate,
@@ -206,10 +198,6 @@ public class ContractController : ControllerBase
 
     // --- Files (download via presigned URL) ---
 
-    /// <summary>
-    /// GET /api/contracts/{id}/files — list all PDF versions của HĐ (TargetType=Contract),
-    /// kèm presigned download URL TTL 15 phút. Self-scope check ở handler.
-    /// </summary>
     [HttpGet("{id:int}/files")]
     [HasAnyPermission(Permissions.ContractFileReadAll, Permissions.ContractFileReadSelf)]
     public async Task<IActionResult> GetFiles(int id, CancellationToken cancellationToken)
@@ -218,10 +206,6 @@ public class ContractController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// GET /api/contracts/{id}/termination/files — list all termination notice PDF versions
-    /// (TargetType=Termination). Có thể trống nếu HĐ chưa terminate.
-    /// </summary>
     [HttpGet("{id:int}/termination/files")]
     [HasAnyPermission(Permissions.ContractFileReadAll, Permissions.ContractFileReadSelf)]
     public async Task<IActionResult> GetTerminationFiles(int id, CancellationToken cancellationToken)
@@ -234,14 +218,10 @@ public class ContractController : ControllerBase
 
     // --- Phase 6: Activation + file replace ---
 
-    /// <summary>
-    /// Upload signed PDF and transition the contract DRAFT → ACTIVE. Freezes the salary snapshot.
-    /// Rate-limited (5/min/user) to avoid abuse since each call writes to MinIO.
-    /// </summary>
     [HttpPost("{id:int}/activate")]
     [HasPermission(Permissions.ContractActivateAll)]
     [EnableRateLimiting("contract-upload")]
-    [RequestSizeLimit(25 * 1024 * 1024)] // 25 MB hard cap at Kestrel; handler enforces 20 MB business limit.
+    [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> Activate(
         int id,
         [FromForm] ActivateContractRequest request,
@@ -266,10 +246,6 @@ public class ContractController : ControllerBase
         return Ok(new { contractFileId });
     }
 
-    /// <summary>
-    /// Replace the current signed PDF after activation. Old row keeps history (IsCurrent=false),
-    /// new row is Version=N+1, IsCurrent=true. Rejected if contract is archived.
-    /// </summary>
     [HttpPost("{id:int}/files/replace")]
     [HasPermission(Permissions.ContractActivateAll)]
     [EnableRateLimiting("contract-upload")]
@@ -296,11 +272,20 @@ public class ContractController : ControllerBase
         return Ok(new { contractFileId });
     }
 
-    /// <summary>
-    /// Form-file streams from Kestrel/IIS are usually non-seekable; PdfStreamValidator and
-    /// the SHA-256 hashing in the storage layer both need to seek/read+rewind. Buffer into
-    /// a small MemoryStream when needed (file is already bounded by RequestSizeLimit).
-    /// </summary>
+    [HttpGet("{id:int}/generate-document")]
+    [HasPermission(Permissions.ContractCreateAll)]
+    public async Task<IActionResult> GenerateDocument(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new MPS.Application.Features.Contract.Queries.GenerateContractDocumentQuery(id),
+            cancellationToken);
+
+        return File(
+            result.Content,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            result.FileName);
+    }
+
     private static async Task<Stream> EnsureSeekableAsync(Stream source, long expectedLength, CancellationToken ct)
     {
         if (source.CanSeek) return source;

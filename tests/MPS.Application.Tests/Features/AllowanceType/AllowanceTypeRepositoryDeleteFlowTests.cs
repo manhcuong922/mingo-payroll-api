@@ -43,13 +43,13 @@ public sealed class AllowanceTypeRepositoryDeleteFlowTests
     public async Task Soft_Deactivates_When_Referenced_By_ContractAllowance()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, allowance) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, allowance) = await fx.SeedBaselineAsync();
 
         // Gắn 1 ContractAllowance trỏ về allowance type.
         var contract = new MPS.Domain.Entities.Contract
         {
             ContractNo = "HDLD-AL-REF",
-            EmployeeId = employee.Id,
+            EmployeeInformationId = employeeInfo.Id,
             EmployerPartyId = party.Id,
             EmployerSignerUserId = actor.Id,
             PositionId = position.Id,
@@ -60,7 +60,6 @@ public sealed class AllowanceTypeRepositoryDeleteFlowTests
             SalaryAmountSnapshot = grade.BaseSalary,
             SalaryCurrencySnapshot = grade.Currency,
             WorkingTimeJson = "{}",
-            ContractText = "x",
             CreatedAt = DateTime.UtcNow,
             CreatedByUserId = actor.Id,
         };

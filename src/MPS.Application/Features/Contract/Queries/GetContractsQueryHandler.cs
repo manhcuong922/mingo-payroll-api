@@ -14,15 +14,18 @@ public class GetContractsQueryHandler : IRequestHandler<GetContractsQuery, Paged
     private readonly IContractRepository _repository;
     private readonly IMapper _mapper;
     private readonly ICurrentUserService _currentUser;
+    private readonly IContractLookupReader _lookup;
 
     public GetContractsQueryHandler(
         IContractRepository repository,
         IMapper mapper,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IContractLookupReader lookup)
     {
         _repository = repository;
         _mapper = mapper;
         _currentUser = currentUser;
+        _lookup = lookup;
     }
 
     public async Task<PagedResult<ContractSummaryDto>> Handle(GetContractsQuery request, CancellationToken cancellationToken)
@@ -33,20 +36,20 @@ public class GetContractsQueryHandler : IRequestHandler<GetContractsQuery, Paged
         if (!hasAll && !hasSelf)
             throw new ForbiddenAccessException("Caller has neither Contract.Read.All nor Contract.Read.Self.");
 
-        // Self-scope: silently filter list to caller's own employeeId (do NOT 403).
-        var effectiveEmployeeId = request.EmployeeId;
+        // Self-scope: silently filter list to caller's own contracts (do NOT 403).
+        var effectiveEmployeeInformationId = request.EmployeeInformationId;
         if (!hasAll && hasSelf)
         {
             var callerId = _currentUser.UserId
                 ?? throw new ForbiddenAccessException("Authenticated user context is required.");
-            effectiveEmployeeId = callerId;
+            effectiveEmployeeInformationId = await _lookup.GetEmployeeInformationIdByUserIdAsync(callerId, cancellationToken);
         }
 
         var page = request.Page <= 0 ? 1 : request.Page;
         var size = request.Size <= 0 ? 20 : Math.Min(request.Size, 100);
 
         var (items, total) = await _repository.GetPagedAsync(
-            effectiveEmployeeId,
+            effectiveEmployeeInformationId,
             request.Status,
             request.Category,
             page,

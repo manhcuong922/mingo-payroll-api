@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using MPS.Application.Mappings;
 using MPS.Domain.Entities;
+using MPS.Domain.Enums.Employee;
 using MPS.Infrastructure.Persistence;
 
 namespace MPS.Application.Tests.TestHelpers;
@@ -33,10 +34,9 @@ internal sealed class ContractIntegrationFixture : IDisposable
         Mapper = mapperConfig.CreateMapper();
     }
 
-    public async Task<(User actor, User employee, ContractParty party, Position position, SalaryGrade grade, AllowanceType allowance)>
+    public async Task<(User actor, EmployeeInformation employeeInfo, ContractParty party, Position position, SalaryGrade grade, AllowanceType allowance)>
         SeedBaselineAsync(CancellationToken ct = default)
     {
-        // Roles + permissions are seeded by HasData automatically (EnsureCreated runs configs).
         var actor = new User
         {
             EmployeeCode = "HR001",
@@ -78,11 +78,25 @@ internal sealed class ContractIntegrationFixture : IDisposable
 
         var position = new Position
         {
+            Code = "SE",
             Name = "Senior Backend Engineer",
         };
         await Db.Positions.AddAsync(position, ct);
 
         await Db.SaveChangesAsync(ct);
+
+        var employeeInfo = new EmployeeInformation
+        {
+            UserId = employee.Id,
+            FullName = "Nguyễn Văn A",
+            Dob = new DateTime(1995, 5, 15, 0, 0, 0, DateTimeKind.Utc),
+            Gender = Gender.Male,
+            CitizenId = "012345678901",
+            PermanentAddress = "Hà Nội",
+            PositionId = position.Id,
+            DependentsNo = 0,
+        };
+        await Db.EmployeeInformations.AddAsync(employeeInfo, ct);
 
         var grade = new SalaryGrade
         {
@@ -111,7 +125,7 @@ internal sealed class ContractIntegrationFixture : IDisposable
 
         await Db.SaveChangesAsync(ct);
 
-        return (actor, employee, party, position, grade, allowance);
+        return (actor, employeeInfo, party, position, grade, allowance);
     }
 
     public void Dispose()

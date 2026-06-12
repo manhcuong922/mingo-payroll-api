@@ -8,5 +8,4 @@ public sealed record ContractTemplateUpdateCommand(
     string Name,
     ContractCategory ContractCategory,
     ContractSubtype ContractSubtype,
-    string TemplateBody,
     bool IsActive) : IRequest<bool>;

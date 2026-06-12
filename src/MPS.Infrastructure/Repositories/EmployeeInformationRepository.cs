@@ -44,12 +44,16 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
 
     public async Task<int> AddAsync(EmployeeInformation entity, CancellationToken cancellationToken = default)
     {
-        var existed = await _context.EmployeeInformations
-            .AsNoTracking()
-            .AnyAsync(e => e.UserId == entity.UserId, cancellationToken);
+        // Enforce unique UserId only when UserId is provided (contract-first flow allows UserId=null)
+        if (entity.UserId.HasValue)
+        {
+            var existed = await _context.EmployeeInformations
+                .AsNoTracking()
+                .AnyAsync(e => e.UserId == entity.UserId, cancellationToken);
 
-        if (existed)
-            throw new DomainValidationException($"EmployeeInformation already exists for UserId '{entity.UserId}'.");
+            if (existed)
+                throw new DomainValidationException($"EmployeeInformation already exists for UserId '{entity.UserId}'.");
+        }
 
         await _context.EmployeeInformations.AddAsync(entity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
@@ -62,13 +66,22 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         if (existing is null) return false;
 
         existing.UserId = entity.UserId;
+        existing.FullName = entity.FullName;
+        existing.Dob = entity.Dob;
+        existing.Gender = entity.Gender;
+        existing.CitizenId = entity.CitizenId;
+        existing.CitizenIssuedDate = entity.CitizenIssuedDate;
+        existing.CitizenIssuedPlace = entity.CitizenIssuedPlace;
+        existing.PermanentAddress = entity.PermanentAddress;
+        existing.ContactAddress = entity.ContactAddress;
+        existing.Email = entity.Email;
+        existing.PhoneNo = entity.PhoneNo;
+        existing.EducationLevel = entity.EducationLevel;
         existing.TaxNo = entity.TaxNo;
         existing.SocialNo = entity.SocialNo;
         existing.BankNumber = entity.BankNumber;
         existing.PositionId = entity.PositionId;
         existing.DependentsNo = entity.DependentsNo;
-        existing.CitizenId = entity.CitizenId;
-        existing.Address = entity.Address;
 
         await _context.SaveChangesAsync(cancellationToken);
         return true;

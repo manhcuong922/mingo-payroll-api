@@ -17,10 +17,7 @@ public class SalaryGradeUpdateCommandHandler : IRequestHandler<SalaryGradeUpdate
         var entity = new Domain.Entities.SalaryGrade
         {
             Id = request.Id,
-            Code = request.Code.Trim(),
             Name = request.Name.Trim(),
-            PositionId = request.PositionId,
-            Level = request.Level,
             BaseSalary = request.BaseSalary,
             Currency = request.Currency.Trim().ToUpperInvariant(),
             Description = request.Description?.Trim(),

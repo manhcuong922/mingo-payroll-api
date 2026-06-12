@@ -46,7 +46,7 @@ public class GetAppendixFilesQueryHandler : IRequestHandler<GetAppendixFilesQuer
         {
             var callerId = _currentUser.UserId
                 ?? throw new ForbiddenAccessException("Authenticated user context is required.");
-            if (appendix.Contract.EmployeeId != callerId)
+            if (appendix.Contract.EmployeeInformation?.UserId != callerId)
                 throw new ForbiddenAccessException("Caller may only read files of appendices on their own contracts.");
         }
 

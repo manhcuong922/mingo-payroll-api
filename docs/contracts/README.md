@@ -10,8 +10,9 @@ Module quản lý Hợp đồng Lao động (HĐLĐ) theo Bộ luật Lao độn
 
 | Việc | Module này | Module khác |
 |---|---|---|
-| Soạn HĐ (text) | ✅ `ContractText` lưu trong DB | – |
-| Render PDF từ template | ❌ | Module ký số |
+| Upload mẫu HĐ (.docx) + merge placeholder | ✅ `ContractTemplate.TemplateFileId` → MinIO | – |
+| Render DOCX in được (generate-document) | ✅ `DocxMergeService` (OpenXml) | – |
+| Render PDF từ DOCX | ❌ | Module ký số |
 | Ký số / chữ ký điện tử | ❌ | Module ký số |
 | Verify chữ ký số trong PDF | ❌ | Module ký số |
 | Verify SHA-256 của blob | ✅ | – |
@@ -20,28 +21,33 @@ Module quản lý Hợp đồng Lao động (HĐLĐ) theo Bộ luật Lao độn
 
 ---
 
-## 2. Database schema (10 bảng)
+## 2. Database schema (11 bảng)
 
 | Bảng | Mục đích | Ràng buộc chính |
 |---|---|---|
-| `Contracts` | HĐLĐ chính (thử việc + chính thức) | unique `ContractNo`, index `(EmployeeId, Status)`, index `ArchivedAt` |
+| `EmployeeInformations` | Thông tin nhân thân NLĐ (contract-first: `UserId` nullable) | unique `CitizenId`; filtered unique `UserId WHERE IS NOT NULL` |
+| `Contracts` | HĐLĐ chính (thử việc + chính thức) | unique `ContractNo`; index `(EmployeeInformationId, Status)`; index `ArchivedAt` |
 | `ContractParties` | Pháp nhân NSDLĐ (append-only versioning) | tại 1 thời điểm chỉ có 1 row `EffectiveTo IS NULL` |
 | `ContractAppendices` | Phụ lục HĐ (Điều 22, 33) | FK → Contracts; `(ContractId, AppendixNo)` unique |
 | `ContractTerminations` | Chấm dứt HĐ (Điều 34) | **1-1** với Contracts (unique `ContractId`) |
-| `ContractFiles` | PDF đã ký (polymorphic via `TargetType`+`TargetId`) | index `(TargetType, TargetId, IsCurrent)` |
-| `ContractTemplates` | Mẫu HĐ (Versioning + placeholder validation) | tổ hợp `(Indefinite, Probation)` invalid |
+| `ContractFiles` | PDF đã ký + DOCX template (polymorphic via `TargetType`+`TargetId`) | index `(TargetType, TargetId, IsCurrent)` |
+| `ContractTemplates` | Mẫu HĐ — `TemplateFileId int?` trỏ tới DOCX trên MinIO | tổ hợp `(Indefinite, Probation)` invalid |
 | `ContractTerminationReasonRefs` | Seed lookup 13 lý do Điều 34 (k.1-13) | unique `Code` |
 | `SalaryGrades` | Thang lương cho HĐ | unique `Code` |
 | `AllowanceTypes` | Loại phụ cấp | unique `Code` |
 | `ContractAllowances` | Junction Contract ↔ AllowanceType | unique `(ContractId, AllowanceTypeId)` |
 
-Migration: `20260604024058_AddContractSeedsAndArchivedIndex` (cộng dồn từ initial schema migration).
+**`EmployeeInformation` — trạng thái:** `UserId IS NULL` = NLĐ chưa có account (tạo HĐ trước); `UserId IS NOT NULL` = đã promote (SystemAdmin gọi `POST /api/users` với `employeeInformationId`).
+
+**Fields mới trên `EmployeeInformations`:** `FullName`, `Dob`, `Gender`, `ContactAddress`, `CitizenIssuedDate`, `CitizenIssuedPlace`, `Email`, `PhoneNo`, `EducationLevel`; `TaxNo`/`SocialNo`/`BankNumber` đổi sang nullable; `Address` rename → `PermanentAddress`.
+
+Migration: `20260604024058_AddContractSeedsAndArchivedIndex` + `20260609130520_AddDocxOcrPermissions` (seed permissions 65–67).
 
 ---
 
 ## 3. Permission matrix
 
-32 permissions (IDs 33–64). Map sang 7 system roles:
+35 permissions (IDs 33–67). Map sang 7 system roles:
 
 | Permission | SystemAdmin | HR | Accountant | Director | DeptMgr | Employee | Auditor |
 |---|---|---|---|---|---|---|---|
@@ -66,6 +72,9 @@ Migration: `20260604024058_AddContractSeedsAndArchivedIndex` (cộng dồn từ 
 | `SalaryGrade.*` (4 perms) | ✅ | ✅ | – | – | – | – | – |
 | `AllowanceType.*` (4 perms) | ✅ | ✅ | – | – | – | – | – |
 | `ContractTemplate.*` (4 perms) | ✅ | ✅ | – | – | – | – | – |
+| `ContractTemplate.Upload.All` (ID 65) | ✅ | – | – | – | – | – | – |
+| `Contract.GenerateDocument.All` (ID 66) | ✅ | ✅ | – | – | – | – | – |
+| `Ocr.CitizenId.Use` (ID 67) | ✅ | ✅ | – | – | – | – | – |
 | `ContractParty.*` (2 perms) | ✅ | – | – | – | – | – | – |
 
 > **Self-scope** (`.Self`): list endpoint **silently filter** về data của caller (không trả 403). Detail endpoint khác `EmployeeId` → throw `ForbiddenAccessException` (HTTP 401 theo middleware mapping).
@@ -82,6 +91,7 @@ Migration: `20260604024058_AddContractSeedsAndArchivedIndex` (cộng dồn từ 
 | GET/POST/PUT/DELETE | `/api/salary-grades[/{id}]` | `SalaryGrade.*` |
 | GET/POST/PUT/DELETE | `/api/allowance-types[/{id}]` | `AllowanceType.*` |
 | GET/POST/PUT/DELETE | `/api/contract-templates[/{id}]` | `ContractTemplate.*` |
+| POST | `/api/contract-templates/{id}/upload` (multipart .docx, ≤ 5MB) | `ContractTemplate.Upload.All` |
 | GET/POST | `/api/contract-parties` | `ContractParty.*` (append-only, no PUT/DELETE) |
 
 ### 4.2. Contract core (Phase 5–6)
@@ -89,7 +99,7 @@ Migration: `20260604024058_AddContractSeedsAndArchivedIndex` (cộng dồn từ 
 | Method | Route | Permission | Trạng thái HĐ cho phép |
 |---|---|---|---|
 | POST | `/api/contracts` | `Contract.Create.All` | – (tạo Draft) |
-| GET | `/api/contracts?employeeId=&status=&category=&page=&size=` | `Read.All`/`Read.Self` | – |
+| GET | `/api/contracts?employeeInformationId=&status=&category=&page=&size=` | `Read.All`/`Read.Self` | – |
 | GET | `/api/contracts/{id}` | `Read.All`/`Read.Self` | – |
 | PUT | `/api/contracts/{id}` | `Update.All` | Draft |
 | DELETE | `/api/contracts/{id}` | `Delete.All` | Draft (hard delete) |
@@ -99,6 +109,7 @@ Migration: `20260604024058_AddContractSeedsAndArchivedIndex` (cộng dồn từ 
 | DELETE | `/api/contracts/{id}/allowances/{allowanceTypeId}` | `Update.All` | Draft |
 | POST | `/api/contracts/{id}/activate` (multipart PDF) | `Activate.All` | Draft → Active |
 | POST | `/api/contracts/{id}/files/replace` (multipart PDF) | `Activate.All` | Active (giữ history) |
+| GET | `/api/contracts/{id}/generate-document` | `Contract.GenerateDocument.All` | Active/Draft |
 
 ### 4.3. Appendix (Phase 7)
 
@@ -117,7 +128,13 @@ Migration: `20260604024058_AddContractSeedsAndArchivedIndex` (cộng dồn từ 
 | POST | `/api/contracts/{contractId}/termination` (JSON) | `ContractTermination.Create.All` |
 | GET | `/api/contracts/{contractId}/termination` | `Read.All`/`Read.Self` |
 
-### 4.5. Admin background-job triggers (Phase 9)
+### 4.5. OCR
+
+| Method | Route | Permission | Ghi chú |
+|---|---|---|---|
+| POST | `/api/ocr/citizen-id` (multipart `image`, ≤ 5MB, JPEG/PNG) | `Ocr.CitizenId.Use` | Rate limit 10 req/min/user. Trả structured JSON để FE prefill form EmployeeInformation. |
+
+### 4.6. Admin background-job triggers (Phase 9)
 
 | Method | Route | Role |
 |---|---|---|
@@ -159,6 +176,18 @@ stateDiagram-v2
 ### 5.3. ContractTermination
 
 1-1 với Contract. Không có state — đã tạo là chốt; muốn sửa phải fix bản ghi rồi update Contract.Status thủ công (admin).
+
+### 5.4. EmployeeInformation.UserId
+
+```
+UserId IS NULL   →  NLĐ chưa có account (contract-first stage)
+       ↓
+       POST /api/users  { ..., employeeInformationId }   (SystemAdmin)
+       ↓
+UserId IS NOT NULL  →  NLĐ đã được promote, có thể đăng nhập
+```
+
+Điều kiện promote: EI tồn tại + `UserId IS NULL` + có ít nhất 1 contract `Status=Active`.
 
 ---
 
@@ -317,7 +346,24 @@ Health check: `GET /health/minio`.
 
 Nếu thiếu → log warning, không seed. Admin sẽ tạo qua POST `/api/contract-parties`.
 
-### 9.3. Rate limit upload (Phase 6+)
+### 9.3. FPT.AI OCR
+
+```json
+"FptAiOcr": {
+  "BaseUrl": "https://api.fpt.ai",
+  "TimeoutSeconds": 15,
+  "MaxImageSizeBytes": 5242880
+}
+```
+
+Secret (không commit vào source):
+```bash
+dotnet user-secrets set "FptAiOcr:ApiKey" "..." --project src/MPS.API
+```
+
+Polly: retry 2 lần trên `HttpRequestException` hoặc HTTP ≥ 500, delay linear 1s/2s.
+
+### 9.4. Rate limit upload (Phase 6+)
 
 Policy `contract-upload` — 5 req/min/user (fallback IP), áp dụng cho:
 - `POST /api/contracts/{id}/activate`
@@ -327,7 +373,9 @@ Policy `contract-upload` — 5 req/min/user (fallback IP), áp dụng cho:
 
 Vượt → 429.
 
-### 9.4. Request size cap
+Policy `ocr-citizen-id` — 10 req/min/user (fallback IP), áp dụng cho `POST /api/ocr/citizen-id`. Partition key = `ClaimTypes.NameIdentifier`, fallback `RemoteIpAddress`.
+
+### 9.5. Request size cap
 
 `[RequestSizeLimit(25 * 1024 * 1024)]` = 25MB hard cap ở Kestrel. `PdfStreamValidator` enforce business limit 20MB. Khoảng cách 5MB để chứa boundary multipart overhead.
 
@@ -340,6 +388,7 @@ Vượt → 429.
 | Contract PDF | `contracts/{yyyy}/{MM}/{contractNo}/v{version}.pdf` | `contracts/2026/06/HDLD-2026-0001/v1.pdf` |
 | Appendix PDF | `appendices/{yyyy}/{MM}/{contractNo}/{appendixNo}-v{version}.pdf` | `appendices/2026/06/HDLD-2026-0001/PL-001-v1.pdf` |
 | Termination notice | `terminations/{yyyy}/{MM}/{contractNo}/notice-v{version}.pdf` | `terminations/2026/06/HDLD-2026-0001/notice-v1.pdf` |
+| Contract template (DOCX) | `templates/{templateId}/v{version}.docx` | `templates/3/v2.docx` |
 
 `ObjectKeyBuilder` validate segment để chặn path traversal (`..`), null bytes, slashes lẫn vào.
 
@@ -358,6 +407,19 @@ Vượt → 429.
 | `TERMINATION_NOTICE_DEFINITE_UNDER_12M_TOO_SHORT` | 400 | HĐ Definite < 12m mà working-day gap < 3 |
 | `TERMINATION_NOTICE_DEFINITE_MISSING_END` | 400 | Definite mà input thiếu EffectiveTo |
 | `CONTRACT_ARCHIVED` | **409** | Mọi write trên HĐ đã `ArchivedAt != null` |
+| `CONTRACT_NO_COLLISION` | 500 | Auto-gen `ContractNo` fail unique constraint sau 3 lần retry (rất hiếm) |
+| `TEMPLATE_NOT_FOUND` | 404 | `Contract.TemplateId` không có DOCX upload (`TemplateFileId IS NULL`) |
+| `INVALID_DOCX` | 400 | File upload template không phải DOCX hợp lệ (magic bytes ZIP) |
+| `EMPLOYEE_INFO_NOT_FOUND` | 400 | `EmployeeInformationId` không tồn tại khi tạo User |
+| `EMPLOYEE_ALREADY_PROMOTED` | 400 | EI đã có `UserId IS NOT NULL` khi promote |
+| `CONTRACT_NOT_ACTIVE` | 400 | EI chưa có contract `Status=Active` khi promote |
+| `IMAGE_REQUIRED` | 400 | OCR: request không có file hoặc file rỗng |
+| `INVALID_IMAGE_TYPE` | 400 | OCR: content-type không phải `image/jpeg`/`image/png` |
+| `IMAGE_TOO_LARGE` | 400 | OCR: file > 5MB |
+| `INVALID_IMAGE_CONTENT` | 400 | OCR: magic bytes không khớp JPEG (`FF D8 FF`) hoặc PNG (`89 50 4E 47`) |
+| `OCR_FAILED` | 422 | FPT.AI trả `errorCode != 0` |
+| `OCR_INVALID_DOCUMENT_TYPE` | 422 | FPT.AI nhận dạng không phải CCCD/CMND (`type` ∉ `cccd_*/cmnd_*`) |
+| `OCR_UNAVAILABLE` | 503 | FPT.AI timeout/5xx sau 2 lần retry Polly |
 | (FluentValidation errors) | 400 | Body 4xx từ validator |
 | (FileStorageUnavailableException) | 503 | MinIO down khi upload |
 
@@ -386,7 +448,16 @@ Có thể HĐ đã ở Terminated/Expired/Cancelled. 1 HĐ chỉ terminate đư�
 ### 12.7. "Tôi reupload notice → mất file cũ?"
 Không. Pattern giống Phase 6: file cũ → `IsCurrent=false` (giữ history), file mới → `Version=N+1, IsCurrent=true`. MinIO object thì có version mới.
 
-### 12.8. "Job background không chạy?"
+### 12.8. "OCR trả 422 OCR_INVALID_DOCUMENT_TYPE?"
+Ảnh không phải CCCD/CMND mặt trước VN (e.g. passport, bằng lái). FPT.AI chỉ nhận CCCD 2021+ và CMND. Kiểm tra `type` trong raw response FPT để debug.
+
+### 12.9. "OCR trả 503 OCR_UNAVAILABLE?"
+FPT.AI down hoặc timeout > 15s sau 2 retry. Kiểm tra `FptAiOcr:ApiKey` đã được set chưa (log sẽ ghi `api-key missing` nếu empty string). Retry thủ công sau 1-2 phút.
+
+### 12.10. "generate-document trả 404?"
+Template chưa có file DOCX upload (`TemplateFileId IS NULL`). HR cần gọi `POST /api/contract-templates/{id}/upload` trước.
+
+### 12.11. "Job background không chạy?"
 Check:
 1. App đã start ≥ 5 phút (3 job có initial delay 2/3/5 phút khi startup)
 2. Log có dòng `ContractAutoConvertJob started; interval=24:00:00` không
@@ -404,7 +475,9 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 | Kiểm tra | Status | Vị trí |
 |---|---|---|
-| Mọi upload check content-type + size + magic bytes | ✅ | `PdfStreamValidator` |
+| PDF upload check content-type + size + magic bytes | ✅ | `PdfStreamValidator` |
+| OCR image check content-type + size + magic bytes (JPEG/PNG) | ✅ | `OcrController.HasValidMagicBytesAsync` |
+| OCR rate limit chống brute-force ảnh | ✅ | Policy `ocr-citizen-id` 10 req/min/user |
 | Presigned URL TTL ≤ 15 phút | ✅ | `MinioOptions.PresignedUrlExpiryMinutes=15` |
 | Object key chặn path traversal | ✅ | `ObjectKeyBuilder.ValidateSegment` |
 | Self-scope filter cho list endpoint | ✅ | Handler-level check `_currentUserService.HasPermission(*.Read.Self)` |
@@ -418,7 +491,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ## 14. Testing
 
-**Suite hiện tại:** 212 tests (158 Application + 54 Infrastructure), 0 fail.
+**Suite hiện tại:** 249 tests (173 Application + 76 Infrastructure), 0 fail.
 
 Phân bố theo feature (Application):
 
@@ -430,7 +503,18 @@ Phân bố theo feature (Application):
 | BackgroundJobs + Behaviors | 12 |
 | SalaryGrade | 9 |
 | AllowanceType | 9 |
-| (others — Auth/User/EmployeeInformation/Role/PerformanceMetric) | 48 |
+| User (create + promote path) | 6 |
+| (others — Auth/EmployeeInformation/Role/PerformanceMetric) | 57 |
+
+Phân bố Infrastructure (76):
+
+| Feature | Test count |
+|---|---|
+| ContractNoGenerator | 5 |
+| DocxMergeService | 7 |
+| FptAiCitizenIdOcrService | 11 |
+| MinIO / Storage | 22 |
+| (others — repositories, validators) | 31 |
 
 Chạy:
 ```bash

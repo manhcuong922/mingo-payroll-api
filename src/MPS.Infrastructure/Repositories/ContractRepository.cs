@@ -25,7 +25,7 @@ public class ContractRepository : IContractRepository
     {
         var query = _context.Contracts
             .AsNoTracking()
-            .Include(c => c.Employee)
+            .Include(c => c.EmployeeInformation)
             .Include(c => c.SalaryGrade)
             .AsQueryable();
 
@@ -40,7 +40,7 @@ public class ContractRepository : IContractRepository
     }
 
     public async Task<(IReadOnlyList<Domain.Entities.Contract> Items, int Total)> GetPagedAsync(
-        int? employeeId,
+        int? employeeInformationId,
         ContractStatus? status,
         ContractCategory? category,
         int page,
@@ -49,11 +49,11 @@ public class ContractRepository : IContractRepository
     {
         var query = _context.Contracts
             .AsNoTracking()
-            .Include(c => c.Employee)
+            .Include(c => c.EmployeeInformation)
             .AsQueryable();
 
-        if (employeeId.HasValue)
-            query = query.Where(c => c.EmployeeId == employeeId.Value);
+        if (employeeInformationId.HasValue)
+            query = query.Where(c => c.EmployeeInformationId == employeeInformationId.Value);
         if (status.HasValue)
             query = query.Where(c => c.Status == status.Value);
         if (category.HasValue)
@@ -81,13 +81,13 @@ public class ContractRepository : IContractRepository
     }
 
     public Task<int> CountDefiniteOfficialContractsAsync(
-        int employeeId,
+        int employeeInformationId,
         int employerPartyId,
         int? excludeContractId,
         CancellationToken cancellationToken = default)
     {
         var query = _context.Contracts.AsNoTracking()
-            .Where(c => c.EmployeeId == employeeId
+            .Where(c => c.EmployeeInformationId == employeeInformationId
                 && c.EmployerPartyId == employerPartyId
                 && c.ContractCategory == ContractCategory.Definite
                 && c.ContractSubtype == ContractSubtype.Official
@@ -373,6 +373,25 @@ public class ContractRepository : IContractRepository
             .Select(c => c.ArchivedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public Task<bool> HasActiveContractAsync(int employeeInformationId, CancellationToken cancellationToken = default) =>
+        _context.Contracts
+            .AsNoTracking()
+            .AnyAsync(c => c.EmployeeInformationId == employeeInformationId
+                        && c.Status == ContractStatus.Active, cancellationToken);
+
+    public Task<Domain.Entities.Contract?> GetForDocumentGenerationAsync(int id, CancellationToken cancellationToken = default) =>
+        _context.Contracts
+            .AsNoTracking()
+            .Include(c => c.EmployeeInformation)
+            .Include(c => c.EmployerParty)
+            .Include(c => c.Position)
+            .Include(c => c.SalaryGrade)
+            .Include(c => c.ContractAllowances)
+                .ThenInclude(a => a.AllowanceType)
+            .Include(c => c.Template)
+                .ThenInclude(t => t!.TemplateFile)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
     public async Task<int> AutoConvertExpiredDefiniteAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
     {
         // Cutoff = nowUtc - 30 ngày: HĐ Definite kết thúc ≥ 30 ngày trước mà vẫn Active = phải convert.
@@ -473,7 +492,7 @@ public class ContractRepository : IContractRepository
         tracked.ContractCategory = source.ContractCategory;
         tracked.ContractSubtype = source.ContractSubtype;
         tracked.Form = source.Form;
-        tracked.EmployeeId = source.EmployeeId;
+        tracked.EmployeeInformationId = source.EmployeeInformationId;
         tracked.EmployerPartyId = source.EmployerPartyId;
         tracked.EmployerSignerUserId = source.EmployerSignerUserId;
         tracked.PositionId = source.PositionId;
@@ -494,7 +513,6 @@ public class ContractRepository : IContractRepository
         tracked.UnemploymentInsuranceFlag = source.UnemploymentInsuranceFlag;
         tracked.TrainingPolicy = source.TrainingPolicy;
         tracked.ConfidentialityClause = source.ConfidentialityClause;
-        tracked.ContractText = source.ContractText;
         tracked.TemplateId = source.TemplateId;
         tracked.ParentContractId = source.ParentContractId;
         tracked.HasProbation = source.HasProbation;

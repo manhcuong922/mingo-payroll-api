@@ -39,7 +39,7 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
 
             var callerId = _currentUser.UserId
                 ?? throw new ForbiddenAccessException("Authenticated user context is required.");
-            if (entity.EmployeeId != callerId)
+            if (entity.EmployeeInformation?.UserId != callerId)
                 throw new ForbiddenAccessException("Caller may only read their own contracts.");
         }
 

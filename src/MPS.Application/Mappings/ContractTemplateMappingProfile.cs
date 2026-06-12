@@ -12,6 +12,8 @@ public class ContractTemplateMappingProfile : Profile
             .ForCtorParam(nameof(ContractTemplateDto.ContractCategory),
                 opt => opt.MapFrom(src => src.ContractCategory.ToString()))
             .ForCtorParam(nameof(ContractTemplateDto.ContractSubtype),
-                opt => opt.MapFrom(src => src.ContractSubtype.ToString()));
+                opt => opt.MapFrom(src => src.ContractSubtype.ToString()))
+            .ForCtorParam(nameof(ContractTemplateDto.FileName),
+                opt => opt.MapFrom(src => src.TemplateFile != null ? src.TemplateFile.FileName : null));
     }
 }

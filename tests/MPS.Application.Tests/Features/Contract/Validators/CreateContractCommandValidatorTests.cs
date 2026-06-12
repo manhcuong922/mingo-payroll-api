@@ -82,37 +82,6 @@ public sealed class CreateContractCommandValidatorTests
             e.ErrorMessage.Contains("Indefinite") && e.ErrorMessage.Contains("Probation"));
     }
 
-    // Case BLLĐ Điều 14 k.2: HĐ giao kết bằng lời nói chỉ cho phép với HĐ <30 ngày.
-    // HĐ 60 ngày + form=Verbal → reject.
-    [Fact]
-    public void Fails_When_Verbal_Form_Used_For_Contract_30_Days_Or_Longer()
-    {
-        var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var cmd = ContractCommandFactory.ValidCreate(
-            form: ContractForm.Verbal,
-            effectiveFrom: from,
-            effectiveTo: from.AddDays(60));
-
-        var result = _sut.Validate(cmd);
-
-        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Verbal form"));
-    }
-
-    // Case BLLĐ Điều 14 k.2 — boundary: HĐ 20 ngày + form=Verbal → cho phép (mùa vụ ngắn).
-    [Fact]
-    public void Passes_When_Verbal_Form_Used_For_Short_Contract()
-    {
-        var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var cmd = ContractCommandFactory.ValidCreate(
-            form: ContractForm.Verbal,
-            effectiveFrom: from,
-            effectiveTo: from.AddDays(20));
-
-        var result = _sut.Validate(cmd);
-
-        result.IsValid.Should().BeTrue(string.Join(" | ", result.Errors.Select(e => e.ErrorMessage)));
-    }
-
     // Case: HasProbation=true bắt buộc 4 trường ProbationStartDate/EndDate/Salary/ResultStatus.
     // Test cố tình bỏ trống cả 4 → validator báo cả 4 lỗi (không stop ở lỗi đầu).
     [Fact]

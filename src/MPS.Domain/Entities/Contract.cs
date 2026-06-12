@@ -10,14 +10,14 @@ public class Contract
     public ContractEnums.ContractSubtype ContractSubtype { get; set; }
     public ContractEnums.ContractForm Form { get; set; }
 
-    public int EmployeeId { get; set; }
-    public User Employee { get; set; } = null!;
+    public int EmployeeInformationId { get; set; }
+    public EmployeeInformation EmployeeInformation { get; set; } = null!;
 
     public int EmployerPartyId { get; set; }
     public ContractParty EmployerParty { get; set; } = null!;
 
-    public int EmployerSignerUserId { get; set; }
-    public User EmployerSignerUser { get; set; } = null!;
+    public int? EmployerSignerUserId { get; set; }
+    public User? EmployerSignerUser { get; set; }
 
     public int PositionId { get; set; }
     public Position Position { get; set; } = null!;
@@ -41,7 +41,6 @@ public class Contract
     public bool UnemploymentInsuranceFlag { get; set; } = true;
     public string? TrainingPolicy { get; set; }
     public string? ConfidentialityClause { get; set; }
-    public string ContractText { get; set; } = string.Empty;
 
     public int? TemplateId { get; set; }
     public ContractTemplate? Template { get; set; }

@@ -10,6 +10,7 @@ using MPS.Application.Tests.TestHelpers;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Contract;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Services;
 
 namespace MPS.Application.Tests.Features.ContractTermination.Integration;
 
@@ -27,7 +28,7 @@ public sealed class ContractTerminationFlowIntegrationTests
     public async Task Full_Happy_Path_Upload_Notice_Then_Terminate_Indefinite_Contract()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -42,16 +43,16 @@ public sealed class ContractTerminationFlowIntegrationTests
         var createCmd = ContractCommandFactory.ValidCreate(
             category: ContractCategory.Indefinite,
             subtype: ContractSubtype.Official,
-            employeeId: employee.Id,
+            employeeInformationId: employeeInfo.Id,
             employerPartyId: party.Id,
             employerSignerUserId: actor.Id,
             positionId: position.Id,
             salaryGradeId: grade.Id) with
         {
-            EffectiveTo = null, // Indefinite phải null
+            EffectiveTo = null,
         };
 
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(createCmd, CancellationToken.None);
 
         var activateHandler = new ActivateContractCommandHandler(
@@ -87,18 +88,18 @@ public sealed class ContractTerminationFlowIntegrationTests
         noticeFile.TargetType.Should().Be(FileTargetType.Termination);
         noticeFile.TargetId.Should().Be(contractId);
         noticeFile.IsCurrent.Should().BeTrue();
-        noticeFile.MinioObjectKey.Should().MatchRegex(@"^terminations/\d{4}/\d{2}/HDLD-2026-0001/notice-v1\.pdf$");
+        noticeFile.MinioObjectKey.Should().MatchRegex(@"^terminations/\d{4}/\d{2}/HDLD-[A-Z]+-\d{4}-\d{4}/notice-v1\.pdf$");
 
-        // === Step 2: terminate với reason C9 (NLĐ đơn phương, RequiresWrittenNotice=true) ===
+        // === Step 2: terminate với reason C9 ===
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object);
 
         var noticeSent = DateTime.UtcNow;
         var terminationId = await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
-            ReasonRefId: 9, // C9 — Employee unilateral
+            ReasonRefId: 9,
             TerminationParty: TerminationParty.Employee,
-            TerminationDate: noticeSent.AddDays(50), // > 45 ngày → đủ
+            TerminationDate: noticeSent.AddDays(50),
             NoticeSentAt: noticeSent,
             NoticeDaysAhead: 50,
             NoNoticeRequired: false,
@@ -108,12 +109,10 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         terminationId.Should().BeGreaterThan(0);
 
-        // === Verify HĐ đã Terminated ===
         var contractAfter = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
         contractAfter.Status.Should().Be(ContractStatus.Terminated);
         contractAfter.UpdatedAt.Should().NotBeNull();
 
-        // === Verify ContractTermination row ===
         var term = await fx.Db.ContractTerminations.AsNoTracking()
             .Include(t => t.ReasonRef)
             .FirstAsync(t => t.Id == terminationId);
@@ -127,13 +126,13 @@ public sealed class ContractTerminationFlowIntegrationTests
 
     /// <summary>
     /// Reason C1 (Hết hạn HĐ) yêu cầu WrittenNotice — KHÔNG upload notice → fail với code
-    /// WRITTEN_NOTICE_REQUIRED, không insert ContractTermination.
+    /// WRITTEN_NOTICE_REQUIRED.
     /// </summary>
     [Fact]
     public async Task Create_Rejects_When_Reason_Requires_Written_Notice_But_FileId_Missing()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -145,20 +144,20 @@ public sealed class ContractTerminationFlowIntegrationTests
         var storage = new FakeFileStorageService();
 
         var contractId = await ActivateContractAsync(fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object);
 
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
-            ReasonRefId: 1, // C1 — Expiry, RequiresWrittenNotice=true
+            ReasonRefId: 1,
             TerminationParty: TerminationParty.AutoExpiry,
             TerminationDate: DateTime.UtcNow.AddDays(30),
             NoticeSentAt: DateTime.UtcNow,
             NoticeDaysAhead: null,
             NoNoticeRequired: false,
-            WrittenNoticeFileId: null, // ← thiếu!
+            WrittenNoticeFileId: null,
             LegalBasis: "Điều 34 k.1",
             Notes: null), CancellationToken.None);
 
@@ -170,14 +169,13 @@ public sealed class ContractTerminationFlowIntegrationTests
     }
 
     /// <summary>
-    /// Reason C6 (NLĐ chết) RequiresWrittenNotice=false — không cần upload notice → pass kể cả thiếu FileId.
-    /// Party = ByLaw → bypass notice-day rules.
+    /// Reason C6 (NLĐ chết) RequiresWrittenNotice=false — không cần upload notice → pass.
     /// </summary>
     [Fact]
     public async Task Create_Pass_When_Reason_Has_No_Written_Notice_Requirement()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -189,14 +187,14 @@ public sealed class ContractTerminationFlowIntegrationTests
         var storage = new FakeFileStorageService();
 
         var contractId = await ActivateContractAsync(fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object);
 
         var terminationId = await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
-            ReasonRefId: 6, // C6 — Employee death, RequiresWrittenNotice=false
+            ReasonRefId: 6,
             TerminationParty: TerminationParty.ByLaw,
             TerminationDate: DateTime.UtcNow,
             NoticeSentAt: DateTime.UtcNow,
@@ -219,7 +217,7 @@ public sealed class ContractTerminationFlowIntegrationTests
     public async Task Create_Rejects_Second_Termination_For_Same_Contract()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -231,12 +229,11 @@ public sealed class ContractTerminationFlowIntegrationTests
         var storage = new FakeFileStorageService();
 
         var contractId = await ActivateContractAsync(fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object);
 
-        // 1st termination — OK.
         await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
             ReasonRefId: 6,
@@ -249,7 +246,6 @@ public sealed class ContractTerminationFlowIntegrationTests
             LegalBasis: "Điều 34 k.6",
             Notes: null), CancellationToken.None);
 
-        // 2nd termination — phải fail vì HĐ đã Terminated (Status check).
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
             ReasonRefId: 6,
@@ -268,13 +264,13 @@ public sealed class ContractTerminationFlowIntegrationTests
 
     /// <summary>
     /// Notice rule fail: HĐ vô thời hạn + NoticeDaysAhead = 10 → reject với code
-    /// TERMINATION_NOTICE_INDEFINITE_TOO_SHORT, KHÔNG terminate HĐ.
+    /// TERMINATION_NOTICE_INDEFINITE_TOO_SHORT.
     /// </summary>
     [Fact]
     public async Task Create_Rejects_When_Notice_Days_Below_Threshold()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -285,18 +281,17 @@ public sealed class ContractTerminationFlowIntegrationTests
         var termRepo = new ContractTerminationRepository(fx.Db);
         var storage = new FakeFileStorageService();
 
-        // Tạo HĐ vô thời hạn.
         var createCmd = ContractCommandFactory.ValidCreate(
             category: ContractCategory.Indefinite,
             subtype: ContractSubtype.Official,
-            employeeId: employee.Id,
+            employeeInformationId: employeeInfo.Id,
             employerPartyId: party.Id,
             employerSignerUserId: actor.Id,
             positionId: position.Id,
             salaryGradeId: grade.Id) with
         { EffectiveTo = null };
 
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(createCmd, CancellationToken.None);
 
         var activateHandler = new ActivateContractCommandHandler(
@@ -313,7 +308,6 @@ public sealed class ContractTerminationFlowIntegrationTests
             SignedPlace: "HN",
             SignedBySource: null), CancellationToken.None);
 
-        // Upload notice OK.
         var noticeHandler = new UploadTerminationNoticeCommandHandler(
             repo, storage, currentUser.Object,
             NullLogger<UploadTerminationNoticeCommandHandler>.Instance);
@@ -322,7 +316,6 @@ public sealed class ContractTerminationFlowIntegrationTests
             contractId, new MemoryStream(noticePdf), noticePdf.Length, "n.pdf", "application/pdf", null),
             CancellationToken.None);
 
-        // Terminate với chỉ 10 ngày → fail (cần 45).
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object);
 
@@ -341,20 +334,18 @@ public sealed class ContractTerminationFlowIntegrationTests
         await act.Should().ThrowAsync<MPS.Domain.Exceptions.DomainValidationException>()
             .WithMessage("*TERMINATION_NOTICE_INDEFINITE_TOO_SHORT*");
 
-        // HĐ vẫn Active.
         var contractAfter = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
         contractAfter.Status.Should().Be(ContractStatus.Active);
     }
 
     /// <summary>
     /// Upload notice 2 lần → file cũ IsCurrent=false, file mới IsCurrent=true, version bump.
-    /// HR có thể replace notice nếu phát hiện sai sót.
     /// </summary>
     [Fact]
     public async Task Upload_Notice_Twice_Bumps_Version_And_Demotes_Old()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -365,7 +356,7 @@ public sealed class ContractTerminationFlowIntegrationTests
         var storage = new FakeFileStorageService();
 
         var contractId = await ActivateContractAsync(fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var noticeHandler = new UploadTerminationNoticeCommandHandler(
             repo, storage, currentUser.Object,
@@ -402,12 +393,12 @@ public sealed class ContractTerminationFlowIntegrationTests
         ContractPreflightChecker preflight,
         FakeFileStorageService storage,
         ICurrentUserService currentUser,
-        int actorId, int employeeId, int partyId, int positionId, int gradeId)
+        int actorId, int employeeInformationId, int partyId, int positionId, int gradeId)
     {
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(
             ContractCommandFactory.ValidCreate(
-                employeeId: employeeId,
+                employeeInformationId: employeeInformationId,
                 employerPartyId: partyId,
                 employerSignerUserId: actorId,
                 positionId: positionId,

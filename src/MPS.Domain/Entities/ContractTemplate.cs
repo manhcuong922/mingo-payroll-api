@@ -8,7 +8,8 @@ public class ContractTemplate
     public string Name { get; set; } = string.Empty;
     public ContractEnums.ContractCategory ContractCategory { get; set; }
     public ContractEnums.ContractSubtype ContractSubtype { get; set; }
-    public string TemplateBody { get; set; } = string.Empty;
+    public int? TemplateFileId { get; set; }
+    public ContractFile? TemplateFile { get; set; }
     public int Version { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }

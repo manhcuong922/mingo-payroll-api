@@ -42,7 +42,7 @@ public class PositionController : ControllerBase
         [FromBody] CreatePositionRequest request,
         CancellationToken cancellationToken)
     {
-        var id = await _mediator.Send(new PositionCreateCommand(request.Name), cancellationToken);
+        var id = await _mediator.Send(new PositionCreateCommand(request.Code, request.Name), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -53,7 +53,7 @@ public class PositionController : ControllerBase
         [FromBody] UpdatePositionRequest request,
         CancellationToken cancellationToken)
     {
-        var updated = await _mediator.Send(new PositionUpdateCommand(id, request.Name), cancellationToken);
+        var updated = await _mediator.Send(new PositionUpdateCommand(id, request.Code, request.Name), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }

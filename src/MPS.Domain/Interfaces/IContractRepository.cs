@@ -8,7 +8,7 @@ public interface IContractRepository
     Task<Contract?> GetByIdAsync(int id, bool includeAllowances = false, CancellationToken cancellationToken = default);
 
     Task<(IReadOnlyList<Contract> Items, int Total)> GetPagedAsync(
-        int? employeeId,
+        int? employeeInformationId,
         ContractStatus? status,
         ContractCategory? category,
         int page,
@@ -22,7 +22,7 @@ public interface IContractRepository
     /// (trạng thái Active/Expired/Terminated). Dùng cho rule Điều 20 k.2c.
     /// </summary>
     Task<int> CountDefiniteOfficialContractsAsync(
-        int employeeId,
+        int employeeInformationId,
         int employerPartyId,
         int? excludeContractId,
         CancellationToken cancellationToken = default);
@@ -116,6 +116,17 @@ public interface IContractRepository
     /// how to handle absence (typically downstream handler will throw 4xx itself).
     /// </summary>
     Task<DateTime?> GetArchivedAtAsync(int contractId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kiểm tra NLĐ có ít nhất 1 HĐ Status=Active không. Dùng khi promote employee → create User.
+    /// </summary>
+    Task<bool> HasActiveContractAsync(int employeeInformationId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Load HĐ kèm toàn bộ dữ liệu cần thiết để sinh DOCX: EI, EmployerParty, Position,
+    /// SalaryGrade, ContractAllowances + AllowanceType, Template + TemplateFile.
+    /// </summary>
+    Task<Contract?> GetForDocumentGenerationAsync(int id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Điều 20 k.2.b BLLĐ 2019 — HĐ Definite + Status=Active mà

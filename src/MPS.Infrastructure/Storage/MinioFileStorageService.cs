@@ -40,44 +40,42 @@ public sealed class MinioFileStorageService : IFileStorageService
 
         var bucket = ResolveBucket(request.Bucket);
 
-        using var sha256 = SHA256.Create();
-        string hashHex;
+        // Buffer content so hash can be computed after the full stream is read.
+        // CryptoStream in Read mode does not call FlushFinalBlock on Dispose,
+        // so the CryptoStream approach would crash when accessing sha256.Hash.
+        using var buffer = new MemoryStream();
+        await request.Content.CopyToAsync(buffer, cancellationToken);
 
-        // Scope CryptoStream so it is disposed (and TransformFinalBlock runs)
-        // before we read sha256.Hash.
+        var hashHex = Convert.ToHexString(
+            SHA256.HashData(buffer.GetBuffer().AsSpan(0, (int)buffer.Length))
+        ).ToLowerInvariant();
+
+        buffer.Position = 0;
+
+        var args = new PutObjectArgs()
+            .WithBucket(bucket)
+            .WithObject(request.ObjectKey)
+            .WithStreamData(buffer)
+            .WithObjectSize(buffer.Length)
+            .WithContentType(request.ContentType);
+
+        if (request.Metadata is { Count: > 0 })
+            args = args.WithHeaders(new Dictionary<string, string>(request.Metadata));
+
+        try
         {
-            await using var cryptoStream = new CryptoStream(
-                request.Content, sha256, CryptoStreamMode.Read, leaveOpen: true);
-
-            var size = request.KnownSizeBytes ?? -1L;
-
-            var args = new PutObjectArgs()
-                .WithBucket(bucket)
-                .WithObject(request.ObjectKey)
-                .WithStreamData(cryptoStream)
-                .WithObjectSize(size)
-                .WithContentType(request.ContentType);
-
-            if (request.Metadata is { Count: > 0 })
-                args = args.WithHeaders(new Dictionary<string, string>(request.Metadata));
-
-            try
-            {
-                await _client.PutObjectAsync(args, cancellationToken);
-            }
-            catch (Exception ex) when (IsTransient(ex))
-            {
-                throw new FileStorageUnavailableException(
-                    $"MinIO upload failed for '{request.ObjectKey}'.", ex);
-            }
-            catch (MinioException ex)
-            {
-                throw new FileStorageException(
-                    $"MinIO upload failed for '{request.ObjectKey}'.", ex);
-            }
+            await _client.PutObjectAsync(args, cancellationToken);
         }
-
-        hashHex = Convert.ToHexString(sha256.Hash!).ToLowerInvariant();
+        catch (Exception ex) when (IsTransient(ex))
+        {
+            throw new FileStorageUnavailableException(
+                $"MinIO upload failed for '{request.ObjectKey}'.", ex);
+        }
+        catch (MinioException ex)
+        {
+            throw new FileStorageException(
+                $"MinIO upload failed for '{request.ObjectKey}'.", ex);
+        }
 
         var stat = await StatAsync(bucket, request.ObjectKey, cancellationToken);
 

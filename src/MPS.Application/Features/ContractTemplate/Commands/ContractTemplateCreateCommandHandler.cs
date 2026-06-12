@@ -19,7 +19,6 @@ public class ContractTemplateCreateCommandHandler : IRequestHandler<ContractTemp
             Name = request.Name.Trim(),
             ContractCategory = request.ContractCategory,
             ContractSubtype = request.ContractSubtype,
-            TemplateBody = request.TemplateBody,
             Version = 1,
             IsActive = request.IsActive,
         };

@@ -3,12 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Minio;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Options;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.BackgroundJobs;
 using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Repositories;
 using MPS.Infrastructure.Security;
+using MPS.Infrastructure.Services;
 using MPS.Infrastructure.Storage;
 
 namespace MPS.Infrastructure.DependencyInjection;
@@ -38,6 +40,7 @@ public static class InfrastructureServiceRegistration
         // Contract module — core
         services.AddScoped<IContractRepository, ContractRepository>();
         services.AddScoped<IContractLookupReader, ContractLookupReader>();
+        services.AddScoped<IContractNoGenerator, ContractNoGenerator>();
         services.AddScoped<MPS.Application.Features.Contract.Common.ContractPreflightChecker>();
 
         // Contract module — appendix (Phase 7)
@@ -55,6 +58,14 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IPermissionResolver, PermissionResolver>();
         services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+        // Document rendering (DOCX merge)
+        services.AddScoped<IDocumentRenderingService, DocxMergeService>();
+
+        // OCR — FPT.AI citizen ID
+        services.AddOptions<FptAiOcrOptions>()
+            .Bind(configuration.GetSection(FptAiOcrOptions.SectionName));
+        services.AddHttpClient<ICitizenIdOcrService, FptAiCitizenIdOcrService>();
 
         // Startup seeding
         services.AddScoped<DatabaseSeeder>();

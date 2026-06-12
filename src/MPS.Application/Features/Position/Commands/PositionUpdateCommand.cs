@@ -1,9 +1,5 @@
-﻿using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using MediatR;
 
 namespace MPS.Application.Features.Position.Commands;
-public record PositionUpdateCommand(int Id, string Name) : IRequest<bool>;
+
+public sealed record PositionUpdateCommand(int Id, string Code, string Name) : IRequest<bool>;

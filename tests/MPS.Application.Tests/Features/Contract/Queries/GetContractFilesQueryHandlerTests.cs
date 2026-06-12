@@ -10,6 +10,7 @@ using MPS.Application.Tests.TestHelpers;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Contract;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Services;
 
 namespace MPS.Application.Tests.Features.Contract.Queries;
 
@@ -31,7 +32,7 @@ public sealed class GetContractFilesQueryHandlerTests
     public async Task Returns_Contract_Files_Sorted_DESC_With_Presigned_Url()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -44,7 +45,7 @@ public sealed class GetContractFilesQueryHandlerTests
 
         // Tạo HĐ → activate v1 → replace để có v2 IsCurrent=true + v1 IsCurrent=false.
         var contractId = await ActivateAndReplaceAsync(fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var handler = new GetContractFilesQueryHandler(repo, storage, currentUser.Object);
         var result = await handler.Handle(new GetContractFilesQuery(contractId), CancellationToken.None);
@@ -69,9 +70,9 @@ public sealed class GetContractFilesQueryHandlerTests
     public async Task Throws_Forbidden_When_Self_Scope_And_Contract_Belongs_To_Other_Employee()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
-        // HR tạo + activate contract cho employee Nam.
+        // HR tạo + activate contract cho employeeInfo.
         var hrUser = new Mock<ICurrentUserService>();
         hrUser.SetupGet(c => c.UserId).Returns(actor.Id);
 
@@ -81,7 +82,7 @@ public sealed class GetContractFilesQueryHandlerTests
         var storage = new FakeFileStorageService();
 
         var contractId = await ActivateContractAsync(fx, repo, lookup, preflight, storage, hrUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         // "Stranger" cố đọc → chỉ có Read.Self, UserId khác EmployeeId.
         var stranger = new Mock<ICurrentUserService>();
@@ -120,7 +121,7 @@ public sealed class GetContractFilesQueryHandlerTests
     public async Task Returns_Empty_When_Contract_Has_No_Files()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -131,10 +132,10 @@ public sealed class GetContractFilesQueryHandlerTests
         var preflight = new ContractPreflightChecker(lookup, repo);
 
         // Tạo draft contract, KHÔNG activate (no file uploaded).
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(
             ContractCommandFactory.ValidCreate(
-                employeeId: employee.Id, employerPartyId: party.Id,
+                employeeInformationId: employeeInfo.Id, employerPartyId: party.Id,
                 employerSignerUserId: actor.Id, positionId: position.Id, salaryGradeId: grade.Id),
             CancellationToken.None);
 
@@ -149,12 +150,12 @@ public sealed class GetContractFilesQueryHandlerTests
     private static async Task<int> ActivateContractAsync(
         ContractIntegrationFixture fx, ContractRepository repo, ContractLookupReader lookup,
         ContractPreflightChecker preflight, FakeFileStorageService storage, ICurrentUserService currentUser,
-        int actorId, int employeeId, int partyId, int positionId, int gradeId)
+        int actorId, int employeeInformationId, int partyId, int positionId, int gradeId)
     {
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(
             ContractCommandFactory.ValidCreate(
-                employeeId: employeeId, employerPartyId: partyId,
+                employeeInformationId: employeeInformationId, employerPartyId: partyId,
                 employerSignerUserId: actorId, positionId: positionId, salaryGradeId: gradeId),
             CancellationToken.None);
 
@@ -173,10 +174,10 @@ public sealed class GetContractFilesQueryHandlerTests
     private static async Task<int> ActivateAndReplaceAsync(
         ContractIntegrationFixture fx, ContractRepository repo, ContractLookupReader lookup,
         ContractPreflightChecker preflight, FakeFileStorageService storage, ICurrentUserService currentUser,
-        int actorId, int employeeId, int partyId, int positionId, int gradeId)
+        int actorId, int employeeInformationId, int partyId, int positionId, int gradeId)
     {
         var contractId = await ActivateContractAsync(fx, repo, lookup, preflight, storage, currentUser,
-            actorId, employeeId, partyId, positionId, gradeId);
+            actorId, employeeInformationId, partyId, positionId, gradeId);
 
         var replaceHandler = new ReplaceContractFileCommandHandler(
             repo, storage, currentUser,

@@ -20,7 +20,7 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpGet]
-    [HasPermission(Permissions.EmployeeInformationReadAll)]
+    [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new EmployeeInformationGetAllQuery(), cancellationToken);
@@ -44,13 +44,22 @@ public class EmployeeInformationController : ControllerBase
     {
         var command = new EmployeeInformationCreateCommand(
             request.UserId,
-            request.TaxNo,
-            request.SocialNo,
-            request.BankNumber,
+            request.FullName,
+            request.Dob,
+            request.Gender,
+            request.CitizenId,
+            request.CitizenIssuedDate,
+            request.CitizenIssuedPlace,
+            request.PermanentAddress,
+            request.ContactAddress,
+            request.Email,
+            request.PhoneNo,
+            request.EducationLevel,
             request.PositionId,
             request.DependentsNo,
-            request.CitizenId,
-            request.Address);
+            request.TaxNo,
+            request.SocialNo,
+            request.BankNumber);
 
         var id = await _mediator.Send(command, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
@@ -66,13 +75,22 @@ public class EmployeeInformationController : ControllerBase
         var command = new EmployeeInformationUpdateCommand(
             id,
             request.UserId,
-            request.TaxNo,
-            request.SocialNo,
-            request.BankNumber,
+            request.FullName,
+            request.Dob,
+            request.Gender,
+            request.CitizenId,
+            request.CitizenIssuedDate,
+            request.CitizenIssuedPlace,
+            request.PermanentAddress,
+            request.ContactAddress,
+            request.Email,
+            request.PhoneNo,
+            request.EducationLevel,
             request.PositionId,
             request.DependentsNo,
-            request.CitizenId,
-            request.Address);
+            request.TaxNo,
+            request.SocialNo,
+            request.BankNumber);
 
         var updated = await _mediator.Send(command, cancellationToken);
         if (!updated) return NotFound();

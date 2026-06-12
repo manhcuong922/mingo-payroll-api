@@ -9,4 +9,5 @@ public sealed record CreateUserRequest(
     string Email,
     DateTime Dob,
     string PhoneNo,
-    int Status);
+    int Status,
+    int? EmployeeInformationId = null);

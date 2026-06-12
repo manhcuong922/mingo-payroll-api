@@ -5,4 +5,5 @@ public enum FileTargetType
     Contract,
     Appendix,
     Termination,
+    Template,
 }

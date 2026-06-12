@@ -11,15 +11,20 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
     private readonly IContractRepository _repository;
     private readonly ContractPreflightChecker _preflight;
     private readonly ICurrentUserService _currentUser;
+    private readonly IContractNoGenerator _noGenerator;
+
+    private static readonly int[] RetryDelaysMs = [50, 150, 300];
 
     public CreateContractCommandHandler(
         IContractRepository repository,
         ContractPreflightChecker preflight,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IContractNoGenerator noGenerator)
     {
         _repository = repository;
         _preflight = preflight;
         _currentUser = currentUser;
+        _noGenerator = noGenerator;
     }
 
     public async Task<int> Handle(CreateContractCommand request, CancellationToken cancellationToken)
@@ -29,8 +34,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
 
         var (snapshotAmount, snapshotCurrency) = await _preflight.RunAsync(
             new ContractCheckInput(
-                ContractNo: request.ContractNo,
-                EmployeeId: request.EmployeeId,
+                EmployeeInformationId: request.EmployeeInformationId,
                 EmployerPartyId: request.EmployerPartyId,
                 EmployerSignerUserId: request.EmployerSignerUserId,
                 PositionId: request.PositionId,
@@ -46,9 +50,38 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
             cancellationToken);
 
         var nowUtc = DateTime.UtcNow;
-        var entity = ContractBuilder.FromCreate(request, snapshotAmount, snapshotCurrency, userId, nowUtc);
+        var year = nowUtc.Year;
         var allowances = ContractBuilder.BuildAllowances(request.Allowances, snapshotCurrency, nowUtc);
 
-        return await _repository.AddAsync(entity, allowances, cancellationToken);
+        string? lastAttemptedNo = null;
+        for (var attempt = 0; attempt <= RetryDelaysMs.Length; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(RetryDelaysMs[attempt - 1], cancellationToken);
+
+            var contractNo = await _noGenerator.GenerateAsync(
+                request.ContractCategory, request.ContractSubtype, year, cancellationToken);
+            lastAttemptedNo = contractNo;
+
+            var entity = ContractBuilder.FromCreate(request, contractNo, snapshotAmount, snapshotCurrency, userId, nowUtc);
+
+            try
+            {
+                return await _repository.AddAsync(entity, allowances, cancellationToken);
+            }
+            catch (Exception ex) when (IsUniqueViolation(ex))
+            {
+                if (attempt == RetryDelaysMs.Length)
+                    throw new ContractNoCollisionException(contractNo);
+            }
+        }
+
+        throw new ContractNoCollisionException(lastAttemptedNo!);
+    }
+
+    private static bool IsUniqueViolation(Exception ex)
+    {
+        var msg = ex.InnerException?.Message ?? ex.Message;
+        return msg.Contains("2601") || msg.Contains("2627") || msg.Contains("UNIQUE");
     }
 }

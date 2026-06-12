@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
@@ -26,7 +27,7 @@ public class ContractTemplateRepository : IContractTemplateRepository
         bool? isActive,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.ContractTemplates.AsNoTracking();
+        IQueryable<ContractTemplate> query = _context.ContractTemplates.AsNoTracking();
         if (category.HasValue)
             query = query.Where(t => t.ContractCategory == category.Value);
         if (subtype.HasValue)
@@ -35,6 +36,7 @@ public class ContractTemplateRepository : IContractTemplateRepository
             query = query.Where(t => t.IsActive == isActive.Value);
 
         return await query
+            .Include(t => t.TemplateFile)
             .OrderBy(t => t.Name)
             .ThenByDescending(t => t.Version)
             .ToListAsync(cancellationToken);
@@ -58,7 +60,6 @@ public class ContractTemplateRepository : IContractTemplateRepository
         existing.Name = entity.Name;
         existing.ContractCategory = entity.ContractCategory;
         existing.ContractSubtype = entity.ContractSubtype;
-        existing.TemplateBody = entity.TemplateBody;
         existing.Version = existing.Version + 1;
         existing.IsActive = entity.IsActive;
 
@@ -84,5 +85,40 @@ public class ContractTemplateRepository : IContractTemplateRepository
 
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public Task<ContractTemplate?> GetWithFileAsync(int id, CancellationToken cancellationToken = default) =>
+        _context.ContractTemplates
+            .AsNoTracking()
+            .Include(t => t.TemplateFile)
+            .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+
+    public async Task<int> AttachTemplateFileAsync(int templateId, ContractFile file, CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var template = await _context.ContractTemplates
+            .FirstOrDefaultAsync(t => t.Id == templateId, cancellationToken);
+
+        if (template is null)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw new Domain.Exceptions.DomainValidationException($"TEMPLATE_NOT_FOUND: {templateId}");
+        }
+
+        // Mark any existing template file as not current.
+        await _context.ContractFiles
+            .Where(f => f.TargetType == FileTargetType.Template && f.TargetId == templateId && f.IsCurrent)
+            .ExecuteUpdateAsync(s => s.SetProperty(f => f.IsCurrent, false), cancellationToken);
+
+        await _context.ContractFiles.AddAsync(file, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        template.TemplateFileId = file.Id;
+        template.Version = file.Version;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
+        return file.Id;
     }
 }

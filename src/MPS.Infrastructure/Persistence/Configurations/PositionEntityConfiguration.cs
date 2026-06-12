@@ -13,6 +13,12 @@ namespace MPS.Infrastructure.Persistence.Configurations
 
             builder.HasKey(e => e.Id);
 
+            builder.Property(e => e.Code)
+                .HasMaxLength(20)
+                .IsRequired();
+
+            builder.HasIndex(e => e.Code).IsUnique();
+
             builder.Property(e => e.Name)
                 .HasMaxLength(100)
                 .IsRequired();

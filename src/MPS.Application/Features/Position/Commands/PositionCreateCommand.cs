@@ -1,10 +1,5 @@
-﻿using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using MediatR;
 
 namespace MPS.Application.Features.Position.Commands;
-public record PositionCreateCommand(string Name) : IRequest<int>;
 
+public sealed record PositionCreateCommand(string Code, string Name) : IRequest<int>;

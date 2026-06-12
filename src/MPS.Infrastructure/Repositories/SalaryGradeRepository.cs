@@ -34,25 +34,45 @@ public class SalaryGradeRepository : ISalaryGradeRepository
             .ToListAsync(cancellationToken);
     }
 
-    public Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken cancellationToken = default)
-    {
-        var normalized = code.Trim();
-        var query = _context.SalaryGrades.AsNoTracking()
-            .Where(s => s.Code == normalized);
-        if (excludeId.HasValue)
-            query = query.Where(s => s.Id != excludeId.Value);
-        return query.AnyAsync(cancellationToken);
-    }
+    public Task<SalaryGrade?> GetActiveByPositionAndLevelAsync(
+        int positionId,
+        int level,
+        CancellationToken cancellationToken = default) =>
+        _context.SalaryGrades
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.PositionId == positionId && s.Level == level && s.IsActive, cancellationToken);
 
     public Task<bool> HasContractsAsync(int id, CancellationToken cancellationToken = default) =>
         _context.Contracts.AsNoTracking().AnyAsync(c => c.SalaryGradeId == id, cancellationToken);
 
-    public async Task<int> AddAsync(SalaryGrade entity, CancellationToken cancellationToken = default)
+    public async Task<int> CreateWithDeactivationAsync(SalaryGrade newGrade, CancellationToken cancellationToken = default)
     {
-        entity.CreatedAt = DateTime.UtcNow;
-        await _context.SalaryGrades.AddAsync(entity, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
-        return entity.Id;
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+            var existingActive = await _context.SalaryGrades
+                .FirstOrDefaultAsync(
+                    s => s.PositionId == newGrade.PositionId && s.Level == newGrade.Level && s.IsActive,
+                    cancellationToken);
+
+            if (existingActive is not null)
+            {
+                existingActive.IsActive = false;
+                existingActive.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            newGrade.IsActive = true;
+            newGrade.CreatedAt = DateTime.UtcNow;
+            newGrade.UpdatedAt = null;
+            await _context.SalaryGrades.AddAsync(newGrade, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+            return newGrade.Id;
+        });
     }
 
     public async Task<bool> UpdateAsync(SalaryGrade entity, CancellationToken cancellationToken = default)
@@ -61,10 +81,7 @@ public class SalaryGradeRepository : ISalaryGradeRepository
             .FirstOrDefaultAsync(s => s.Id == entity.Id, cancellationToken);
         if (existing is null) return false;
 
-        existing.Code = entity.Code;
         existing.Name = entity.Name;
-        existing.PositionId = entity.PositionId;
-        existing.Level = entity.Level;
         existing.BaseSalary = entity.BaseSalary;
         existing.Currency = entity.Currency;
         existing.Description = entity.Description;

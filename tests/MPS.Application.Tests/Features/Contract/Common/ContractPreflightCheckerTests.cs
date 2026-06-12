@@ -18,7 +18,7 @@ public sealed class ContractPreflightCheckerTests
     private readonly Mock<IContractLookupReader> _lookup = new();
     private readonly Mock<IContractRepository> _contracts = new();
 
-    private const int EmployeeId = 100;
+    private const int EmployeeInformationId = 100;
     private const int EmployerPartyId = 1;
     private const int SignerId = 1;
     private const int PositionId = 1;
@@ -37,11 +37,11 @@ public sealed class ContractPreflightCheckerTests
         decimal baseSalary = 20_000_000m,
         bool gradeActive = true,
         int existingDefiniteContracts = 0,
-        bool contractNoExists = false,
         IReadOnlyList<int>? allowanceIds = null)
     {
-        _lookup.Setup(l => l.GetUserSnapshotAsync(EmployeeId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new UserSnapshot(EmployeeId, Status: 1,
+        _lookup.Setup(l => l.GetEmployeeInfoSnapshotAsync(EmployeeInformationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EmployeeInfoSnapshot(
+                Id: EmployeeInformationId,
                 Dob: dob ?? new DateTime(1995, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 FullName: "Nguyễn Văn A"));
 
@@ -58,11 +58,8 @@ public sealed class ContractPreflightCheckerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(ids);
 
-        _contracts.Setup(c => c.ContractNoExistsAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(contractNoExists);
-
         _contracts.Setup(c => c.CountDefiniteOfficialContractsAsync(
-                EmployeeId, EmployerPartyId, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+                EmployeeInformationId, EmployerPartyId, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingDefiniteContracts);
     }
 
@@ -74,8 +71,7 @@ public sealed class ContractPreflightCheckerTests
         IReadOnlyList<int>? allowanceIds = null,
         bool forceAllowThirdDefinite = false) =>
         new(
-            ContractNo: "HDLD-2026-0001",
-            EmployeeId: EmployeeId,
+            EmployeeInformationId: EmployeeInformationId,
             EmployerPartyId: EmployerPartyId,
             EmployerSignerUserId: SignerId,
             PositionId: PositionId,
@@ -101,31 +97,17 @@ public sealed class ContractPreflightCheckerTests
         currency.Should().Be("VND");
     }
 
-    // Case: EmployeeId chỉ tới user không tồn tại trong DB → reject thay vì silent insert FK lỗi.
+    // Case: EmployeeInformationId chỉ tới EI không tồn tại trong DB → reject thay vì silent insert FK lỗi.
     [Fact]
     public async Task RunAsync_Throws_When_Employee_NotFound()
     {
-        _lookup.Setup(l => l.GetUserSnapshotAsync(EmployeeId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((UserSnapshot?)null);
+        _lookup.Setup(l => l.GetEmployeeInfoSnapshotAsync(EmployeeInformationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((EmployeeInfoSnapshot?)null);
 
         var act = () => CreateSut().RunAsync(BuildInput(), CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainValidationException>()
-            .WithMessage("*Employee 100 not found*");
-    }
-
-    // Case: Employee tồn tại nhưng Status=0 (disabled). Không cho ký HĐ với nhân viên đã nghỉ/khóa.
-    [Fact]
-    public async Task RunAsync_Throws_When_Employee_NotActive()
-    {
-        _lookup.Setup(l => l.GetUserSnapshotAsync(EmployeeId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new UserSnapshot(EmployeeId, Status: 0,
-                Dob: new DateTime(1995, 1, 1, 0, 0, 0, DateTimeKind.Utc), FullName: "A"));
-
-        var act = () => CreateSut().RunAsync(BuildInput(), CancellationToken.None);
-
-        await act.Should().ThrowAsync<DomainValidationException>()
-            .WithMessage("*is not active*");
+            .WithMessage("*EmployeeInformation 100 not found*");
     }
 
     // Case BLLĐ Điều 18 + scope dự án: NLĐ phải đủ 18 tuổi tại EffectiveFrom.
@@ -275,15 +257,4 @@ public sealed class ContractPreflightCheckerTests
         await act.Should().NotThrowAsync();
     }
 
-    // Case: ContractNo trùng với HĐ đã có trong DB → reject (DB cũng có unique constraint nhưng app check trước cho UX tốt).
-    [Fact]
-    public async Task RunAsync_Throws_When_ContractNo_Already_Exists()
-    {
-        SetupHappyPath(contractNoExists: true);
-
-        var act = () => CreateSut().RunAsync(BuildInput(), CancellationToken.None);
-
-        await act.Should().ThrowAsync<DomainValidationException>()
-            .WithMessage("*ContractNo*already exists*");
-    }
 }

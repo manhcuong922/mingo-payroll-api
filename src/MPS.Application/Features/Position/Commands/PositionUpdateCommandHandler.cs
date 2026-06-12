@@ -1,12 +1,8 @@
-﻿using MediatR;
+using MediatR;
 using MPS.Domain.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MPS.Application.Features.Position.Commands;
+
 public class PositionUpdateCommandHandler : IRequestHandler<PositionUpdateCommand, bool>
 {
     private readonly IPositionRepository _repository;
@@ -21,7 +17,8 @@ public class PositionUpdateCommandHandler : IRequestHandler<PositionUpdateComman
         var entity = new Domain.Entities.Position
         {
             Id = request.Id,
-            Name = request.Name
+            Code = request.Code.Trim().ToUpperInvariant(),
+            Name = request.Name.Trim()
         };
 
         return await _repository.UpdateAsync(entity, cancellationToken);

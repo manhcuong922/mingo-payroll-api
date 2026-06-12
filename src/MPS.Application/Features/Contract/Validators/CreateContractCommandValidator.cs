@@ -8,11 +8,9 @@ public class CreateContractCommandValidator : AbstractValidator<CreateContractCo
     public CreateContractCommandValidator()
     {
         ContractValidationRules.ApplyCommonRules(this, cmd => new ContractCore(
-            cmd.ContractNo,
             cmd.ContractCategory,
             cmd.ContractSubtype,
-            cmd.Form,
-            cmd.EmployeeId,
+            cmd.EmployeeInformationId,
             cmd.EmployerPartyId,
             cmd.EmployerSignerUserId,
             cmd.PositionId,
@@ -22,7 +20,6 @@ public class CreateContractCommandValidator : AbstractValidator<CreateContractCo
             cmd.EffectiveFrom,
             cmd.EffectiveTo,
             cmd.WorkingTimeJson,
-            cmd.ContractText,
             cmd.HasProbation,
             cmd.ProbationStartDate,
             cmd.ProbationEndDate,

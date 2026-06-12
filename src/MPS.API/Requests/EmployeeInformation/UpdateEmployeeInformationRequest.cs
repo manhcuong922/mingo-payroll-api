@@ -1,11 +1,22 @@
+using MPS.Domain.Enums.Employee;
+
 namespace MPS.API.Requests.EmployeeInformation;
 
 public sealed record UpdateEmployeeInformationRequest(
-    int UserId,
-    string TaxNo,
-    string SocialNo,
-    string BankNumber,
+    int? UserId,
+    string FullName,
+    DateTime Dob,
+    Gender Gender,
+    string CitizenId,
+    DateTime? CitizenIssuedDate,
+    string? CitizenIssuedPlace,
+    string PermanentAddress,
+    string? ContactAddress,
+    string? Email,
+    string? PhoneNo,
+    string? EducationLevel,
     int PositionId,
     int DependentsNo,
-    string CitizenId,
-    string Address);
+    string? TaxNo,
+    string? SocialNo,
+    string? BankNumber);

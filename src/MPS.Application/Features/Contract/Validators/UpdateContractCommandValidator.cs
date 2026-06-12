@@ -10,11 +10,9 @@ public class UpdateContractCommandValidator : AbstractValidator<UpdateContractCo
         RuleFor(x => x.Id).GreaterThan(0);
 
         ContractValidationRules.ApplyCommonRules(this, cmd => new ContractCore(
-            cmd.ContractNo,
             cmd.ContractCategory,
             cmd.ContractSubtype,
-            cmd.Form,
-            cmd.EmployeeId,
+            cmd.EmployeeInformationId,
             cmd.EmployerPartyId,
             cmd.EmployerSignerUserId,
             cmd.PositionId,
@@ -24,7 +22,6 @@ public class UpdateContractCommandValidator : AbstractValidator<UpdateContractCo
             cmd.EffectiveFrom,
             cmd.EffectiveTo,
             cmd.WorkingTimeJson,
-            cmd.ContractText,
             cmd.HasProbation,
             cmd.ProbationStartDate,
             cmd.ProbationEndDate,

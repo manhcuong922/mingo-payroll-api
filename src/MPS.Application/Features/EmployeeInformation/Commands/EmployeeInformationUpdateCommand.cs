@@ -1,14 +1,24 @@
 using MediatR;
+using MPS.Domain.Enums.Employee;
 
 namespace MPS.Application.Features.EmployeeInformation.Commands;
 
 public record EmployeeInformationUpdateCommand(
     int Id,
-    int UserId,
-    string TaxNo,
-    string SocialNo,
-    string BankNumber,
+    int? UserId,
+    string FullName,
+    DateTime Dob,
+    Gender Gender,
+    string CitizenId,
+    DateTime? CitizenIssuedDate,
+    string? CitizenIssuedPlace,
+    string PermanentAddress,
+    string? ContactAddress,
+    string? Email,
+    string? PhoneNo,
+    string? EducationLevel,
     int PositionId,
     int DependentsNo,
-    string CitizenId,
-    string Address) : IRequest<bool>;
+    string? TaxNo,
+    string? SocialNo,
+    string? BankNumber) : IRequest<bool>;

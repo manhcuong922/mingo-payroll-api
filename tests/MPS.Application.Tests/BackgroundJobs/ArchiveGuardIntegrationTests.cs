@@ -14,6 +14,7 @@ using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Services;
 
 namespace MPS.Application.Tests.BackgroundJobs;
 
@@ -32,7 +33,7 @@ public sealed class ArchiveGuardIntegrationTests
     public async Task Cancel_On_Archived_Contract_Throws_ContractArchivedException_Via_Pipeline()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var repo = new ContractRepository(fx.Db);
         var lookup = new ContractLookupReader(fx.Db);
@@ -41,10 +42,10 @@ public sealed class ArchiveGuardIntegrationTests
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
 
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(
             ContractCommandFactory.ValidCreate(
-                employeeId: employee.Id,
+                employeeInformationId: employeeInfo.Id,
                 employerPartyId: party.Id,
                 employerSignerUserId: actor.Id,
                 positionId: position.Id,

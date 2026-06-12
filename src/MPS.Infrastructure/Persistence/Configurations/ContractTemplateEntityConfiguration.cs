@@ -16,9 +16,14 @@ public class ContractTemplateEntityConfiguration : IEntityTypeConfiguration<Cont
         builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
         builder.Property(e => e.ContractCategory).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.ContractSubtype).HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(e => e.TemplateBody).IsRequired();
         builder.Property(e => e.Version).IsRequired();
         builder.Property(e => e.IsActive).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
+
+        builder.HasOne(e => e.TemplateFile)
+            .WithMany()
+            .HasForeignKey(e => e.TemplateFileId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

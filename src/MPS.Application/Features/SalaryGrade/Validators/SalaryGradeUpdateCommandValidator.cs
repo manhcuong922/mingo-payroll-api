@@ -1,21 +1,13 @@
 using FluentValidation;
 using MPS.Application.Features.SalaryGrade.Commands;
-using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.SalaryGrade.Validators;
 
 public class SalaryGradeUpdateCommandValidator : AbstractValidator<SalaryGradeUpdateCommand>
 {
-    public SalaryGradeUpdateCommandValidator(ISalaryGradeRepository repository)
+    public SalaryGradeUpdateCommandValidator()
     {
         RuleFor(x => x.Id).GreaterThan(0);
-
-        RuleFor(x => x.Code)
-            .NotEmpty().WithMessage("Code is required.")
-            .MaximumLength(50).WithMessage("Code must not exceed 50 characters.")
-            .Matches("^[A-Za-z0-9_\\-]+$").WithMessage("Code may only contain letters, digits, hyphen and underscore.")
-            .MustAsync(async (cmd, code, ct) => !await repository.CodeExistsAsync(code.Trim(), cmd.Id, ct))
-            .WithMessage("Code already exists.");
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")
@@ -31,9 +23,5 @@ public class SalaryGradeUpdateCommandValidator : AbstractValidator<SalaryGradeUp
 
         RuleFor(x => x.Description)
             .MaximumLength(500).WithMessage("Description must not exceed 500 characters.");
-
-        RuleFor(x => x.Level)
-            .GreaterThan(0).When(x => x.Level.HasValue)
-            .WithMessage("Level must be greater than 0.");
     }
 }

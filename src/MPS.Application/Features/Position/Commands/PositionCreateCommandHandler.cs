@@ -1,12 +1,8 @@
-﻿using MediatR;
+using MediatR;
 using MPS.Domain.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MPS.Application.Features.Position.Commands;
+
 public class PositionCreateCommandHandler : IRequestHandler<PositionCreateCommand, int>
 {
     private readonly IPositionRepository _repository;
@@ -20,7 +16,8 @@ public class PositionCreateCommandHandler : IRequestHandler<PositionCreateComman
     {
         var entity = new Domain.Entities.Position
         {
-            Name = request.Name
+            Code = request.Code.Trim().ToUpperInvariant(),
+            Name = request.Name.Trim()
         };
 
         return await _repository.AddAsync(entity, cancellationToken);

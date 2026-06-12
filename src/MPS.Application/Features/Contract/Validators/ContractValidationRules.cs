@@ -14,10 +14,6 @@ internal static class ContractValidationRules
     public static void ApplyCommonRules<TCommand>(AbstractValidator<TCommand> v, Func<TCommand, ContractCore> selector)
         where TCommand : class
     {
-        v.RuleFor(x => selector(x).ContractNo)
-            .NotEmpty().WithMessage("ContractNo is required.")
-            .MaximumLength(50).WithMessage("ContractNo must not exceed 50 characters.");
-
         v.RuleFor(x => selector(x).JobDescription)
             .NotEmpty().WithMessage("JobDescription is required.");
 
@@ -28,12 +24,12 @@ internal static class ContractValidationRules
         v.RuleFor(x => selector(x).WorkingTimeJson)
             .NotEmpty().WithMessage("WorkingTimeJson is required.");
 
-        v.RuleFor(x => selector(x).ContractText)
-            .NotEmpty().WithMessage("ContractText is required.");
-
-        v.RuleFor(x => selector(x).EmployeeId).GreaterThan(0);
+        v.RuleFor(x => selector(x).EmployeeInformationId).GreaterThan(0);
         v.RuleFor(x => selector(x).EmployerPartyId).GreaterThan(0);
-        v.RuleFor(x => selector(x).EmployerSignerUserId).GreaterThan(0);
+        v.RuleFor(x => selector(x).EmployerSignerUserId)
+            .GreaterThan(0)
+            .When(x => selector(x).EmployerSignerUserId.HasValue)
+            .WithMessage("EmployerSignerUserId must be greater than 0 when provided.");
         v.RuleFor(x => selector(x).PositionId).GreaterThan(0);
         v.RuleFor(x => selector(x).SalaryGradeId).GreaterThan(0);
 
@@ -72,17 +68,6 @@ internal static class ContractValidationRules
             .Must(c => !(c.ContractCategory == ContractCategory.Indefinite && c.ContractSubtype == ContractSubtype.Probation))
             .WithMessage("Combination Category=Indefinite + Subtype=Probation is not allowed (Điều 25 BLLĐ 2019).")
             .OverridePropertyName("ContractSubtype");
-
-        // Form=Verbal ⇒ duration < 30 days
-        v.RuleFor(x => selector(x))
-            .Must(c =>
-            {
-                if (c.Form != ContractForm.Verbal) return true;
-                if (c.EffectiveTo is null) return false;
-                return (c.EffectiveTo.Value - c.EffectiveFrom).TotalDays < LaborLawConstants.ContractForm.MinDurationForWrittenFormDays;
-            })
-            .WithMessage($"Verbal form is only allowed for contracts shorter than {LaborLawConstants.ContractForm.MinDurationForWrittenFormDays} days (Điều 14 k.2 BLLĐ 2019).")
-            .OverridePropertyName("Form");
 
         // HasProbation true ⇒ 4 trường bắt buộc
         v.RuleFor(x => selector(x))
@@ -153,13 +138,11 @@ internal static class ContractValidationRules
 
 /// <summary>Adapter exposing the subset of fields shared by Create/Update commands to the rules above.</summary>
 internal sealed record ContractCore(
-    string ContractNo,
     ContractCategory ContractCategory,
     ContractSubtype ContractSubtype,
-    ContractForm Form,
-    int EmployeeId,
+    int EmployeeInformationId,
     int EmployerPartyId,
-    int EmployerSignerUserId,
+    int? EmployerSignerUserId,
     int PositionId,
     int SalaryGradeId,
     string JobDescription,
@@ -167,7 +150,6 @@ internal sealed record ContractCore(
     DateTime EffectiveFrom,
     DateTime? EffectiveTo,
     string WorkingTimeJson,
-    string ContractText,
     bool HasProbation,
     DateTime? ProbationStartDate,
     DateTime? ProbationEndDate,

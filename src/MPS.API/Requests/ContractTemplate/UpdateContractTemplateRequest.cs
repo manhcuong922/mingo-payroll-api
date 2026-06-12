@@ -6,5 +6,4 @@ public sealed record UpdateContractTemplateRequest(
     string Name,
     ContractCategory ContractCategory,
     ContractSubtype ContractSubtype,
-    string TemplateBody,
     bool IsActive);

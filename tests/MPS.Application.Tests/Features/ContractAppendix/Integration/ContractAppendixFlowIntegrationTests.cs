@@ -12,6 +12,7 @@ using MPS.Application.Tests.TestHelpers;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Services;
 
 namespace MPS.Application.Tests.Features.ContractAppendix.Integration;
 
@@ -30,9 +31,8 @@ public sealed class ContractAppendixFlowIntegrationTests
     public async Task Full_Happy_Path_Create_Then_Activate_Appendix_Applies_Changes_To_Contract()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
-        // Seed thêm allowance type "TRANSPORT" để phụ lục có thể add.
         var transport = new MPS.Domain.Entities.AllowanceType
         {
             Code = "TRANSPORT",
@@ -55,12 +55,10 @@ public sealed class ContractAppendixFlowIntegrationTests
         var applier = new AppendixApplier(lookup);
         var storage = new FakeFileStorageService();
 
-        // === Step 1: tạo HĐ DRAFT + activate (cần Status=Active để được tạo phụ lục) ===
         var contractId = await ActivateContractAsync(
             fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
-        // === Step 2: tạo phụ lục DRAFT — đổi JobDescription + thêm allowance TRANSPORT ===
         var changeSet = new
         {
             jobDescription = "Tech Lead",
@@ -71,7 +69,6 @@ public sealed class ContractAppendixFlowIntegrationTests
         };
         var changeJson = JsonSerializer.Serialize(changeSet);
 
-        // EffectiveFrom phải ≥ NOW + 3 working days. Chọn NOW + 14 ngày để vô tư qua weekend.
         var effectiveFrom = DateTime.UtcNow.AddDays(14);
 
         var createHandler = new CreateContractAppendixCommandHandler(appendixRepo, repo, currentUser.Object);
@@ -90,7 +87,6 @@ public sealed class ContractAppendixFlowIntegrationTests
         draftAppendix.Status.Should().Be(AppendixStatus.Draft);
         draftAppendix.NoticeSentAt.Should().NotBeNull("create handler phải set NoticeSentAt=NOW()");
 
-        // === Step 3: activate phụ lục với PDF ===
         var pdfBytes = BuildFakePdfBytes("Phụ lục đã ký");
         var activateHandler = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,
@@ -107,12 +103,10 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         fileId.Should().BeGreaterThan(0);
 
-        // === Verify phụ lục đã active ===
         var activated = await fx.Db.ContractAppendices.AsNoTracking().FirstAsync(a => a.Id == appendixId);
         activated.Status.Should().Be(AppendixStatus.Active);
         activated.SignedAt.Should().NotBeNull();
 
-        // === Verify HĐ đã apply: JobDescription + ContractAllowance mới ===
         var updatedContract = await fx.Db.Contracts.AsNoTracking()
             .Include(c => c.ContractAllowances)
             .FirstAsync(c => c.Id == contractId);
@@ -122,25 +116,23 @@ public sealed class ContractAppendixFlowIntegrationTests
         updatedContract.ContractAllowances.Should().Contain(a =>
             a.AllowanceTypeId == transport.Id && a.Amount == 700_000m && a.Currency == "VND");
 
-        // === Verify ContractFile row cho phụ lục ===
         var file = await fx.Db.ContractFiles.AsNoTracking().FirstAsync(f => f.Id == fileId);
         file.TargetType.Should().Be(FileTargetType.Appendix);
         file.TargetId.Should().Be(appendixId);
         file.Version.Should().Be(1);
         file.IsCurrent.Should().BeTrue();
-        file.MinioObjectKey.Should().MatchRegex(@"^appendices/\d{4}/\d{2}/HDLD-2026-0001/PL-2026-001-v1\.pdf$");
+        file.MinioObjectKey.Should().MatchRegex(@"^appendices/\d{4}/\d{2}/HDLD-[A-Z]+-\d{4}-\d{4}/PL-2026-001-v1\.pdf$");
         storage.Uploaded.Should().ContainKey($"{FakeFileStorageService.DefaultBucket}/{file.MinioObjectKey}");
     }
 
     /// <summary>
-    /// Điều 22 k.2 — phụ lục có key bị cấm (EffectiveTo) → reject ở create handler,
-    /// KHÔNG insert phụ lục vào DB.
+    /// Điều 22 k.2 — phụ lục có key bị cấm (EffectiveTo) → reject ở create handler.
     /// </summary>
     [Fact]
     public async Task Create_Rejects_When_ChangedClausesJson_Contains_Forbidden_Key()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -153,9 +145,8 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         var contractId = await ActivateContractAsync(
             fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
-        // ChangedClausesJson chứa "EffectiveTo" — bị cấm Điều 22 k.2.
         var badJson = """{"EffectiveTo": "2030-01-01", "jobDescription": "x"}""";
 
         var createHandler = new CreateContractAppendixCommandHandler(appendixRepo, repo, currentUser.Object);
@@ -172,20 +163,18 @@ public sealed class ContractAppendixFlowIntegrationTests
         await act.Should().ThrowAsync<MPS.Domain.Exceptions.DomainValidationException>()
             .WithMessage("*FORBIDDEN_APPENDIX_KEY*EffectiveTo*");
 
-        // Verify không có row appendix nào được insert.
         var count = await fx.Db.ContractAppendices.CountAsync(a => a.ContractId == contractId);
         count.Should().Be(0);
     }
 
     /// <summary>
     /// Điều 33 k.1 — EffectiveFrom cách NOW < 3 working days → reject ở create handler.
-    /// Chọn EffectiveFrom = NOW + 1 ngày để chắc chắn không đủ 3 working days.
     /// </summary>
     [Fact]
     public async Task Create_Rejects_When_Notice_Less_Than_3_Working_Days()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -198,7 +187,7 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         var contractId = await ActivateContractAsync(
             fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var changeJson = """{"jobDescription": "Senior"}""";
 
@@ -227,7 +216,7 @@ public sealed class ContractAppendixFlowIntegrationTests
     public async Task Activate_Rejects_When_Parent_Contract_Archived()
     {
         using var fx = new ContractIntegrationFixture();
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
@@ -241,9 +230,8 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         var contractId = await ActivateContractAsync(
             fx, repo, lookup, preflight, storage, currentUser.Object,
-            actor.Id, employee.Id, party.Id, position.Id, grade.Id);
+            actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
-        // Tạo phụ lục DRAFT bình thường.
         var changeJson = """{"jobDescription": "Senior"}""";
         var createHandler = new CreateContractAppendixCommandHandler(appendixRepo, repo, currentUser.Object);
         var appendixId = await createHandler.Handle(new CreateContractAppendixCommand(
@@ -255,7 +243,6 @@ public sealed class ContractAppendixFlowIntegrationTests
             AppendixText: "...",
             EffectiveFrom: DateTime.UtcNow.AddDays(14)), CancellationToken.None);
 
-        // Giả lập job auto-archive: set ArchivedAt rồi activate.
         var contract = await fx.Db.Contracts.FirstAsync(c => c.Id == contractId);
         contract.ArchivedAt = DateTime.UtcNow;
         await fx.Db.SaveChangesAsync();
@@ -278,9 +265,6 @@ public sealed class ContractAppendixFlowIntegrationTests
             .WithMessage("*CONTRACT_ARCHIVED*");
     }
 
-    /// <summary>
-    /// Helper: tạo + activate HĐ để có HĐ ở Status=Active làm parent cho appendix tests.
-    /// </summary>
     private static async Task<int> ActivateContractAsync(
         ContractIntegrationFixture fx,
         ContractRepository repo,
@@ -288,12 +272,12 @@ public sealed class ContractAppendixFlowIntegrationTests
         ContractPreflightChecker preflight,
         FakeFileStorageService storage,
         ICurrentUserService currentUser,
-        int actorId, int employeeId, int partyId, int positionId, int gradeId)
+        int actorId, int employeeInformationId, int partyId, int positionId, int gradeId)
     {
-        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser);
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser, new ContractNoGenerator(fx.Db));
         var contractId = await createHandler.Handle(
             ContractCommandFactory.ValidCreate(
-                employeeId: employeeId,
+                employeeInformationId: employeeInformationId,
                 employerPartyId: partyId,
                 employerSignerUserId: actorId,
                 positionId: positionId,

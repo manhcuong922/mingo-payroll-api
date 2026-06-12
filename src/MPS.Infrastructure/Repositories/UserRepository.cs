@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
 using MPS.Domain.Interfaces;
@@ -129,5 +130,20 @@ public class UserRepository : IUserRepository
         _context.Users.Remove(existing);
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<int> AddWithEmployeeInfoLinkAsync(User user, int employeeInformationId, CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        await _context.Users.AddAsync(user, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _context.EmployeeInformations
+            .Where(e => e.Id == employeeInformationId)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.UserId, user.Id), cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
+        return user.Id;
     }
 }

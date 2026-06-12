@@ -8,6 +8,8 @@ namespace MPS.Domain.Interfaces;
 public interface IContractLookupReader
 {
     Task<UserSnapshot?> GetUserSnapshotAsync(int userId, CancellationToken cancellationToken);
+    Task<EmployeeInfoSnapshot?> GetEmployeeInfoSnapshotAsync(int employeeInformationId, CancellationToken cancellationToken);
+    Task<int?> GetEmployeeInformationIdByUserIdAsync(int userId, CancellationToken cancellationToken);
     Task<bool> IsActiveUserAsync(int userId, CancellationToken cancellationToken);
     Task<bool> IsActiveContractPartyAsync(int partyId, CancellationToken cancellationToken);
     Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken);
@@ -19,6 +21,8 @@ public interface IContractLookupReader
 }
 
 public sealed record UserSnapshot(int Id, int Status, DateTime Dob, string FullName);
+
+public sealed record EmployeeInfoSnapshot(int Id, DateTime Dob, string FullName);
 
 public sealed record SalaryGradeSnapshot(int Id, decimal BaseSalary, string Currency, bool IsActive);
 

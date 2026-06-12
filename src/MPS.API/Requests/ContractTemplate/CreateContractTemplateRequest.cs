@@ -6,5 +6,4 @@ public sealed record CreateContractTemplateRequest(
     string Name,
     ContractCategory ContractCategory,
     ContractSubtype ContractSubtype,
-    string TemplateBody,
     bool IsActive = true);

@@ -6,14 +6,15 @@ namespace MPS.Application.Features.SalaryGrade.Validators;
 
 public class SalaryGradeCreateCommandValidator : AbstractValidator<SalaryGradeCreateCommand>
 {
-    public SalaryGradeCreateCommandValidator(ISalaryGradeRepository repository)
+    public SalaryGradeCreateCommandValidator(IPositionRepository positionRepository)
     {
-        RuleFor(x => x.Code)
-            .NotEmpty().WithMessage("Code is required.")
-            .MaximumLength(50).WithMessage("Code must not exceed 50 characters.")
-            .Matches("^[A-Za-z0-9_\\-]+$").WithMessage("Code may only contain letters, digits, hyphen and underscore.")
-            .MustAsync(async (code, ct) => !await repository.CodeExistsAsync(code.Trim(), null, ct))
-            .WithMessage("Code already exists.");
+        RuleFor(x => x.PositionId)
+            .GreaterThan(0).WithMessage("PositionId is required.")
+            .MustAsync(async (id, ct) => await positionRepository.GetByIdAsync(id, ct) is not null)
+            .WithMessage("Position does not exist.");
+
+        RuleFor(x => x.Level)
+            .GreaterThan(0).WithMessage("Level must be greater than 0.");
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")
@@ -29,9 +30,5 @@ public class SalaryGradeCreateCommandValidator : AbstractValidator<SalaryGradeCr
 
         RuleFor(x => x.Description)
             .MaximumLength(500).WithMessage("Description must not exceed 500 characters.");
-
-        RuleFor(x => x.Level)
-            .GreaterThan(0).When(x => x.Level.HasValue)
-            .WithMessage("Level must be greater than 0.");
     }
 }

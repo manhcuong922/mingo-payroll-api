@@ -1,3 +1,3 @@
-﻿namespace MPS.Application.DTOs;
+namespace MPS.Application.DTOs;
 
-public record PositionDto(int Id, string Name);
+public record PositionDto(int Id, string Code, string Name);

@@ -5,7 +5,8 @@ public sealed record ContractTemplateDto(
     string Name,
     string ContractCategory,
     string ContractSubtype,
-    string TemplateBody,
     int Version,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    int? TemplateFileId,
+    string? FileName);

@@ -43,7 +43,7 @@ public class GetContractAppendicesQueryHandler : IRequestHandler<GetContractAppe
         {
             var callerId = _currentUser.UserId
                 ?? throw new ForbiddenAccessException("Authenticated user context is required.");
-            if (contract.EmployeeId != callerId)
+            if (contract.EmployeeInformation?.UserId != callerId)
                 throw new ForbiddenAccessException("Caller may only read appendices of their own contracts.");
         }
 

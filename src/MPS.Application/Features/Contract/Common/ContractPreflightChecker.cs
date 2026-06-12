@@ -25,21 +25,22 @@ public sealed class ContractPreflightChecker
         ContractCheckInput input,
         CancellationToken ct)
     {
-        // Employee + age ≥ 18 at EffectiveFrom
-        var employee = await _lookup.GetUserSnapshotAsync(input.EmployeeId, ct)
-            ?? throw new DomainValidationException($"Employee {input.EmployeeId} not found.");
+        // EmployeeInformation existence + age ≥ 18 at EffectiveFrom
+        var employeeInfo = await _lookup.GetEmployeeInfoSnapshotAsync(input.EmployeeInformationId, ct)
+            ?? throw new DomainValidationException($"EmployeeInformation {input.EmployeeInformationId} not found.");
 
-        if (employee.Status != 1)
-            throw new DomainValidationException($"Employee {input.EmployeeId} is not active.");
-
-        var ageAtStart = AgeAt(employee.Dob, input.EffectiveFrom);
+        var ageAtStart = AgeAt(employeeInfo.Dob, input.EffectiveFrom);
         if (ageAtStart < LaborLawConstants.SigningAuthority.EmployeeFullCapacityAge)
             throw new DomainValidationException(
                 $"EMPLOYEE_UNDER_AGE: Employee must be at least {LaborLawConstants.SigningAuthority.EmployeeFullCapacityAge} at contract EffectiveFrom (current age={ageAtStart}).");
 
-        // EmployerSignerUser exists + active
-        if (!await _lookup.IsActiveUserAsync(input.EmployerSignerUserId, ct))
-            throw new DomainValidationException($"EmployerSignerUser {input.EmployerSignerUserId} not found or inactive.");
+        // EmployerSignerUser optional: if provided, must be active.
+        // When omitted, the contract document falls back to ContractParty.RepresentativeFullName/Title.
+        if (input.EmployerSignerUserId is { } signerId)
+        {
+            if (!await _lookup.IsActiveUserAsync(signerId, ct))
+                throw new DomainValidationException($"EmployerSignerUser {signerId} not found or inactive.");
+        }
 
         // EmployerParty active (EffectiveTo IS NULL) at signing time
         if (!await _lookup.IsActiveContractPartyAsync(input.EmployerPartyId, ct))
@@ -69,10 +70,6 @@ public sealed class ContractPreflightChecker
                     $"AllowanceTypeId(s) not found or inactive: {string.Join(", ", missing)}.");
         }
 
-        // ContractNo unique
-        if (await _contracts.ContractNoExistsAsync(input.ContractNo.Trim(), input.ExcludeContractId, ct))
-            throw new DomainValidationException($"ContractNo '{input.ContractNo}' already exists.");
-
         // Snapshot-derived: probation salary ≥ 85% snapshot
         if (input.HasProbation && input.ProbationSalary is { } probationSalary)
         {
@@ -87,7 +84,7 @@ public sealed class ContractPreflightChecker
             && !input.ForceAllowThirdDefinite)
         {
             var count = await _contracts.CountDefiniteOfficialContractsAsync(
-                input.EmployeeId, input.EmployerPartyId, input.ExcludeContractId, ct);
+                input.EmployeeInformationId, input.EmployerPartyId, input.ExcludeContractId, ct);
             if (count >= 2)
                 throw new DomainValidationException(
                     $"Cannot sign a third Definite+Official contract with the same employer (currently {count}). " +
@@ -106,10 +103,9 @@ public sealed class ContractPreflightChecker
 }
 
 public sealed record ContractCheckInput(
-    string ContractNo,
-    int EmployeeId,
+    int EmployeeInformationId,
     int EmployerPartyId,
-    int EmployerSignerUserId,
+    int? EmployerSignerUserId,
     int PositionId,
     int SalaryGradeId,
     DateTime EffectiveFrom,

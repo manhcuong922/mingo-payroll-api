@@ -24,6 +24,20 @@ public sealed class ContractLookupReader : IContractLookupReader
             .Select(u => new UserSnapshot(u.Id, u.Status, u.Dob, u.FullName))
             .FirstOrDefaultAsync(cancellationToken);
 
+    public Task<EmployeeInfoSnapshot?> GetEmployeeInfoSnapshotAsync(int employeeInformationId, CancellationToken cancellationToken) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .Where(e => e.Id == employeeInformationId)
+            .Select(e => new EmployeeInfoSnapshot(e.Id, e.Dob, e.FullName))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<int?> GetEmployeeInformationIdByUserIdAsync(int userId, CancellationToken cancellationToken) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .Where(e => e.UserId == userId)
+            .Select(e => (int?)e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task<bool> IsActiveUserAsync(int userId, CancellationToken cancellationToken) =>
         _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && u.Status == 1, cancellationToken);
 

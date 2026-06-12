@@ -6,7 +6,7 @@ public sealed record ContractSummaryDto(
     string ContractCategory,
     string ContractSubtype,
     string Status,
-    int EmployeeId,
+    int EmployeeInformationId,
     string? EmployeeFullName,
     int EmployerPartyId,
     int PositionId,

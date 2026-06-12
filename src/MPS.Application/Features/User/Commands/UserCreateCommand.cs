@@ -11,4 +11,5 @@ public record UserCreateCommand(
     string Email,
     DateTime Dob,
     string PhoneNo,
-    int Status) : IRequest<int>;
+    int Status,
+    int? EmployeeInformationId = null) : IRequest<int>;

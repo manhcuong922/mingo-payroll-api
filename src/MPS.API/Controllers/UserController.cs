@@ -60,7 +60,8 @@ public class UserController : ControllerBase
             request.Email,
             request.Dob,
             request.PhoneNo,
-            request.Status);
+            request.Status,
+            request.EmployeeInformationId);
 
         var id = await _mediator.Send(command, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });

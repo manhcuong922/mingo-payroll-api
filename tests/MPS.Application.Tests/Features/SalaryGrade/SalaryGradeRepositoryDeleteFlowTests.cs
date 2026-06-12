@@ -23,9 +23,10 @@ public sealed class SalaryGradeRepositoryDeleteFlowTests
 
         var standalone = new Domain.Entities.SalaryGrade
         {
-            Code = "JR-1",
-            Name = "Junior Bậc 1",
+            Code = "SE-1",
+            Name = "Senior Engineer Bậc 1",
             PositionId = position.Id,
+            Level = 1,
             BaseSalary = 10_000_000m,
             Currency = "VND",
             IsActive = true,
@@ -50,13 +51,13 @@ public sealed class SalaryGradeRepositoryDeleteFlowTests
     {
         using var fx = new ContractIntegrationFixture();
         // SeedBaseline tự gắn 1 SalaryGrade với 0 contract; cần tạo HĐ tham chiếu nó.
-        var (actor, employee, party, position, grade, _) = await fx.SeedBaselineAsync();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         // Tạo HĐ tham chiếu grade.
         var contract = new MPS.Domain.Entities.Contract
         {
             ContractNo = "HDLD-REF",
-            EmployeeId = employee.Id,
+            EmployeeInformationId = employeeInfo.Id,
             EmployerPartyId = party.Id,
             EmployerSignerUserId = actor.Id,
             PositionId = position.Id,
@@ -67,7 +68,6 @@ public sealed class SalaryGradeRepositoryDeleteFlowTests
             SalaryAmountSnapshot = grade.BaseSalary,
             SalaryCurrencySnapshot = grade.Currency,
             WorkingTimeJson = "{}",
-            ContractText = "x",
             CreatedAt = DateTime.UtcNow,
             CreatedByUserId = actor.Id,
         };
