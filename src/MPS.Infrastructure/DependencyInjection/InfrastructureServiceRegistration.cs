@@ -3,12 +3,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Minio;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Options;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.BackgroundJobs;
 using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Repositories.Compliance;
 using MPS.Infrastructure.Security;
+using MPS.Infrastructure.Services;
 using MPS.Infrastructure.Storage;
 
 namespace MPS.Infrastructure.DependencyInjection;
@@ -47,6 +50,25 @@ public static class InfrastructureServiceRegistration
         // Contract module — termination (Phase 8)
         services.AddScoped<IContractTerminationRepository, ContractTerminationRepository>();
 
+        // Compliance module repositories
+        services.AddScoped<ISocialInsuranceRateRepository, SocialInsuranceRateRepository>();
+        services.AddScoped<IPitRegulationRepository, PitRegulationRepository>();
+        services.AddScoped<IOtRateRepository, OtRateRepository>();
+        services.AddScoped<IMinimumWageRepository, MinimumWageRepository>();
+        services.AddScoped<IAllowanceExemptThresholdRepository, AllowanceExemptThresholdRepository>();
+        services.AddScoped<ILaborLawConstantsRepository, LaborLawConstantsRepository>();
+
+        // Compliance module services
+        services.AddSingleton<ComplianceCacheInvalidator>();
+        services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
+
+        // Compliance options
+        services.AddOptions<ComplianceOptions>()
+            .Bind(configuration.GetSection(ComplianceOptions.SectionName))
+            .Validate(o => o.MaxForwardDays is >= 1 and <= 3650,
+                "Compliance:MaxForwardDays must be between 1 and 3650.")
+            .ValidateOnStart();
+
         // Auth & security
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddMemoryCache();
@@ -73,6 +95,10 @@ public static class InfrastructureServiceRegistration
         services.AddHostedService(sp => sp.GetRequiredService<ContractExpiryJob>());
         services.AddSingleton<ContractArchiveJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ContractArchiveJob>());
+
+        // Compliance module — background job
+        services.AddSingleton<ComplianceActivationJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<ComplianceActivationJob>());
 
         // Storage (MinIO)
         services.AddOptions<MinioOptions>()

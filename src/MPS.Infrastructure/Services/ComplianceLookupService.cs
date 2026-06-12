@@ -1,0 +1,220 @@
+using Microsoft.Extensions.Caching.Memory;
+using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Compliance;
+using MPS.Domain.Interfaces;
+
+namespace MPS.Infrastructure.Services;
+
+public sealed class ComplianceLookupService : IComplianceLookupService
+{
+    private readonly ISocialInsuranceRateRepository _socialInsurance;
+    private readonly IPitRegulationRepository _pit;
+    private readonly IOtRateRepository _otRate;
+    private readonly IMinimumWageRepository _minWage;
+    private readonly IAllowanceExemptThresholdRepository _allowanceThreshold;
+    private readonly ILaborLawConstantsRepository _laborLaw;
+    private readonly IMemoryCache _cache;
+
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
+
+    public ComplianceLookupService(
+        ISocialInsuranceRateRepository socialInsurance,
+        IPitRegulationRepository pit,
+        IOtRateRepository otRate,
+        IMinimumWageRepository minWage,
+        IAllowanceExemptThresholdRepository allowanceThreshold,
+        ILaborLawConstantsRepository laborLaw,
+        IMemoryCache cache)
+    {
+        _socialInsurance = socialInsurance;
+        _pit = pit;
+        _otRate = otRate;
+        _minWage = minWage;
+        _allowanceThreshold = allowanceThreshold;
+        _laborLaw = laborLaw;
+        _cache = cache;
+    }
+
+    public async Task<SocialInsuranceRateSnapshot> GetActiveSocialInsuranceAsync(CancellationToken ct)
+    {
+        const string key = "compliance:SocialInsuranceRateVersion:active";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            ConfigureEntry(entry, "SocialInsuranceRateVersion");
+            var v = await _socialInsurance.GetActiveAsync(ct)
+                ?? throw new InvalidOperationException("No active SocialInsuranceRateVersion found. Run ComplianceActivationJob or seed data.");
+            return MapSocialInsurance(v);
+        }) ?? throw new InvalidOperationException("Cache returned null for SocialInsuranceRateVersion.");
+    }
+
+    public async Task<PitRegulationSnapshot> GetActivePitAsync(CancellationToken ct)
+    {
+        const string key = "compliance:PitRegulationVersion:active";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            ConfigureEntry(entry, "PitRegulationVersion");
+            var v = await _pit.GetActiveAsync(ct)
+                ?? throw new InvalidOperationException("No active PitRegulationVersion found.");
+            return MapPit(v);
+        }) ?? throw new InvalidOperationException("Cache returned null for PitRegulationVersion.");
+    }
+
+    public async Task<OtRateSnapshot> GetActiveOtRatesAsync(CancellationToken ct)
+    {
+        const string key = "compliance:OtRateVersion:active";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            ConfigureEntry(entry, "OtRateVersion");
+            var v = await _otRate.GetActiveAsync(ct)
+                ?? throw new InvalidOperationException("No active OtRateVersion found.");
+            return MapOtRate(v);
+        }) ?? throw new InvalidOperationException("Cache returned null for OtRateVersion.");
+    }
+
+    public async Task<MinimumWageSnapshot> GetActiveMinimumWageAsync(CancellationToken ct)
+    {
+        const string key = "compliance:MinimumWageVersion:active";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            ConfigureEntry(entry, "MinimumWageVersion");
+            var v = await _minWage.GetActiveAsync(ct)
+                ?? throw new InvalidOperationException("No active MinimumWageVersion found.");
+            return MapMinimumWage(v);
+        }) ?? throw new InvalidOperationException("Cache returned null for MinimumWageVersion.");
+    }
+
+    public async Task<AllowanceExemptThresholdSnapshot?> GetActiveAllowanceThresholdAsync(int allowanceTypeId, CancellationToken ct)
+    {
+        var key = $"compliance:AllowanceExemptThresholdVersion:active:{allowanceTypeId}";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            ConfigureEntry(entry, "AllowanceExemptThresholdVersion");
+            var v = await _allowanceThreshold.GetActiveForAllowanceTypeAsync(allowanceTypeId, ct);
+            return v is null ? null : MapAllowanceThreshold(v);
+        });
+    }
+
+    public async Task<LaborLawConstantsSnapshot> GetActiveLaborLawConstantsAsync(CancellationToken ct)
+    {
+        const string key = "compliance:LaborLawConstantsVersion:active";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            ConfigureEntry(entry, "LaborLawConstantsVersion");
+            var v = await _laborLaw.GetActiveAsync(ct)
+                ?? throw new InvalidOperationException("No active LaborLawConstantsVersion found.");
+            return MapLaborLaw(v);
+        }) ?? throw new InvalidOperationException("Cache returned null for LaborLawConstantsVersion.");
+    }
+
+    public async Task<SocialInsuranceRateSnapshot> GetSocialInsuranceAtAsync(DateOnly payDate, CancellationToken ct)
+    {
+        var key = $"compliance:SocialInsuranceRateVersion:at:{payDate:yyyyMMdd}";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.SlidingExpiration = CacheDuration;
+            var v = await _socialInsurance.GetActiveAtAsync(payDate, ct)
+                ?? throw new InvalidOperationException($"No SocialInsuranceRateVersion active at {payDate:yyyy-MM-dd}.");
+            return MapSocialInsurance(v);
+        }) ?? throw new InvalidOperationException("Cache returned null.");
+    }
+
+    public async Task<PitRegulationSnapshot> GetPitAtAsync(DateOnly payDate, CancellationToken ct)
+    {
+        var key = $"compliance:PitRegulationVersion:at:{payDate:yyyyMMdd}";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.SlidingExpiration = CacheDuration;
+            var v = await _pit.GetActiveAtAsync(payDate, ct)
+                ?? throw new InvalidOperationException($"No PitRegulationVersion active at {payDate:yyyy-MM-dd}.");
+            return MapPit(v);
+        }) ?? throw new InvalidOperationException("Cache returned null.");
+    }
+
+    public async Task<OtRateSnapshot> GetOtRatesAtAsync(DateOnly payDate, CancellationToken ct)
+    {
+        var key = $"compliance:OtRateVersion:at:{payDate:yyyyMMdd}";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.SlidingExpiration = CacheDuration;
+            var v = await _otRate.GetActiveAtAsync(payDate, ct)
+                ?? throw new InvalidOperationException($"No OtRateVersion active at {payDate:yyyy-MM-dd}.");
+            return MapOtRate(v);
+        }) ?? throw new InvalidOperationException("Cache returned null.");
+    }
+
+    public async Task<MinimumWageSnapshot> GetMinimumWageAtAsync(DateOnly payDate, CancellationToken ct)
+    {
+        var key = $"compliance:MinimumWageVersion:at:{payDate:yyyyMMdd}";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.SlidingExpiration = CacheDuration;
+            var v = await _minWage.GetActiveAtAsync(payDate, ct)
+                ?? throw new InvalidOperationException($"No MinimumWageVersion active at {payDate:yyyy-MM-dd}.");
+            return MapMinimumWage(v);
+        }) ?? throw new InvalidOperationException("Cache returned null.");
+    }
+
+    public async Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAtAsync(int allowanceTypeId, DateOnly payDate, CancellationToken ct)
+    {
+        var key = $"compliance:AllowanceExemptThresholdVersion:at:{payDate:yyyyMMdd}:{allowanceTypeId}";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.SlidingExpiration = CacheDuration;
+            var v = await _allowanceThreshold.GetActiveAtForAllowanceTypeAsync(allowanceTypeId, payDate, ct);
+            return v is null ? null : MapAllowanceThreshold(v);
+        });
+    }
+
+    public async Task<LaborLawConstantsSnapshot> GetLaborLawConstantsAtAsync(DateOnly payDate, CancellationToken ct)
+    {
+        var key = $"compliance:LaborLawConstantsVersion:at:{payDate:yyyyMMdd}";
+        return await _cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.SlidingExpiration = CacheDuration;
+            var v = await _laborLaw.GetActiveAtAsync(payDate, ct)
+                ?? throw new InvalidOperationException($"No LaborLawConstantsVersion active at {payDate:yyyy-MM-dd}.");
+            return MapLaborLaw(v);
+        }) ?? throw new InvalidOperationException("Cache returned null.");
+    }
+
+    private void ConfigureEntry(ICacheEntry entry, string complianceType)
+    {
+        entry.SlidingExpiration = CacheDuration;
+        var token = ComplianceCacheInvalidator.GetToken(complianceType);
+        entry.AddExpirationToken(new Microsoft.Extensions.Primitives.CancellationChangeToken(token));
+    }
+
+    private static SocialInsuranceRateSnapshot MapSocialInsurance(Domain.Entities.Compliance.SocialInsuranceRateVersion v) =>
+        new(v.Id, v.ValidFrom, v.EmployeeSocialPercent, v.EmployerSocialPercent,
+            v.EmployerOccupationalDiseasePercent, v.EmployeeHealthPercent, v.EmployerHealthPercent,
+            v.EmployeeUnemploymentPercent, v.EmployerUnemploymentPercent, v.EmployerUnionFundPercent,
+            v.ReferenceAmount, v.SocialCapMultiplier, v.UnemploymentCapMultiplier, v.LegalReference);
+
+    private static PitRegulationSnapshot MapPit(Domain.Entities.Compliance.PitRegulationVersion v) =>
+        new(v.Id, v.ValidFrom, v.PersonalDeductionAmount, v.DependentDeductionAmount,
+            v.Brackets.OrderBy(b => b.Order).Select(b => new PitBracketSnapshot(b.Order, b.LowerBound, b.UpperBound, b.Rate)).ToList(),
+            v.LegalReference);
+
+    private static OtRateSnapshot MapOtRate(Domain.Entities.Compliance.OtRateVersion v) =>
+        new(v.Id, v.ValidFrom,
+            v.Entries.Select(e => new OtRateEntrySnapshot(e.OtType, e.Label, e.Rate)).ToList(),
+            v.LegalReference);
+
+    private static MinimumWageSnapshot MapMinimumWage(Domain.Entities.Compliance.MinimumWageVersion v) =>
+        new(v.Id, v.ValidFrom,
+            v.Regions.Select(r => new MinimumWageRegionSnapshot(r.RegionCode, r.AmountPerMonth)).ToList(),
+            v.LegalReference);
+
+    private static AllowanceExemptThresholdSnapshot MapAllowanceThreshold(Domain.Entities.Compliance.AllowanceExemptThresholdVersion v) =>
+        new(v.Id, v.ValidFrom, v.AllowanceTypeId,
+            v.AllowanceType?.Code ?? string.Empty,
+            v.AllowanceType?.Name ?? string.Empty,
+            v.ThresholdMode, v.MonthlyExemptAmount,
+            v.AppliesToTax, v.AppliesToSocial, v.LegalReference);
+
+    private static LaborLawConstantsSnapshot MapLaborLaw(Domain.Entities.Compliance.LaborLawConstantsVersion v) =>
+        new(v.Id, v.ValidFrom, v.ProbationSalaryMinPercent, v.NightShiftSurchargePercent,
+            v.StandardWorkingHoursPerDay, v.StandardWorkingDaysPerMonth,
+            v.AnnualLeaveMinDays, v.OvertimeMaxHoursPerDay, v.OvertimeMaxHoursPerYear,
+            v.LegalReference);
+}
