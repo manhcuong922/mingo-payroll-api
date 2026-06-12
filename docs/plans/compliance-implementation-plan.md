@@ -7,11 +7,35 @@
 **SRS mapping:** FT-24, FT-25, FT-26, FT-27
 **Priority:** Must
 **Primary actor:** HR Manager
-**Last updated:** 2026-06-11 (**Rev 5** — full flex: LaborLawConstantsVersion + UnemploymentCapMultiplier DB + exception classes)
+**Last updated:** 2026-06-12 (**Rev 8** — fix: Permissions "24 perms", role ChiefAccountant, IsBhxhBase note, LaborLawConstants percent unit 0–100 + validator rule, OtRateSnapshot dùng Entries list + OtRateEntrySnapshot, AllowanceExemptThresholdDto clarify navigation Include)
 
 ---
 
 ## Changelog
+
+### Rev 8 (2026-06-12) — Fix 6 lỗi nhỏ sau review
+
+- Mục 3.2.1: "20 rows" → "24 perms" (tên chính xác)
+- Mục 1.1/1.2/0.2: "Accountant" → "ChiefAccountant" — khớp tên role thực tế trong hệ thống
+- Mục 3.2.6: thêm note giải thích `IsBhxhBase = false` nghĩa là phụ cấp không thuộc căn cứ đóng BHXH (khác với miễn BHXH qua threshold)
+- Mục 2.1.6 + 5.2: làm rõ `ProbationSalaryMinPercent`/`NightShiftSurchargePercent` **đơn vị 0–100**; thêm validator rule cho LaborLawConstants
+- Mục 7.2: `OtRateSnapshot` đổi từ 4 property cứng → `IReadOnlyList<OtRateEntrySnapshot> Entries` + convenience accessors (khớp entity `OtRateEntry`); thêm `OtRateEntrySnapshot` record
+- Mục 5.4: `AllowanceExemptThresholdDto` làm rõ `AllowanceTypeCode`/`Name` populate từ navigation `AllowanceType` khi EF Include
+
+### Rev 7 (2026-06-12) — Sync all phases: đồng bộ LaborLawConstants xuyên suốt
+
+- Phase 1: thêm `LaborLawConstantsVersion.cs` vào danh sách entity, thêm `ILaborLawConstantsRepository` vào danh sách 6 interface
+- Phase 2: fix EF filtered unique index snippet (index trên `ValidFrom`, không phải `ValidTo`)
+- Phase 3: thêm `ILaborLawConstantsRepository` vào DI registration (6 repo)
+- Phase 4: sửa OtRate validator dùng `Entries` list thay vì property cứng; thêm `LaborLawConstantsDto`; sửa mapping profile count thành 6
+- Phase 6: sửa deliverable "5 Snapshot record" → "8 Snapshot record"; sửa inject "5 repository" → "6 repository"
+- Phase 7: thêm test LaborLawConstants validator + repository + ArchiveAsyncTests bổ sung 2 case Rev 6; thêm smoke LaborLawConstants Phase 8
+
+### Rev 6 (2026-06-11) — Risk review: bổ sung 3 rule còn thiếu trong Phase 3
+
+- `ArchiveAsync`: block archive record đang active (`ValidFrom <= today`) — tránh engine crash vì không có coverage kỳ lương hiện tại
+- `ArchiveAsync`: gap timeline check trước khi restore previous — reject nếu khôi phục previous tạo khoảng trống ngày không có coverage
+- `UpdateAsync`: bổ sung rule kiểm tra `NewValidFrom > previous.ValidFrom` khi HR sửa ngày hiệu lực record future-dated — tránh gap/overlap ngầm trong timeline
 
 ### Rev 5 (2026-06-11) — Full flex: không còn magic number trong engine
 
@@ -67,8 +91,8 @@
 - Filtered unique index `(ValidTo IS NULL)` enforce DC-12 ở DB level
 - `IComplianceLookupService` — read-side immutable snapshot + cache shared toàn app (IMemoryCache Singleton, TTL 15 phút, invalidate khi có write)
 - Soft delete (`IsArchived = true`) — không hard delete record đã từng active
-- Seed bộ luật **2 version BHXH** (2025-07-01 + 2026-07-01) + 1 version PIT/OT/MinWage + 3 allowance threshold trong `DatabaseSeeder` (idempotent)
-- Permission-based authz cho HR Manager (admin), SystemAdmin / Chief Accountant / Auditor (read-only)
+- Seed bộ luật **2 version BHXH** (2025-07-01 + 2026-07-01) + **2 version PIT** (2020-01-01 + 2026-01-01) + 1 version OT/MinWage/LaborLawConstants + 3 allowance threshold trong `DatabaseSeeder` (idempotent)
+- Permission-based authz cho HR Manager (admin), SystemAdmin / ChiefAccountant / Auditor (read-only)
 - Unit + integration tests, target ≥80% coverage
 
 ❌ **Ngoài scope:**
@@ -123,12 +147,12 @@ Thêm **24 permissions mới** vào `MPS.Domain.Constants.Permissions` + `Permis
 
 ### 1.2. Role-permission seed mapping
 
-| Permission group | SystemAdmin | HRManager | HRStaff | Manager | Employee | Accountant | Auditor |
-|------------------|:-----------:|:---------:|:-------:|:-------:|:--------:|:----------:|:-------:|
+| Permission group | SystemAdmin | HRManager | HRStaff | Manager | Employee | ChiefAccountant | Auditor |
+|------------------|:-----------:|:---------:|:-------:|:-------:|:--------:|:---------------:|:-------:|
 | `*.Read.All` (6 perms) | ✅ | ✅ | – | – | – | ✅ | ✅ |
 | `*.{Create/Update/Delete}.All` (18 perms) | ✅ | ✅ | – | – | – | – | – |
 
-> HR Staff KHÔNG có quyền compliance — đúng spec ("Primary Actor: HR Manager"). Chief Accountant + Auditor read-only.
+> HR Staff KHÔNG có quyền compliance — đúng spec ("Primary Actor: HR Manager"). ChiefAccountant + Auditor read-only.
 
 ---
 
@@ -141,9 +165,11 @@ SocialInsuranceRateVersion.cs
 PitRegulationVersion.cs
 PitBracket.cs
 OtRateVersion.cs
+OtRateEntry.cs
 MinimumWageVersion.cs
 MinimumWageRegion.cs
 AllowanceExemptThresholdVersion.cs
+LaborLawConstantsVersion.cs
 ```
 
 #### 2.1.1. `SocialInsuranceRateVersion`
@@ -308,8 +334,8 @@ Entity này tập trung tất cả **hằng số luật lao động** có khả 
 | ValidFrom | DateOnly | |
 | ValidTo | DateOnly? | Null = open |
 | IsArchived | bool | default false |
-| ProbationSalaryMinPercent | decimal(5,2) | % lương tối thiểu khi thử việc. Mặc định **85.00** (BLLĐ 2019 Điều 26) |
-| NightShiftSurchargePercent | decimal(5,2) | % phụ trội OT ban đêm cộng dồn. Mặc định **20.00** (BLLĐ Điều 98 khoản 3) |
+| ProbationSalaryMinPercent | decimal(5,2) | % lương tối thiểu khi thử việc. **Đơn vị: 0–100** (vd 85.00 = 85%). Mặc định **85.00** (BLLĐ 2019 Điều 26) |
+| NightShiftSurchargePercent | decimal(5,2) | % phụ trội OT ban đêm cộng dồn. **Đơn vị: 0–100** (vd 20.00 = 20%). Mặc định **20.00** (BLLĐ Điều 98 khoản 3) |
 | StandardWorkingHoursPerDay | decimal(4,2) | Giờ làm việc chuẩn/ngày. Mặc định **8.00** (NĐ 145/2020 Điều 54) |
 | StandardWorkingDaysPerMonth | decimal(4,2) | Ngày làm việc chuẩn/tháng. Mặc định **26.00** (NĐ 145/2020 Điều 54) |
 | AnnualLeaveMinDays | int | Số ngày nghỉ phép tối thiểu/năm. Mặc định **12** (BLLĐ Điều 113) |
@@ -342,14 +368,15 @@ EF config: `.HasMaxLength(10)` cho RegionCode, `.HasMaxLength(30)` cho Threshold
 
 ### 2.3. Repository interfaces (`src/MPS.Domain/Interfaces/`)
 
-5 interface:
+6 interface:
 
 ```
 ISocialInsuranceRateRepository
 IPitRegulationRepository           (xử lý cả PitBracket child)
-IOtRateRepository
+IOtRateRepository                  (xử lý cả OtRateEntry child)
 IMinimumWageRepository             (xử lý cả MinimumWageRegion child)
 IAllowanceExemptThresholdRepository
+ILaborLawConstantsRepository
 ```
 
 Method chung:
@@ -375,15 +402,12 @@ Append 24 perms vào `Permissions.cs` + `PermissionIds.cs` (IDs 65–88).
 
 ### 2.5. Deliverables Phase 1
 
-- [x] 7 entity files trong `Entities/Compliance/` *(done)*
-- [x] 3 constants files trong `Enums/Compliance/` (`RegionCodes`, `ThresholdModes`, `OtRateTypes`) *(done)*
-- [x] 5 repo interface files *(done)*
-- [x] `Permissions.cs` extend IDs 65–84 *(done)*
-- [ ] Thêm `LaborLawConstantsVersion.cs` entity + `ILaborLawConstantsRepository.cs`
-- [ ] Thêm `UpdatedByUserId int?` + navigation `CreatedByUser`/`UpdatedByUser` vào 6 version entities
-- [ ] Thêm `UnemploymentCapMultiplier int` vào `SocialInsuranceRateVersion`
-- [ ] Dọn comment hardcode số tiền/tỷ lệ trong entity files
-- [ ] `Permissions.cs` extend thêm IDs 85–88 cho `LaborLawConstants`
+- [ ] 9 entity files trong `Entities/Compliance/` (`SocialInsuranceRateVersion`, `PitRegulationVersion`, `PitBracket`, `OtRateVersion`, `OtRateEntry`, `MinimumWageVersion`, `MinimumWageRegion`, `AllowanceExemptThresholdVersion`, `LaborLawConstantsVersion`)
+- [ ] 3 constants files trong `Enums/Compliance/` (`RegionCodes`, `ThresholdModes`, `OtRateTypes`)
+- [ ] 6 repo interface files (gồm `ILaborLawConstantsRepository`)
+- [ ] `UpdatedByUserId int?` + navigation `CreatedByUser`/`UpdatedByUser` vào tất cả 6 version entities
+- [ ] `UnemploymentCapMultiplier int` vào `SocialInsuranceRateVersion`
+- [ ] `Permissions.cs` extend IDs 65–88 (6 resource × 4 perm)
 - [ ] `dotnet build` pass
 
 ---
@@ -397,15 +421,15 @@ Append 24 perms vào `Permissions.cs` + `PermissionIds.cs` (IDs 65–88).
 > **DateOnly → SQL `date`:** EF Core 8 map `DateOnly` trực tiếp sang SQL Server `date` column mà không cần `.HasConversion()`. `ValidFrom` và `ValidTo` **không cần** `.HasColumnType("date")` thủ công — EF Core 8 tự suy ra. Lợi ích: không có time component, tránh hoàn toàn vấn đề timezone.
 
 - Unique index `(ValidFrom)` cho mọi version table
-- **Filtered unique index** `(WHERE ValidTo IS NULL AND IsArchived = 0)` — chỉ 1 record open + chưa archived mỗi loại:
+- **Filtered unique index** trên `ValidFrom` với filter `(WHERE ValidTo IS NULL AND IsArchived = 0)` — chỉ 1 record open + chưa archived mỗi loại:
 
   ```csharp
-  builder.HasIndex(e => new { e.ValidTo })
+  builder.HasIndex(e => e.ValidFrom)
       .HasFilter("[ValidTo] IS NULL AND [IsArchived] = 0")
       .IsUnique();
   ```
 
-  Với `AllowanceExemptThresholdVersion`: filtered unique trên `(AllowanceTypeId, ValidTo)` với cùng filter `IsArchived = 0`.
+  Với `AllowanceExemptThresholdVersion`: filtered unique trên `(AllowanceTypeId, ValidFrom)` với cùng filter `[ValidTo] IS NULL AND [IsArchived] = 0`.
 
 #### 3.1.2. Child table constraints
 
@@ -424,7 +448,7 @@ Append 24 perms vào `Permissions.cs` + `PermissionIds.cs` (IDs 65–88).
 
 ### 3.2. Seed data trong `DatabaseSeeder.SeedDefaultComplianceAsync(ct)`
 
-#### 3.2.1. `Permissions` (20 rows) + `RolePermissions` (~30 mapping)
+#### 3.2.1. `Permissions` (24 perms) + `RolePermissions` (~30 mapping)
 
 Pattern hiện tại — append HasData hoặc seed runtime idempotent.
 
@@ -547,6 +571,8 @@ Regions:
 | FUEL | Phụ cấp xăng xe | false | true | null |
 | PHONE | Phụ cấp điện thoại | false | true | null |
 
+> **Lưu ý `IsBhxhBase`:** Cột này xác định phụ cấp có **được tính vào căn cứ đóng BHXH** không (base for contribution), không phải "có miễn BHXH" hay không. `false` = phụ cấp không thuộc căn cứ đóng BHXH theo mặc định. Việc miễn/không miễn BHXH theo ngưỡng được kiểm soát riêng qua `AllowanceExemptThresholdVersion.AppliesToSocial`.
+
 Threshold seed:
 
 | AllowanceType | ValidFrom | ThresholdMode | MonthlyExemptAmount | AppliesToTax | AppliesToSocial | LegalRef |
@@ -594,8 +620,8 @@ public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLaw
 
 ### 3.5. Deliverables Phase 2
 
-- [ ] 8 EntityTypeConfiguration files (thêm `LaborLawConstantsVersion`)
-- [ ] `AppDbContext` thêm 9 DbSet
+- [ ] 9 EntityTypeConfiguration files (`SocialInsuranceRateVersion`, `PitRegulationVersion`, `PitBracket`, `OtRateVersion`, `OtRateEntry`, `MinimumWageVersion`, `MinimumWageRegion`, `AllowanceExemptThresholdVersion`, `LaborLawConstantsVersion`)
+- [ ] `AppDbContext` thêm 9 DbSet (khớp danh sách mục 3.4)
 - [ ] `DatabaseSeeder.SeedDefaultComplianceAsync` + `SeedDefaultAllowanceTypesAsync`
 - [ ] Migration `ComplianceModule` applied trên dev DB
 - [ ] Seed verified: 2 BHXH rows + 2 PIT rows + 1 OT (Entries) + 1 MinWage + 3 allowance + thresholds + 1 LaborLawConstants
@@ -659,20 +685,66 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
 - **Chỉ cho phép update record `future-dated`**: `ValidFrom > DateOnly.FromDateTime(_clock.UtcNow)` **AND** `IsArchived = false`
 - **KHÔNG cho phép sửa record đang active** (`ValidFrom <= DateOnly.FromDateTime(_clock.UtcNow)` dù `ValidTo IS NULL`) — muốn thay đổi hiệu lực ngay phải POST tạo version mới
 - Không cho phép sửa `ValidFrom` thành ngày ≤ `DateOnly.FromDateTime(_clock.UtcNow)` (sẽ vi phạm rule trên)
+- **Nếu HR sửa `ValidFrom` của record future-dated**, `NewValidFrom` phải > `ValidFrom` của record liền trước (previous) để tránh tạo gap hoặc overlap trong timeline:
+  ```csharp
+  // Trong UpdateAsync — kiểm tra khi NewValidFrom khác ValidFrom cũ:
+  if (newValidFrom != entity.ValidFrom)
+  {
+      var previous = await _context.Set<TVersion>()
+          .Where(x => x.Id != entity.Id && x.ValidFrom < entity.ValidFrom && !x.IsArchived)
+          .OrderByDescending(x => x.ValidFrom)
+          .FirstOrDefaultAsync(ct);
+
+      if (previous is not null && newValidFrom <= previous.ValidFrom)
+          throw new ConflictException(
+              $"New ValidFrom ({newValidFrom:yyyy-MM-dd}) must be after previous version's ValidFrom ({previous.ValidFrom:yyyy-MM-dd}).");
+
+      // Cập nhật ValidTo của previous để khớp timeline mới
+      if (previous is not null && previous.ValidTo is not null)
+          previous.ValidTo = newValidFrom.AddDays(-1);
+  }
+  ```
 - Reject với `ConflictException` nếu vi phạm
 
 > ⚠️ **Lý do cấm sửa record active:** Nếu kỳ lương đã tính dựa trên tỷ lệ hiện tại, việc sửa record nguồn sẽ khiến `PayrollItem.snapshot` không còn khớp `GetActiveAt(payDate)` khi audit → vi phạm DC-10 ngầm. Muốn đổi tỷ lệ → tạo version mới với `ValidFrom` trong tương lai, hệ thống tự auto-close version hiện tại.
 
 ### 4.3. `ArchiveAsync` (soft delete)
 
-- Chỉ cho phép archive record với `ValidTo IS NULL` AND `IsArchived = false`
-- Nếu record đã đóng (`ValidTo NOT NULL`) → reject 409 "Cannot archive closed historical record — historical immutable"
-- Nếu record đã archived → reject 409
+**Điều kiện cho phép archive:**
+- Record phải có `ValidTo IS NULL` AND `IsArchived = false` → nếu không, reject 409
+- Nếu record đã đóng (`ValidTo NOT NULL`) → reject 409 `"Cannot archive closed historical record — historical immutable"`
+- Nếu record đã archived → reject 409 `"Record is already archived"`
+- **KHÔNG cho phép archive record đang active** (`ValidFrom <= today`): archive record active khiến không có version nào cover kỳ lương hiện tại → engine crash toàn kỳ:
+  ```csharp
+  var today = DateOnly.FromDateTime(_clock.UtcNow);
+  if (target.ValidFrom <= today && target.ValidTo == null && !target.IsArchived)
+      throw new ConflictException(
+          $"Cannot archive active version (ValidFrom={target.ValidFrom:yyyy-MM-dd}). " +
+          "Create a new version to auto-close this one, or contact HR Manager.");
+  ```
+  > Nếu muốn thay đổi tỷ lệ hiệu lực ngay: POST version mới với `ValidFrom = today + 1` → hệ thống tự auto-close record hiện tại qua `AddAsync`.
+
+**Gap timeline check trước khi restore previous:**
+
+Sau khi xác định `previous`, phải kiểm tra gap — nếu khôi phục `previous.ValidTo = null` nhưng giữa `previous.ValidTo` cũ và `target.ValidFrom` có khoảng trống ngày, timeline sẽ có gap:
+
+```csharp
+if (previous is not null && previous.ValidTo is not null)
+{
+    var expectedContinuity = previous.ValidTo.Value.AddDays(1);
+    if (expectedContinuity < target.ValidFrom)
+        throw new ConflictException(
+            $"Cannot archive: restoring previous version would leave a coverage gap from " +
+            $"{expectedContinuity:yyyy-MM-dd} to {target.ValidFrom.AddDays(-1):yyyy-MM-dd}. " +
+            "No compliance rule would cover this period — payroll engine will crash.");
+}
+```
 
 **Thứ tự bắt buộc trong transaction (QUAN TRỌNG — sai thứ tự gây unique index exception):**
 
 1. Load `target` cần archive trong cùng tx
-2. **Tìm `previous`** bằng cách quét timeline thực tế — KHÔNG dùng công thức `AddDays(-1)`:
+2. Validate các điều kiện reject ở trên (active check, gap check)
+3. **Tìm `previous`** bằng cách quét timeline thực tế — KHÔNG dùng công thức `AddDays(-1)`:
    ```csharp
    var previous = await _context.Set<TVersion>()
        .Where(x => x.ValidFrom < target.ValidFrom && !x.IsArchived)
@@ -680,9 +752,9 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
        .FirstOrDefaultAsync(ct);
    ```
    > ⚠️ **Rev 5 fix — lý do bỏ `AddDays(-1)`:** Công thức cũ tra cứu theo giá trị cột `ValidTo`, dễ bốc nhầm bản ghi đã `IsArchived = true` có `ValidTo` trùng công thức, hoặc trả về `null` nếu có GAP ngày giữa 2 version → luật bị archive mà không có luật nào mở lại → engine crash kỳ lương tiếp theo.
-3. **Bước 1:** Set `target.IsArchived = true`, `target.UpdatedAt = _clock.UtcNow` (DateTime UTC)
-4. **Bước 2:** Nếu có `previous`: set `previous.ValidTo = null` — phục hồi nó thành "open"
-5. `SaveChangesAsync` → `CommitAsync`
+4. **Bước 1:** Set `target.IsArchived = true`, `target.UpdatedAt = _clock.UtcNow` (DateTime UTC)
+5. **Bước 2:** Nếu có `previous`: set `previous.ValidTo = null` — phục hồi nó thành "open"
+6. `SaveChangesAsync` → `CommitAsync`
 
 > ⚠️ **Không được** reset `previous.ValidTo` trước bước 1. Nếu làm ngược: tại thời điểm `previous.ValidTo = null`, filtered unique index `WHERE ValidTo IS NULL AND IsArchived = 0` sẽ thấy 2 record open (`target` vẫn chưa archived + `previous` vừa mở lại) → `DbUpdateException` trong transaction → archive bị rollback.
 
@@ -717,6 +789,7 @@ services.AddScoped<IPitRegulationRepository, PitRegulationRepository>();
 services.AddScoped<IOtRateRepository, OtRateRepository>();
 services.AddScoped<IMinimumWageRepository, MinimumWageRepository>();
 services.AddScoped<IAllowanceExemptThresholdRepository, AllowanceExemptThresholdRepository>();
+services.AddScoped<ILaborLawConstantsRepository, LaborLawConstantsRepository>();
 ```
 
 ### 4.6. Map `DbUpdateException` → 409 tại Compliance Repository layer
@@ -818,9 +891,10 @@ Mỗi sub-feature có 6 file Command/Query (Create/Update/Archive/GetAll/GetById
 | **All Create** | `ValidFrom >= DateOnly.FromDateTime(_clock.UtcNow).AddDays(-MaxBackdateDays)` (default 30) AND `ValidFrom <= DateOnly.FromDateTime(_clock.UtcNow).AddDays(MaxForwardDays)` (default 365) |
 | **SocialInsurance** | Mọi percent ∈ [0, 100]; `EmployerOccupationalDiseasePercent ≤ EmployerSocialPercent`; `ReferenceAmount > 0`; `SocialCapMultiplier ∈ [1, 100]` |
 | **PitRegulation** | `PersonalDeductionAmount > 0`, `DependentDeductionAmount > 0`; **brackets sequence**: `Order` consecutive starting 1; `LowerBound[0] = 0`; `LowerBound[i+1] = UpperBound[i]`; bracket cuối `UpperBound = null`; **rate ascending**: `Rate[i] ≥ Rate[i-1]` ; mọi rate ∈ [0, 1] |
-| **OtRate** | `WeekdayRate ≥ 1.50` ; `WeekendRate ≥ 2.00` ; `HolidayRate ≥ 3.00` ; `NightShiftRate ≥ 1.30` ; mọi rate ≤ 10 (sanity cap) |
+| **OtRate** | `Entries` phải có đủ 4 `OtType` trong `OtRateTypes.Required`; unique `OtType` trong list; duyệt từng entry: rate ≥ `OtRateTypes.MinimumRates[OtType]` (Weekday≥1.50, Weekend≥2.00, Holiday≥3.00, NightShift≥1.30); mọi rate ≤ 10 (sanity cap) |
 | **MinimumWage** | Phải có đủ 4 `RegionCode` I/II/III/IV; unique RegionCode; mọi amount > 0; `Amount[I] ≥ Amount[II] ≥ Amount[III] ≥ Amount[IV]` |
 | **AllowanceExemptThreshold** | `AllowanceTypeId` tồn tại + `IsActive`; nếu `ThresholdMode = FixedAmount` thì `MonthlyExemptAmount > 0`; nếu `ActualAllocation` thì `MonthlyExemptAmount` phải null; ít nhất 1 trong `AppliesToTax`/`AppliesToSocial` = true |
+| **LaborLawConstants** | `ProbationSalaryMinPercent` ∈ (0, 100]; `NightShiftSurchargePercent` ∈ (0, 100]; `StandardWorkingHoursPerDay` ∈ (0, 24]; `StandardWorkingDaysPerMonth` ∈ (0, 31]; `AnnualLeaveMinDays` ≥ 1; `OvertimeMaxHoursPerDay` ∈ (0, 24]; `OvertimeMaxHoursPerYear` ≥ 1. Tất cả percent **đơn vị 0–100**, engine chia 100 khi tính |
 
 Inject `IClock` vào validator (FluentValidation hỗ trợ DI).
 
@@ -840,23 +914,34 @@ Bind từ `appsettings.json` section `Compliance`. Validate on start.
 ### 5.4. DTOs (`src/MPS.Application/DTOs/Compliance/`)
 
 ```
-SocialInsuranceRateDto.cs              (gồm EmployerOccupationalDiseasePercent + ReferenceAmount)
+SocialInsuranceRateDto.cs              (gồm EmployerOccupationalDiseasePercent + ReferenceAmount + UnemploymentCapMultiplier)
 PitRegulationDto.cs                    (gồm List<PitBracketDto>)
 PitBracketDto.cs
-OtRateDto.cs                           (gồm NightShiftRate)
+OtRateDto.cs                           (gồm List<OtRateEntryDto> — không dùng property cứng)
+OtRateEntryDto.cs                      (OtType, Label, Rate)
 MinimumWageDto.cs                      (gồm List<MinimumWageRegionDto>)
 MinimumWageRegionDto.cs
-AllowanceExemptThresholdDto.cs         (gồm AppliesToTax/AppliesToSocial + AllowanceTypeCode/Name lookup)
+AllowanceExemptThresholdDto.cs         (gồm AppliesToTax/AppliesToSocial + AllowanceTypeCode/AllowanceTypeName — populate từ navigation property `AllowanceType` khi query; EF Include AllowanceType trong GetById/GetAll query)
+LaborLawConstantsDto.cs                (gồm ProbationSalaryMinPercent, NightShiftSurchargePercent, StandardWorkingHoursPerDay, StandardWorkingDaysPerMonth, AnnualLeaveMinDays, OvertimeMaxHoursPerDay, OvertimeMaxHoursPerYear)
 ```
 
-### 5.5. AutoMapper profiles (5 files trong `MPS.Application/Mappings/`).
+### 5.5. AutoMapper profiles (6 files trong `MPS.Application/Mappings/Compliance/`):
+
+```
+SocialInsuranceRateMappingProfile.cs
+PitRegulationMappingProfile.cs
+OtRateMappingProfile.cs
+MinimumWageMappingProfile.cs
+AllowanceExemptThresholdMappingProfile.cs
+LaborLawConstantsMappingProfile.cs
+```
 
 ### 5.6. Deliverables Phase 4
 
-- [ ] ~30 Command/Query class + handler
-- [ ] ~10 Validator class
-- [ ] 7 DTO class
-- [ ] 5 mapping profile
+- [ ] ~36 Command/Query class + handler (6 sub-feature × 6 operations)
+- [ ] ~12 Validator class (6 sub-feature × Create + Update)
+- [ ] 9 DTO class
+- [ ] 6 mapping profile
 - [ ] `ComplianceOptions` bind + validate
 - [ ] `dotnet build` pass
 
@@ -954,13 +1039,24 @@ public sealed record PitRegulationSnapshot(
     IReadOnlyList<PitBracketSnapshot> Brackets,
     string LegalReference);
 
+public sealed record OtRateEntrySnapshot(string OtType, string Label, decimal Rate);
+
 public sealed record OtRateSnapshot(
     DateOnly ValidFrom,
-    decimal WeekdayRate,
-    decimal WeekendRate,
-    decimal HolidayRate,
-    decimal NightShiftRate,
-    string LegalReference);
+    IReadOnlyList<OtRateEntrySnapshot> Entries,
+    string LegalReference)
+{
+    // Convenience accessors — map từ Entries list, không hardcode cột
+    public decimal GetRate(string otType) =>
+        Entries.FirstOrDefault(e => e.OtType == otType)?.Rate
+        ?? throw new InvalidOperationException($"No OT rate for type {otType}");
+
+    public decimal WeekdayRate    => GetRate(OtRateTypes.Weekday);
+    public decimal WeekendRate    => GetRate(OtRateTypes.Weekend);
+    public decimal HolidayRate    => GetRate(OtRateTypes.Holiday);
+    public decimal NightShiftRate => GetRate(OtRateTypes.NightShift);
+}
+// Engine gọi snapshot.WeekdayRate hoặc snapshot.GetRate("Weekday") — cả 2 đều được.
 
 public sealed record MinimumWageRegionSnapshot(string RegionCode, decimal AmountPerMonth);
 
@@ -998,7 +1094,7 @@ public sealed record LaborLawConstantsSnapshot(
 
 ### 7.3. Implementation (`src/MPS.Infrastructure/Services/ComplianceLookupService.cs`)
 
-- Inject 5 repository + `IMemoryCache` (Singleton — shared toàn app, không phải scoped per request)
+- Inject 6 repository (`ISocialInsuranceRateRepository`, `IPitRegulationRepository`, `IOtRateRepository`, `IMinimumWageRepository`, `IAllowanceExemptThresholdRepository`, `ILaborLawConstantsRepository`) + `IMemoryCache` (Singleton — shared toàn app, không phải scoped per request)
 - **Cache key**: `$"compliance:{type}:{payDate:yyyyMMdd}"` (cho allowance thì kèm `allowanceTypeId`)
 - **Cache duration**: 15 phút sliding **hoặc** invalidate sớm qua MediatR notification khi có POST/PUT/DELETE
 - Mỗi method gọi `GetActiveAtAsync(date)` → map sang snapshot → set vào cache với `CancellationChangeToken` của type tương ứng
@@ -1049,7 +1145,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 ### 7.6. Deliverables Phase 6
 
 - [ ] `IComplianceLookupService` interface + doc comment "publish rates only"
-- [ ] 5 Snapshot record
+- [ ] 9 Snapshot record (`SocialInsuranceRateSnapshot`, `PitBracketSnapshot`, `PitRegulationSnapshot`, `OtRateEntrySnapshot`, `OtRateSnapshot`, `MinimumWageRegionSnapshot`, `MinimumWageSnapshot`, `AllowanceExemptThresholdSnapshot`, `LaborLawConstantsSnapshot`)
 - [ ] `ComplianceLookupService` implementation + cache + token-based invalidation
 - [ ] `ComplianceVersionChangedNotification` + invalidator handler
 - [ ] DI wire
@@ -1068,6 +1164,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 | `OtRateCreateCommandValidatorTests` | **Weekday < 1.5 fail** (Rev 2); **Weekend < 2.0 fail**; **Holiday < 3.0 fail**; **NightShift < 1.3 fail**; rate > 10 fail (sanity); happy path 1.5/2.0/3.0/1.3 pass |
 | `MinimumWageCreateCommandValidatorTests` | Missing region IV fail; duplicate region II fail; Amount(I) < Amount(II) fail; happy path 4 regions pass (verify with seed data 5310/4730/4140/3700) |
 | `AllowanceExemptThresholdCreateCommandValidatorTests` | FixedAmount with null amount fail; ActualAllocation with amount fail; both AppliesToTax + AppliesToSocial false fail; non-existent AllowanceTypeId fail; happy MEAL (both true) + FUEL (tax only) pass |
+| `LaborLawConstantsCreateCommandValidatorTests` | ProbationSalaryMinPercent = 0 fail; NightShiftSurchargePercent > 100 fail; StandardWorkingHoursPerDay ≤ 0 fail; OvertimeMaxHoursPerYear ≤ 0 fail; happy path 85/20/8/26/12/4/300 pass |
 
 ### 8.2. Repository integration tests (`ComplianceIntegrationFixture`)
 
@@ -1079,7 +1176,8 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 | `MinimumWageRepositoryTests` | Verify Include 4 regions; **seed verify Region III=4,140,000 IV=3,700,000** |
 | `AllowanceExemptThresholdRepositoryTests` | Per-AllowanceType scoping: 2 allowance type cùng có ValidTo=null song song; auto-close chỉ trong scope cùng AllowanceTypeId |
 | `FilteredUniqueIndexTests` | Insert 2 record open cùng loại bằng raw EF → DbUpdateException; verify wrap thành 409 trong API integration |
-| `ArchiveAsyncTests` | Archive open record → previous record's ValidTo = NULL (rollback); archive closed record → 409; archive archived record → 409 |
+| `ArchiveAsyncTests` | Archive open record → previous record's ValidTo = NULL (restored); archive closed record → 409; archive archived record → 409; **archive active record (ValidFrom ≤ today) → 409** (Rev 6); **archive future record khi previous.ValidTo + 1 < target.ValidFrom → 409 gap check** (Rev 6) |
+| `LaborLawConstantsRepositoryTests` | AddAsync auto-closes current open; GetActiveAt boundary; seed verify 1 row 2021-01-01 với 85/20/8/26/12/4/300 |
 | `RaceConditionTests` | 2 task song song POST cùng loại → 1 thành công, 1 nhận 409 (không 500) |
 
 ### 8.3. Lookup service tests
@@ -1094,7 +1192,7 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 
 ### 8.5. Deliverables Phase 7
 
-- [ ] ~40 test methods, target ≥80% coverage
+- [ ] ~50 test methods (thêm LaborLawConstants validator + repo + ArchiveAsync Rev 6 cases), target ≥80% coverage
 - [ ] `dotnet test` all green
 
 ---
@@ -1110,6 +1208,8 @@ services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
   - POST tạo SocialInsurance mới ValidFrom 2027-01-01 → row 2 (2026-07-01) tự được set ValidTo = 2026-12-31
   - Repeat POST cùng ValidFrom → 409
   - DELETE id → IsArchived = true, GET list `?includeArchived=false` không thấy
+  - GET `/api/compliance/labor-law-constants/active?date=2026-01-01` → ProbationSalaryMinPercent = 85.00, StandardWorkingDaysPerMonth = 26.00
+  - DELETE active labor-law-constants record → 409 (block archive active)
 - [ ] Update `appsettings.json` thêm section `Compliance`:
   ```json
   "Compliance": {
