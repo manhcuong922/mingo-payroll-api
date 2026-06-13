@@ -105,19 +105,29 @@ public sealed class DatabaseSeeder
             (RoleId: SystemRoles.EmployeeId,          Code: "EMP001",  Username: "employee",    Email: "employee@mingo.local",   FullName: "Employee User"),
         };
 
-        var existingUsernames = (await _context.Users
+        var existing = await _context.Users
             .AsNoTracking()
-            .Select(u => u.Username)
-            .ToListAsync(cancellationToken))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(u => new { u.Username, u.Email, u.EmployeeCode })
+            .ToListAsync(cancellationToken);
+
+        var existingUsernames = existing.Select(u => u.Username).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingEmails = existing.Select(u => u.Email).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingCodes = existing.Select(u => u.EmployeeCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var now = DateTime.UtcNow;
         var toAdd = new List<User>();
 
         foreach (var (roleId, code, username, email, fullName) in candidates)
         {
-            if (existingUsernames.Contains(username))
+            if (existingUsernames.Contains(username)
+                || existingEmails.Contains(email)
+                || existingCodes.Contains(code))
+            {
+                _logger.LogDebug(
+                    "Default role user skipped (conflict): username={Username} email={Email} code={Code}",
+                    username, email, code);
                 continue;
+            }
 
             toAdd.Add(new User
             {

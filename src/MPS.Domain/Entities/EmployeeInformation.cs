@@ -29,6 +29,12 @@ public class EmployeeInformation
     public string? SocialNo { get; set; }
     public string? BankNumber { get; set; }
 
+    // Guardian / next-of-kin (emergency contact)
+    public string? GuardianFullName { get; set; }
+    public string? GuardianRelationship { get; set; }
+    public string? GuardianPhoneNo { get; set; }
+    public string? GuardianAddress { get; set; }
+
     // Navigation
     public Position Position { get; set; } = null!;
     public User? User { get; set; }

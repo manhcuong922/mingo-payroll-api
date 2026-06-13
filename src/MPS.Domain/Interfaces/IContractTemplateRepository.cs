@@ -11,6 +11,14 @@ public interface IContractTemplateRepository
         ContractSubtype? subtype,
         bool? isActive,
         CancellationToken cancellationToken = default);
+
+    Task<(IReadOnlyList<ContractTemplate> Items, int TotalCount)> GetPagedAsync(
+        ContractCategory? category,
+        ContractSubtype? subtype,
+        bool? isActive,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
     Task<int> AddAsync(ContractTemplate entity, CancellationToken cancellationToken = default);
     Task<bool> UpdateAsync(ContractTemplate entity, CancellationToken cancellationToken = default);
 

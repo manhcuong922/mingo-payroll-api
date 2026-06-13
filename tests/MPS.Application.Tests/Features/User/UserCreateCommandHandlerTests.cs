@@ -15,127 +15,147 @@ public sealed class UserCreateCommandHandlerTests
     private readonly Mock<IPasswordHasher> _hasher = new();
     private readonly Mock<IEmployeeInformationRepository> _eiRepo = new();
     private readonly Mock<IContractRepository> _contractRepo = new();
+    private readonly Mock<IEmailSender> _emailSender = new();
 
     private UserCreateCommandHandler CreateSut() =>
-        new(_users.Object, _hasher.Object, _eiRepo.Object, _contractRepo.Object);
+        new(_users.Object, _hasher.Object, _eiRepo.Object, _contractRepo.Object, _emailSender.Object);
 
-    private static UserCreateCommand PlainCommand() => new(
-        EmployeeCode: "EC001",
-        FullName: "Nguyen Van A",
-        RoleId: 2,
-        Username: "nguyenvana",
-        Password: "secret",
-        Email: "a@example.com",
-        Dob: new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-        PhoneNo: "0901234567",
-        Status: 1);
+    private static UserCreateCommand Command(int eiId) => new(eiId, RoleId: 2);
 
-    private static UserCreateCommand PromoteCommand(int eiId) =>
-        PlainCommand() with { EmployeeInformationId = eiId };
-
-    private static MPS.Domain.Entities.EmployeeInformation BuildEi(int id, int? userId = null) =>
+    private static MPS.Domain.Entities.EmployeeInformation BuildEi(
+        int id,
+        int? userId = null,
+        string email = "a@example.com",
+        string fullName = "Vũ Đình Thắng",
+        int positionId = 1) =>
         new()
         {
             Id = id,
             UserId = userId,
-            FullName = "Nguyen Van A",
+            FullName = fullName,
             Dob = new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             Gender = Gender.Male,
             CitizenId = "012345678901",
             PermanentAddress = "Ha Noi",
-            PositionId = 1,
+            Email = email,
+            PositionId = positionId,
         };
 
-    // ─────────────────────────── Plain create (no EI) ───────────────────────────
-
-    [Fact]
-    public async Task Handle_PlainCreate_Calls_AddAsync_And_Returns_Id()
+    private void SetupHappyPath(int eiId, string positionCode = "BA", int existingCount = 0)
     {
-        _hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns("hashed");
-        _users.Setup(r => r.AddAsync(It.IsAny<MPS.Domain.Entities.User>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(42);
-
-        var result = await CreateSut().Handle(PlainCommand(), CancellationToken.None);
-
-        result.Should().Be(42);
-        _users.Verify(r => r.AddAsync(It.IsAny<MPS.Domain.Entities.User>(), It.IsAny<CancellationToken>()), Times.Once);
-        _users.Verify(r => r.AddWithEmployeeInfoLinkAsync(It.IsAny<MPS.Domain.Entities.User>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    // ─────────────────────────── Promote path (with EI) ───────────────────────────
-
-    [Fact]
-    public async Task Handle_Promote_HappyPath_Creates_User_And_Links_EI()
-    {
-        const int eiId = 10;
         _eiRepo.Setup(r => r.GetByIdAsync(eiId, It.IsAny<CancellationToken>()))
-               .ReturnsAsync(BuildEi(eiId, userId: null));
+               .ReturnsAsync(BuildEi(eiId));
+        _eiRepo.Setup(r => r.GetPositionCodeAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(positionCode);
         _contractRepo.Setup(r => r.HasActiveContractAsync(eiId, It.IsAny<CancellationToken>()))
                      .ReturnsAsync(true);
+        _users.Setup(r => r.CountByEmployeeCodePrefixAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(existingCount);
+        _users.Setup(r => r.EmployeeCodeExistsAsync(It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(false);
+        _users.Setup(r => r.UsernameExistsAsync(It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(false);
         _hasher.Setup(h => h.Hash(It.IsAny<string>())).Returns("hashed");
         _users.Setup(r => r.AddWithEmployeeInfoLinkAsync(
                 It.IsAny<MPS.Domain.Entities.User>(), eiId, It.IsAny<CancellationToken>()))
               .ReturnsAsync(99);
-
-        var result = await CreateSut().Handle(PromoteCommand(eiId), CancellationToken.None);
-
-        result.Should().Be(99);
-        _users.Verify(r => r.AddWithEmployeeInfoLinkAsync(
-            It.IsAny<MPS.Domain.Entities.User>(), eiId, It.IsAny<CancellationToken>()), Times.Once);
-        _users.Verify(r => r.AddAsync(It.IsAny<MPS.Domain.Entities.User>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Handle_Promote_Throws_When_EI_Not_Found()
+    public async Task Handle_HappyPath_Generates_Code_Username_And_Sends_Email()
+    {
+        const int eiId = 10;
+        SetupHappyPath(eiId);
+
+        var result = await CreateSut().Handle(Command(eiId), CancellationToken.None);
+
+        var yy = (DateTime.UtcNow.Year % 100).ToString("D2");
+        result.UserId.Should().Be(99);
+        result.EmployeeCode.Should().Be($"BA{yy}0001");
+        result.Username.Should().Be($"thangvdBA{yy}0001");
+
+        _users.Verify(r => r.AddWithEmployeeInfoLinkAsync(
+            It.IsAny<MPS.Domain.Entities.User>(), eiId, It.IsAny<CancellationToken>()), Times.Once);
+        _emailSender.Verify(s => s.SendAccountCredentialsAsync(
+            "a@example.com", It.IsAny<string>(), result.Username, It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_Increments_Sequence_When_Position_Year_Has_Existing_Users()
+    {
+        const int eiId = 11;
+        SetupHappyPath(eiId, existingCount: 5);
+
+        var result = await CreateSut().Handle(Command(eiId), CancellationToken.None);
+
+        var yy = (DateTime.UtcNow.Year % 100).ToString("D2");
+        result.EmployeeCode.Should().Be($"BA{yy}0006");
+    }
+
+    [Fact]
+    public async Task Handle_Throws_When_EI_Not_Found()
     {
         const int eiId = 999;
         _eiRepo.Setup(r => r.GetByIdAsync(eiId, It.IsAny<CancellationToken>()))
                .ReturnsAsync((MPS.Domain.Entities.EmployeeInformation?)null);
 
-        var act = () => CreateSut().Handle(PromoteCommand(eiId), CancellationToken.None);
+        var act = () => CreateSut().Handle(Command(eiId), CancellationToken.None);
 
-        await act.Should().ThrowAsync<DomainValidationException>()
-            .WithMessage("*EMPLOYEE_INFO_NOT_FOUND*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*EMPLOYEE_INFO_NOT_FOUND*");
     }
 
     [Fact]
-    public async Task Handle_Promote_Throws_When_EI_Already_Has_User()
+    public async Task Handle_Throws_When_EI_Already_Has_User()
     {
         const int eiId = 10;
         _eiRepo.Setup(r => r.GetByIdAsync(eiId, It.IsAny<CancellationToken>()))
-               .ReturnsAsync(BuildEi(eiId, userId: 77)); // UserId is already set
+               .ReturnsAsync(BuildEi(eiId, userId: 77));
 
-        var act = () => CreateSut().Handle(PromoteCommand(eiId), CancellationToken.None);
+        var act = () => CreateSut().Handle(Command(eiId), CancellationToken.None);
 
-        await act.Should().ThrowAsync<DomainValidationException>()
-            .WithMessage("*EMPLOYEE_ALREADY_PROMOTED*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*EMPLOYEE_ALREADY_PROMOTED*");
     }
 
     [Fact]
-    public async Task Handle_Promote_Throws_When_No_Active_Contract()
+    public async Task Handle_Throws_When_EI_Has_No_Email()
     {
         const int eiId = 10;
         _eiRepo.Setup(r => r.GetByIdAsync(eiId, It.IsAny<CancellationToken>()))
-               .ReturnsAsync(BuildEi(eiId, userId: null));
+               .ReturnsAsync(BuildEi(eiId, email: ""));
+
+        var act = () => CreateSut().Handle(Command(eiId), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*EMPLOYEE_EMAIL_REQUIRED*");
+    }
+
+    [Fact]
+    public async Task Handle_Throws_When_No_Active_Contract()
+    {
+        const int eiId = 10;
+        _eiRepo.Setup(r => r.GetByIdAsync(eiId, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(BuildEi(eiId));
         _contractRepo.Setup(r => r.HasActiveContractAsync(eiId, It.IsAny<CancellationToken>()))
                      .ReturnsAsync(false);
 
-        var act = () => CreateSut().Handle(PromoteCommand(eiId), CancellationToken.None);
+        var act = () => CreateSut().Handle(Command(eiId), CancellationToken.None);
 
-        await act.Should().ThrowAsync<DomainValidationException>()
-            .WithMessage("*CONTRACT_NOT_ACTIVE*");
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*CONTRACT_NOT_ACTIVE*");
     }
 
     [Fact]
-    public async Task Handle_Promote_Does_Not_Check_Contract_When_EI_NotFound()
+    public async Task Handle_Throws_When_Position_Has_No_Code()
     {
-        const int eiId = 999;
+        const int eiId = 10;
         _eiRepo.Setup(r => r.GetByIdAsync(eiId, It.IsAny<CancellationToken>()))
-               .ReturnsAsync((MPS.Domain.Entities.EmployeeInformation?)null);
+               .ReturnsAsync(BuildEi(eiId));
+        _contractRepo.Setup(r => r.HasActiveContractAsync(eiId, It.IsAny<CancellationToken>()))
+                     .ReturnsAsync(true);
+        _eiRepo.Setup(r => r.GetPositionCodeAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync((string?)null);
 
-        var act = () => CreateSut().Handle(PromoteCommand(eiId), CancellationToken.None);
+        var act = () => CreateSut().Handle(Command(eiId), CancellationToken.None);
 
-        await act.Should().ThrowAsync<DomainValidationException>();
-        _contractRepo.Verify(r => r.HasActiveContractAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*POSITION_CODE_MISSING*");
     }
 }

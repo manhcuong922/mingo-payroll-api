@@ -78,7 +78,12 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IPermissionResolver, PermissionResolver>();
-        services.AddScoped<IEmailSender, LoggingEmailSender>();
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
+        var smtpConfigured = !string.IsNullOrWhiteSpace(configuration[$"{SmtpOptions.SectionName}:Host"]);
+        if (smtpConfigured)
+            services.AddScoped<IEmailSender, SmtpEmailSender>();
+        else
+            services.AddScoped<IEmailSender, LoggingEmailSender>();
 
         // Document rendering (DOCX merge)
         services.AddScoped<IDocumentRenderingService, DocxMergeService>();

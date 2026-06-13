@@ -25,4 +25,17 @@ public sealed class LoggingEmailSender : IEmailSender
             toEmail, resetToken, expiresAt);
         return Task.CompletedTask;
     }
+
+    public Task SendAccountCredentialsAsync(
+        string toEmail,
+        string fullName,
+        string username,
+        string plainPassword,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogWarning(
+            "[DEV EMAIL] Account credentials for {FullName} <{Email}>. Username: {Username}. Password: {Password}.",
+            fullName, toEmail, username, plainPassword);
+        return Task.CompletedTask;
+    }
 }

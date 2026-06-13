@@ -34,6 +34,32 @@ public class SalaryGradeRepository : ISalaryGradeRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<SalaryGrade> Items, int TotalCount)> GetPagedAsync(
+        int? positionId,
+        bool? isActive,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.SalaryGrades.AsNoTracking();
+        if (positionId.HasValue)
+            query = query.Where(s => s.PositionId == positionId.Value);
+        if (isActive.HasValue)
+            query = query.Where(s => s.IsActive == isActive.Value);
+
+        var total = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderBy(s => s.PositionId)
+            .ThenBy(s => s.Level)
+            .ThenBy(s => s.Code)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
     public Task<SalaryGrade?> GetActiveByPositionAndLevelAsync(
         int positionId,
         int level,
