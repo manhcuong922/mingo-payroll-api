@@ -24,6 +24,8 @@ public sealed class PitRegulationRepository : IPitRegulationRepository
         _context.PitRegulationVersions
             .AsNoTracking()
             .Include(x => x.Brackets.OrderBy(b => b.Order))
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<PitRegulationVersion>> GetAllAsync(bool includeArchived, CancellationToken ct)
@@ -31,6 +33,8 @@ public sealed class PitRegulationRepository : IPitRegulationRepository
         var query = _context.PitRegulationVersions
             .AsNoTracking()
             .Include(x => x.Brackets.OrderBy(b => b.Order))
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .AsQueryable();
         if (!includeArchived)
             query = query.Where(x => !x.IsArchived);
@@ -41,6 +45,8 @@ public sealed class PitRegulationRepository : IPitRegulationRepository
         _context.PitRegulationVersions
             .AsNoTracking()
             .Include(x => x.Brackets.OrderBy(b => b.Order))
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.IsActive && !x.IsArchived, ct);
 
     public async Task<PitRegulationVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct)
@@ -48,6 +54,8 @@ public sealed class PitRegulationRepository : IPitRegulationRepository
         var active = await _context.PitRegulationVersions
             .AsNoTracking()
             .Include(x => x.Brackets.OrderBy(b => b.Order))
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .FirstOrDefaultAsync(ct);
 
@@ -56,6 +64,8 @@ public sealed class PitRegulationRepository : IPitRegulationRepository
         return await _context.PitRegulationVersions
             .AsNoTracking()
             .Include(x => x.Brackets.OrderBy(b => b.Order))
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .OrderByDescending(x => x.ValidFrom)
             .FirstOrDefaultAsync(ct);

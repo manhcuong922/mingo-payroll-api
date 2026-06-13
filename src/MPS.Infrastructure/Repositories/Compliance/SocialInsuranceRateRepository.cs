@@ -23,11 +23,17 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     public Task<SocialInsuranceRateVersion?> GetByIdAsync(int id, CancellationToken ct) =>
         _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<SocialInsuranceRateVersion>> GetAllAsync(bool includeArchived, CancellationToken ct)
     {
-        var query = _context.SocialInsuranceRateVersions.AsNoTracking();
+        var query = _context.SocialInsuranceRateVersions
+            .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
+            .AsQueryable();
         if (!includeArchived)
             query = query.Where(x => !x.IsArchived);
         return await query.OrderByDescending(x => x.ValidFrom).ToListAsync(ct);
@@ -36,12 +42,16 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     public Task<SocialInsuranceRateVersion?> GetActiveAsync(CancellationToken ct) =>
         _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.IsActive && !x.IsArchived, ct);
 
     public async Task<SocialInsuranceRateVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct)
     {
         var active = await _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .FirstOrDefaultAsync(ct);
 
@@ -49,6 +59,8 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
 
         return await _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .OrderByDescending(x => x.ValidFrom)
             .FirstOrDefaultAsync(ct);

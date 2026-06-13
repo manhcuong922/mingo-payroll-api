@@ -23,8 +23,8 @@ public sealed class ComplianceMappingProfile : Profile
             .ForMember(d => d.Regions, opt => opt.MapFrom(s => s.Regions));
 
         CreateMap<AllowanceExemptThresholdVersion, AllowanceExemptThresholdDto>()
-            .ForMember(d => d.AllowanceTypeCode, opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Code : string.Empty))
-            .ForMember(d => d.AllowanceTypeName, opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Name : string.Empty));
+            .ForCtorParam("allowanceTypeCode", opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Code : string.Empty))
+            .ForCtorParam("allowanceTypeName", opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Name : string.Empty));
 
         CreateMap<LaborLawConstantsVersion, LaborLawConstantsDto>();
     }

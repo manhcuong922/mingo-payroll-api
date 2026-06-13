@@ -23,11 +23,17 @@ public sealed class LaborLawConstantsRepository : ILaborLawConstantsRepository
     public Task<LaborLawConstantsVersion?> GetByIdAsync(int id, CancellationToken ct) =>
         _context.LaborLawConstantsVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<LaborLawConstantsVersion>> GetAllAsync(bool includeArchived, CancellationToken ct)
     {
-        var query = _context.LaborLawConstantsVersions.AsNoTracking();
+        var query = _context.LaborLawConstantsVersions
+            .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
+            .AsQueryable();
         if (!includeArchived)
             query = query.Where(x => !x.IsArchived);
         return await query.OrderByDescending(x => x.ValidFrom).ToListAsync(ct);
@@ -36,12 +42,16 @@ public sealed class LaborLawConstantsRepository : ILaborLawConstantsRepository
     public Task<LaborLawConstantsVersion?> GetActiveAsync(CancellationToken ct) =>
         _context.LaborLawConstantsVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.IsActive && !x.IsArchived, ct);
 
     public async Task<LaborLawConstantsVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct)
     {
         var active = await _context.LaborLawConstantsVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .FirstOrDefaultAsync(ct);
 
@@ -49,6 +59,8 @@ public sealed class LaborLawConstantsRepository : ILaborLawConstantsRepository
 
         return await _context.LaborLawConstantsVersions
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .OrderByDescending(x => x.ValidFrom)
             .FirstOrDefaultAsync(ct);

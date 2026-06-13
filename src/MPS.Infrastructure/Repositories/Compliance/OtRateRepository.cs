@@ -24,6 +24,8 @@ public sealed class OtRateRepository : IOtRateRepository
         _context.OtRateVersions
             .AsNoTracking()
             .Include(x => x.Entries)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<OtRateVersion>> GetAllAsync(bool includeArchived, CancellationToken ct)
@@ -31,6 +33,8 @@ public sealed class OtRateRepository : IOtRateRepository
         var query = _context.OtRateVersions
             .AsNoTracking()
             .Include(x => x.Entries)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .AsQueryable();
         if (!includeArchived)
             query = query.Where(x => !x.IsArchived);
@@ -41,6 +45,8 @@ public sealed class OtRateRepository : IOtRateRepository
         _context.OtRateVersions
             .AsNoTracking()
             .Include(x => x.Entries)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.IsActive && !x.IsArchived, ct);
 
     public async Task<OtRateVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct)
@@ -48,6 +54,8 @@ public sealed class OtRateRepository : IOtRateRepository
         var active = await _context.OtRateVersions
             .AsNoTracking()
             .Include(x => x.Entries)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .FirstOrDefaultAsync(ct);
 
@@ -56,6 +64,8 @@ public sealed class OtRateRepository : IOtRateRepository
         return await _context.OtRateVersions
             .AsNoTracking()
             .Include(x => x.Entries)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .OrderByDescending(x => x.ValidFrom)
             .FirstOrDefaultAsync(ct);

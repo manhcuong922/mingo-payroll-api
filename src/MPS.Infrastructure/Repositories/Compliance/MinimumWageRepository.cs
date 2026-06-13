@@ -24,6 +24,8 @@ public sealed class MinimumWageRepository : IMinimumWageRepository
         _context.MinimumWageVersions
             .AsNoTracking()
             .Include(x => x.Regions)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<MinimumWageVersion>> GetAllAsync(bool includeArchived, CancellationToken ct)
@@ -31,6 +33,8 @@ public sealed class MinimumWageRepository : IMinimumWageRepository
         var query = _context.MinimumWageVersions
             .AsNoTracking()
             .Include(x => x.Regions)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .AsQueryable();
         if (!includeArchived)
             query = query.Where(x => !x.IsArchived);
@@ -41,6 +45,8 @@ public sealed class MinimumWageRepository : IMinimumWageRepository
         _context.MinimumWageVersions
             .AsNoTracking()
             .Include(x => x.Regions)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.IsActive && !x.IsArchived, ct);
 
     public async Task<MinimumWageVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct)
@@ -48,6 +54,8 @@ public sealed class MinimumWageRepository : IMinimumWageRepository
         var active = await _context.MinimumWageVersions
             .AsNoTracking()
             .Include(x => x.Regions)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .FirstOrDefaultAsync(ct);
 
@@ -56,6 +64,8 @@ public sealed class MinimumWageRepository : IMinimumWageRepository
         return await _context.MinimumWageVersions
             .AsNoTracking()
             .Include(x => x.Regions)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .OrderByDescending(x => x.ValidFrom)
             .FirstOrDefaultAsync(ct);

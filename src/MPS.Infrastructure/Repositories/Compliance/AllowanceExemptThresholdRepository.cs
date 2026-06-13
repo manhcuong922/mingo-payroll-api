@@ -24,6 +24,8 @@ public sealed class AllowanceExemptThresholdRepository : IAllowanceExemptThresho
         _context.AllowanceExemptThresholdVersions
             .AsNoTracking()
             .Include(x => x.AllowanceType)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<AllowanceExemptThresholdVersion>> GetAllAsync(bool includeArchived, CancellationToken ct)
@@ -31,6 +33,8 @@ public sealed class AllowanceExemptThresholdRepository : IAllowanceExemptThresho
         var query = _context.AllowanceExemptThresholdVersions
             .AsNoTracking()
             .Include(x => x.AllowanceType)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .AsQueryable();
         if (!includeArchived)
             query = query.Where(x => !x.IsArchived);
@@ -41,6 +45,8 @@ public sealed class AllowanceExemptThresholdRepository : IAllowanceExemptThresho
         _context.AllowanceExemptThresholdVersions
             .AsNoTracking()
             .Include(x => x.AllowanceType)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.AllowanceTypeId == allowanceTypeId && x.IsActive && !x.IsArchived, ct);
 
     public async Task<AllowanceExemptThresholdVersion?> GetActiveAtForAllowanceTypeAsync(int allowanceTypeId, DateOnly date, CancellationToken ct)
@@ -48,6 +54,8 @@ public sealed class AllowanceExemptThresholdRepository : IAllowanceExemptThresho
         var active = await _context.AllowanceExemptThresholdVersions
             .AsNoTracking()
             .Include(x => x.AllowanceType)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => x.AllowanceTypeId == allowanceTypeId && x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .FirstOrDefaultAsync(ct);
 
@@ -56,6 +64,8 @@ public sealed class AllowanceExemptThresholdRepository : IAllowanceExemptThresho
         return await _context.AllowanceExemptThresholdVersions
             .AsNoTracking()
             .Include(x => x.AllowanceType)
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.UpdatedByUser)
             .Where(x => x.AllowanceTypeId == allowanceTypeId && !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
             .OrderByDescending(x => x.ValidFrom)
             .FirstOrDefaultAsync(ct);
