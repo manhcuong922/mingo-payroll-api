@@ -43,6 +43,47 @@ public class UserRepository : IUserRepository
             .Include(u => u.EmployeeInformation)
             .ToListAsync(cancellationToken);
 
+    public async Task<(IReadOnlyList<User> Items, int TotalCount)> GetPagedAsync(
+        string? keyword,
+        int? roleId,
+        int? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Users
+            .AsNoTracking()
+            .Include(u => u.Role)
+            .Include(u => u.EmployeeInformation)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            query = query.Where(u =>
+                EF.Functions.Like(u.FullName, $"%{kw}%") ||
+                EF.Functions.Like(u.Username, $"%{kw}%") ||
+                EF.Functions.Like(u.EmployeeCode, $"%{kw}%") ||
+                EF.Functions.Like(u.Email, $"%{kw}%"));
+        }
+
+        if (roleId.HasValue)
+            query = query.Where(u => u.RoleId == roleId.Value);
+
+        if (status.HasValue)
+            query = query.Where(u => u.Status == status.Value);
+
+        var total = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderBy(u => u.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
     public Task<bool> EmployeeCodeExistsAsync(string employeeCode, int? excludeUserId = null, CancellationToken cancellationToken = default)
     {
         var query = _context.Users.AsNoTracking().Where(u => u.EmployeeCode == employeeCode);
@@ -69,6 +110,12 @@ public class UserRepository : IUserRepository
 
     public Task<bool> RoleExistsAsync(int roleId, CancellationToken cancellationToken = default) =>
         _context.Roles.AsNoTracking().AnyAsync(r => r.Id == roleId, cancellationToken);
+
+    public Task<int> CountByEmployeeCodePrefixAsync(string prefix, CancellationToken cancellationToken = default) =>
+        _context.Users
+            .AsNoTracking()
+            .Where(u => u.EmployeeCode.StartsWith(prefix))
+            .CountAsync(cancellationToken);
 
     public async Task<int> AddAsync(User entity, CancellationToken cancellationToken = default)
     {

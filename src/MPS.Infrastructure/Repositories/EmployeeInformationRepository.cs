@@ -36,11 +36,65 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .Include(e => e.User)
             .ToListAsync(cancellationToken);
 
+    public async Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
+        string? keyword,
+        int? positionId,
+        bool? hasAccount,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.EmployeeInformations
+            .AsNoTracking()
+            .Include(e => e.Position)
+            .Include(e => e.User)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            query = query.Where(e =>
+                EF.Functions.Like(e.FullName, $"%{kw}%") ||
+                EF.Functions.Like(e.CitizenId, $"%{kw}%") ||
+                (e.Email != null && EF.Functions.Like(e.Email, $"%{kw}%")));
+        }
+
+        if (positionId.HasValue)
+            query = query.Where(e => e.PositionId == positionId.Value);
+
+        if (hasAccount.HasValue)
+            query = hasAccount.Value
+                ? query.Where(e => e.UserId != null)
+                : query.Where(e => e.UserId == null);
+
+        var total = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderBy(e => e.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default) =>
         _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId, cancellationToken);
 
     public Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken = default) =>
         _context.Positions.AsNoTracking().AnyAsync(p => p.Id == positionId, cancellationToken);
+
+    public Task<bool> EmailExistsAsync(string email, int? excludeId = null, CancellationToken cancellationToken = default) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.Email == email && (excludeId == null || e.Id != excludeId), cancellationToken);
+
+    public Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default) =>
+        _context.Positions
+            .AsNoTracking()
+            .Where(p => p.Id == positionId)
+            .Select(p => p.Code)
+            .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<int> AddAsync(EmployeeInformation entity, CancellationToken cancellationToken = default)
     {
@@ -82,6 +136,10 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         existing.BankNumber = entity.BankNumber;
         existing.PositionId = entity.PositionId;
         existing.DependentsNo = entity.DependentsNo;
+        existing.GuardianFullName = entity.GuardianFullName;
+        existing.GuardianRelationship = entity.GuardianRelationship;
+        existing.GuardianPhoneNo = entity.GuardianPhoneNo;
+        existing.GuardianAddress = entity.GuardianAddress;
 
         await _context.SaveChangesAsync(cancellationToken);
         return true;

@@ -20,4 +20,8 @@ public record EmployeeInformationCreateCommand(
     int DependentsNo,
     string? TaxNo,
     string? SocialNo,
-    string? BankNumber) : IRequest<int>;
+    string? BankNumber,
+    string? GuardianFullName,
+    string? GuardianRelationship,
+    string? GuardianPhoneNo,
+    string? GuardianAddress) : IRequest<int>;

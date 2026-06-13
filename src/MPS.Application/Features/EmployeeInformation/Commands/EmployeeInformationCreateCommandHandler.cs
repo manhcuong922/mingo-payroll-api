@@ -33,6 +33,10 @@ public class EmployeeInformationCreateCommandHandler : IRequestHandler<EmployeeI
             TaxNo = request.TaxNo?.Trim(),
             SocialNo = request.SocialNo?.Trim(),
             BankNumber = request.BankNumber?.Trim(),
+            GuardianFullName = request.GuardianFullName?.Trim(),
+            GuardianRelationship = request.GuardianRelationship?.Trim(),
+            GuardianPhoneNo = request.GuardianPhoneNo?.Trim(),
+            GuardianAddress = request.GuardianAddress?.Trim(),
         };
 
         return await _repository.AddAsync(entity, cancellationToken);

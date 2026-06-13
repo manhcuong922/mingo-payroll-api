@@ -42,6 +42,35 @@ public class ContractTemplateRepository : IContractTemplateRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<ContractTemplate> Items, int TotalCount)> GetPagedAsync(
+        ContractCategory? category,
+        ContractSubtype? subtype,
+        bool? isActive,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<ContractTemplate> query = _context.ContractTemplates.AsNoTracking();
+        if (category.HasValue)
+            query = query.Where(t => t.ContractCategory == category.Value);
+        if (subtype.HasValue)
+            query = query.Where(t => t.ContractSubtype == subtype.Value);
+        if (isActive.HasValue)
+            query = query.Where(t => t.IsActive == isActive.Value);
+
+        var total = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .Include(t => t.TemplateFile)
+            .OrderBy(t => t.Name)
+            .ThenByDescending(t => t.Version)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
     public async Task<int> AddAsync(ContractTemplate entity, CancellationToken cancellationToken = default)
     {
         entity.CreatedAt = DateTime.UtcNow;

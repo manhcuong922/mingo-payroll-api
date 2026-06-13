@@ -21,4 +21,8 @@ public record EmployeeInformationUpdateCommand(
     int DependentsNo,
     string? TaxNo,
     string? SocialNo,
-    string? BankNumber) : IRequest<bool>;
+    string? BankNumber,
+    string? GuardianFullName,
+    string? GuardianRelationship,
+    string? GuardianPhoneNo,
+    string? GuardianAddress) : IRequest<bool>;

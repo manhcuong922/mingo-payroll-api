@@ -9,10 +9,19 @@ public interface IUserRepository
     Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken = default);
 
+    Task<(IReadOnlyList<User> Items, int TotalCount)> GetPagedAsync(
+        string? keyword,
+        int? roleId,
+        int? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
     Task<bool> EmployeeCodeExistsAsync(string employeeCode, int? excludeUserId = null, CancellationToken cancellationToken = default);
     Task<bool> UsernameExistsAsync(string username, int? excludeUserId = null, CancellationToken cancellationToken = default);
     Task<bool> EmailExistsAsync(string email, int? excludeUserId = null, CancellationToken cancellationToken = default);
     Task<bool> RoleExistsAsync(int roleId, CancellationToken cancellationToken = default);
+    Task<int> CountByEmployeeCodePrefixAsync(string prefix, CancellationToken cancellationToken = default);
 
     Task<int> AddAsync(User entity, CancellationToken cancellationToken = default);
 

@@ -27,6 +27,11 @@ public class EmployeeInformationEntityConfiguration : IEntityTypeConfiguration<E
         builder.Property(e => e.SocialNo).HasMaxLength(50);
         builder.Property(e => e.BankNumber).HasMaxLength(50);
 
+        builder.Property(e => e.GuardianFullName).HasMaxLength(200);
+        builder.Property(e => e.GuardianRelationship).HasMaxLength(50);
+        builder.Property(e => e.GuardianPhoneNo).HasMaxLength(20);
+        builder.Property(e => e.GuardianAddress).HasMaxLength(500);
+
         // 1 CCCD = 1 EI row
         builder.HasIndex(e => e.CitizenId).IsUnique();
 

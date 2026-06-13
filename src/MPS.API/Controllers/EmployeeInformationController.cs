@@ -27,6 +27,25 @@ public class EmployeeInformationController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("paged")]
+    [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] string? keyword,
+        [FromQuery] int? positionId,
+        [FromQuery] bool? hasAccount,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+        var result = await _mediator.Send(
+            new EmployeeInformationGetPagedQuery(keyword, positionId, hasAccount, page, pageSize),
+            cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
@@ -59,7 +78,11 @@ public class EmployeeInformationController : ControllerBase
             request.DependentsNo,
             request.TaxNo,
             request.SocialNo,
-            request.BankNumber);
+            request.BankNumber,
+            request.GuardianFullName,
+            request.GuardianRelationship,
+            request.GuardianPhoneNo,
+            request.GuardianAddress);
 
         var id = await _mediator.Send(command, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
@@ -90,7 +113,11 @@ public class EmployeeInformationController : ControllerBase
             request.DependentsNo,
             request.TaxNo,
             request.SocialNo,
-            request.BankNumber);
+            request.BankNumber,
+            request.GuardianFullName,
+            request.GuardianRelationship,
+            request.GuardianPhoneNo,
+            request.GuardianAddress);
 
         var updated = await _mediator.Send(command, cancellationToken);
         if (!updated) return NotFound();

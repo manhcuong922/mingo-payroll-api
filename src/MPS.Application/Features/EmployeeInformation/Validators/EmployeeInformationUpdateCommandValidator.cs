@@ -22,6 +22,25 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
         RuleFor(x => x.PermanentAddress)
             .NotEmpty().WithMessage("PermanentAddress is required.");
 
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("Email is not a valid email address.")
+            .MaximumLength(255).WithMessage("Email must not exceed 255 characters.")
+            .MustAsync(async (cmd, email, ct) =>
+                string.IsNullOrWhiteSpace(email) || !await repository.EmailExistsAsync(email!.Trim(), cmd.Id, ct))
+            .WithMessage("Email is already used by another employee.");
+
+        When(x => !string.IsNullOrWhiteSpace(x.GuardianFullName) || !string.IsNullOrWhiteSpace(x.GuardianPhoneNo), () =>
+        {
+            RuleFor(x => x.GuardianFullName)
+                .NotEmpty().WithMessage("GuardianFullName is required when guardian info is provided.")
+                .MaximumLength(200);
+
+            RuleFor(x => x.GuardianPhoneNo)
+                .NotEmpty().WithMessage("GuardianPhoneNo is required when guardian info is provided.")
+                .MaximumLength(20);
+        });
+
         RuleFor(x => x.UserId)
             .Must(userId => userId == null || userId > 0)
             .WithMessage("UserId must be greater than 0 when specified.")

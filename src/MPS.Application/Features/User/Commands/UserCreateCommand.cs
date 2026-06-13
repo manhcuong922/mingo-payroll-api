@@ -3,13 +3,7 @@ using MediatR;
 namespace MPS.Application.Features.User.Commands;
 
 public record UserCreateCommand(
-    string EmployeeCode,
-    string FullName,
-    int RoleId,
-    string Username,
-    string Password,
-    string Email,
-    DateTime Dob,
-    string PhoneNo,
-    int Status,
-    int? EmployeeInformationId = null) : IRequest<int>;
+    int EmployeeInformationId,
+    int RoleId) : IRequest<UserCreateResult>;
+
+public sealed record UserCreateResult(int UserId, string EmployeeCode, string Username);

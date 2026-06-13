@@ -33,6 +33,24 @@ public class ContractTemplateController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("paged")]
+    [HasPermission(Permissions.ContractTemplateReadAll)]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] ContractCategory? category,
+        [FromQuery] ContractSubtype? subtype,
+        [FromQuery] bool? isActive,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+        var result = await _mediator.Send(
+            new ContractTemplateGetPagedQuery(category, subtype, isActive, page, pageSize), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [HasPermission(Permissions.ContractTemplateReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)

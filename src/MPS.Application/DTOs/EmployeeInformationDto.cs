@@ -20,4 +20,8 @@ public record EmployeeInformationDto(
     int DependentsNo,
     string? TaxNo,
     string? SocialNo,
-    string? BankNumber);
+    string? BankNumber,
+    string? GuardianFullName,
+    string? GuardianRelationship,
+    string? GuardianPhoneNo,
+    string? GuardianAddress);

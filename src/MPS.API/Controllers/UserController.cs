@@ -27,6 +27,25 @@ public class UserController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("paged")]
+    [HasPermission(Permissions.UserReadAll)]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] string? keyword,
+        [FromQuery] int? roleId,
+        [FromQuery] int? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+        var result = await _mediator.Send(
+            new UserGetPagedQuery(keyword, roleId, status, page, pageSize),
+            cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [HasAnyPermission(Permissions.UserReadAll, Permissions.UserReadSelf)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
@@ -51,20 +70,12 @@ public class UserController : ControllerBase
         [FromBody] CreateUserRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new UserCreateCommand(
-            request.EmployeeCode,
-            request.FullName,
-            request.RoleId,
-            request.Username,
-            request.Password,
-            request.Email,
-            request.Dob,
-            request.PhoneNo,
-            request.Status,
-            request.EmployeeInformationId);
-
-        var id = await _mediator.Send(command, cancellationToken);
-        return CreatedAtAction(nameof(GetById), new { id }, new { id });
+        var command = new UserCreateCommand(request.EmployeeInformationId, request.RoleId);
+        var result = await _mediator.Send(command, cancellationToken);
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = result.UserId },
+            new { id = result.UserId, employeeCode = result.EmployeeCode, username = result.Username });
     }
 
     [HttpPut("{id:int}")]

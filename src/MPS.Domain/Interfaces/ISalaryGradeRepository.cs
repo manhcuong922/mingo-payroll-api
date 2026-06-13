@@ -6,6 +6,13 @@ public interface ISalaryGradeRepository
 {
     Task<SalaryGrade?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SalaryGrade>> GetAllAsync(int? positionId, bool? isActive, CancellationToken cancellationToken = default);
+
+    Task<(IReadOnlyList<SalaryGrade> Items, int TotalCount)> GetPagedAsync(
+        int? positionId,
+        bool? isActive,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
     Task<SalaryGrade?> GetActiveByPositionAndLevelAsync(int positionId, int level, CancellationToken cancellationToken = default);
     Task<bool> HasContractsAsync(int id, CancellationToken cancellationToken = default);
 
