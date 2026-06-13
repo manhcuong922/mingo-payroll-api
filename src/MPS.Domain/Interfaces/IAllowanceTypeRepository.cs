@@ -6,6 +6,7 @@ public interface IAllowanceTypeRepository
 {
     Task<AllowanceType?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AllowanceType>> GetAllAsync(bool? isActive, CancellationToken cancellationToken = default);
+    Task<(IReadOnlyList<AllowanceType> Items, int TotalCount)> GetPagedAsync(bool? isActive, int page, int pageSize, CancellationToken cancellationToken = default);
     Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken cancellationToken = default);
     Task<int> AddAsync(AllowanceType entity, CancellationToken cancellationToken = default);
     Task<bool> UpdateAsync(AllowanceType entity, CancellationToken cancellationToken = default);

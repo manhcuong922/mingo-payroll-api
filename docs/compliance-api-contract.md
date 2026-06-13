@@ -17,7 +17,7 @@
 | `true`   | `false`    | bất kỳ            | **Active** — đang áp dụng | ❌ Không |
 | `false`  | `false`    | > today           | **Pending** — chờ hiệu lực | ✅ Được |
 | `false`  | `false`    | ≤ today           | **Historical** — đã qua | ❌ Không |
-| `false`  | `true`     | bất kỳ            | **Archived** — đã xóa mềm | ❌ Không |
+| `false`  | `true`     | bất kỳ            | **Archived** — chỉ còn trên historical, pending đã bị hard delete | ❌ Không |
 
 ### Trường `applyImmediately` khi POST
 
@@ -170,7 +170,7 @@ Chỉ cho phép với **pending** version.
 
 ### DELETE /api/compliance/social-insurance-rates/{id}
 
-Chỉ xóa **pending** version (soft delete → isArchived=true).
+Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
 
 **Response 204** — **Response 409** (nếu cố xóa active/historical)
 
@@ -273,6 +273,8 @@ Response 200: `PitRegulationDto`
 
 ### DELETE /api/compliance/pit-regulations/{id}
 
+Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
+
 **Response 204** — **Response 409** (nếu cố xóa active/historical)
 
 ---
@@ -362,6 +364,8 @@ Response 200: `OtRateDto`
 **Response 204** — **Response 409** (nếu cố sửa active/historical)
 
 ### DELETE /api/compliance/ot-rates/{id}
+
+Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
 
 **Response 204** — **Response 409** (nếu cố xóa active/historical)
 
@@ -454,11 +458,133 @@ Response 200: `MinimumWageDto`
 
 ### DELETE /api/compliance/minimum-wages/{id}
 
+Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
+
 **Response 204** — **Response 409** (nếu cố xóa active/historical)
 
 ---
 
-## 5. Ngưỡng miễn thuế phụ cấp — Allowance Exempt Threshold
+## 5. Loại phụ cấp — Allowance Type
+
+**Base:** `GET|POST /api/allowance-types`  
+**Item:**  `GET|PUT|DELETE /api/allowance-types/{id}`  
+**Paged:** `GET /api/allowance-types/paged`
+
+### Response DTO (dùng cho mọi GET)
+
+```json
+{
+  "id": 1,
+  "code": "MEAL",
+  "name": "Phụ cấp ăn ca",
+  "description": null,
+  "defaultAmount": 730000.00,
+  "isBhxhBase": false,
+  "isTaxable": false,
+  "isActive": true,
+  "createdAt": "2026-06-13T00:00:00Z",
+  "updatedAt": null
+}
+```
+
+**Giải thích các trường:**
+
+| Trường | Ý nghĩa |
+|--------|---------|
+| `code` | Mã định danh duy nhất, alphanumeric + `-` `_`, tối đa 50 ký tự |
+| `defaultAmount` | Số tiền mặc định điền sẵn khi thêm vào hợp đồng (nullable) |
+| `isBhxhBase` | `true` = tính vào căn cứ đóng BHXH |
+| `isTaxable` | `true` = tính vào thu nhập chịu thuế TNCN |
+| `isActive` | `false` = ẩn, không thể thêm vào hợp đồng mới |
+
+### GET /api/allowance-types?isActive=true
+
+```
+Query: ?isActive=true|false   (bỏ trống = lấy tất cả)
+Response 200: AllowanceTypeDto[]
+```
+
+### GET /api/allowance-types/paged
+
+```
+Query: ?page=1&pageSize=10&isActive=true
+  page     — mặc định 1
+  pageSize — mặc định 10, tối đa 100
+  isActive — tuỳ chọn
+Response 200:
+```
+
+```json
+{
+  "items": [ /* AllowanceTypeDto[] */ ],
+  "total": 25,
+  "page": 1,
+  "size": 10
+}
+```
+
+### GET /api/allowance-types/{id}
+
+```
+Response 200: AllowanceTypeDto
+Response 404: (nếu không tìm thấy)
+```
+
+### POST /api/allowance-types
+
+```json
+{
+  "code": "HOUSING",
+  "name": "Phụ cấp nhà ở",
+  "description": null,
+  "defaultAmount": 1000000.00,
+  "isBhxhBase": false,
+  "isTaxable": true,
+  "isActive": true
+}
+```
+
+**Validation:**
+- `code`: bắt buộc, unique, tối đa 50 ký tự, chỉ chứa chữ/số/`-`/`_`
+- `name`: bắt buộc, tối đa 200 ký tự
+- `description`: tối đa 500 ký tự
+- `defaultAmount`: ≥ 0 nếu có
+
+**Response 201:** `{ "id": 4 }`
+
+### PUT /api/allowance-types/{id}
+
+```json
+{
+  "code": "HOUSING",
+  "name": "Phụ cấp nhà ở (cập nhật)",
+  "description": "Hỗ trợ chi phí thuê nhà",
+  "defaultAmount": 1200000.00,
+  "isBhxhBase": false,
+  "isTaxable": true,
+  "isActive": true
+}
+```
+
+**Response 204** — **Response 404** (nếu không tìm thấy)
+
+### DELETE /api/allowance-types/{id}
+
+> Smart delete: hard delete nếu chưa có hợp đồng nào dùng, soft delete (isActive=false) nếu đã được tham chiếu.
+
+**Response 204** — **Response 404** (nếu không tìm thấy)
+
+**AllowanceTypeId mặc định sau seed:**
+
+| Id | Code  | Tên | isBhxhBase | isTaxable |
+|----|-------|-----|------------|-----------|
+| 1  | MEAL  | Phụ cấp ăn ca | false | false |
+| 2  | FUEL  | Phụ cấp xăng xe | false | false |
+| 3  | PHONE | Phụ cấp điện thoại | false | false |
+
+---
+
+## 7. Ngưỡng miễn thuế phụ cấp — Allowance Exempt Threshold
 
 **Base:** `GET|POST /api/compliance/allowance-exempt-thresholds`  
 **Item:**  `GET|PUT|DELETE /api/compliance/allowance-exempt-thresholds/{id}`
@@ -578,11 +704,13 @@ Ví dụ **ActualAllocation** (xăng xe, điện thoại):
 
 ### DELETE /api/compliance/allowance-exempt-thresholds/{id}
 
+Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
+
 **Response 204** — **Response 409** (nếu cố xóa active/historical)
 
 ---
 
-## 6. Hằng số luật lao động — Labor Law Constants
+## 8. Hằng số luật lao động — Labor Law Constants
 
 **Base:** `GET|POST /api/compliance/labor-law-constants`  
 **Item:**  `GET|PUT|DELETE /api/compliance/labor-law-constants/{id}`
@@ -678,6 +806,8 @@ Response 200: `LaborLawConstantsDto`
 
 ### DELETE /api/compliance/labor-law-constants/{id}
 
+Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
+
 **Response 204** — **Response 409** (nếu cố xóa active/historical)
 
 ---
@@ -730,6 +860,7 @@ Các message 409 có thể gặp:
 - `"Active version is read-only. Create a new version instead."`
 - `"Historical version is read-only — immutable for audit integrity."`
 - `"Cannot delete active version. It is currently in effect."`
+- `"Cannot delete historical version — immutable for audit integrity."`
 - `"A pending version with ValidFrom=2027-01-01 already exists."`
 
 ---
@@ -741,13 +872,14 @@ Tôi cần build UI cho module "Quản lý các quy định pháp luật" (Compl
 
 ## Tổng quan module
 
-Module gồm 6 sub-features, mỗi cái có chức năng giống nhau:
+Module gồm 8 sub-features, mỗi cái có chức năng giống nhau:
 1. Tỷ lệ BHXH/BHYT/BHTN (Social Insurance Rate)
 2. Biểu thuế TNCN (PIT Regulation) — có bảng bracket thuế lồng trong
 3. Hệ số làm thêm giờ (OT Rate) — có danh sách loại OT
 4. Lương tối thiểu vùng (Minimum Wage) — có 4 vùng I/II/III/IV
-5. Ngưỡng miễn thuế phụ cấp (Allowance Exempt Threshold) — filter theo loại phụ cấp
-6. Hằng số luật lao động (Labor Law Constants)
+5. Loại phụ cấp (Allowance Type) — CRUD + phân trang
+6. Ngưỡng miễn thuế phụ cấp (Allowance Exempt Threshold) — filter theo loại phụ cấp
+7. Hằng số luật lao động (Labor Law Constants)
 
 ## Lifecycle của mỗi quy định
 
@@ -800,8 +932,14 @@ Mỗi quy định có "version" với 4 trạng thái:
 - 4 vùng cố định: I/II/III/IV
 - Input số tiền VND có format 1,000,000
 
+### Allowance Type:
+- Bảng CRUD đơn giản, có phân trang (GET /paged)
+- Cột badge IsActive (green/gray)
+- Xóa: hiển thị info "Sẽ vô hiệu hoá thay vì xóa nếu đang được dùng trong hợp đồng"
+- Không có versionning — không cần badge Active/Pending/Historical
+
 ### Allowance Exempt Threshold:
-- Dropdown chọn AllowanceType (MEAL/FUEL/PHONE)
+- Dropdown chọn AllowanceType (MEAL/FUEL/PHONE) — load từ GET /api/allowance-types?isActive=true
 - Radio ThresholdMode: FixedAmount / ActualAllocation
 - Ẩn/hiện field MonthlyExemptAmount theo mode
 - Không có ngày hiệu lực + applyImmediately (luôn apply ngay)

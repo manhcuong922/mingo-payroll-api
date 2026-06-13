@@ -29,6 +29,22 @@ public class AllowanceTypeController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("paged")]
+    [HasPermission(Permissions.AllowanceTypeReadAll)]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] bool? isActive,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+        var result = await _mediator.Send(
+            new AllowanceTypeGetPagedQuery(isActive, page, pageSize), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [HasPermission(Permissions.AllowanceTypeReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)

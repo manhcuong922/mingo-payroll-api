@@ -30,6 +30,23 @@ public class AllowanceTypeRepository : IAllowanceTypeRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<AllowanceType> Items, int TotalCount)> GetPagedAsync(
+        bool? isActive, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var query = _context.AllowanceTypes.AsNoTracking();
+        if (isActive.HasValue)
+            query = query.Where(a => a.IsActive == isActive.Value);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(a => a.Code)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
     public Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken cancellationToken = default)
     {
         var normalized = code.Trim();

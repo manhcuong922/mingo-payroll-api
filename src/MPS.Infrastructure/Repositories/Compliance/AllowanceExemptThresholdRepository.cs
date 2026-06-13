@@ -143,13 +143,10 @@ public sealed class AllowanceExemptThresholdRepository : IAllowanceExemptThresho
 
         if (target.IsActive)
             throw new ConflictException("Cannot delete active version. It is currently in effect.");
-        if (target.IsArchived)
-            throw new ConflictException("Version is already archived.");
         if (target.ValidFrom <= today)
             throw new ConflictException("Cannot delete historical version — immutable for audit integrity.");
 
-        target.IsArchived = true;
-        target.UpdatedAt = _clock.UtcNow;
+        _context.AllowanceExemptThresholdVersions.Remove(target);
         await _context.SaveChangesAsync(ct);
         return true;
     }
