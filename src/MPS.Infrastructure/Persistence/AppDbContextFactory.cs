@@ -14,7 +14,7 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
 
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? "Server=localhost;Database=HRM_Database;User Id=sa;Password=123;TrustServerCertificate=True;";
+            ?? "Server=localhost;Database=MPS_Db;User Id=admin;Password=123;TrustServerCertificate=True;";
 
         optionsBuilder.UseSqlServer(connectionString);
 

@@ -205,6 +205,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 unique: true,
                 filter: "[IsActive] = 1");
 
+            migrationBuilder.Sql("UPDATE Positions SET Code = 'POS' + CAST(Id AS NVARCHAR(10)) WHERE Code = ''");
+
             migrationBuilder.CreateIndex(
                 name: "IX_Positions_Code",
                 table: "Positions",
