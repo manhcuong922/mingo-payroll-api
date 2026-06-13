@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
+using MPS.Domain.Entities.Compliance;
 
 namespace MPS.Infrastructure.Persistence;
 
@@ -29,6 +30,17 @@ public class AppDbContext : DbContext
     public DbSet<ContractAllowance> ContractAllowances => Set<ContractAllowance>();
     public DbSet<ContractAppendix> ContractAppendices => Set<ContractAppendix>();
     public DbSet<ContractTermination> ContractTerminations => Set<ContractTermination>();
+
+    // Compliance module (FE-06)
+    public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
+    public DbSet<PitRegulationVersion> PitRegulationVersions => Set<PitRegulationVersion>();
+    public DbSet<PitBracket> PitBrackets => Set<PitBracket>();
+    public DbSet<OtRateVersion> OtRateVersions => Set<OtRateVersion>();
+    public DbSet<OtRateEntry> OtRateEntries => Set<OtRateEntry>();
+    public DbSet<MinimumWageVersion> MinimumWageVersions => Set<MinimumWageVersion>();
+    public DbSet<MinimumWageRegion> MinimumWageRegions => Set<MinimumWageRegion>();
+    public DbSet<AllowanceExemptThresholdVersion> AllowanceExemptThresholdVersions => Set<AllowanceExemptThresholdVersion>();
+    public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLawConstantsVersion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

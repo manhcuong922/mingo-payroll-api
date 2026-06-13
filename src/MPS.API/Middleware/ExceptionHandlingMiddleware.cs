@@ -43,6 +43,20 @@ public class ExceptionHandlingMiddleware
                 contractId = caex.ContractId,
             }));
         }
+        catch (NotFoundException nfex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(
+                JsonSerializer.Serialize(new { error = nfex.Message }));
+        }
+        catch (ConflictException cfex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(
+                JsonSerializer.Serialize(new { error = cfex.Message }));
+        }
         catch (DomainValidationException dvex)
         {
             context.Response.StatusCode = (int)HttpStatusCode.BadRequest;

@@ -76,6 +76,538 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("AllowanceTypes", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllowanceTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("AppliesToSocial")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AppliesToTax")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal?>("MonthlyExemptAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ThresholdMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("AllowanceTypeId", "IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1 AND [IsArchived] = 0");
+
+                    b.HasIndex("AllowanceTypeId", "ValidFrom")
+                        .IsUnique();
+
+                    b.ToTable("AllowanceExemptThresholdVersions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.LaborLawConstantsVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AnnualLeaveMinDays")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("NightShiftSurchargePercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<decimal>("OvertimeMaxHoursPerDay")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<int>("OvertimeMaxHoursPerYear")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ProbationSalaryMinPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("StandardWorkingDaysPerMonth")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<decimal>("StandardWorkingHoursPerDay")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1 AND [IsArchived] = 0");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ValidFrom")
+                        .IsUnique();
+
+                    b.ToTable("LaborLawConstantsVersions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageRegion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountPerMonth")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("MinimumWageVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RegionCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MinimumWageVersionId", "RegionCode")
+                        .IsUnique();
+
+                    b.ToTable("MinimumWageRegions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MinimumWageRegion_Amount", "[AmountPerMonth] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1 AND [IsArchived] = 0");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ValidFrom")
+                        .IsUnique();
+
+                    b.ToTable("MinimumWageVersions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.OtRateEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("OtRateVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OtType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OtRateVersionId", "OtType")
+                        .IsUnique();
+
+                    b.ToTable("OtRateEntries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OtRateEntry_Rate", "[Rate] > 0 AND [Rate] <= 10");
+                        });
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.OtRateVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1 AND [IsArchived] = 0");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ValidFrom")
+                        .IsUnique();
+
+                    b.ToTable("OtRateVersions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitBracket", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("LowerBound")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PitRegulationVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("decimal(5,4)");
+
+                    b.Property<decimal?>("UpperBound")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PitRegulationVersionId", "Order")
+                        .IsUnique();
+
+                    b.ToTable("PitBrackets", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PitBracket_LowerBound", "[LowerBound] >= 0");
+
+                            t.HasCheckConstraint("CK_PitBracket_Order", "[Order] >= 1");
+
+                            t.HasCheckConstraint("CK_PitBracket_Rate", "[Rate] >= 0 AND [Rate] <= 1");
+                        });
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitRegulationVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("DependentDeductionAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<decimal>("PersonalDeductionAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1 AND [IsArchived] = 0");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ValidFrom")
+                        .IsUnique();
+
+                    b.ToTable("PitRegulationVersions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceRateVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("EmployeeHealthPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployeeSocialPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployeeUnemploymentPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployerHealthPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployerOccupationalDiseasePercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployerSocialPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployerUnemploymentPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployerUnionFundPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<decimal>("ReferenceAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("SocialCapMultiplier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(20);
+
+                    b.Property<int>("UnemploymentCapMultiplier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(20);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1 AND [IsArchived] = 0");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ValidFrom")
+                        .IsUnique();
+
+                    b.ToTable("SocialInsuranceRateVersions", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Contract", b =>
                 {
                     b.Property<int>("Id")
@@ -2723,6 +3255,155 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("PerformanceMetricRoles", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.AllowanceType", "AllowanceType")
+                        .WithMany()
+                        .HasForeignKey("AllowanceTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AllowanceType");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.LaborLawConstantsVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageRegion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Compliance.MinimumWageVersion", "MinimumWageVersion")
+                        .WithMany("Regions")
+                        .HasForeignKey("MinimumWageVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MinimumWageVersion");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.OtRateEntry", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Compliance.OtRateVersion", "OtRateVersion")
+                        .WithMany("Entries")
+                        .HasForeignKey("OtRateVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OtRateVersion");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.OtRateVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitBracket", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Compliance.PitRegulationVersion", "PitRegulationVersion")
+                        .WithMany("Brackets")
+                        .HasForeignKey("PitRegulationVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PitRegulationVersion");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitRegulationVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceRateVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Contract", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
@@ -2990,6 +3671,21 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.AllowanceType", b =>
                 {
                     b.Navigation("ContractAllowances");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageVersion", b =>
+                {
+                    b.Navigation("Regions");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.OtRateVersion", b =>
+                {
+                    b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitRegulationVersion", b =>
+                {
+                    b.Navigation("Brackets");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Contract", b =>
