@@ -1,0 +1,27 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/out/
+
+# IDE / VCS
+.git/
+.github/
+.idea/
+.vs/
+.vscode/
+
+# Tests không cần khi publish API
+tests/
+
+# Local config & secrets — không bao giờ đưa vào image
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/appsettings.*.local.json
+.env
+.env.*
+
+# Infra & docs không liên quan tới build image
+deploy/
+minio-setup/
+docs/
+*.md

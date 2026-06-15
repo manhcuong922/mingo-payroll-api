@@ -204,9 +204,14 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ===== Seed default admin =====
+// ===== Apply migrations + seed default admin =====
 using (var scope = app.Services.CreateScope())
 {
+    // Tự áp các migration còn thiếu khi khởi động (idempotent).
+    // Cần thiết cho deploy container: DB mới sẽ được tạo schema đầy đủ.
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
 }
