@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MPS.Application.Common.Interfaces;
+using MPS.Domain.Interfaces;
 using MPS.Application.Features.Contract.Commands;
 using MPS.Application.Features.Contract.Common;
 using MPS.Application.Features.ContractTermination.Commands;
@@ -57,6 +58,9 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         var activateHandler = new ActivateContractCommandHandler(
             repo, lookup, storage, currentUser.Object,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IEmailSender>(),
             NullLogger<ActivateContractCommandHandler>.Instance);
         var pdf = BuildFakePdfBytes();
         await activateHandler.Handle(new ActivateContractCommand(
@@ -296,6 +300,9 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         var activateHandler = new ActivateContractCommandHandler(
             repo, lookup, storage, currentUser.Object,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IEmailSender>(),
             NullLogger<ActivateContractCommandHandler>.Instance);
         var pdf = BuildFakePdfBytes();
         await activateHandler.Handle(new ActivateContractCommand(
@@ -407,6 +414,9 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         var activateHandler = new ActivateContractCommandHandler(
             repo, lookup, storage, currentUser,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IEmailSender>(),
             NullLogger<ActivateContractCommandHandler>.Instance);
         var pdf = BuildFakePdfBytes();
         await activateHandler.Handle(new ActivateContractCommand(

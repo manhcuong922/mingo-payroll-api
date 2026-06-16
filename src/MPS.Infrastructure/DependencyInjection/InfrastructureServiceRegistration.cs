@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Minio;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Options;
+using MPS.Application.Common.Services;
 using MPS.Application.Options;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.BackgroundJobs;
@@ -84,6 +85,9 @@ public static class InfrastructureServiceRegistration
             services.AddScoped<IEmailSender, SmtpEmailSender>();
         else
             services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+        // Cross-cutting application services
+        services.AddScoped<IEmployeeAccountProvisioner, EmployeeAccountProvisioner>();
 
         // Document rendering (DOCX merge)
         services.AddScoped<IDocumentRenderingService, DocxMergeService>();

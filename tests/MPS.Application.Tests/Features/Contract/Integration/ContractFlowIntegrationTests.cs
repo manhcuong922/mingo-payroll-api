@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MPS.Application.Common.Interfaces;
+using MPS.Domain.Interfaces;
 using MPS.Application.Features.Contract.Commands;
 using MPS.Application.Features.Contract.Common;
 using MPS.Application.Features.Contract.Queries;
@@ -208,6 +209,9 @@ public sealed class ContractFlowIntegrationTests
 
         var activateHandler = new ActivateContractCommandHandler(
             repo, lookup, storage, currentUser.Object,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IEmailSender>(),
             NullLogger<ActivateContractCommandHandler>.Instance);
 
         var fileId = await activateHandler.Handle(new ActivateContractCommand(
@@ -280,6 +284,9 @@ public sealed class ContractFlowIntegrationTests
 
         var activateHandler = new ActivateContractCommandHandler(
             repo, lookup, storage, currentUser.Object,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IEmailSender>(),
             NullLogger<ActivateContractCommandHandler>.Instance);
 
         var pdfBytes = BuildFakePdfBytes();
@@ -326,6 +333,9 @@ public sealed class ContractFlowIntegrationTests
 
         var activateHandler = new ActivateContractCommandHandler(
             repo, lookup, storage, currentUser.Object,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IEmailSender>(),
             NullLogger<ActivateContractCommandHandler>.Instance);
 
         var v1Bytes = BuildFakePdfBytes("v1 content");

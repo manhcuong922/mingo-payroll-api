@@ -77,6 +77,7 @@ namespace MPS.Infrastructure.Repositories
 
             existing.Code = entity.Code;
             existing.Name = entity.Name;
+            existing.Description = entity.Description;
 
             await _context.SaveChangesAsync(cancellationToken);
             return true;
