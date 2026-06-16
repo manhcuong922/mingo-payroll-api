@@ -65,15 +65,18 @@ ufw status
 
 ## BƯỚC 2 — Tạo SSH key cho GitHub Actions
 
-Trên **máy local**, sinh cặp khóa riêng cho CI:
-```bash
-ssh-keygen -t ed25519 -C "github-actions-mingo" -f ./mingo_deploy_key -N ""
-# Tạo ra: mingo_deploy_key (private) + mingo_deploy_key.pub (public)
+Trên **máy local** (Windows — mở CMD hoặc PowerShell), sinh cặp khóa riêng cho CI.
+Lệnh tạo key tại **thư mục đang đứng**; ví dụ đứng ở `C:\Users\Admin`:
+```cmd
+cd C:\Users\Admin
+ssh-keygen -t ed25519 -C "github-actions-mingo" -f mingo_deploy_key -N ""
+# Tạo ra: C:\Users\Admin\mingo_deploy_key (private) + mingo_deploy_key.pub (public)
 ```
+> Ghi nhớ đường dẫn đầy đủ tới key (vd `C:\Users\Admin\mingo_deploy_key`) để dùng cho `-i` ở các lệnh sau.
 
 Xem public key để copy:
-```bash
-cat mingo_deploy_key.pub
+```cmd
+type C:\Users\Admin\mingo_deploy_key.pub
 ```
 
 Đưa public key lên VPS (user deploy):
@@ -85,27 +88,32 @@ chmod 600 ~/.ssh/authorized_keys
 exit
 ```
 
-Test:
-```bash
-ssh -i ./mingo_deploy_key deploy@103.179.173.60 "echo OK"
+Test (in ra `OK` mà không hỏi password là key đúng):
+```cmd
+ssh -i C:\Users\Admin\mingo_deploy_key deploy@103.179.173.60 "echo OK"
 ```
 
 ---
 
-## BƯỚC 3 — Cho VPS quyền pull image từ GHCR
+## BƯỚC 3 — Cho VPS quyền pull image từ GHCR (login bằng PAT)
 
-Image GHCR mặc định private. Chọn **một** cách:
+Image GHCR mặc định private. Ta cho VPS đăng nhập GHCR bằng Personal Access Token —
+cách này **chạy được ngay cả khi package còn Private và chưa tồn tại**, nên lần deploy
+đầu tiên pull được luôn (không phải chờ build xong rồi flip Public).
 
-**Cách A (khuyến nghị) — để package public:** sau lần build đầu (Bước 6), vào
-`https://github.com/users/luans1mple/packages` → mở `mingo-payroll-api` và `mingo-payroll-ui`
-→ Package settings → Change visibility → **Public**. Khi đó VPS pull không cần đăng nhập.
-
-**Cách B — login GHCR trên VPS bằng PAT:**
-1. GitHub → Settings → Developer settings → Personal access tokens (classic) → scope **`read:packages`**.
-2. Trên VPS (user deploy):
+1. Tạo token: GitHub → Settings → Developer settings → Personal access tokens (classic)
+   → Generate new token → tích scope **`read:packages`** → Generate → copy token.
+2. SSH vào VPS bằng user `deploy`, rồi login (token nhập 1 lần, Docker lưu lại):
 ```bash
-echo "DÁN_PAT" | docker login ghcr.io -u luans1mple --password-stdin
+echo "<YOUR_GITHUB_TOKEN>" | docker login ghcr.io -u luans1mple --password-stdin
+# Thành công sẽ in: Login Succeeded
 ```
+
+> Các lần `docker pull` / `./deploy.sh` sau đó tự dùng credential đã lưu, không cần login lại.
+>
+> **(Tùy chọn)** Sau khi đã build lần đầu, nếu muốn khỏi quản lý token: vào
+> `https://github.com/users/luans1mple/packages` → mở từng package → Package settings →
+> Change visibility → **Public**. Khi public thì VPS pull không cần login.
 
 ---
 
@@ -125,7 +133,7 @@ nslookup api.operix.fun
 ```
 
 ---
-
+ đến đây r
 ## BƯỚC 5 — Cấu hình GitHub
 
 ### 5.1. Secrets — tạo ở **cả 2 repo** (API và UI)
@@ -155,18 +163,27 @@ Settings → Branches → Add rule, branch name pattern = `dev`:
 
 ---
 
-## BƯỚC 6 — Deploy lần đầu (thủ công, để kiểm chứng)
+## BƯỚC 6 — Deploy lần đầu (chuẩn bị thủ công + kích hoạt pipeline)
 
 ### 6.1. Copy thư mục deploy lên VPS
-Từ máy local, trong thư mục repo **API**:
-```bash
-scp -i ./mingo_deploy_key -r deploy/* deploy@103.179.173.60:/opt/mingo/
+Từ máy local (chạy được ở bất kỳ thư mục nào nhờ dùng đường dẫn đầy đủ).
+Lưu ý: kết thúc nguồn bằng `/.` để copy **cả file ẩn `.env.example`**:
+```cmd
+scp -i C:\Users\Admin\mingo_deploy_key -r E:/projects/sep490/mingo-payroll-api/deploy/. deploy@103.179.173.60:/opt/mingo/
 ```
+Kiểm tra đã lên đủ (phải thấy cả `.env.example`):
+```cmd
+ssh -i C:\Users\Admin\mingo_deploy_key deploy@103.179.173.60 "ls -la /opt/mingo"
+```
+> Nếu thiếu `.env.example`, copy riêng:
+> ```cmd
+> scp -i C:\Users\Admin\mingo_deploy_key E:/projects/sep490/mingo-payroll-api/deploy/.env.example deploy@103.179.173.60:/opt/mingo/
+> ```
 
 ### 6.2. Tạo file .env trên VPS
 `.env.example` đã được điền sẵn đầy đủ giá trị thật, chỉ cần copy:
-```bash
-ssh -i ./mingo_deploy_key deploy@103.179.173.60
+```cmd
+ssh -i C:\Users\Admin\mingo_deploy_key deploy@103.179.173.60
 cd /opt/mingo
 cp .env.example .env
 ```
@@ -174,15 +191,25 @@ cp .env.example .env
 > `MSSQL_SA_PASSWORD` khớp password trong `ConnectionStrings__DefaultConnection`,
 > `MINIO_BACKEND_PASSWORD` khớp `Minio__SecretKey`.)
 
-### 6.3. Chạy deploy
-```bash
-cd /opt/mingo
-chmod +x deploy.sh
-./deploy.sh
-```
+### 6.3. Kích hoạt build + deploy lần đầu
+Image chưa tồn tại trên GHCR cho tới khi pipeline build. Vì vậy **để pipeline lo trọn gói**:
+bạn **merge `dev`→`main`** (hoặc vào tab **Actions** → workflow `Build & Deploy API` → **Run workflow**).
+
+Khi đó workflow sẽ tự động: build image → push lên GHCR → scp lại `deploy/*` lên VPS →
+SSH chạy `./deploy.sh` (pull image vừa push rồi `up -d`). Làm tương tự cho repo UI.
+
+> Điều kiện để bước SSH deploy thành công: VPS đã có sẵn `/opt/mingo/.env` (Bước 6.2),
+> đã login GHCR (Bước 3), và GitHub Secrets đã đặt (Bước 5.1).
+>
+> Nếu muốn deploy tay (vd sau khi đã có image trên GHCR), trên VPS chạy:
+> ```bash
+> cd /opt/mingo && chmod +x deploy.sh && ./deploy.sh
+> ```
 
 ### 6.4. Theo dõi
+Xem tiến trình build ở tab **Actions** của repo. Khi job xanh, SSH vào VPS kiểm tra container:
 ```bash
+cd /opt/mingo
 docker compose -f docker-compose.prod.yml ps                 # tất cả Up/healthy
 docker compose -f docker-compose.prod.yml logs -f api        # migration + seed admin
 docker compose -f docker-compose.prod.yml logs minio-init    # "=== MinIO bootstrap done ==="
@@ -203,15 +230,13 @@ curl -i https://api.operix.fun/health/minio     # mong đợi HTTP 200
 
 ---
 
-## BƯỚC 8 — Bật tự động (CI/CD)
+## BƯỚC 8 — Quy trình vận hành hằng ngày (CI/CD)
 
-Sau khi deploy thủ công OK:
-1. Đảm bảo code (Dockerfile + `.github/workflows/`) đã có trên `main` của cả 2 repo.
-2. Quy trình hằng ngày:
-   - Team mở **PR vào `dev`** → CI chạy → bạn **review & approve** → merge vào `dev`.
-   - Khi muốn phát hành: bạn **merge `dev`→`main`**.
-   - Push vào `main` tự động build + deploy lên VPS (xem tab **Actions**).
-3. Kiểm tra container trên VPS đã đổi sang image mới.
+Sau khi lần deploy đầu (Bước 6) đã chạy ổn, pipeline hoạt động liên tục:
+1. Team mở **PR vào `dev`** → CI tự chạy (build/test) → bạn **review & approve** → merge vào `dev`.
+2. Khi muốn phát hành: bạn **merge `dev`→`main`**.
+3. Push vào `main` tự động build → push GHCR → SSH deploy lên VPS (theo dõi tab **Actions**).
+4. Kiểm tra container trên VPS đã đổi sang image mới (so tag/thời điểm khởi động).
 
 ---
 
