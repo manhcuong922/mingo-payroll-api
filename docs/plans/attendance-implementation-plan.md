@@ -7,11 +7,20 @@
 **SRS mapping:** FT-09, FT-10, FT-11, FT-12, FT-13, FT-14
 **Priority:** Must
 **Primary actors:** Department Manager (DM), HR Manager, Employee
-**Last updated:** 2026-06-16 (**Rev 6** — tách rule preset tái sử dụng + hệ số chỉnh tự do trên từng ca, gỡ ràng buộc "sàn theo luật")
+**Last updated:** 2026-06-16 (**Rev 7** — denormalize ShiftTemplate, thêm Code/Break/StandardDays + gộp hệ số tính công lên thẳng entity)
 
 ---
 
 ## Changelog
+
+### Rev 7 (2026-06-16) — Denormalize ShiftTemplate + thêm Code/Break/StandardDays
+
+- **`ShiftTemplate` giờ phẳng** — thêm `Code` (UNIQUE, HR/DM nhập tay), `BreakStartTime`/`BreakEndTime` (nullable, 1 break duy nhất), `StandardDays` (mặc định 1.0), và 3 hệ số work rate denorm (`WorkRateNormal`/`WorkRateWeeklyRest`/`WorkRateHoliday`) trực tiếp trên entity.
+- **`StandardHours`** = giờ làm thực (đã trừ break) — Payroll Engine dùng trực tiếp, không cần trừ lại.
+- **`AttendanceRule` preset đơn giản hóa** — gộp 3 hệ số vào thẳng entity, bỏ entity con `AttendanceRulePayRule`.
+- **Bỏ entity `ShiftPayRule` và `AttendanceRulePayRule`** — tổng còn **9 entities** (giảm 2).
+- **OT rate** vẫn dùng hệ số cứng 150/200/300% theo `DayType` (BR-4, DC-16) — không lưu trong `ShiftTemplate`.
+- **BR mới BR-28** (validate break time), **BR-29** (Code unique + regex). **BR-22**, **BR-26** sửa theo cấu trúc denorm.
 
 ### Rev 6 (2026-06-16) — Rule preset tái sử dụng + hệ số chỉnh per-shift (vẫn floor theo luật)
 
@@ -94,24 +103,44 @@ Module này build từ đầu. Không có entity, repository, hay feature folder
 
 ---
 
-## 2. Data model — 11 entities mới
+## 2. Data model — 9 entities mới
 
 ### 2.1. `ShiftTemplate` (ca làm việc mẫu — FT-09)
 
 | Column | Type | Ghi chú |
 |---|---|---|
 | `Id` | int PK | |
-| `Name` | nvarchar(100) NOT NULL | UNIQUE |
-| `StartTime` | time NOT NULL | |
-| `EndTime` | time NOT NULL | CHECK EndTime > StartTime (validator) |
-| `StandardHours` | decimal(4,2) NOT NULL | |
+| `Code` | nvarchar(20) NOT NULL | **Mã ca làm** — UNIQUE; HR/DM nhập tay (VD `CA-SANG`, `CA-DEM`). Regex `^[A-Z0-9-]{2,20}$` (BR-29) |
+| `Name` | nvarchar(100) NOT NULL | **Tên ca** — UNIQUE |
+| `StartTime` | time NOT NULL | **Giờ bắt đầu** |
+| `EndTime` | time NOT NULL | **Giờ kết thúc** — CHECK `EndTime > StartTime` (validator) |
+| `BreakStartTime` | time NULL | **Giờ bắt đầu nghỉ giữa ca** — set kèm `BreakEndTime` (BR-28) |
+| `BreakEndTime` | time NULL | **Giờ kết thúc nghỉ giữa ca** — `BreakEnd > BreakStart`, cả 2 ∈ `[StartTime, EndTime]` (BR-28) |
+| `StandardHours` | decimal(4,2) NOT NULL | **Giờ công** — đã trừ break. VD ca 08:00–17:00 nghỉ 12:00–13:00 ⇒ `StandardHours = 8.0` |
+| `StandardDays` | decimal(3,2) NOT NULL DEFAULT 1.00 | **Ngày công** — quy đổi; mặc định 1.0; ca nửa ngày = 0.5 |
+| `WorkRateNormal` | decimal(4,2) NOT NULL DEFAULT 1.00 | **Hệ số ngày thường** — floor ≥ 1.00 (Điều 98, BR-22) |
+| `WorkRateWeeklyRest` | decimal(4,2) NOT NULL DEFAULT 2.00 | **Hệ số ngày nghỉ tuần** — floor ≥ 2.00 |
+| `WorkRateHoliday` | decimal(4,2) NOT NULL DEFAULT 3.00 | **Hệ số ngày lễ** — floor ≥ 3.00 |
 | `IsNightShift` | bit NOT NULL DEFAULT 0 | Cờ ca đêm (Điều 106) → +30% theo luật |
-| `AppliedAttendanceRuleId` | int? FK → AttendanceRules | Preset đã apply khi tạo/sửa ca lần gần nhất. Chỉ để tracking — sau khi snapshot, sửa preset KHÔNG ảnh hưởng `ShiftPayRule` của ca này (BR-27) |
+| `AppliedAttendanceRuleId` | int? FK → AttendanceRules | Preset đã apply gần nhất (tracking). Snapshot semantics — sửa preset KHÔNG retroactive (BR-27) |
 | `IsActive` | bit NOT NULL DEFAULT 1 | soft delete |
 | `Notes` | nvarchar(500) NULL | |
 | Audit fields | | `CreatedAt`, `UpdatedAt`, `CreatedByUserId` → Users, `UpdatedByUserId` → Users |
 
-**Navigation:** `ICollection<ShiftPayRule> PayRules` — bộ rule tính công theo `DayType`, **owned by shift** (snapshot, sửa được trực tiếp).
+**Validator bổ sung:**
+- `Code` UNIQUE toàn DB, khớp regex `^[A-Z0-9-]{2,20}$` (BR-29).
+- Nếu `BreakStartTime` hoặc `BreakEndTime` ≠ null ⇒ cả 2 phải set, `BreakEndTime > BreakStartTime`, và cả 2 nằm trong `[StartTime, EndTime]` (BR-28).
+- `StandardHours ≤ (EndTime - StartTime) - (BreakEnd - BreakStart)` — sanity check.
+- 3 hệ số work rate floor theo Điều 98 (BR-22).
+
+> **Payroll Engine khi tính lương:**
+> 1. Resolve `DayType` cho `WorkDate` qua `IDayTypeResolver` (BR-23)
+> 2. Lookup `ShiftTemplate` của NV tại ngày đó, chọn rate theo `DayType`:
+>    - `Normal` → `WorkRateNormal`
+>    - `WeeklyRestDay` → `WorkRateWeeklyRest`
+>    - `PublicHoliday` → `PublicHolidays.PayRateOverride` (nếu có) hoặc `WorkRateHoliday`
+>    - `PaidLeaveDay` → `WorkRateNormal` (mặc định: nghỉ phép có lương trả 100%)
+> 3. Tiền công = `rate × StandardHours × HourlyRate` cho ngày công. OT vẫn dùng hệ số cứng 150/200/300% theo `DayType` (BR-4, DC-16) — không lưu OT rate trong `ShiftTemplate`.
 
 ### 2.1.1. `AttendanceRules` (preset rule chấm công — thư viện tái sử dụng)
 
@@ -120,47 +149,13 @@ Module này build từ đầu. Không có entity, repository, hay feature folder
 | `Id` | int PK | |
 | `Name` | nvarchar(150) NOT NULL | UNIQUE — ví dụ "Standard Office", "Night Shift Premium", "Weekend Heavy" |
 | `Description` | nvarchar(500) NULL | |
+| `WorkRateNormal` | decimal(4,2) NOT NULL | Floor ≥ 1.00 (BR-22) |
+| `WorkRateWeeklyRest` | decimal(4,2) NOT NULL | Floor ≥ 2.00 (BR-22) |
+| `WorkRateHoliday` | decimal(4,2) NOT NULL | Floor ≥ 3.00 (BR-22) |
 | `IsActive` | bit NOT NULL DEFAULT 1 | Soft delete |
 | Audit fields | | |
 
-**Navigation:** `ICollection<AttendanceRulePayRule> PayRules`.
-
-> **Mục đích:** thư viện preset do HR/DM tạo & quản lý trong **chính module Attendance** (không phải Compliance/Law). Khi tạo ca mới, DM chọn 1 preset → handler snapshot 4 dòng vào `ShiftPayRule`. Cũng có thể bỏ qua preset và chỉnh hệ số trực tiếp trên ca.
-
-### 2.1.2. `AttendanceRulePayRules` (4 dòng hệ số của 1 preset)
-
-| Column | Type | Ghi chú |
-|---|---|---|
-| `Id` | int PK | |
-| `AttendanceRuleId` | int FK → AttendanceRules | ON DELETE CASCADE |
-| `DayType` | tinyint NOT NULL | Xem enum `DayType` |
-| `WorkRateMultiplier` | decimal(4,2) NOT NULL | Floor theo luật (xem BR-22) |
-| `OtRateMultiplier` | decimal(4,2) NOT NULL | Floor theo luật (xem BR-22) |
-| Audit fields | | |
-
-**Constraints:** UNIQUE `(AttendanceRuleId, DayType)` — 1 preset có đúng 4 dòng.
-
-### 2.1.3. `ShiftPayRules` (hệ số tính công per-shift — owned by `ShiftTemplate`)
-
-| Column | Type | Ghi chú |
-|---|---|---|
-| `Id` | int PK | |
-| `ShiftTemplateId` | int FK → ShiftTemplates | ON DELETE CASCADE |
-| `DayType` | tinyint NOT NULL | Xem enum `DayType` — `Normal=1, WeeklyRestDay=2, PublicHoliday=3, PaidLeaveDay=4` |
-| `WorkRateMultiplier` | decimal(4,2) NOT NULL | Floor theo luật (xem BR-22). Có thể vượt lên nếu công ty muốn trả cao hơn |
-| `OtRateMultiplier` | decimal(4,2) NOT NULL | Floor theo luật (xem BR-22) |
-| `Notes` | nvarchar(300) NULL | |
-| Audit fields | | |
-
-**Constraints:** UNIQUE `(ShiftTemplateId, DayType)` — 1 rule duy nhất cho mỗi cặp (ca, loại ngày). Khi tạo `ShiftTemplate`:
-- Nếu DM chọn `AppliedAttendanceRuleId` ⇒ handler copy 4 dòng từ `AttendanceRulePayRules` sang `ShiftPayRules`.
-- Nếu không chọn preset ⇒ seed mặc định theo luật (Normal=1.0/1.5, WeeklyRestDay=2.0/2.0, PublicHoliday=3.0/3.0, PaidLeaveDay=1.0/1.5).
-- Sau đó DM/HR có thể chỉnh `ShiftPayRule` trực tiếp qua `UpdateShiftPayRulesCommand` (vẫn floor theo luật).
-
-> **Payroll Engine khi tính lương:**
-> 1. Resolve `DayType` cho `WorkDate` (xem BR-23 — qua `IDayTypeResolver`)
-> 2. Lookup `ShiftPayRule` của ca NV đó tại ngày đó (không lookup `AttendanceRule` — đó chỉ là preset source)
-> 3. Áp `WorkRateMultiplier × StandardHours + OtRateMultiplier × OtHours`
+> **Mục đích:** thư viện preset do HR/DM tạo & quản lý trong **chính module Attendance** (không phải Compliance/Law). Khi tạo/sửa ca, DM chọn 1 preset ⇒ handler **snapshot** 3 cột rate từ preset sang `ShiftTemplate` (BR-26). Sau snapshot, sửa preset KHÔNG ảnh hưởng ca đã apply (BR-27). DM cũng có thể bỏ qua preset và set 3 cột rate trực tiếp.
 
 ### 2.2. `EmployeeShiftAssignments` (phân ca theo ngày — FT-09)
 
@@ -184,7 +179,7 @@ Module này build từ đầu. Không có entity, repository, hay feature folder
 | `Name` | nvarchar(200) NOT NULL | |
 | `HolidayDate` | date NOT NULL | UNIQUE |
 | `Category` | tinyint NOT NULL | `Statutory=1` (luật định, Điều 112), `Company=2` (công ty tự thêm) |
-| `PayRateOverride` | decimal(4,2) NULL | Nếu NULL → dùng `ShiftPayRule[PublicHoliday].WorkRateMultiplier`. Set khi công ty muốn rate cao hơn luật cho lễ cụ thể |
+| `PayRateOverride` | decimal(4,2) NULL | Nếu NULL → dùng `ShiftTemplate.WorkRateHoliday`. Set khi công ty muốn rate cao hơn luật cho lễ cụ thể |
 | `Description` | nvarchar(500) NULL | |
 | Audit fields | | |
 
@@ -230,12 +225,12 @@ Module này build từ đầu. Không có entity, repository, hay feature folder
 **Constraints:** INDEX `(EmployeeInformationId, WorkDate, Status)`.
 
 > **Khi Approved:** handler upsert `AttendanceRecord` với `Status = Present` nếu chưa có.
-> **Hệ số OT KHÔNG lưu trong `OvertimeRequests`.** Tại thời điểm tính lương, Payroll Engine:
+> **Hệ số OT KHÔNG lưu trong `OvertimeRequests` và KHÔNG lưu trong `ShiftTemplate`.** Tại thời điểm tính lương, Payroll Engine áp **hệ số OT cứng theo `DayType`** (BR-4, DC-16): `Normal=150%`, `WeeklyRestDay=200%`, `PublicHoliday=300%`.
 > 1. Resolve `DayType` của `WorkDate` qua `IDayTypeResolver` (BR-23)
-> 2. Lookup `ShiftPayRule[ShiftTemplateId, DayType].OtRateMultiplier` của ca NV đó (Rev 5/6 — source of truth cho **tiền** OT)
-> 3. Áp `OtRateMultiplier × OtHours × HourlyRate`
+> 2. Lookup hệ số OT theo `DayType` (cứng)
+> 3. Áp `OtMultiplier × OtHours × HourlyRate`
 >
-> Lưu ý phân biệt với **giờ** OT: các giới hạn 50%/40h/200h/300h (Điều 107) sống ở `LaborLawConstants` và được check tại lúc **tạo/duyệt** `OvertimeRequest` (BR-6, BR-7, BR-8) — không liên quan tới `ShiftPayRule`.
+> Lưu ý phân biệt với **giờ** OT: các giới hạn 50%/40h/200h/300h (Điều 107) sống ở `LaborLawConstants` và được check tại lúc **tạo/duyệt** `OvertimeRequest` (BR-6, BR-7, BR-8).
 
 ### 2.6. `LeaveRequests` (yêu cầu nghỉ phép — FT-13)
 
@@ -347,7 +342,7 @@ public enum LeaveType
 // AdjustmentStatus.cs
 public enum AdjustmentStatus { Pending = 1, Approved = 2, Rejected = 3 }
 
-// DayType.cs — phân loại ngày để tra ShiftPayRule (Rev 5)
+// DayType.cs — phân loại ngày để chọn rate trên ShiftTemplate (Rev 5/7)
 public enum DayType
 {
     Normal = 1,           // Ngày thường (Mon–Sat không trùng lễ)
@@ -457,12 +452,14 @@ Bổ sung vào `src/MPS.Domain/Constants/Permissions.cs` và `PermissionIds` (ID
 | BR-19 | `Maternity.TotalDays ≤ 180` (6 tháng cơ bản). Trường hợp sinh đôi/sinh ba (Điều 139.2) ⇒ HR dùng `OverrideAttendanceCommand` để cấp thêm ngày thủ công; nghỉ thêm sau thai sản phải tạo `LeaveRequest` riêng với `LeaveType = Unpaid` | **Điều 139.1 + 139.3** | `DomainValidationException` |
 | BR-20 | `PaternityOnWifeBirth`: chỉ áp dụng nếu `EmployeeInformation.Gender = Male`; `TotalDays ≤ 14` | **Điều 139.5** | `DomainValidationException` |
 | BR-21 | OT request phải có flag `EmployeeConsent = true` (Employee tự tạo ⇒ ngầm đồng ý) | **Điều 107.2.a** | N/A (model contract) |
-| BR-22 | Mỗi `ShiftTemplate` (và mỗi `AttendanceRule`) phải có đủ 4 dòng pay rule (Normal/WeeklyRestDay/PublicHoliday/PaidLeaveDay). Floor cứng theo **Điều 98**: `Normal.WorkRate ≥ 1.00 & OtRate ≥ 1.50`, `WeeklyRestDay.WorkRate ≥ 2.00 & OtRate ≥ 2.00`, `PublicHoliday.WorkRate ≥ 3.00 & OtRate ≥ 3.00`, `PaidLeaveDay.WorkRate ≥ 1.00 & OtRate ≥ 1.50`. Được phép set cao hơn floor (chính sách công ty), không được thấp hơn. Áp cho cả `Create/Update ShiftTemplate`, `Create/Update AttendanceRule`, `UpdateShiftPayRulesCommand`. | **Điều 98** | `DomainValidationException` |
+| BR-22 | `ShiftTemplate` và `AttendanceRule` phải set đủ 3 hệ số work rate. Floor cứng theo **Điều 98**: `WorkRateNormal ≥ 1.00`, `WorkRateWeeklyRest ≥ 2.00`, `WorkRateHoliday ≥ 3.00`. Được phép set cao hơn floor (chính sách công ty), không được thấp hơn. Áp cho `Create/Update ShiftTemplate`, `Create/Update AttendanceRule`, `UpdateShiftPayRatesCommand`. | **Điều 98** | `DomainValidationException` |
 | BR-23 | **Day-type resolution** thứ tự ưu tiên: (1) `WorkDate` ∈ `PublicHolidays` → `PublicHoliday`; (2) `AttendanceRecord.Status == OnLeave` và `LeaveRequest.IsPaid == true` → `PaidLeaveDay`; (3) `DayOfWeek == Sunday` (mặc định) → `WeeklyRestDay`; (4) còn lại → `Normal`. Logic đóng gói trong `IDayTypeResolver` (Application layer) để Payroll Engine dùng chung. | **Điều 98 + 112** | N/A (service) |
 | BR-24 | `BulkAssignShiftCommand` phải idempotent — nếu `(employeeId, workDate)` đã tồn tại với cùng `ShiftTemplateId` ⇒ skip; nếu khác `ShiftTemplateId` ⇒ throw `ConflictException` (DM phải xóa assignment cũ trước). | FT-09 | `ConflictException` |
 | BR-25 | `ApplyWeeklyPatternCommand` không ghi đè ngày đã có `AttendanceRecord` (đã chấm công). Skip ngày đó và trả về danh sách `SkippedDates` trong response. | FT-09 | N/A (skip + report) |
-| BR-26 | Khi `CreateShiftTemplateCommand` / `UpdateShiftTemplateCommand` có `AppliedAttendanceRuleId`, handler **snapshot** 4 dòng từ `AttendanceRulePayRules` sang `ShiftPayRules` của ca. Sau snapshot, 2 bộ rời nhau hoàn toàn. | FT-09 | N/A (logic handler) |
-| BR-27 | `UpdateAttendanceRuleCommand` / `UpdateAttendanceRulePayRulesCommand` KHÔNG retroactive — không sửa `ShiftPayRule` của các ca đã apply preset đó. Nếu DM muốn re-apply, phải gọi `ReapplyAttendanceRuleCommand` (explicit). | FT-09 | N/A (snapshot semantics) |
+| BR-26 | Khi `CreateShiftTemplateCommand` / `UpdateShiftTemplateCommand` có `AppliedAttendanceRuleId`, handler **snapshot** 3 cột `WorkRateNormal`/`WorkRateWeeklyRest`/`WorkRateHoliday` từ preset sang `ShiftTemplate`. Sau snapshot, 2 bộ rời nhau hoàn toàn. | FT-09 | N/A (logic handler) |
+| BR-27 | `UpdateAttendanceRuleCommand` KHÔNG retroactive — không sửa rate của các ca đã apply preset đó. Nếu DM muốn re-apply, phải gọi `ReapplyAttendanceRuleCommand` (explicit). | FT-09 | N/A (snapshot semantics) |
+| BR-28 | Nếu `BreakStartTime` hoặc `BreakEndTime` ≠ null ⇒ cả 2 phải set, `BreakEndTime > BreakStartTime`, và cả 2 nằm trong `[StartTime, EndTime]`. | FT-09 | `ValidationException` |
+| BR-29 | `ShiftTemplate.Code` UNIQUE toàn DB, khớp regex `^[A-Z0-9-]{2,20}$`. | FT-09 | `ValidationException` / `ConflictException` |
 
 ---
 
@@ -475,10 +472,8 @@ Bổ sung vào `src/MPS.Domain/Constants/Permissions.cs` và `PermissionIds` (ID
 ```
 src/MPS.Domain/
   Entities/Attendance/
-    ShiftTemplate.cs
-    AttendanceRule.cs              ← NEW (Rev 6)
-    AttendanceRulePayRule.cs       ← NEW (Rev 6)
-    ShiftPayRule.cs                ← NEW (Rev 5)
+    ShiftTemplate.cs               ← Rev 7: thêm Code/Break/StandardDays/3 rate columns
+    AttendanceRule.cs              ← Rev 7: gộp 3 rate columns vào thẳng entity
     EmployeeShiftAssignment.cs
     PublicHoliday.cs
     AttendanceRecord.cs
@@ -494,8 +489,8 @@ src/MPS.Domain/
 
 src/MPS.Infrastructure/
   Persistence/
-    Configurations/Attendance/   ← 11 configuration files
-    AppDbContext.cs               ← thêm 11 DbSet
+    Configurations/Attendance/   ← 9 configuration files
+    AppDbContext.cs               ← thêm 9 DbSet
 ```
 
 **Migration:**
@@ -506,25 +501,24 @@ dotnet ef migrations add AddAttendanceModule --project src/MPS.Infrastructure --
 Seed 27 permissions + role-permission rows trong cùng migration (dùng `migrationBuilder.InsertData`) — theo cách Compliance module đã seed permissions.
 
 **Deliverables:**
-- [ ] 11 entity + 7 enum files build được
+- [ ] 9 entity + 7 enum files build được
 - [ ] `Permissions.cs` có IDs 89–119
-- [ ] 11 EF config files; 11 DbSet trong `AppDbContext`
+- [ ] 9 EF config files; 9 DbSet trong `AppDbContext`
 - [ ] `dotnet build` 0 errors
-- [ ] Migration tạo đúng 11 bảng + constraints + seed permissions
-- [ ] Migration seed 1–2 `AttendanceRule` mặc định ("Standard" với floor luật, "Night Premium" với +30%) để DM có sẵn để chọn
+- [ ] Migration tạo đúng 9 bảng + constraints (incl. UNIQUE `ShiftTemplate.Code`) + seed permissions
+- [ ] Migration seed 1–2 `AttendanceRule` mặc định ("Standard" floor luật `1.0/2.0/3.0`, "Night Premium" `1.3/2.0/3.0`) để DM có sẵn để chọn
 - [ ] `IDayTypeResolver` interface (Application/Common/Interfaces) + impl (Infrastructure) — BR-23
 
 ---
 
-### Phase 2 — Repositories (11 interfaces + implementations)
+### Phase 2 — Repositories (9 interfaces + implementations)
 
 Tạo trong `src/MPS.Infrastructure/Repositories/Attendance/`. Đăng ký `AddScoped` trong `InfrastructureServiceRegistration.cs`.
 
 | Repository | Methods cốt lõi |
 |---|---|
-| `IShiftTemplateRepository` | `GetPagedAsync`, `GetByIdAsync` (include `PayRules`), `ExistsByNameAsync`, `AddAsync`, `UpdateAsync` |
-| `IAttendanceRuleRepository` | `GetPagedAsync`, `GetByIdAsync` (include `PayRules`), `ExistsByNameAsync`, `AddAsync`, `UpdateAsync`, `IsUsedByAnyShiftAsync(ruleId)` |
-| `IShiftPayRuleRepository` | `GetByShiftTemplateAsync`, `GetByKeyAsync(shiftTemplateId, dayType)`, `BulkUpsertAsync` |
+| `IShiftTemplateRepository` | `GetPagedAsync`, `GetByIdAsync`, `ExistsByNameAsync`, `ExistsByCodeAsync`, `AddAsync`, `UpdateAsync` |
+| `IAttendanceRuleRepository` | `GetPagedAsync`, `GetByIdAsync`, `ExistsByNameAsync`, `AddAsync`, `UpdateAsync`, `IsUsedByAnyShiftAsync(ruleId)` |
 | `IEmployeeShiftAssignmentRepository` | `GetByKeyAsync(employeeId, date)`, `GetByEmployeeRangeAsync`, `GetByDateAsync`, `AddAsync`, `DeleteAsync` |
 | `IPublicHolidayRepository` | `GetByYearAsync`, `IsHolidayAsync(date)`, `ExistsByDateAsync`, `AddAsync`, `UpdateAsync`, `DeleteAsync` |
 | `IAttendanceRecordRepository` | `GetByKeyAsync(employeeId, date)`, `GetByEmployeeRangeAsync`, `GetSummaryPagedAsync`, `UpsertAsync`, `BulkUpsertAsync` |
@@ -533,7 +527,7 @@ Tạo trong `src/MPS.Infrastructure/Repositories/Attendance/`. Đăng ký `AddSc
 | `ILeaveBalanceRepository` | `GetByKeyAsync(employeeId, year, leaveType)`, `GetByEmployeeAsync(employeeId, year)`, `AddAsync`, `UpdateAsync` |
 | `IAttendanceAdjustmentRepository` | `GetPagedAsync`, `GetByIdAsync`, `GetPendingByRecordIdAsync`, `AddAsync`, `UpdateAsync` |
 
-**Deliverables:** 11 interface + 11 implementation files; `dotnet build` pass.
+**Deliverables:** 9 interface + 9 implementation files; `dotnet build` pass.
 
 ---
 
@@ -541,28 +535,27 @@ Tạo trong `src/MPS.Infrastructure/Repositories/Attendance/`. Đăng ký `AddSc
 
 **Commands/Queries** trong `src/MPS.Application/Features/Attendance/AttendanceRule/`, `.../ShiftTemplate/`, `.../EmployeeShift/`:
 
-#### AttendanceRule (preset library — Rev 6)
+#### AttendanceRule (preset library — Rev 6/7)
 
 | | Mô tả |
 |---|---|
-| `CreateAttendanceRuleCommand` | Tạo preset mới với 4 dòng pay rule. Validate floor luật (BR-22). Tên unique |
-| `UpdateAttendanceRuleCommand` | Sửa metadata (Name/Description/IsActive). KHÔNG retroactive lên `ShiftPayRule` đã snapshot (BR-27) |
-| `UpdateAttendanceRulePayRulesCommand` | Sửa 4 dòng pay rule của preset. Floor luật. KHÔNG retroactive (BR-27) |
+| `CreateAttendanceRuleCommand` | Tạo preset mới (Name + 3 cột rate `WorkRateNormal/WeeklyRest/Holiday`). Validate floor luật (BR-22). Tên unique |
+| `UpdateAttendanceRuleCommand` | Sửa metadata + 3 cột rate. Floor luật. KHÔNG retroactive lên `ShiftTemplate` đã snapshot (BR-27) |
 | `DeleteAttendanceRuleCommand` | Soft delete (`IsActive=false`) nếu đang được tham chiếu bởi ca; hard delete nếu chưa |
-| `ReapplyAttendanceRuleCommand` | Explicit re-snapshot preset → `ShiftPayRule` cho 1 ca cụ thể (input: `shiftTemplateId, attendanceRuleId`). Ghi đè 4 dòng hiện tại của ca |
-| `GetAttendanceRulesQuery` | Paged, filter `isActive?`, include `PayRules` khi `?includeRules=true` |
-| `GetAttendanceRuleByIdQuery` | Detail kèm 4 dòng pay rule + danh sách ca đang dùng (tracking) |
+| `ReapplyAttendanceRuleCommand` | Explicit re-snapshot preset → `ShiftTemplate` cho 1 ca cụ thể (input: `shiftTemplateId, attendanceRuleId`). Ghi đè 3 cột rate hiện tại của ca |
+| `GetAttendanceRulesQuery` | Paged, filter `isActive?` |
+| `GetAttendanceRuleByIdQuery` | Detail + danh sách ca đang dùng (tracking) |
 
 #### ShiftTemplate
 
 | | Mô tả |
 |---|---|
-| `CreateShiftTemplateCommand` | Validate: EndTime > StartTime; tên không trùng. **Logic seed `ShiftPayRule`:** nếu `AppliedAttendanceRuleId` ≠ null ⇒ snapshot từ preset (BR-26); ngược lại ⇒ seed defaults (Normal=1.0/1.5, WeeklyRestDay=2.0/2.0, PublicHoliday=3.0/3.0, PaidLeaveDay=1.0/1.5). Cả 2 nhánh đều validate floor luật (BR-22) |
+| `CreateShiftTemplateCommand` | Validate: `EndTime > StartTime`; `Code` UNIQUE + regex (BR-29); break time (BR-28); tên không trùng. **Logic seed 3 cột rate:** nếu `AppliedAttendanceRuleId` ≠ null ⇒ snapshot từ preset (BR-26); ngược lại ⇒ seed defaults `(1.0, 2.0, 3.0)`. Cả 2 nhánh đều validate floor luật (BR-22) |
 | `UpdateShiftTemplateCommand` | Validate tương tự. Đổi `AppliedAttendanceRuleId` KHÔNG tự re-snapshot — phải gọi `ReapplyAttendanceRuleCommand` để re-snapshot |
-| `UpdateShiftPayRulesCommand` | DM/HR chỉnh `WorkRateMultiplier` / `OtRateMultiplier` cho từng `DayType` trên 1 ca cụ thể; chặn nếu thấp hơn luật (BR-22). Đây là cách edit **trực tiếp**, không cần đụng preset |
-| `DeleteShiftTemplateCommand` | Soft (`IsActive = false`) nếu đang dùng; hard delete (cascade `ShiftPayRules`) nếu chưa assign |
-| `GetShiftTemplatesQuery` | Paged, filter `isActive?`; include `PayRules` khi `?includeRules=true` |
-| `GetShiftTemplateByIdQuery` | Detail kèm 4 `ShiftPayRule` |
+| `UpdateShiftPayRatesCommand` | DM/HR chỉnh 3 cột `WorkRateNormal/WeeklyRest/Holiday` trực tiếp trên 1 ca cụ thể; chặn nếu thấp hơn luật (BR-22). Không cần đụng preset |
+| `DeleteShiftTemplateCommand` | Soft (`IsActive = false`) nếu đang dùng; hard delete nếu chưa assign |
+| `GetShiftTemplatesQuery` | Paged, filter `isActive?` |
+| `GetShiftTemplateByIdQuery` | Detail (3 cột rate đã ở entity gốc) |
 | `AssignShiftCommand` | Check unique (employeeId, workDate) → `ConflictException`; check NV có HĐ Active |
 | `BulkAssignShiftCommand` | Assign 1 NV cho **nhiều ngày** trong 1 lần (input: `employeeId, shiftTemplateId, dates[]`). Idempotent — skip trùng cùng ca, throw nếu trùng khác ca (BR-24). Trả về `{ assigned, skipped }` |
 | `ApplyWeeklyPatternCommand` | Áp pattern tuần (input: `employeeId, shiftTemplateId, daysOfWeek[Mon..Sun], dateRange{from,to}`) — handler enumerate các ngày match `daysOfWeek` trong range, skip ngày đã có `AttendanceRecord` (BR-25). Cho phép NV làm cả tuần, nửa tuần, hay bất kỳ tổ hợp ngày nào |
@@ -580,13 +573,12 @@ Tạo trong `src/MPS.Infrastructure/Repositories/Attendance/`. Đăng ký `AddSc
 | `GET` | `/api/attendance-rules` | `AttendanceRule.Read.All` |
 | `GET` | `/api/attendance-rules/{id}` | `AttendanceRule.Read.All` |
 | `PUT` | `/api/attendance-rules/{id}` | `AttendanceRule.Update.All` |
-| `PUT` | `/api/attendance-rules/{id}/pay-rules` | `AttendanceRule.Update.All` |
 | `DELETE` | `/api/attendance-rules/{id}` | `AttendanceRule.Delete.All` |
 | `POST` | `/api/shift-templates` | `ShiftTemplate.Create.All` |
 | `GET` | `/api/shift-templates` | `ShiftTemplate.Read.All` |
 | `GET` | `/api/shift-templates/{id}` | `ShiftTemplate.Read.All` |
 | `PUT` | `/api/shift-templates/{id}` | `ShiftTemplate.Update.All` |
-| `PUT` | `/api/shift-templates/{id}/pay-rules` | `ShiftTemplate.Update.All` |
+| `PUT` | `/api/shift-templates/{id}/pay-rates` | `ShiftTemplate.Update.All` |
 | `POST` | `/api/shift-templates/{id}/reapply-rule` | `ShiftTemplate.Update.All` |
 | `DELETE` | `/api/shift-templates/{id}` | `ShiftTemplate.Delete.All` |
 | `POST` | `/api/employee-shifts` | `EmployeeShift.Create.All` |
@@ -768,11 +760,11 @@ Tạo trong `src/MPS.Infrastructure/Repositories/Attendance/`. Đăng ký `AddSc
 | `ApproveOvertimeRequestHandlerTests` | Self-approval → fail; approve → `AttendanceRecord` upserted |
 | `ApproveLeaveRequestHandlerTests` | Không đủ số dư → fail; đủ số dư → balance deducted + attendance `OnLeave` |
 | `ApproveAttendanceAdjustmentHandlerTests` | Self-approval → fail; approve → `Original*` fields populated + record overwritten |
-| `CreateShiftTemplateHandlerTests` | Không có preset → seed 4 `ShiftPayRule` defaults (luật); có `AppliedAttendanceRuleId` → snapshot từ preset (BR-26); set `Normal.WorkRate < 1.0` → fail BR-22 |
-| `UpdateShiftPayRulesHandlerTests` | Set `Normal.WorkRate < 1.0` → fail; `WeeklyRest.WorkRate < 2.0` → fail; `PublicHoliday.WorkRate < 3.0` → fail; vượt floor (350%) → pass |
-| `CreateAttendanceRuleHandlerTests` | Tên trùng → `ConflictException`; thiếu 1 trong 4 `DayType` → fail; set dưới floor → fail BR-22 |
-| `UpdateAttendanceRulePayRulesHandlerTests` | Sửa preset KHÔNG ảnh hưởng `ShiftPayRule` của ca đã apply (BR-27) — kiểm tra ca giữ nguyên giá trị cũ |
-| `ReapplyAttendanceRuleHandlerTests` | Explicit re-apply ⇒ ghi đè 4 dòng `ShiftPayRule` của ca từ preset hiện tại |
+| `CreateShiftTemplateHandlerTests` | Không có preset → 3 cột rate seed defaults `(1.0/2.0/3.0)`; có `AppliedAttendanceRuleId` → snapshot 3 cột từ preset (BR-26); set `WorkRateNormal < 1.0` → fail BR-22; `Code` không khớp regex → fail BR-29; `Code` trùng → `ConflictException` (BR-29); break invalid → fail BR-28 |
+| `UpdateShiftPayRatesHandlerTests` | `WorkRateNormal < 1.0` → fail; `WorkRateWeeklyRest < 2.0` → fail; `WorkRateHoliday < 3.0` → fail; vượt floor (350%) → pass |
+| `CreateAttendanceRuleHandlerTests` | Tên trùng → `ConflictException`; set dưới floor (1 trong 3 cột) → fail BR-22 |
+| `UpdateAttendanceRuleHandlerTests` | Sửa preset KHÔNG ảnh hưởng `ShiftTemplate` của ca đã apply (BR-27) — kiểm tra ca giữ nguyên 3 cột rate cũ |
+| `ReapplyAttendanceRuleHandlerTests` | Explicit re-apply ⇒ ghi đè 3 cột rate của `ShiftTemplate` từ preset hiện tại |
 | `BulkAssignShiftHandlerTests` | Trùng cùng ca → skip; trùng khác ca → `ConflictException`; mix → trả về đúng `{assigned, skipped}` |
 | `ApplyWeeklyPatternHandlerTests` | NV làm Mon/Wed/Fri trong 4 tuần → tạo đúng 12 assignment, skip ngày đã có `AttendanceRecord` |
 | `DayTypeResolverTests` | Lễ > PaidLeave > Sunday > Normal — đúng thứ tự ưu tiên (BR-23) |
@@ -793,7 +785,7 @@ Tạo trong `src/MPS.Infrastructure/Repositories/Attendance/`. Đăng ký `AddSc
 ## 7. Folder structure tổng hợp
 
 ```
-src/MPS.Domain/Entities/Attendance/          ← 11 entities (incl. AttendanceRule, AttendanceRulePayRule, ShiftPayRule)
+src/MPS.Domain/Entities/Attendance/          ← 9 entities (Rev 7: ShiftTemplate phẳng, AttendanceRule phẳng)
 src/MPS.Domain/Enums/Attendance/             ← 7 enums (incl. DayType, PublicHolidayCategory)
 src/MPS.Domain/Constants/Permissions.cs     ← update (+31 perms)
 
@@ -803,8 +795,8 @@ src/MPS.Infrastructure/Services/
   DayTypeResolver.cs                         ← impl: lookup PublicHolidays + LeaveRequest
 
 src/MPS.Application/Features/Attendance/
-  AttendanceRule/    Commands/ Queries/ Validators/   ← NEW (Rev 6) — preset CRUD + Reapply
-  ShiftTemplate/     Commands/ Queries/ Validators/   (incl. UpdateShiftPayRulesCommand)
+  AttendanceRule/    Commands/ Queries/ Validators/   ← preset CRUD + Reapply (3 rate columns)
+  ShiftTemplate/     Commands/ Queries/ Validators/   (incl. UpdateShiftPayRatesCommand)
   EmployeeShift/     Commands/ Queries/ Validators/   (incl. BulkAssign + WeeklyPattern)
   PublicHoliday/     Commands/ Queries/ Validators/
   Attendance/        Commands/ Queries/ Validators/
@@ -814,12 +806,12 @@ src/MPS.Application/Features/Attendance/
   AttendanceAdjustment/ Commands/ Queries/ Validators/
 src/MPS.Application/DTOs/Attendance/         ← DTOs
 
-src/MPS.Infrastructure/Persistence/Configurations/Attendance/  ← 11 configs
-src/MPS.Infrastructure/Repositories/Attendance/               ← 11 repos
+src/MPS.Infrastructure/Persistence/Configurations/Attendance/  ← 9 configs
+src/MPS.Infrastructure/Repositories/Attendance/               ← 9 repos
 src/MPS.Infrastructure/Persistence/AppDbContext.cs             ← update
 
 src/MPS.API/Controllers/
-  AttendanceRuleController.cs       ← NEW (Rev 6)
+  AttendanceRuleController.cs
   ShiftTemplateController.cs
   EmployeeShiftController.cs
   PublicHolidayController.cs
@@ -836,28 +828,31 @@ src/MPS.API/Controllers/
 
 | Phase | Nội dung | Ước tính |
 |---|---|---|
-| 1 | Entities + Enums + Permissions + EF + Migration + `IDayTypeResolver` + seed presets | 1.5 ngày |
-| 2 | 11 Repositories | 1.0 ngày |
-| 3 | FT-09 Ca làm việc + `AttendanceRule` preset + `ShiftPayRule` + Bulk/WeeklyPattern assign | 2.0 ngày |
+| 1 | Entities + Enums + Permissions + EF + Migration + `IDayTypeResolver` + seed presets | 1.0 ngày |
+| 2 | 9 Repositories | 1.0 ngày |
+| 3 | FT-09 Ca làm việc (denorm) + `AttendanceRule` preset + Bulk/WeeklyPattern assign | 2.0 ngày |
 | 4 | FT-10 Ngày lễ (kèm `Category`, `PayRateOverride`) | 0.5 ngày |
 | 5 | FT-11 Chấm công hằng ngày | 1.0 ngày |
 | 6 | FT-12 Tăng ca | 1.0 ngày |
 | 7 | FT-13 Nghỉ phép | 1.0 ngày |
 | 8 | FT-14 Điều chỉnh | 1.0 ngày |
-| 9 | Tests (incl. DayTypeResolver, ShiftPayRule, BulkAssign, WeeklyPattern) | 2.5 ngày |
-| **Tổng** | | **~11.5 ngày** |
+| 9 | Tests (incl. DayTypeResolver, ShiftPayRates, BreakValidator, BulkAssign, WeeklyPattern) | 2.5 ngày |
+| **Tổng** | | **~11.0 ngày** |
 
 ---
 
 ## 9. Verification checklist
 
-- [ ] `dotnet ef database update` — 11 bảng mới + permissions 89–119 trong DB
+- [ ] `dotnet ef database update` — 9 bảng mới + permissions 89–119 trong DB
 - [ ] `dotnet build` pass 0 errors 0 warnings
-- [ ] Tạo `AttendanceRule` "Night Premium" (Normal=1.3/1.5) → tạo `ShiftTemplate` apply preset → 4 `ShiftPayRule` được snapshot đúng giá trị preset
+- [ ] Tạo `AttendanceRule` "Night Premium" (1.3/2.0/3.0) → tạo `ShiftTemplate` apply preset → 3 cột rate trên ca được snapshot đúng giá trị preset
 - [ ] Sửa `AttendanceRule` sau khi đã có ca apply → ca KHÔNG đổi (BR-27)
 - [ ] `ReapplyAttendanceRuleCommand` → ca cập nhật lại theo preset hiện tại
-- [ ] Set `Normal.WorkRate = 0.9` → `400` (BR-22 floor); set `Normal.WorkRate = 1.5` → pass (vượt floor)
-- [ ] Tạo `ShiftTemplate` không pick preset → 4 `ShiftPayRule` mặc định theo luật
+- [ ] Set `WorkRateNormal = 0.9` → `400` (BR-22 floor); set `WorkRateNormal = 1.5` → pass (vượt floor)
+- [ ] Tạo `ShiftTemplate` không pick preset → 3 cột rate mặc định `(1.0, 2.0, 3.0)`
+- [ ] Tạo ca với `Code = "ca-sang"` (lowercase) → `400` (BR-29 regex); `Code` trùng → `409` (BR-29 unique)
+- [ ] Tạo ca chỉ set `BreakStartTime` (thiếu `BreakEndTime`) → `400` (BR-28); set `BreakEnd < BreakStart` → `400`
+- [ ] Tạo ca 08:00–17:00 nghỉ 12:00–13:00 → `StandardHours = 8.0` hợp lệ; set `StandardHours = 9.0` → `400` (sanity check)
 - [ ] `ApplyWeeklyPattern` với Mon/Wed/Fri × 4 tuần → tạo đúng 12 assignment
 - [ ] `BulkAssign` idempotent — chạy 2 lần cho cùng input → lần 2 skip 100%
 - [ ] `IDayTypeResolver` resolve đúng: ngày lễ → `PublicHoliday`; ngày phép Annual → `PaidLeaveDay`; CN → `WeeklyRestDay`
