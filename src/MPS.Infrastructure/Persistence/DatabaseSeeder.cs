@@ -257,7 +257,6 @@ public sealed class DatabaseSeeder
 
         await SeedSocialInsuranceAsync(adminId, now, ct);
         await SeedPitRegulationAsync(adminId, now, ct);
-        await SeedOtRateAsync(adminId, now, ct);
         await SeedMinimumWageAsync(adminId, now, ct);
         await SeedLaborLawConstantsAsync(adminId, now, ct);
         await SeedAllowanceExemptThresholdsAsync(adminId, now, ct);
@@ -377,36 +376,6 @@ public sealed class DatabaseSeeder
         await _context.PitRegulationVersions.AddRangeAsync(new[] { row1, row2 }, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded 2 PitRegulationVersion rows (row1 IsActive=false historical, row2 IsActive=true current).");
-    }
-
-    private async Task SeedOtRateAsync(int adminId, DateTime now, CancellationToken ct)
-    {
-        if (await _context.OtRateVersions.AsNoTracking().AnyAsync(ct))
-        {
-            _logger.LogDebug("OtRate already seeded; skipping.");
-            return;
-        }
-
-        var version = new OtRateVersion
-        {
-            ValidFrom = new DateOnly(2021, 1, 1),
-            IsActive = true,
-            IsArchived = false,
-            LegalReference = "BLLĐ 2019, Điều 98",
-            CreatedAt = now,
-            CreatedByUserId = adminId,
-            Entries = new List<OtRateEntry>
-            {
-                new() { OtType = OtRateTypes.Weekday,    Label = "Ngày thường",  Rate = 1.50m },
-                new() { OtType = OtRateTypes.Weekend,    Label = "Cuối tuần",    Rate = 2.00m },
-                new() { OtType = OtRateTypes.Holiday,    Label = "Ngày lễ/Tết", Rate = 3.00m },
-                new() { OtType = OtRateTypes.NightShift, Label = "Ban đêm",      Rate = 1.30m },
-            },
-        };
-
-        await _context.OtRateVersions.AddAsync(version, ct);
-        await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded OtRateVersion (IsActive=true, BLLĐ 2019).");
     }
 
     private async Task SeedMinimumWageAsync(int adminId, DateTime now, CancellationToken ct)

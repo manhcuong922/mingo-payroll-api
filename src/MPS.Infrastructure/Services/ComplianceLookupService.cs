@@ -9,18 +9,17 @@ public sealed class ComplianceLookupService : IComplianceLookupService
 {
     private readonly ISocialInsuranceRateRepository _socialInsurance;
     private readonly IPitRegulationRepository _pit;
-    private readonly IOtRateRepository _otRate;
     private readonly IMinimumWageRepository _minWage;
     private readonly IAllowanceExemptThresholdRepository _allowanceThreshold;
     private readonly ILaborLawConstantsRepository _laborLaw;
     private readonly IMemoryCache _cache;
 
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
+    private const string CacheNullError = "Cache returned null.";
 
     public ComplianceLookupService(
         ISocialInsuranceRateRepository socialInsurance,
         IPitRegulationRepository pit,
-        IOtRateRepository otRate,
         IMinimumWageRepository minWage,
         IAllowanceExemptThresholdRepository allowanceThreshold,
         ILaborLawConstantsRepository laborLaw,
@@ -28,7 +27,6 @@ public sealed class ComplianceLookupService : IComplianceLookupService
     {
         _socialInsurance = socialInsurance;
         _pit = pit;
-        _otRate = otRate;
         _minWage = minWage;
         _allowanceThreshold = allowanceThreshold;
         _laborLaw = laborLaw;
@@ -57,18 +55,6 @@ public sealed class ComplianceLookupService : IComplianceLookupService
                 ?? throw new InvalidOperationException("No active PitRegulationVersion found.");
             return MapPit(v);
         }) ?? throw new InvalidOperationException("Cache returned null for PitRegulationVersion.");
-    }
-
-    public async Task<OtRateSnapshot> GetActiveOtRatesAsync(CancellationToken ct)
-    {
-        const string key = "compliance:OtRateVersion:active";
-        return await _cache.GetOrCreateAsync(key, async entry =>
-        {
-            ConfigureEntry(entry, "OtRateVersion");
-            var v = await _otRate.GetActiveAsync(ct)
-                ?? throw new InvalidOperationException("No active OtRateVersion found.");
-            return MapOtRate(v);
-        }) ?? throw new InvalidOperationException("Cache returned null for OtRateVersion.");
     }
 
     public async Task<MinimumWageSnapshot> GetActiveMinimumWageAsync(CancellationToken ct)
@@ -115,7 +101,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
             var v = await _socialInsurance.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No SocialInsuranceRateVersion active at {payDate:yyyy-MM-dd}.");
             return MapSocialInsurance(v);
-        }) ?? throw new InvalidOperationException("Cache returned null.");
+        }) ?? throw new InvalidOperationException(CacheNullError);
     }
 
     public async Task<PitRegulationSnapshot> GetPitAtAsync(DateOnly payDate, CancellationToken ct)
@@ -127,19 +113,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
             var v = await _pit.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No PitRegulationVersion active at {payDate:yyyy-MM-dd}.");
             return MapPit(v);
-        }) ?? throw new InvalidOperationException("Cache returned null.");
-    }
-
-    public async Task<OtRateSnapshot> GetOtRatesAtAsync(DateOnly payDate, CancellationToken ct)
-    {
-        var key = $"compliance:OtRateVersion:at:{payDate:yyyyMMdd}";
-        return await _cache.GetOrCreateAsync(key, async entry =>
-        {
-            entry.SlidingExpiration = CacheDuration;
-            var v = await _otRate.GetActiveAtAsync(payDate, ct)
-                ?? throw new InvalidOperationException($"No OtRateVersion active at {payDate:yyyy-MM-dd}.");
-            return MapOtRate(v);
-        }) ?? throw new InvalidOperationException("Cache returned null.");
+        }) ?? throw new InvalidOperationException(CacheNullError);
     }
 
     public async Task<MinimumWageSnapshot> GetMinimumWageAtAsync(DateOnly payDate, CancellationToken ct)
@@ -151,7 +125,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
             var v = await _minWage.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No MinimumWageVersion active at {payDate:yyyy-MM-dd}.");
             return MapMinimumWage(v);
-        }) ?? throw new InvalidOperationException("Cache returned null.");
+        }) ?? throw new InvalidOperationException(CacheNullError);
     }
 
     public async Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAtAsync(int allowanceTypeId, DateOnly payDate, CancellationToken ct)
@@ -174,7 +148,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
             var v = await _laborLaw.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No LaborLawConstantsVersion active at {payDate:yyyy-MM-dd}.");
             return MapLaborLaw(v);
-        }) ?? throw new InvalidOperationException("Cache returned null.");
+        }) ?? throw new InvalidOperationException(CacheNullError);
     }
 
     private void ConfigureEntry(ICacheEntry entry, string complianceType)
@@ -193,11 +167,6 @@ public sealed class ComplianceLookupService : IComplianceLookupService
     private static PitRegulationSnapshot MapPit(Domain.Entities.Compliance.PitRegulationVersion v) =>
         new(v.Id, v.ValidFrom, v.PersonalDeductionAmount, v.DependentDeductionAmount,
             v.Brackets.OrderBy(b => b.Order).Select(b => new PitBracketSnapshot(b.Order, b.LowerBound, b.UpperBound, b.Rate)).ToList(),
-            v.LegalReference);
-
-    private static OtRateSnapshot MapOtRate(Domain.Entities.Compliance.OtRateVersion v) =>
-        new(v.Id, v.ValidFrom,
-            v.Entries.Select(e => new OtRateEntrySnapshot(e.OtType, e.Label, e.Rate)).ToList(),
             v.LegalReference);
 
     private static MinimumWageSnapshot MapMinimumWage(Domain.Entities.Compliance.MinimumWageVersion v) =>

@@ -1,5 +1,7 @@
 namespace MPS.Application.DTOs.Compliance;
 
+public sealed record AuditUserDto(int UserId, string FullName, string Email);
+
 public sealed record SocialInsuranceRateDto(
     int Id,
     DateOnly ValidFrom,
@@ -18,8 +20,38 @@ public sealed record SocialInsuranceRateDto(
     int UnemploymentCapMultiplier,
     string LegalReference,
     string? Note,
+    AuditUserDto CreatedBy,
     DateTime CreatedAt,
+    AuditUserDto? UpdatedBy,
     DateTime? UpdatedAt);
+
+public sealed record LegalDocumentSummaryDto(
+    int Id,
+    string Code,
+    string DocumentNumber,
+    string Title,
+    DateOnly EffectiveDate,
+    bool IsActive);
+
+public sealed record LegalDocumentDto(
+    int Id,
+    string Code,
+    string DocumentType,
+    string DocumentNumber,
+    string Title,
+    string IssuedBy,
+    DateOnly IssuedDate,
+    DateOnly EffectiveDate,
+    DateOnly? ExpiryDate,
+    string? Url,
+    string? Note,
+    bool IsActive,
+    AuditUserDto CreatedBy,
+    DateTime CreatedAt,
+    AuditUserDto? UpdatedBy,
+    DateTime? UpdatedAt);
+
+public sealed record ComplianceVersionWithDocDto(string ComplianceEntityType, int ComplianceVersionId);
 
 public sealed record PitBracketDto(int Order, decimal LowerBound, decimal? UpperBound, decimal Rate);
 
@@ -33,20 +65,9 @@ public sealed record PitRegulationDto(
     IReadOnlyList<PitBracketDto> Brackets,
     string LegalReference,
     string? Note,
+    AuditUserDto CreatedBy,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
-
-public sealed record OtRateEntryDto(string OtType, string Label, decimal Rate);
-
-public sealed record OtRateDto(
-    int Id,
-    DateOnly ValidFrom,
-    bool IsActive,
-    bool IsArchived,
-    IReadOnlyList<OtRateEntryDto> Entries,
-    string LegalReference,
-    string? Note,
-    DateTime CreatedAt,
+    AuditUserDto? UpdatedBy,
     DateTime? UpdatedAt);
 
 public sealed record MinimumWageRegionDto(string RegionCode, decimal AmountPerMonth);
@@ -59,7 +80,9 @@ public sealed record MinimumWageDto(
     IReadOnlyList<MinimumWageRegionDto> Regions,
     string LegalReference,
     string? Note,
+    AuditUserDto CreatedBy,
     DateTime CreatedAt,
+    AuditUserDto? UpdatedBy,
     DateTime? UpdatedAt);
 
 public sealed record AllowanceExemptThresholdDto(
@@ -76,7 +99,9 @@ public sealed record AllowanceExemptThresholdDto(
     bool AppliesToSocial,
     string LegalReference,
     string? Note,
+    AuditUserDto CreatedBy,
     DateTime CreatedAt,
+    AuditUserDto? UpdatedBy,
     DateTime? UpdatedAt);
 
 public sealed record LaborLawConstantsDto(
@@ -93,5 +118,7 @@ public sealed record LaborLawConstantsDto(
     int OvertimeMaxHoursPerYear,
     string LegalReference,
     string? Note,
+    AuditUserDto CreatedBy,
     DateTime CreatedAt,
+    AuditUserDto? UpdatedBy,
     DateTime? UpdatedAt);

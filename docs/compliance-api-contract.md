@@ -2,8 +2,8 @@
 
 > Dùng file này để vibe coding UI. Tất cả request/response JSON chính xác 100% từ source code.
 >
-> **Base URL:** `http://localhost:5000`  
-> **Auth:** `Authorization: Bearer <accessToken>`  
+> **Base URL:** `http://localhost:5000`
+> **Auth:** `Authorization: Bearer <accessToken>`
 > **Date format:** `"yyyy-MM-dd"` (string, không phải timestamp)
 
 ---
@@ -17,12 +17,23 @@
 | `true`   | `false`    | bất kỳ            | **Active** — đang áp dụng | ❌ Không |
 | `false`  | `false`    | > today           | **Pending** — chờ hiệu lực | ✅ Được |
 | `false`  | `false`    | ≤ today           | **Historical** — đã qua | ❌ Không |
-| `false`  | `true`     | bất kỳ            | **Archived** — chỉ còn trên historical, pending đã bị hard delete | ❌ Không |
+| `false`  | `true`     | bất kỳ            | **Archived** — đã xóa mềm | ❌ Không |
 
 ### Trường `applyImmediately` khi POST
 
 - `true` → validFrom = hôm nay, isActive = true ngay lập tức (thay thế active hiện tại)
-- `false` → validFrom phải > hôm nay, isActive = false (pending, background job tự kích hoạt đúng ngày)
+- `false` → validFrom phải > hôm nay (max 365 ngày), isActive = false (pending, background job tự kích hoạt đúng ngày)
+
+### Audit fields trong mọi response
+
+```json
+"createdBy": { "userId": 1, "fullName": "Nguyễn Văn A", "email": "admin@company.com" },
+"createdAt": "2026-06-13T00:00:00Z",
+"updatedBy": null,
+"updatedAt": null
+```
+
+- `updatedBy` / `updatedAt` = `null` nếu chưa từng update
 
 ### HTTP Status codes
 
@@ -41,10 +52,10 @@
 
 ## 1. Tỷ lệ BHXH/BHYT/BHTN — Social Insurance Rate
 
-**Base:** `GET|POST /api/compliance/social-insurance-rates`  
+**Base:** `GET|POST /api/compliance/social-insurance-rates`
 **Item:**  `GET|PUT|DELETE /api/compliance/social-insurance-rates/{id}`
 
-### Response DTO (dùng cho mọi GET)
+### Response DTO
 
 ```json
 {
@@ -65,7 +76,9 @@
   "unemploymentCapMultiplier": 20,
   "legalReference": "Luật BHXH 41/2024/QH15 + NĐ 158/2025/NĐ-CP",
   "note": null,
+  "createdBy": { "userId": 1, "fullName": "Admin", "email": "admin@company.com" },
   "createdAt": "2026-06-13T00:00:00Z",
+  "updatedBy": null,
   "updatedAt": null
 }
 ```
@@ -89,7 +102,7 @@
 ### GET /api/compliance/social-insurance-rates
 
 ```
-Query: ?includeArchived=false   (true = hiện cả archived)
+Query: ?includeArchived=false
 Response 200: SocialInsuranceRateDto[]
 ```
 
@@ -97,22 +110,22 @@ Response 200: SocialInsuranceRateDto[]
 
 ```
 Response 200: SocialInsuranceRateDto
-Response 404: (nếu không tìm thấy)
+Response 404
 ```
 
 ### GET /api/compliance/social-insurance-rates/active
 
 ```
-Response 200: SocialInsuranceRateDto   (version đang isActive=true)
-Response 404: (nếu chưa có active)
+Response 200: SocialInsuranceRateDto
+Response 404
 ```
 
 ### GET /api/compliance/social-insurance-rates/active-at?date=2025-12-01
 
 ```
 Query: ?date=yyyy-MM-dd
-Response 200: SocialInsuranceRateDto   (version active tại ngày đó — audit replay)
-Response 404: (nếu không có version nào cover ngày đó)
+Response 200: SocialInsuranceRateDto
+Response 404
 ```
 
 ### POST /api/compliance/social-insurance-rates
@@ -137,10 +150,6 @@ Response 404: (nếu không có version nào cover ngày đó)
 }
 ```
 
-**Lưu ý:**
-- `applyImmediately: true` → `validFrom` server tự override = hôm nay
-- `applyImmediately: false` → `validFrom` phải > hôm nay, max 365 ngày tới
-
 **Response 201:** `{ "id": 3 }`
 
 ### PUT /api/compliance/social-insurance-rates/{id}
@@ -161,24 +170,22 @@ Chỉ cho phép với **pending** version.
   "referenceAmount": 2650000.00,
   "socialCapMultiplier": 20,
   "unemploymentCapMultiplier": 20,
-  "legalReference": "NĐ xxx/2026/NĐ-CP (sửa ngày)",
-  "note": "Dời ngày hiệu lực"
+  "legalReference": "NĐ xxx/2026/NĐ-CP (cập nhật ngày)",
+  "note": null
 }
 ```
 
-**Response 204** — **Response 409** (nếu cố sửa active/historical)
+**Response 204** — **Response 409** nếu cố sửa active/historical
 
 ### DELETE /api/compliance/social-insurance-rates/{id}
 
-Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
-
-**Response 204** — **Response 409** (nếu cố xóa active/historical)
+Chỉ xóa **pending**. **Response 204** — **Response 409**
 
 ---
 
 ## 2. Biểu thuế TNCN — PIT Regulation
 
-**Base:** `GET|POST /api/compliance/pit-regulations`  
+**Base:** `GET|POST /api/compliance/pit-regulations`
 **Item:**  `GET|PUT|DELETE /api/compliance/pit-regulations/{id}`
 
 ### Response DTO
@@ -192,15 +199,17 @@ Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
   "personalDeductionAmount": 15500000.00,
   "dependentDeductionAmount": 6200000.00,
   "brackets": [
-    { "order": 1, "lowerBound": 0, "upperBound": 10000000, "rate": 0.0500 },
-    { "order": 2, "lowerBound": 10000000, "upperBound": 30000000, "rate": 0.1000 },
-    { "order": 3, "lowerBound": 30000000, "upperBound": 60000000, "rate": 0.2000 },
-    { "order": 4, "lowerBound": 60000000, "upperBound": 100000000, "rate": 0.3000 },
-    { "order": 5, "lowerBound": 100000000, "upperBound": null, "rate": 0.3500 }
+    { "order": 1, "lowerBound": 0,         "upperBound": 10000000,  "rate": 0.0500 },
+    { "order": 2, "lowerBound": 10000000,  "upperBound": 30000000,  "rate": 0.1000 },
+    { "order": 3, "lowerBound": 30000000,  "upperBound": 60000000,  "rate": 0.2000 },
+    { "order": 4, "lowerBound": 60000000,  "upperBound": 100000000, "rate": 0.3000 },
+    { "order": 5, "lowerBound": 100000000, "upperBound": null,      "rate": 0.3500 }
   ],
   "legalReference": "Luật TNCN 109/2025/QH15 + NQ 110/2025/UBTVQH15",
   "note": null,
+  "createdBy": { "userId": 1, "fullName": "Admin", "email": "admin@company.com" },
   "createdAt": "2026-06-13T00:00:00Z",
+  "updatedBy": null,
   "updatedAt": null
 }
 ```
@@ -208,7 +217,6 @@ Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
 **Giải thích:**
 - `rate`: thập phân (0.05 = 5%, 0.35 = 35%)
 - `upperBound: null` = bracket cuối, không giới hạn trên
-- `lowerBound` bracket sau = `upperBound` bracket trước
 - `personalDeductionAmount`: giảm trừ bản thân (VND/tháng)
 - `dependentDeductionAmount`: giảm trừ mỗi người phụ thuộc (VND/tháng)
 
@@ -237,11 +245,11 @@ Response 200: `PitRegulationDto`
   "personalDeductionAmount": 17000000.00,
   "dependentDeductionAmount": 7000000.00,
   "brackets": [
-    { "order": 1, "lowerBound": 0, "upperBound": 10000000, "rate": 0.0500 },
-    { "order": 2, "lowerBound": 10000000, "upperBound": 30000000, "rate": 0.1000 },
-    { "order": 3, "lowerBound": 30000000, "upperBound": 60000000, "rate": 0.2000 },
-    { "order": 4, "lowerBound": 60000000, "upperBound": 100000000, "rate": 0.3000 },
-    { "order": 5, "lowerBound": 100000000, "upperBound": null, "rate": 0.3500 }
+    { "order": 1, "lowerBound": 0,         "upperBound": 10000000,  "rate": 0.0500 },
+    { "order": 2, "lowerBound": 10000000,  "upperBound": 30000000,  "rate": 0.1000 },
+    { "order": 3, "lowerBound": 30000000,  "upperBound": 60000000,  "rate": 0.2000 },
+    { "order": 4, "lowerBound": 60000000,  "upperBound": 100000000, "rate": 0.3000 },
+    { "order": 5, "lowerBound": 100000000, "upperBound": null,      "rate": 0.3500 }
   ],
   "legalReference": "Luật TNCN xxx/2026",
   "note": null
@@ -258,122 +266,28 @@ Response 200: `PitRegulationDto`
   "personalDeductionAmount": 17000000.00,
   "dependentDeductionAmount": 7000000.00,
   "brackets": [
-    { "order": 1, "lowerBound": 0, "upperBound": 10000000, "rate": 0.0500 },
-    { "order": 2, "lowerBound": 10000000, "upperBound": 30000000, "rate": 0.1000 },
-    { "order": 3, "lowerBound": 30000000, "upperBound": 60000000, "rate": 0.2000 },
-    { "order": 4, "lowerBound": 60000000, "upperBound": 100000000, "rate": 0.3000 },
-    { "order": 5, "lowerBound": 100000000, "upperBound": null, "rate": 0.3500 }
+    { "order": 1, "lowerBound": 0,         "upperBound": 10000000,  "rate": 0.0500 },
+    { "order": 2, "lowerBound": 10000000,  "upperBound": 30000000,  "rate": 0.1000 },
+    { "order": 3, "lowerBound": 30000000,  "upperBound": 60000000,  "rate": 0.2000 },
+    { "order": 4, "lowerBound": 60000000,  "upperBound": 100000000, "rate": 0.3000 },
+    { "order": 5, "lowerBound": 100000000, "upperBound": null,      "rate": 0.3500 }
   ],
   "legalReference": "Luật TNCN xxx/2026 (cập nhật)",
   "note": null
 }
 ```
 
-**Response 204** — **Response 409** (nếu cố sửa active/historical)
+**Response 204** — **Response 409** nếu cố sửa active/historical
 
 ### DELETE /api/compliance/pit-regulations/{id}
 
-Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
-
-**Response 204** — **Response 409** (nếu cố xóa active/historical)
+**Response 204** — **Response 409**
 
 ---
 
-## 3. Hệ số làm thêm giờ — OT Rate
+## 3. Lương tối thiểu vùng — Minimum Wage
 
-**Base:** `GET|POST /api/compliance/ot-rates`  
-**Item:**  `GET|PUT|DELETE /api/compliance/ot-rates/{id}`
-
-### Response DTO
-
-```json
-{
-  "id": 1,
-  "validFrom": "2021-01-01",
-  "isActive": true,
-  "isArchived": false,
-  "entries": [
-    { "otType": "Weekday",    "label": "Ngày thường",  "rate": 1.50 },
-    { "otType": "Weekend",    "label": "Cuối tuần",    "rate": 2.00 },
-    { "otType": "Holiday",    "label": "Ngày lễ/Tết", "rate": 3.00 },
-    { "otType": "NightShift", "label": "Ban đêm",      "rate": 1.30 }
-  ],
-  "legalReference": "BLLĐ 2019, Điều 98",
-  "note": null,
-  "createdAt": "2026-06-13T00:00:00Z",
-  "updatedAt": null
-}
-```
-
-**Giải thích entries:**
-- `rate`: hệ số nhân lương (1.50 = 150%, 3.00 = 300%)
-- `otType` cố định 4 loại: `"Weekday"`, `"Weekend"`, `"Holiday"`, `"NightShift"` — bắt buộc đủ cả 4
-- `NightShift` (1.30) là hệ số OT ban đêm đứng riêng; khi OT đêm + ngày thường engine cộng thêm `nightShiftSurchargePercent` từ LaborLawConstants
-
-### GET /api/compliance/ot-rates?includeArchived=false
-
-Response 200: `OtRateDto[]`
-
-### GET /api/compliance/ot-rates/{id}
-
-Response 200: `OtRateDto`
-
-### GET /api/compliance/ot-rates/active
-
-Response 200: `OtRateDto`
-
-### GET /api/compliance/ot-rates/active-at?date=2021-06-01
-
-Response 200: `OtRateDto`
-
-### POST /api/compliance/ot-rates
-
-```json
-{
-  "validFrom": "2027-01-01",
-  "applyImmediately": false,
-  "entries": [
-    { "otType": "Weekday",    "label": "Ngày thường",  "rate": 1.50 },
-    { "otType": "Weekend",    "label": "Cuối tuần",    "rate": 2.00 },
-    { "otType": "Holiday",    "label": "Ngày lễ/Tết", "rate": 3.00 },
-    { "otType": "NightShift", "label": "Ban đêm",      "rate": 1.30 }
-  ],
-  "legalReference": "BLLĐ 2019 (giữ nguyên)",
-  "note": null
-}
-```
-
-**Response 201:** `{ "id": 2 }`
-
-### PUT /api/compliance/ot-rates/{id}
-
-```json
-{
-  "validFrom": "2027-02-01",
-  "entries": [
-    { "otType": "Weekday",    "label": "Ngày thường",  "rate": 1.50 },
-    { "otType": "Weekend",    "label": "Cuối tuần",    "rate": 2.00 },
-    { "otType": "Holiday",    "label": "Ngày lễ/Tết", "rate": 3.00 },
-    { "otType": "NightShift", "label": "Ban đêm",      "rate": 1.30 }
-  ],
-  "legalReference": "BLLĐ 2019 (sửa ngày)",
-  "note": null
-}
-```
-
-**Response 204** — **Response 409** (nếu cố sửa active/historical)
-
-### DELETE /api/compliance/ot-rates/{id}
-
-Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
-
-**Response 204** — **Response 409** (nếu cố xóa active/historical)
-
----
-
-## 4. Lương tối thiểu vùng — Minimum Wage
-
-**Base:** `GET|POST /api/compliance/minimum-wages`  
+**Base:** `GET|POST /api/compliance/minimum-wages`
 **Item:**  `GET|PUT|DELETE /api/compliance/minimum-wages/{id}`
 
 ### Response DTO
@@ -392,16 +306,16 @@ Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
   ],
   "legalReference": "NĐ 293/2025/NĐ-CP",
   "note": null,
+  "createdBy": { "userId": 1, "fullName": "Admin", "email": "admin@company.com" },
   "createdAt": "2026-06-13T00:00:00Z",
+  "updatedBy": null,
   "updatedAt": null
 }
 ```
 
-**Giải thích regions:**
+**Giải thích:**
 - `regionCode` cố định 4 vùng: `"I"`, `"II"`, `"III"`, `"IV"` — bắt buộc đủ cả 4
-- Vùng I: Hà Nội, TP.HCM (mức cao nhất)
-- Vùng IV: các tỉnh còn lại (mức thấp nhất)
-- `amountPerMonth`: VND/tháng
+- Vùng I: Hà Nội, TP.HCM (mức cao nhất) — Vùng IV: các tỉnh còn lại
 
 ### GET /api/compliance/minimum-wages?includeArchived=false
 
@@ -449,28 +363,26 @@ Response 200: `MinimumWageDto`
     { "regionCode": "III", "amountPerMonth": 4500000.00 },
     { "regionCode": "IV",  "amountPerMonth": 4000000.00 }
   ],
-  "legalReference": "NĐ xxx/2026 (sửa ngày)",
+  "legalReference": "NĐ xxx/2026 (cập nhật ngày)",
   "note": null
 }
 ```
 
-**Response 204** — **Response 409** (nếu cố sửa active/historical)
+**Response 204** — **Response 409**
 
 ### DELETE /api/compliance/minimum-wages/{id}
 
-Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
-
-**Response 204** — **Response 409** (nếu cố xóa active/historical)
+**Response 204** — **Response 409**
 
 ---
 
-## 5. Loại phụ cấp — Allowance Type
+## 4. Loại phụ cấp — Allowance Type
 
-**Base:** `GET|POST /api/allowance-types`  
-**Item:**  `GET|PUT|DELETE /api/allowance-types/{id}`  
+**Base:** `GET|POST /api/allowance-types`
+**Item:**  `GET|PUT|DELETE /api/allowance-types/{id}`
 **Paged:** `GET /api/allowance-types/paged`
 
-### Response DTO (dùng cho mọi GET)
+### Response DTO
 
 ```json
 {
@@ -487,16 +399,6 @@ Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
 }
 ```
 
-**Giải thích các trường:**
-
-| Trường | Ý nghĩa |
-|--------|---------|
-| `code` | Mã định danh duy nhất, alphanumeric + `-` `_`, tối đa 50 ký tự |
-| `defaultAmount` | Số tiền mặc định điền sẵn khi thêm vào hợp đồng (nullable) |
-| `isBhxhBase` | `true` = tính vào căn cứ đóng BHXH |
-| `isTaxable` | `true` = tính vào thu nhập chịu thuế TNCN |
-| `isActive` | `false` = ẩn, không thể thêm vào hợp đồng mới |
-
 ### GET /api/allowance-types?isActive=true
 
 ```
@@ -508,16 +410,13 @@ Response 200: AllowanceTypeDto[]
 
 ```
 Query: ?page=1&pageSize=10&isActive=true
-  page     — mặc định 1
-  pageSize — mặc định 10, tối đa 100
-  isActive — tuỳ chọn
 Response 200:
 ```
 
 ```json
 {
-  "items": [ /* AllowanceTypeDto[] */ ],
-  "total": 25,
+  "items": [],
+  "total": 3,
   "page": 1,
   "size": 10
 }
@@ -525,10 +424,7 @@ Response 200:
 
 ### GET /api/allowance-types/{id}
 
-```
-Response 200: AllowanceTypeDto
-Response 404: (nếu không tìm thấy)
-```
+Response 200: `AllowanceTypeDto`
 
 ### POST /api/allowance-types
 
@@ -543,12 +439,6 @@ Response 404: (nếu không tìm thấy)
   "isActive": true
 }
 ```
-
-**Validation:**
-- `code`: bắt buộc, unique, tối đa 50 ký tự, chỉ chứa chữ/số/`-`/`_`
-- `name`: bắt buộc, tối đa 200 ký tự
-- `description`: tối đa 500 ký tự
-- `defaultAmount`: ≥ 0 nếu có
 
 **Response 201:** `{ "id": 4 }`
 
@@ -566,15 +456,15 @@ Response 404: (nếu không tìm thấy)
 }
 ```
 
-**Response 204** — **Response 404** (nếu không tìm thấy)
+**Response 204**
 
 ### DELETE /api/allowance-types/{id}
 
 > Smart delete: hard delete nếu chưa có hợp đồng nào dùng, soft delete (isActive=false) nếu đã được tham chiếu.
 
-**Response 204** — **Response 404** (nếu không tìm thấy)
+**Response 204**
 
-**AllowanceTypeId mặc định sau seed:**
+**Allowance Type mặc định sau seed:**
 
 | Id | Code  | Tên | isBhxhBase | isTaxable |
 |----|-------|-----|------------|-----------|
@@ -584,23 +474,12 @@ Response 404: (nếu không tìm thấy)
 
 ---
 
-## 7. Ngưỡng miễn thuế phụ cấp — Allowance Exempt Threshold
+## 5. Ngưỡng miễn thuế phụ cấp — Allowance Exempt Threshold
 
-**Base:** `GET|POST /api/compliance/allowance-exempt-thresholds`  
+**Base:** `GET|POST /api/compliance/allowance-exempt-thresholds`
 **Item:**  `GET|PUT|DELETE /api/compliance/allowance-exempt-thresholds/{id}`
 
-> **Khác biệt so với 5 module kia:**
-> - Mỗi loại phụ cấp (`AllowanceType`) có 1 threshold version active riêng
-> - `GET /active` và `GET /active-at` cần thêm `?allowanceTypeId={id}`
-> - POST **không có** `validFrom` và `applyImmediately` — luôn apply ngay (ValidFrom = today)
-
-**AllowanceTypeId mặc định sau seed:**
-
-| AllowanceTypeId | Code  | Tên |
-|-----------------|-------|-----|
-| 1               | MEAL  | Phụ cấp ăn ca |
-| 2               | FUEL  | Phụ cấp xăng xe |
-| 3               | PHONE | Phụ cấp điện thoại |
+> **Khác biệt:** POST không có `validFrom`/`applyImmediately` — luôn apply ngay (ValidFrom = today)
 
 ### Response DTO
 
@@ -617,15 +496,17 @@ Response 404: (nếu không tìm thấy)
   "monthlyExemptAmount": 730000.00,
   "appliesToTax": true,
   "appliesToSocial": true,
-  "legalReference": "TT 26/2016/TT-BLĐTBXH + TT 111/2013/TT-BTC",
+  "legalReference": "TT 26/2016/TT-BLĐTBXH",
   "note": null,
+  "createdBy": { "userId": 1, "fullName": "Admin", "email": "admin@company.com" },
   "createdAt": "2026-06-13T00:00:00Z",
+  "updatedBy": null,
   "updatedAt": null
 }
 ```
 
 **Giải thích:**
-- `thresholdMode`: `"FixedAmount"` (ngưỡng cố định) hoặc `"ActualAllocation"` (theo mức thực chi)
+- `thresholdMode`: `"FixedAmount"` hoặc `"ActualAllocation"` (theo mức thực chi)
 - `monthlyExemptAmount`: null khi mode = `"ActualAllocation"`
 - `appliesToTax`: true = miễn TNCN
 - `appliesToSocial`: true = miễn BHXH/BHYT/BHTN
@@ -640,24 +521,15 @@ Response 200: `AllowanceExemptThresholdDto`
 
 ### GET /api/compliance/allowance-exempt-thresholds/active?allowanceTypeId=1
 
-```
-Query: ?allowanceTypeId=1
-Response 200: AllowanceExemptThresholdDto
-Response 404: (nếu chưa có active cho loại đó)
-```
+Response 200: `AllowanceExemptThresholdDto`
 
 ### GET /api/compliance/allowance-exempt-thresholds/active-at?allowanceTypeId=1&date=2020-01-01
 
-```
-Query: ?allowanceTypeId=1&date=yyyy-MM-dd
-Response 200: AllowanceExemptThresholdDto
-```
+Response 200: `AllowanceExemptThresholdDto`
 
 ### POST /api/compliance/allowance-exempt-thresholds
 
-> Không có `validFrom` và `applyImmediately` — luôn apply ngay
-
-Ví dụ **FixedAmount** (ăn ca):
+**FixedAmount:**
 ```json
 {
   "allowanceTypeId": 1,
@@ -670,7 +542,7 @@ Ví dụ **FixedAmount** (ăn ca):
 }
 ```
 
-Ví dụ **ActualAllocation** (xăng xe, điện thoại):
+**ActualAllocation:**
 ```json
 {
   "allowanceTypeId": 2,
@@ -687,8 +559,6 @@ Ví dụ **ActualAllocation** (xăng xe, điện thoại):
 
 ### PUT /api/compliance/allowance-exempt-thresholds/{id}
 
-> Không có `validFrom` trong body
-
 ```json
 {
   "thresholdMode": "FixedAmount",
@@ -700,19 +570,17 @@ Ví dụ **ActualAllocation** (xăng xe, điện thoại):
 }
 ```
 
-**Response 204** — **Response 409** (nếu cố sửa active/historical)
+**Response 204** — **Response 409**
 
 ### DELETE /api/compliance/allowance-exempt-thresholds/{id}
 
-Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
-
-**Response 204** — **Response 409** (nếu cố xóa active/historical)
+**Response 204** — **Response 409**
 
 ---
 
-## 8. Hằng số luật lao động — Labor Law Constants
+## 6. Hằng số luật lao động — Labor Law Constants
 
-**Base:** `GET|POST /api/compliance/labor-law-constants`  
+**Base:** `GET|POST /api/compliance/labor-law-constants`
 **Item:**  `GET|PUT|DELETE /api/compliance/labor-law-constants/{id}`
 
 ### Response DTO
@@ -732,12 +600,14 @@ Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
   "overtimeMaxHoursPerYear": 300,
   "legalReference": "BLLĐ 2019 Điều 26, 98, 107, 113 + NĐ 145/2020 Điều 54",
   "note": null,
+  "createdBy": { "userId": 1, "fullName": "Admin", "email": "admin@company.com" },
   "createdAt": "2026-06-13T00:00:00Z",
+  "updatedBy": null,
   "updatedAt": null
 }
 ```
 
-**Giải thích các trường:**
+**Giải thích:**
 
 | Trường | Ý nghĩa | Đơn vị |
 |--------|---------|--------|
@@ -797,18 +667,214 @@ Response 200: `LaborLawConstantsDto`
   "annualLeaveMinDays": 14,
   "overtimeMaxHoursPerDay": 4.00,
   "overtimeMaxHoursPerYear": 300,
-  "legalReference": "BLLĐ sửa đổi 2026 (sửa ngày)",
+  "legalReference": "BLLĐ sửa đổi 2026 (cập nhật ngày)",
   "note": null
 }
 ```
 
-**Response 204** — **Response 409** (nếu cố sửa active/historical)
+**Response 204** — **Response 409**
 
 ### DELETE /api/compliance/labor-law-constants/{id}
 
-Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
+**Response 204** — **Response 409**
 
-**Response 204** — **Response 409** (nếu cố xóa active/historical)
+---
+
+## 7. Văn bản pháp lý — Legal Document
+
+**Base:** `GET|POST /api/compliance/legal-documents`
+**Item:**  `GET|PUT /api/compliance/legal-documents/{id}`
+
+> Không có versioning — `LegalDocument` là danh mục tham chiếu, không có Active/Pending/Historical.
+> Xóa mềm bằng `DELETE /{id}/deactivate` (isActive = false).
+
+### Response DTO
+
+```json
+{
+  "id": 1,
+  "code": "LUAT-BHXH-41-2024",
+  "documentType": "Luat",
+  "documentNumber": "41/2024/QH15",
+  "title": "Luật Bảo hiểm xã hội",
+  "issuedBy": "Quốc hội",
+  "issuedDate": "2024-06-29",
+  "effectiveDate": "2025-07-01",
+  "expiryDate": null,
+  "url": null,
+  "note": null,
+  "isActive": true,
+  "createdBy": { "userId": 1, "fullName": "Admin", "email": "admin@company.com" },
+  "createdAt": "2026-06-13T00:00:00Z",
+  "updatedBy": null,
+  "updatedAt": null
+}
+```
+
+**Giá trị `documentType` hợp lệ:**
+
+| Giá trị | Hiển thị |
+|---------|---------|
+| `"Luat"` | Luật |
+| `"NghiDinh"` | Nghị định |
+| `"ThongTu"` | Thông tư |
+| `"NghiQuyet"` | Nghị quyết |
+| `"QuyetDinh"` | Quyết định |
+
+**Văn bản seed sẵn (10 rows):**
+
+| Id | Code | DocumentNumber | Title | IsActive |
+|----|------|----------------|-------|----------|
+| 1 | `LUAT-BHXH-41-2024` | 41/2024/QH15 | Luật BHXH | true |
+| 2 | `ND-158-2025` | 158/2025/NĐ-CP | Hướng dẫn Luật BHXH 2024 | true |
+| 3 | `ND-161-2026` | 161/2026/NĐ-CP | Mức tham chiếu BHXH 2,530,000 | true |
+| 4 | `LUAT-BHYT-56-2024` | 56/2024/QH15 | Luật BHYT | true |
+| 5 | `LUAT-VIECLAM-74-2025` | 74/2025/QH15 | Luật Việc làm | true |
+| 6 | `LUAT-TNCN-109-2025` | 109/2025/QH15 | Luật TNCN | true |
+| 7 | `NQ-110-2025` | 110/2025/UBTVQH15 | Biểu thuế TNCN lũy tiến | true |
+| 8 | `ND-293-2025` | 293/2025/NĐ-CP | Lương tối thiểu vùng 2026 | true |
+| 9 | `TT-26-2016` | 26/2016/TT-BLĐTBXH | Ngưỡng phụ cấp ăn ca 730,000 | true |
+| 10 | `BLLD-2019` | (không số) | Bộ luật Lao động 2019 | true |
+
+### GET /api/compliance/legal-documents
+
+```
+Query: ?documentType=Luat&isActive=true   (cả 2 tuỳ chọn, bỏ trống = lấy tất cả)
+Response 200: LegalDocumentDto[]
+```
+
+### GET /api/compliance/legal-documents/{id}
+
+```
+Response 200: LegalDocumentDto
+Response 404
+```
+
+### GET /api/compliance/legal-documents/{id}/compliance-versions
+
+Tra cứu ngược — version nào đang dùng văn bản này.
+
+```
+Response 200:
+```
+
+```json
+[
+  { "complianceEntityType": "SocialInsuranceRate", "complianceVersionId": 1 },
+  { "complianceEntityType": "SocialInsuranceRate", "complianceVersionId": 2 }
+]
+```
+
+### GET /api/compliance/legal-documents/by-version?entityType=SocialInsuranceRate&versionId=1
+
+Văn bản của 1 compliance version cụ thể (dạng summary).
+
+```
+Query: ?entityType=SocialInsuranceRate&versionId=1
+Response 200: LegalDocumentSummaryDto[]
+```
+
+```json
+[
+  {
+    "id": 1,
+    "code": "LUAT-BHXH-41-2024",
+    "documentNumber": "41/2024/QH15",
+    "title": "Luật Bảo hiểm xã hội",
+    "effectiveDate": "2025-07-01",
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "code": "ND-158-2025",
+    "documentNumber": "158/2025/NĐ-CP",
+    "title": "Hướng dẫn Luật BHXH 2024",
+    "effectiveDate": "2025-07-01",
+    "isActive": true
+  }
+]
+```
+
+**Giá trị `entityType` hợp lệ:** `SocialInsuranceRate`, `PitRegulation`, `MinimumWage`, `AllowanceExemptThreshold`, `LaborLawConstants`
+
+### POST /api/compliance/legal-documents
+
+```json
+{
+  "code": "ND-XXX-2027",
+  "documentType": "NghiDinh",
+  "documentNumber": "XXX/2027/NĐ-CP",
+  "title": "Hướng dẫn luật xxx",
+  "issuedBy": "Chính phủ",
+  "issuedDate": "2027-01-01",
+  "effectiveDate": "2027-02-01",
+  "expiryDate": null,
+  "url": null,
+  "note": null
+}
+```
+
+**Validation:**
+- `code`: bắt buộc, unique, max 100 ký tự (immutable sau khi tạo)
+- `documentType`: phải nằm trong danh sách hợp lệ
+- `effectiveDate` ≥ `issuedDate`
+- `expiryDate` > `effectiveDate` nếu có
+
+**Response 201:** `{ "id": 11 }`
+
+### PUT /api/compliance/legal-documents/{id}
+
+> `code` không được sửa sau khi tạo. Chỉ sửa được: `documentType`, `documentNumber`, `title`, `issuedBy`, `issuedDate`, `effectiveDate`, `expiryDate`, `url`, `note`, `isActive`.
+
+```json
+{
+  "documentType": "NghiDinh",
+  "documentNumber": "XXX/2027/NĐ-CP (cập nhật)",
+  "title": "Hướng dẫn luật xxx (đã sửa)",
+  "issuedBy": "Chính phủ",
+  "issuedDate": "2027-01-05",
+  "effectiveDate": "2027-02-01",
+  "expiryDate": null,
+  "url": "https://thuvienphapluat.vn/xxx",
+  "note": null,
+  "isActive": true
+}
+```
+
+**Response 204**
+
+### DELETE /api/compliance/legal-documents/{id}/deactivate
+
+Soft deactivate — isActive = false. Không xóa hẳn, không ảnh hưởng link đã có.
+
+**Response 204**
+
+### POST /api/compliance/legal-documents/link
+
+Link văn bản pháp lý vào một compliance version.
+
+```json
+{
+  "complianceEntityType": "SocialInsuranceRate",
+  "complianceVersionId": 1,
+  "legalDocumentId": 3
+}
+```
+
+**Response 201:** `{ "id": 12 }`
+**Response 409:** nếu link đã tồn tại
+
+### DELETE /api/compliance/legal-documents/unlink
+
+```json
+{
+  "complianceEntityType": "SocialInsuranceRate",
+  "complianceVersionId": 1,
+  "legalDocumentId": 3
+}
+```
+
+**Response 204** — **Response 404** nếu link không tồn tại
 
 ---
 
@@ -856,12 +922,12 @@ Chỉ xóa **pending** version (hard delete — xóa hẳn khỏi DB).
 }
 ```
 
-Các message 409 có thể gặp:
+**Các message 409 thường gặp:**
 - `"Active version is read-only. Create a new version instead."`
 - `"Historical version is read-only — immutable for audit integrity."`
 - `"Cannot delete active version. It is currently in effect."`
-- `"Cannot delete historical version — immutable for audit integrity."`
 - `"A pending version with ValidFrom=2027-01-01 already exists."`
+- `"LegalDocument 3 is already linked to SocialInsuranceRate version 1."`
 
 ---
 
@@ -872,78 +938,75 @@ Tôi cần build UI cho module "Quản lý các quy định pháp luật" (Compl
 
 ## Tổng quan module
 
-Module gồm 8 sub-features, mỗi cái có chức năng giống nhau:
+Module gồm 7 sub-features:
 1. Tỷ lệ BHXH/BHYT/BHTN (Social Insurance Rate)
 2. Biểu thuế TNCN (PIT Regulation) — có bảng bracket thuế lồng trong
-3. Hệ số làm thêm giờ (OT Rate) — có danh sách loại OT
-4. Lương tối thiểu vùng (Minimum Wage) — có 4 vùng I/II/III/IV
-5. Loại phụ cấp (Allowance Type) — CRUD + phân trang
-6. Ngưỡng miễn thuế phụ cấp (Allowance Exempt Threshold) — filter theo loại phụ cấp
-7. Hằng số luật lao động (Labor Law Constants)
+3. Lương tối thiểu vùng (Minimum Wage) — có 4 vùng I/II/III/IV
+4. Loại phụ cấp (Allowance Type) — CRUD + phân trang, không versioning
+5. Ngưỡng miễn thuế phụ cấp (Allowance Exempt Threshold) — filter theo loại phụ cấp
+6. Hằng số luật lao động (Labor Law Constants)
+7. Văn bản pháp lý (Legal Document) — danh mục + liên kết với compliance version
 
-## Lifecycle của mỗi quy định
+## Lifecycle của compliance version (sub-feature 1,2,3,5,6)
 
 Mỗi quy định có "version" với 4 trạng thái:
-- **Active** (isActive=true): đang áp dụng hiện tại — chỉ đọc, không sửa/xóa
+- **Active** (isActive=true): đang áp dụng — chỉ đọc, không sửa/xóa
 - **Pending** (isActive=false, validFrom > today, isArchived=false): chờ hiệu lực — có thể sửa/xóa
 - **Historical** (isActive=false, validFrom ≤ today, isArchived=false): đã qua — chỉ đọc
 - **Archived** (isArchived=true): đã xóa mềm — ẩn mặc định
 
+Response của mọi GET đều có `createdBy: { userId, fullName, email }` và `updatedBy` (null nếu chưa update).
+
 ## UI cần có
 
-### Trang danh sách (cho mỗi sub-feature):
+### Trang danh sách (sub-feature 1,2,3,5,6):
 - Table hiển thị tất cả versions với badge status (Active=green, Pending=yellow, Historical=gray, Archived=red)
 - Toggle "Hiển thị archived" (ẩn mặc định)
 - Button "Thêm phiên bản mới" → mở form
-- Mỗi row: button Xem chi tiết, Sửa (chỉ enable với Pending), Xóa (chỉ enable với Pending)
+- Mỗi row: Xem chi tiết, Sửa (chỉ enable với Pending), Xóa (chỉ enable với Pending)
+- Cột "Người tạo" hiển thị `createdBy.fullName`; tooltip hover hiện email
+- Cột "Người cập nhật" hiển thị `updatedBy?.fullName` hoặc "—"
 - Highlight row có isActive=true
 
 ### Form tạo mới:
-- Radio/Toggle: "Áp dụng ngay" vs "Đặt ngày hiệu lực"
-- Nếu "Áp dụng ngay": ẩn field ngày, POST với applyImmediately=true
-- Nếu "Đặt ngày hiệu lực": bắt buộc nhập date > hôm nay (max 365 ngày), POST với applyImmediately=false
-- Confirm dialog khi "Áp dụng ngay" vì sẽ thay thế version đang active
+- Radio: "Áp dụng ngay" vs "Đặt ngày hiệu lực"
+- "Áp dụng ngay": ẩn field ngày, POST với applyImmediately=true, confirm dialog
+- "Đặt ngày hiệu lực": bắt buộc nhập date > hôm nay (max 365 ngày)
 
 ### Form sửa (chỉ Pending):
-- Hiển thị warning "Chỉ có thể sửa phiên bản đang chờ hiệu lực"
-- Không cho chọn validFrom ≤ hôm nay
-
-### Xóa (chỉ Pending):
-- Confirm dialog: "Xóa phiên bản ngày {validFrom}?"
-- Hiển thị error 409 thân thiện nếu cố xóa Active/Historical
+- Warning "Chỉ có thể sửa phiên bản đang chờ hiệu lực"
 
 ### Card "Đang áp dụng":
-- Ở đầu trang, hiển thị version isActive=true hiện tại
-- Button "Xem lịch sử" scroll xuống table
+- Ở đầu trang, hiển thị version isActive=true
 - Button "Kiểm tra ngày cụ thể" → input date → gọi GET /active-at?date=...
 
 ## Đặc biệt từng sub-feature
 
 ### PIT Regulation:
-- Form có bảng brackets động (thêm/xóa dòng)
-- Order tự tăng, LowerBound của dòng sau = UpperBound của dòng trước
+- Bảng brackets động (thêm/xóa dòng)
 - Rate nhập dạng % (5 = 5%), lưu dạng 0.05
-
-### OT Rate:
-- 4 loại cố định: Weekday/Weekend/Holiday/NightShift
-- Label tự điền tiếng Việt, Rate nhập hệ số (1.5 = 150%)
 
 ### Minimum Wage:
 - 4 vùng cố định: I/II/III/IV
 - Input số tiền VND có format 1,000,000
 
-### Allowance Type:
-- Bảng CRUD đơn giản, có phân trang (GET /paged)
-- Cột badge IsActive (green/gray)
+### Allowance Type (sub-feature 4):
+- CRUD đơn giản, có phân trang
+- Không có versioning — không cần badge Active/Pending/Historical
 - Xóa: hiển thị info "Sẽ vô hiệu hoá thay vì xóa nếu đang được dùng trong hợp đồng"
-- Không có versionning — không cần badge Active/Pending/Historical
 
-### Allowance Exempt Threshold:
-- Dropdown chọn AllowanceType (MEAL/FUEL/PHONE) — load từ GET /api/allowance-types?isActive=true
+### Allowance Exempt Threshold (sub-feature 5):
+- Dropdown chọn AllowanceType — load từ GET /api/allowance-types?isActive=true
 - Radio ThresholdMode: FixedAmount / ActualAllocation
-- Ẩn/hiện field MonthlyExemptAmount theo mode
+- Ẩn field MonthlyExemptAmount khi mode = ActualAllocation
 - Không có ngày hiệu lực + applyImmediately (luôn apply ngay)
-- Tab hoặc filter theo AllowanceType
+
+### Legal Document (sub-feature 7):
+- Table danh mục với filter documentType + isActive
+- Badge isActive: green/gray
+- Nút "Vô hiệu hoá" thay vì "Xoá"
+- Tab "Liên kết" trong detail: hiển thị compliance version nào đang dùng văn bản này
+- Từ compliance version detail: panel "Văn bản pháp lý" với nút Thêm/Xoá liên kết
 
 ## API endpoints (base: http://localhost:5000)
 

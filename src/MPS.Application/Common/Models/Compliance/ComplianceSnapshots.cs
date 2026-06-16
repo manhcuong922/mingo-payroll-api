@@ -1,5 +1,3 @@
-using MPS.Domain.Enums.Compliance;
-
 namespace MPS.Application.Common.Models.Compliance;
 
 public sealed record SocialInsuranceRateSnapshot(
@@ -28,28 +26,6 @@ public sealed record PitRegulationSnapshot(
     IReadOnlyList<PitBracketSnapshot> Brackets,
     string LegalReference);
 
-public sealed record OtRateEntrySnapshot(string OtType, string Label, decimal Rate);
-
-public sealed record OtRateSnapshot(
-    int VersionId,
-    DateOnly ValidFrom,
-    IReadOnlyList<OtRateEntrySnapshot> Entries,
-    string LegalReference)
-{
-    public decimal GetRate(string otType) =>
-        Entries.FirstOrDefault(e => e.OtType == otType)?.Rate
-        ?? throw new InvalidOperationException($"No OT rate for type '{otType}'.");
-
-    public decimal WeekdayRate => GetRate(OtRateTypes.Weekday);
-    public decimal WeekendRate => GetRate(OtRateTypes.Weekend);
-    public decimal HolidayRate => GetRate(OtRateTypes.Holiday);
-
-    /// <summary>
-    /// Hệ số ca đêm STANDALONE (không OT). Khi OT ban đêm ngày thường, engine phải
-    /// cộng thêm NightShiftSurchargePercent từ LaborLawConstantsSnapshot, không dùng đơn lẻ.
-    /// </summary>
-    public decimal NightShiftRate => GetRate(OtRateTypes.NightShift);
-}
 
 public sealed record MinimumWageRegionSnapshot(string RegionCode, decimal AmountPerMonth);
 

@@ -35,12 +35,12 @@ public class AppDbContext : DbContext
     public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
     public DbSet<PitRegulationVersion> PitRegulationVersions => Set<PitRegulationVersion>();
     public DbSet<PitBracket> PitBrackets => Set<PitBracket>();
-    public DbSet<OtRateVersion> OtRateVersions => Set<OtRateVersion>();
-    public DbSet<OtRateEntry> OtRateEntries => Set<OtRateEntry>();
     public DbSet<MinimumWageVersion> MinimumWageVersions => Set<MinimumWageVersion>();
     public DbSet<MinimumWageRegion> MinimumWageRegions => Set<MinimumWageRegion>();
     public DbSet<AllowanceExemptThresholdVersion> AllowanceExemptThresholdVersions => Set<AllowanceExemptThresholdVersion>();
     public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLawConstantsVersion>();
+    public DbSet<LegalDocument> LegalDocuments => Set<LegalDocument>();
+    public DbSet<ComplianceVersionLegalDocument> ComplianceVersionLegalDocuments => Set<ComplianceVersionLegalDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
