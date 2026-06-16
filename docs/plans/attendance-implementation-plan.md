@@ -230,7 +230,12 @@ Module này build từ đầu. Không có entity, repository, hay feature folder
 **Constraints:** INDEX `(EmployeeInformationId, WorkDate, Status)`.
 
 > **Khi Approved:** handler upsert `AttendanceRecord` với `Status = Present` nếu chưa có.
-> **DC-16:** Hệ số OT (150/200/300%) KHÔNG lưu vào đây — Payroll Engine tra `OtRateVersion` + `PublicHolidays` tại thời điểm tính lương.
+> **Hệ số OT KHÔNG lưu trong `OvertimeRequests`.** Tại thời điểm tính lương, Payroll Engine:
+> 1. Resolve `DayType` của `WorkDate` qua `IDayTypeResolver` (BR-23)
+> 2. Lookup `ShiftPayRule[ShiftTemplateId, DayType].OtRateMultiplier` của ca NV đó (Rev 5/6 — source of truth cho **tiền** OT)
+> 3. Áp `OtRateMultiplier × OtHours × HourlyRate`
+>
+> Lưu ý phân biệt với **giờ** OT: các giới hạn 50%/40h/200h/300h (Điều 107) sống ở `LaborLawConstants` và được check tại lúc **tạo/duyệt** `OvertimeRequest` (BR-6, BR-7, BR-8) — không liên quan tới `ShiftPayRule`.
 
 ### 2.6. `LeaveRequests` (yêu cầu nghỉ phép — FT-13)
 
