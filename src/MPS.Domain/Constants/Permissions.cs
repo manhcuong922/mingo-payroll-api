@@ -83,7 +83,7 @@ public static class Permissions
     public const string ContractPartyReadAll = "ContractParty.Read.All";
     public const string ContractPartyCreateAll = "ContractParty.Create.All";
 
-    // ===== Compliance module (FE-06) — IDs 65–84 =====
+    // ===== Compliance module (FE-06) — IDs 65–94 =====
 
     public const string SocialInsuranceRateReadAll = "SocialInsuranceRate.Read.All";
     public const string SocialInsuranceRateCreateAll = "SocialInsuranceRate.Create.All";
@@ -94,11 +94,6 @@ public static class Permissions
     public const string PitRegulationCreateAll = "PitRegulation.Create.All";
     public const string PitRegulationUpdateAll = "PitRegulation.Update.All";
     public const string PitRegulationDeleteAll = "PitRegulation.Delete.All";
-
-    public const string OtRateReadAll = "OtRate.Read.All";
-    public const string OtRateCreateAll = "OtRate.Create.All";
-    public const string OtRateUpdateAll = "OtRate.Update.All";
-    public const string OtRateDeleteAll = "OtRate.Delete.All";
 
     public const string MinimumWageReadAll = "MinimumWage.Read.All";
     public const string MinimumWageCreateAll = "MinimumWage.Create.All";
@@ -114,6 +109,9 @@ public static class Permissions
     public const string LaborLawConstantsCreateAll = "LaborLawConstants.Create.All";
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
     public const string LaborLawConstantsDeleteAll = "LaborLawConstants.Delete.All";
+
+    public const string LegalDocumentReadAll = "LegalDocument.Read.All";
+    public const string LegalDocumentWriteAll = "LegalDocument.Write.All";
 }
 
 public static class PermissionIds
@@ -199,7 +197,7 @@ public static class PermissionIds
     public const int ContractPartyReadAll = 63;
     public const int ContractPartyCreateAll = 64;
 
-    // ===== Compliance module (FE-06) — IDs 65–84 =====
+    // ===== Compliance module (FE-06) — IDs 65–94 =====
 
     public const int SocialInsuranceRateReadAll = 65;
     public const int SocialInsuranceRateCreateAll = 66;
@@ -211,23 +209,21 @@ public static class PermissionIds
     public const int PitRegulationUpdateAll = 71;
     public const int PitRegulationDeleteAll = 72;
 
-    public const int OtRateReadAll = 73;
-    public const int OtRateCreateAll = 74;
-    public const int OtRateUpdateAll = 75;
-    public const int OtRateDeleteAll = 76;
+    public const int MinimumWageReadAll = 73;
+    public const int MinimumWageCreateAll = 74;
+    public const int MinimumWageUpdateAll = 75;
+    public const int MinimumWageDeleteAll = 76;
 
-    public const int MinimumWageReadAll = 77;
-    public const int MinimumWageCreateAll = 78;
-    public const int MinimumWageUpdateAll = 79;
-    public const int MinimumWageDeleteAll = 80;
+    public const int AllowanceExemptThresholdReadAll = 77;
+    public const int AllowanceExemptThresholdCreateAll = 78;
+    public const int AllowanceExemptThresholdUpdateAll = 79;
+    public const int AllowanceExemptThresholdDeleteAll = 80;
 
-    public const int AllowanceExemptThresholdReadAll = 81;
-    public const int AllowanceExemptThresholdCreateAll = 82;
-    public const int AllowanceExemptThresholdUpdateAll = 83;
-    public const int AllowanceExemptThresholdDeleteAll = 84;
+    public const int LaborLawConstantsReadAll = 81;
+    public const int LaborLawConstantsCreateAll = 82;
+    public const int LaborLawConstantsUpdateAll = 83;
+    public const int LaborLawConstantsDeleteAll = 84;
 
-    public const int LaborLawConstantsReadAll = 85;
-    public const int LaborLawConstantsCreateAll = 86;
-    public const int LaborLawConstantsUpdateAll = 87;
-    public const int LaborLawConstantsDeleteAll = 88;
+    public const int LegalDocumentReadAll = 85;
+    public const int LegalDocumentWriteAll = 86;
 }

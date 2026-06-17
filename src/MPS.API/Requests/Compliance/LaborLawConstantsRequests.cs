@@ -10,8 +10,9 @@ public sealed record CreateLaborLawConstantsRequest(
     int AnnualLeaveMinDays,
     decimal OvertimeMaxHoursPerDay,
     int OvertimeMaxHoursPerYear,
-    string LegalReference,
-    string? Note);
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds);
 
 public sealed record UpdateLaborLawConstantsRequest(
     DateOnly ValidFrom,
@@ -22,5 +23,6 @@ public sealed record UpdateLaborLawConstantsRequest(
     int AnnualLeaveMinDays,
     decimal OvertimeMaxHoursPerDay,
     int OvertimeMaxHoursPerYear,
-    string LegalReference,
-    string? Note);
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds);

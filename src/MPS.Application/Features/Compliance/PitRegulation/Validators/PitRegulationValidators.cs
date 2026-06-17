@@ -22,8 +22,12 @@ public sealed class CreatePitRegulationCommandValidator : AbstractValidator<Crea
 
         RuleFor(x => x.PersonalDeductionAmount).GreaterThan(0);
         RuleFor(x => x.DependentDeductionAmount).GreaterThan(0);
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.ShortTermContractMaxMonths).GreaterThan(0);
+        RuleFor(x => x.ShortTermFlatRatePercent).InclusiveBetween(0, 100);
+        RuleFor(x => x.ShortTermTaxExemptMonthlyIncome).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
         RuleFor(x => x.Brackets).NotEmpty().WithMessage("At least one PIT bracket is required.");
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
 
         RuleFor(x => x.Brackets).Custom((brackets, ctx) =>
         {
@@ -69,7 +73,11 @@ public sealed class UpdatePitRegulationCommandValidator : AbstractValidator<Upda
         RuleFor(x => x.ValidFrom).GreaterThan(today);
         RuleFor(x => x.PersonalDeductionAmount).GreaterThan(0);
         RuleFor(x => x.DependentDeductionAmount).GreaterThan(0);
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.ShortTermContractMaxMonths).GreaterThan(0);
+        RuleFor(x => x.ShortTermFlatRatePercent).InclusiveBetween(0, 100);
+        RuleFor(x => x.ShortTermTaxExemptMonthlyIncome).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
         RuleFor(x => x.Brackets).NotEmpty();
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
     }
 }
