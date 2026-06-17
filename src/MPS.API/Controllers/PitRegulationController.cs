@@ -71,9 +71,13 @@ public class PitRegulationController : ControllerBase
             request.ApplyImmediately,
             request.PersonalDeductionAmount,
             request.DependentDeductionAmount,
+            request.ShortTermContractMaxMonths,
+            request.ShortTermFlatRatePercent,
+            request.ShortTermTaxExemptMonthlyIncome,
             brackets,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -93,9 +97,13 @@ public class PitRegulationController : ControllerBase
             request.ValidFrom,
             request.PersonalDeductionAmount,
             request.DependentDeductionAmount,
+            request.ShortTermContractMaxMonths,
+            request.ShortTermFlatRatePercent,
+            request.ShortTermTaxExemptMonthlyIncome,
             brackets,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }

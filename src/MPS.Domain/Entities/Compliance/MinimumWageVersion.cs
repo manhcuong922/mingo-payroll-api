@@ -9,6 +9,8 @@ public sealed class MinimumWageVersion : IComplianceVersion
     public bool IsActive { get; set; }
     public bool IsArchived { get; set; }
 
+    public string AppliedRegionCode { get; set; } = string.Empty;
+
     public string LegalReference { get; set; } = string.Empty;
     public string? Note { get; set; }
 

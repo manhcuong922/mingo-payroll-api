@@ -8,8 +8,9 @@ public sealed record CreateAllowanceExemptThresholdCommand(
     decimal? MonthlyExemptAmount,
     bool AppliesToTax,
     bool AppliesToSocial,
-    string LegalReference,
-    string? Note) : IRequest<int>;
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds) : IRequest<int>;
 
 public sealed record UpdateAllowanceExemptThresholdCommand(
     int Id,
@@ -17,7 +18,8 @@ public sealed record UpdateAllowanceExemptThresholdCommand(
     decimal? MonthlyExemptAmount,
     bool AppliesToTax,
     bool AppliesToSocial,
-    string LegalReference,
-    string? Note) : IRequest<bool>;
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds) : IRequest<bool>;
 
 public sealed record DeleteAllowanceExemptThresholdPendingCommand(int Id) : IRequest<bool>;

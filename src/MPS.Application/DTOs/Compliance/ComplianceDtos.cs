@@ -2,6 +2,12 @@ namespace MPS.Application.DTOs.Compliance;
 
 public sealed record AuditUserDto(int UserId, string FullName, string Email);
 
+public sealed record SocialInsuranceFundEntryDto(
+    string FundCode,
+    string FundName,
+    decimal EmployeePercent,
+    decimal EmployerPercent);
+
 public sealed record SocialInsuranceRateDto(
     int Id,
     DateOnly ValidFrom,
@@ -17,13 +23,19 @@ public sealed record SocialInsuranceRateDto(
     decimal EmployerUnionFundPercent,
     decimal ReferenceAmount,
     int SocialCapMultiplier,
+    int HealthCapMultiplier,
     int UnemploymentCapMultiplier,
+    IReadOnlyList<SocialInsuranceFundEntryDto> Funds,
+    string EligibilityMode,
+    IReadOnlyList<string> EligibleContractSubtypes,
+    int? MinTenureMonths,
     string LegalReference,
     string? Note,
     AuditUserDto CreatedBy,
     DateTime CreatedAt,
     AuditUserDto? UpdatedBy,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    IReadOnlyList<LegalDocumentSummaryDto> LegalDocuments);
 
 public sealed record LegalDocumentSummaryDto(
     int Id,
@@ -62,13 +74,17 @@ public sealed record PitRegulationDto(
     bool IsArchived,
     decimal PersonalDeductionAmount,
     decimal DependentDeductionAmount,
+    int ShortTermContractMaxMonths,
+    decimal ShortTermFlatRatePercent,
+    decimal ShortTermTaxExemptMonthlyIncome,
     IReadOnlyList<PitBracketDto> Brackets,
     string LegalReference,
     string? Note,
     AuditUserDto CreatedBy,
     DateTime CreatedAt,
     AuditUserDto? UpdatedBy,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    IReadOnlyList<LegalDocumentSummaryDto> LegalDocuments);
 
 public sealed record MinimumWageRegionDto(string RegionCode, decimal AmountPerMonth);
 
@@ -77,13 +93,15 @@ public sealed record MinimumWageDto(
     DateOnly ValidFrom,
     bool IsActive,
     bool IsArchived,
+    string AppliedRegionCode,
     IReadOnlyList<MinimumWageRegionDto> Regions,
     string LegalReference,
     string? Note,
     AuditUserDto CreatedBy,
     DateTime CreatedAt,
     AuditUserDto? UpdatedBy,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    IReadOnlyList<LegalDocumentSummaryDto> LegalDocuments);
 
 public sealed record AllowanceExemptThresholdDto(
     int Id,
@@ -102,7 +120,8 @@ public sealed record AllowanceExemptThresholdDto(
     AuditUserDto CreatedBy,
     DateTime CreatedAt,
     AuditUserDto? UpdatedBy,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    IReadOnlyList<LegalDocumentSummaryDto> LegalDocuments);
 
 public sealed record LaborLawConstantsDto(
     int Id,
@@ -121,4 +140,5 @@ public sealed record LaborLawConstantsDto(
     AuditUserDto CreatedBy,
     DateTime CreatedAt,
     AuditUserDto? UpdatedBy,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    IReadOnlyList<LegalDocumentSummaryDto> LegalDocuments);

@@ -12,8 +12,9 @@ public sealed record CreateLaborLawConstantsCommand(
     int AnnualLeaveMinDays,
     decimal OvertimeMaxHoursPerDay,
     int OvertimeMaxHoursPerYear,
-    string LegalReference,
-    string? Note) : IRequest<int>;
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds) : IRequest<int>;
 
 public sealed record UpdateLaborLawConstantsCommand(
     int Id,
@@ -25,7 +26,8 @@ public sealed record UpdateLaborLawConstantsCommand(
     int AnnualLeaveMinDays,
     decimal OvertimeMaxHoursPerDay,
     int OvertimeMaxHoursPerYear,
-    string LegalReference,
-    string? Note) : IRequest<bool>;
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds) : IRequest<bool>;
 
 public sealed record DeleteLaborLawConstantsPendingCommand(int Id) : IRequest<bool>;

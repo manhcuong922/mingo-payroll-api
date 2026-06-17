@@ -384,6 +384,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AppliedRegionCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -511,6 +516,21 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("PersonalDeductionAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int>("ShortTermContractMaxMonths")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(3);
+
+                    b.Property<decimal>("ShortTermFlatRatePercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(10.00m);
+
+                    b.Property<decimal>("ShortTermTaxExemptMonthlyIncome")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(2000000m);
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -536,6 +556,41 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("PitRegulationVersions", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceFundEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("EmployeePercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("EmployerPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("FundCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("FundName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("SocialInsuranceRateVersionId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SocialInsuranceRateVersionId", "FundCode")
+                        .IsUnique();
+
+                    b.ToTable("SocialInsuranceFundEntries", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceRateVersion", b =>
                 {
                     b.Property<int>("Id")
@@ -549,6 +604,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("CreatedByUserId")
                         .HasColumnType("int");
+
+                    b.Property<string>("EligibilityMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("EligibleContractSubtypesCsv")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<decimal>("EmployeeHealthPercent")
                         .HasColumnType("decimal(5,2)");
@@ -574,6 +638,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("EmployerUnionFundPercent")
                         .HasColumnType("decimal(5,2)");
 
+                    b.Property<int>("HealthCapMultiplier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(20);
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -588,6 +657,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("MinTenureMonths")
+                        .HasColumnType("int");
 
                     b.Property<string>("Note")
                         .HasMaxLength(2000)
@@ -3433,6 +3505,17 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("UpdatedByUser");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceFundEntry", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Compliance.SocialInsuranceRateVersion", "SocialInsuranceRateVersion")
+                        .WithMany("Funds")
+                        .HasForeignKey("SocialInsuranceRateVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SocialInsuranceRateVersion");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceRateVersion", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
@@ -3733,6 +3816,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.PitRegulationVersion", b =>
                 {
                     b.Navigation("Brackets");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Compliance.SocialInsuranceRateVersion", b =>
+                {
+                    b.Navigation("Funds");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Contract", b =>

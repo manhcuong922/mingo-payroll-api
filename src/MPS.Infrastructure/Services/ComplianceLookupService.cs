@@ -158,19 +158,28 @@ public sealed class ComplianceLookupService : IComplianceLookupService
         entry.AddExpirationToken(new Microsoft.Extensions.Primitives.CancellationChangeToken(token));
     }
 
+#pragma warning disable CS0618 // Obsolete — backward-compat snapshot fields, intentionally kept
     private static SocialInsuranceRateSnapshot MapSocialInsurance(Domain.Entities.Compliance.SocialInsuranceRateVersion v) =>
         new(v.Id, v.ValidFrom, v.EmployeeSocialPercent, v.EmployerSocialPercent,
             v.EmployerOccupationalDiseasePercent, v.EmployeeHealthPercent, v.EmployerHealthPercent,
             v.EmployeeUnemploymentPercent, v.EmployerUnemploymentPercent, v.EmployerUnionFundPercent,
-            v.ReferenceAmount, v.SocialCapMultiplier, v.UnemploymentCapMultiplier, v.LegalReference);
+            v.ReferenceAmount, v.SocialCapMultiplier, v.HealthCapMultiplier, v.UnemploymentCapMultiplier, v.LegalReference,
+            v.Funds.Select(f => new SocialInsuranceFundEntrySnapshot(f.FundCode, f.FundName, f.EmployeePercent, f.EmployerPercent)).ToList(),
+            v.EligibilityMode,
+            string.IsNullOrWhiteSpace(v.EligibleContractSubtypesCsv)
+                ? Array.Empty<string>()
+                : v.EligibleContractSubtypesCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+            v.MinTenureMonths);
+#pragma warning restore CS0618
 
     private static PitRegulationSnapshot MapPit(Domain.Entities.Compliance.PitRegulationVersion v) =>
         new(v.Id, v.ValidFrom, v.PersonalDeductionAmount, v.DependentDeductionAmount,
+            v.ShortTermContractMaxMonths, v.ShortTermFlatRatePercent, v.ShortTermTaxExemptMonthlyIncome,
             v.Brackets.OrderBy(b => b.Order).Select(b => new PitBracketSnapshot(b.Order, b.LowerBound, b.UpperBound, b.Rate)).ToList(),
             v.LegalReference);
 
     private static MinimumWageSnapshot MapMinimumWage(Domain.Entities.Compliance.MinimumWageVersion v) =>
-        new(v.Id, v.ValidFrom,
+        new(v.Id, v.ValidFrom, v.AppliedRegionCode,
             v.Regions.Select(r => new MinimumWageRegionSnapshot(r.RegionCode, r.AmountPerMonth)).ToList(),
             v.LegalReference);
 

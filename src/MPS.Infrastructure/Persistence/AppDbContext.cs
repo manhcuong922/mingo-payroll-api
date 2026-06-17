@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
 
     // Compliance module (FE-06)
     public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
+    public DbSet<SocialInsuranceFundEntry> SocialInsuranceFundEntries => Set<SocialInsuranceFundEntry>();
     public DbSet<PitRegulationVersion> PitRegulationVersions => Set<PitRegulationVersion>();
     public DbSet<PitBracket> PitBrackets => Set<PitBracket>();
     public DbSet<MinimumWageVersion> MinimumWageVersions => Set<MinimumWageVersion>();

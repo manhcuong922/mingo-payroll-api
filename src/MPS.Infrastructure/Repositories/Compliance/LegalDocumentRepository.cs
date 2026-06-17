@@ -32,8 +32,8 @@ public sealed class LegalDocumentRepository : ILegalDocumentRepository
             .Include(d => d.UpdatedByUser)
             .FirstOrDefaultAsync(d => d.Code == code, ct);
 
-    public async Task<IReadOnlyList<LegalDocument>> GetAllAsync(
-        string? documentType, bool? isActive, CancellationToken ct)
+    public async Task<(IReadOnlyList<LegalDocument> Items, int TotalCount)> GetAllAsync(
+        int pageNumber, int pageSize, string? documentType, bool? isActive, string? keyword, CancellationToken ct)
     {
         var query = _context.LegalDocuments
             .AsNoTracking()
@@ -45,9 +45,24 @@ public sealed class LegalDocumentRepository : ILegalDocumentRepository
             query = query.Where(d => d.DocumentType == documentType);
         if (isActive is not null)
             query = query.Where(d => d.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(keyword))
+            query = query.Where(d => d.Code.Contains(keyword) || d.Title.Contains(keyword) || d.DocumentNumber.Contains(keyword));
 
-        return await query.OrderByDescending(d => d.EffectiveDate).ToListAsync(ct);
+        query = query.OrderByDescending(d => d.EffectiveDate);
+
+        var totalCount = await query.CountAsync(ct);
+        var items = await query.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return (items, totalCount);
     }
+
+    public async Task<IReadOnlyList<LegalDocument>> GetActiveAsync(CancellationToken ct) =>
+        await _context.LegalDocuments
+            .AsNoTracking()
+            .Include(d => d.CreatedByUser)
+            .Include(d => d.UpdatedByUser)
+            .Where(d => d.IsActive)
+            .OrderByDescending(d => d.EffectiveDate)
+            .ToListAsync(ct);
 
     public async Task<IReadOnlyList<LegalDocument>> GetByComplianceVersionAsync(
         string entityType, int versionId, CancellationToken ct) =>
@@ -73,28 +88,6 @@ public sealed class LegalDocumentRepository : ILegalDocumentRepository
         await _context.LegalDocuments.AddAsync(entity, ct);
         await _context.SaveChangesAsync(ct);
         return entity.Id;
-    }
-
-    public async Task<bool> UpdateAsync(LegalDocument entity, CancellationToken ct)
-    {
-        var tracked = await _context.LegalDocuments.FindAsync([entity.Id], ct)
-            ?? throw new NotFoundException($"LegalDocument {entity.Id} not found.");
-
-        tracked.DocumentType = entity.DocumentType;
-        tracked.DocumentNumber = entity.DocumentNumber;
-        tracked.Title = entity.Title;
-        tracked.IssuedBy = entity.IssuedBy;
-        tracked.IssuedDate = entity.IssuedDate;
-        tracked.EffectiveDate = entity.EffectiveDate;
-        tracked.ExpiryDate = entity.ExpiryDate;
-        tracked.Url = entity.Url;
-        tracked.Note = entity.Note;
-        tracked.IsActive = entity.IsActive;
-        tracked.UpdatedAt = _clock.UtcNow;
-        tracked.UpdatedByUserId = entity.UpdatedByUserId;
-
-        await _context.SaveChangesAsync(ct);
-        return true;
     }
 
     public async Task<bool> DeactivateAsync(int id, CancellationToken ct)

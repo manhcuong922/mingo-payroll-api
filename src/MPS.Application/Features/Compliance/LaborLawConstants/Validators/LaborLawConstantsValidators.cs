@@ -29,7 +29,8 @@ public sealed class CreateLaborLawConstantsCommandValidator : AbstractValidator<
         RuleFor(x => x.AnnualLeaveMinDays).GreaterThanOrEqualTo(1);
         RuleFor(x => x.OvertimeMaxHoursPerDay).InclusiveBetween(0.01m, 24m);
         RuleFor(x => x.OvertimeMaxHoursPerYear).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
     }
 }
 
@@ -46,6 +47,7 @@ public sealed class UpdateLaborLawConstantsCommandValidator : AbstractValidator<
         RuleFor(x => x.AnnualLeaveMinDays).GreaterThanOrEqualTo(1);
         RuleFor(x => x.OvertimeMaxHoursPerDay).InclusiveBetween(0.01m, 24m);
         RuleFor(x => x.OvertimeMaxHoursPerYear).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
     }
 }

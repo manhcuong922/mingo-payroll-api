@@ -11,7 +11,7 @@ public sealed class CreateAllowanceExemptThresholdCommandValidator : AbstractVal
         RuleFor(x => x.AllowanceTypeId).GreaterThan(0);
         RuleFor(x => x.ThresholdMode).Must(m => ThresholdModes.All.Contains(m))
             .WithMessage($"ThresholdMode must be one of: {string.Join(", ", ThresholdModes.All)}.");
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
 
         When(x => x.ThresholdMode == ThresholdModes.FixedAmount, () =>
             RuleFor(x => x.MonthlyExemptAmount).NotNull().GreaterThan(0)
@@ -23,6 +23,8 @@ public sealed class CreateAllowanceExemptThresholdCommandValidator : AbstractVal
 
         RuleFor(x => x).Must(x => x.AppliesToTax || x.AppliesToSocial)
             .WithMessage("At least one of AppliesToTax or AppliesToSocial must be true.");
+
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
     }
 }
 
@@ -32,7 +34,7 @@ public sealed class UpdateAllowanceExemptThresholdCommandValidator : AbstractVal
     {
         RuleFor(x => x.ThresholdMode).Must(m => ThresholdModes.All.Contains(m))
             .WithMessage($"ThresholdMode must be one of: {string.Join(", ", ThresholdModes.All)}.");
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
 
         When(x => x.ThresholdMode == ThresholdModes.FixedAmount, () =>
             RuleFor(x => x.MonthlyExemptAmount).NotNull().GreaterThan(0));
@@ -42,5 +44,7 @@ public sealed class UpdateAllowanceExemptThresholdCommandValidator : AbstractVal
 
         RuleFor(x => x).Must(x => x.AppliesToTax || x.AppliesToSocial)
             .WithMessage("At least one of AppliesToTax or AppliesToSocial must be true.");
+
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
     }
 }
