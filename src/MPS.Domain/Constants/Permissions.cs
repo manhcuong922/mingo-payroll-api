@@ -238,7 +238,7 @@ public static class PermissionIds
 
     public const int AuditLogReadAll = 89;
 
-    // ===== LegalDocument module — IDs 90–91 =====
+    // ===== LegalDocument module — IDs 89–90 =====
 
     public const int LegalDocumentReadAll = 90;
     public const int LegalDocumentWriteAll = 91;
