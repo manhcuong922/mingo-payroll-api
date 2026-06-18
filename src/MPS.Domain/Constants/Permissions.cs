@@ -110,6 +110,8 @@ public static class Permissions
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
     public const string LaborLawConstantsDeleteAll = "LaborLawConstants.Delete.All";
 
+    // ===== LegalDocument module — IDs 89–90 =====
+
     public const string LegalDocumentReadAll = "LegalDocument.Read.All";
     public const string LegalDocumentWriteAll = "LegalDocument.Write.All";
 }
@@ -219,11 +221,13 @@ public static class PermissionIds
     public const int AllowanceExemptThresholdUpdateAll = 79;
     public const int AllowanceExemptThresholdDeleteAll = 80;
 
-    public const int LaborLawConstantsReadAll = 81;
-    public const int LaborLawConstantsCreateAll = 82;
-    public const int LaborLawConstantsUpdateAll = 83;
-    public const int LaborLawConstantsDeleteAll = 84;
+    public const int LaborLawConstantsReadAll = 85;
+    public const int LaborLawConstantsCreateAll = 86;
+    public const int LaborLawConstantsUpdateAll = 87;
+    public const int LaborLawConstantsDeleteAll = 88;
 
-    public const int LegalDocumentReadAll = 85;
-    public const int LegalDocumentWriteAll = 86;
+    // ===== LegalDocument module — IDs 89–90 =====
+
+    public const int LegalDocumentReadAll = 89;
+    public const int LegalDocumentWriteAll = 90;
 }
