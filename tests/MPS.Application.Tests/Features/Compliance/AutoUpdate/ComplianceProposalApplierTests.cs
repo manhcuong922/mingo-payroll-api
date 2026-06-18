@@ -17,13 +17,22 @@ public sealed class ComplianceProposalApplierTests
     private readonly Mock<ISocialInsuranceRateRepository> _si = new();
     private readonly Mock<IPitRegulationRepository> _pit = new();
     private readonly Mock<ILaborLawConstantsRepository> _ll = new();
+    private readonly Mock<ILegalDocumentRepository> _legalDoc = new();
+    private readonly Mock<ICurrentUserService> _currentUser = new();
     private readonly Mock<ISender> _sender = new();
     private readonly Mock<IClock> _clock = new();
 
     private ComplianceProposalApplier CreateSut()
     {
         _clock.SetupGet(c => c.UtcNow).Returns(new DateTime(2026, 6, 18, 0, 0, 0, DateTimeKind.Utc));
-        return new ComplianceProposalApplier(_mw.Object, _si.Object, _pit.Object, _ll.Object, _sender.Object, _clock.Object);
+        _currentUser.SetupGet(u => u.UserId).Returns(1);
+        _legalDoc.Setup(r => r.GetByCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((MPS.Domain.Entities.Compliance.LegalDocument?)null);
+        _legalDoc.Setup(r => r.AddAsync(It.IsAny<MPS.Domain.Entities.Compliance.LegalDocument>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(50);
+        return new ComplianceProposalApplier(
+            _mw.Object, _si.Object, _pit.Object, _ll.Object,
+            _legalDoc.Object, _currentUser.Object, _sender.Object, _clock.Object);
     }
 
     [Fact]

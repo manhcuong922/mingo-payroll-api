@@ -18,9 +18,18 @@ public sealed class ProposalApprovalHandlerTests
     public ProposalApprovalHandlerTests() =>
         _clock.SetupGet(c => c.UtcNow).Returns(new DateTime(2026, 6, 18, 0, 0, 0, DateTimeKind.Utc));
 
-    private ComplianceProposalApplier RealApplier(Mock<ISender> sender, Mock<IMinimumWageRepository> mw) =>
-        new(mw.Object, Mock.Of<ISocialInsuranceRateRepository>(), Mock.Of<IPitRegulationRepository>(),
-            Mock.Of<ILaborLawConstantsRepository>(), sender.Object, _clock.Object);
+    private ComplianceProposalApplier RealApplier(Mock<ISender> sender, Mock<IMinimumWageRepository> mw)
+    {
+        var legalDoc = new Mock<ILegalDocumentRepository>();
+        legalDoc.Setup(r => r.GetByCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LegalDocument?)null);
+        legalDoc.Setup(r => r.AddAsync(It.IsAny<LegalDocument>(), It.IsAny<CancellationToken>())).ReturnsAsync(50);
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(u => u.UserId).Returns(1);
+        return new ComplianceProposalApplier(
+            mw.Object, Mock.Of<ISocialInsuranceRateRepository>(), Mock.Of<IPitRegulationRepository>(),
+            Mock.Of<ILaborLawConstantsRepository>(), legalDoc.Object, currentUser.Object, sender.Object, _clock.Object);
+    }
 
     [Fact]
     public async Task Approve_SetsApproved_AndCreatesVersion()
