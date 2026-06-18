@@ -12,13 +12,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
         {
             // LegalDocument.Read.All / LegalDocument.Write.All were never seeded — the
             // LegalDocumentController endpoints have been unreachable by any role.
+            // NOTE: Id 89 đã bị AuditLog.Read.All chiếm (migration 20260616100727).
+            // LegalDocument dùng 90/91 — khớp PermissionIds (AuditLog=89, LegalDocument=90/91).
             migrationBuilder.InsertData(
                 table: "Permissions",
                 columns: new[] { "Id", "Action", "Code", "Description", "Resource", "Scope" },
                 values: new object[,]
                 {
-                    { 89, "Read",  "LegalDocument.Read.All",  "Xem văn bản pháp luật.", "LegalDocument", "All" },
-                    { 90, "Write", "LegalDocument.Write.All", "Tạo/cập nhật/liên kết văn bản pháp luật.", "LegalDocument", "All" }
+                    { 90, "Read",  "LegalDocument.Read.All",  "Xem văn bản pháp luật.", "LegalDocument", "All" },
+                    { 91, "Write", "LegalDocument.Write.All", "Tạo/cập nhật/liên kết văn bản pháp luật.", "LegalDocument", "All" }
                 });
 
             migrationBuilder.InsertData(
@@ -27,29 +29,29 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 values: new object[,]
                 {
                     // SystemAdmin (1) + HR (2) — full Read/Write
-                    { 89, 1 }, { 90, 1 },
-                    { 89, 2 }, { 90, 2 },
+                    { 90, 1 }, { 91, 1 },
+                    { 90, 2 }, { 91, 2 },
 
                     // Accountant (3) + Director (4) — Read-only
-                    { 89, 3 },
-                    { 89, 4 }
+                    { 90, 3 },
+                    { 90, 4 }
                 });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 89, 1 });
             migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 89, 2 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 91, 1 });
             migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 89, 3 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 89, 4 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 91, 2 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 3 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 4 });
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValues: new object[] { 89, 90 });
+                keyValues: new object[] { 90, 91 });
         }
     }
 }
