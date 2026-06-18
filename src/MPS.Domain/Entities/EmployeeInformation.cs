@@ -1,7 +1,9 @@
+using MPS.Domain.Attributes;
 using MPS.Domain.Enums.Employee;
 
 namespace MPS.Domain.Entities;
 
+[Auditable]
 public class EmployeeInformation
 {
     public int Id { get; set; }

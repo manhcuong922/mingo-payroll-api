@@ -12,7 +12,7 @@ public sealed class PositionCreateCommandValidatorTests
     public async Task Code_Is_Required()
     {
         var validator = NewValidator();
-        var result = await validator.TestValidateAsync(new PositionCreateCommand("", "Developer"));
+        var result = await validator.TestValidateAsync(new PositionCreateCommand("", "Developer", null));
 
         result.ShouldHaveValidationErrorFor(c => c.Code)
             .WithErrorMessage("Code is required.");
@@ -25,7 +25,7 @@ public sealed class PositionCreateCommandValidatorTests
     public async Task Code_Rejects_Disallowed_Characters(string code)
     {
         var validator = NewValidator();
-        var result = await validator.TestValidateAsync(new PositionCreateCommand(code, "Developer"));
+        var result = await validator.TestValidateAsync(new PositionCreateCommand(code, "Developer", null));
 
         result.ShouldHaveValidationErrorFor(c => c.Code)
             .WithErrorMessage("Code may only contain letters, digits, hyphen and underscore.");
@@ -39,7 +39,7 @@ public sealed class PositionCreateCommandValidatorTests
         repo.Setup(r => r.NameExistsAsync(It.IsAny<string>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var validator = new PositionCreateCommandValidator(repo.Object);
-        var result = await validator.TestValidateAsync(new PositionCreateCommand("dev", "Developer"));
+        var result = await validator.TestValidateAsync(new PositionCreateCommand("dev", "Developer", null));
 
         result.ShouldHaveValidationErrorFor(c => c.Code)
             .WithErrorMessage("Position code already exists.");
@@ -49,7 +49,7 @@ public sealed class PositionCreateCommandValidatorTests
     public async Task Valid_Command_Passes()
     {
         var validator = NewValidator();
-        var result = await validator.TestValidateAsync(new PositionCreateCommand("DEV", "Developer"));
+        var result = await validator.TestValidateAsync(new PositionCreateCommand("DEV", "Developer", null));
 
         result.ShouldNotHaveAnyValidationErrors();
     }

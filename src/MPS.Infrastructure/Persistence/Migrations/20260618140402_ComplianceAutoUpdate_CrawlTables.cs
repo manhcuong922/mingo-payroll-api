@@ -93,14 +93,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 table: "ComplianceUpdateProposals",
                 columns: new[] { "Status", "CreatedAt" });
 
-            // ===== Permission master cho module Auto-Update (ID 89–90; 87/88 đã dùng cho LaborLawConstants seed master) =====
+            // ===== Permission master cho module Auto-Update (ID 92–93; 89/90 đã dùng cho LegalDocument, 91 chừa) =====
             migrationBuilder.InsertData(
                 table: "Permissions",
                 columns: new[] { "Id", "Action", "Code", "Description", "Resource", "Scope" },
                 values: new object[,]
                 {
-                    { 89, "Run",  "ComplianceAutoUpdate.Run.All",  "Kích hoạt quét & đề xuất cập nhật pháp luật tự động.", "ComplianceAutoUpdate", "All" },
-                    { 90, "Read", "ComplianceAutoUpdate.Read.All", "Xem các đề xuất cập nhật pháp luật tự động.", "ComplianceAutoUpdate", "All" }
+                    { 92, "Run",  "ComplianceAutoUpdate.Run.All",  "Kích hoạt quét & đề xuất cập nhật pháp luật tự động.", "ComplianceAutoUpdate", "All" },
+                    { 93, "Read", "ComplianceAutoUpdate.Read.All", "Xem các đề xuất cập nhật pháp luật tự động.", "ComplianceAutoUpdate", "All" }
                 });
 
             // Gán quyền: Run cho SystemAdmin(1) + HR(2); Read cho cả 4 role chuẩn (Accountant=3, Director=4 đọc).
@@ -109,22 +109,22 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 columns: new[] { "PermissionId", "RoleId" },
                 values: new object[,]
                 {
-                    { 89, 1 }, { 89, 2 },
-                    { 90, 1 }, { 90, 2 }, { 90, 3 }, { 90, 4 }
+                    { 92, 1 }, { 92, 2 },
+                    { 93, 1 }, { 93, 2 }, { 93, 3 }, { 93, 4 }
                 });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 89, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 89, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 3 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 90, 4 });
-            migrationBuilder.DeleteData(table: "Permissions", keyColumn: "Id", keyValue: 89);
-            migrationBuilder.DeleteData(table: "Permissions", keyColumn: "Id", keyValue: 90);
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 92, 1 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 92, 2 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 93, 1 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 93, 2 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 93, 3 });
+            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 93, 4 });
+            migrationBuilder.DeleteData(table: "Permissions", keyColumn: "Id", keyValue: 92);
+            migrationBuilder.DeleteData(table: "Permissions", keyColumn: "Id", keyValue: 93);
 
             migrationBuilder.DropTable(
                 name: "ComplianceCrawledDocumentLogs");

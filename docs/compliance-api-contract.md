@@ -85,9 +85,9 @@ Mọi response GET (item đơn hoặc list) của `SocialInsuranceRate`, `PitReg
 | `PitRegulation.Read/Create/Update/Delete.All` | 69/70/71/72 |
 | `MinimumWage.Read/Create/Update/Delete.All` | 73/74/75/76 |
 | `AllowanceExemptThreshold.Read/Create/Update/Delete.All` | 77/78/79/80 |
-| `LaborLawConstants.Read/Create/Update/Delete.All` | 81/82/83/84 |
-| `LegalDocument.Read.All` | 85 |
-| `LegalDocument.Write.All` (Create + Deactivate + Link/Unlink) | 86 |
+| `LaborLawConstants.Read/Create/Update/Delete.All` | 85/86/87/88 |
+| `LegalDocument.Read.All` | 89 |
+| `LegalDocument.Write.All` (Create + Deactivate + Link/Unlink) | 90 |
 
 ---
 

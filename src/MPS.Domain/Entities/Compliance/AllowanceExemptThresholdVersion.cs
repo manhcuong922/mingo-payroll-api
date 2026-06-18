@@ -1,5 +1,8 @@
+using MPS.Domain.Attributes;
+
 namespace MPS.Domain.Entities.Compliance;
 
+[Auditable]
 public sealed class AllowanceExemptThresholdVersion
 {
     public int Id { get; set; }

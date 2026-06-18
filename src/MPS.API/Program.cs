@@ -59,6 +59,7 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IAuditContextProvider, HttpAuditContextProvider>();
 
 // ===== Application Layer =====
 var applicationAssembly = typeof(MPS.Application.Features.PerformanceMetric.Commands.PerformanceMetricCreateCommand).Assembly;
@@ -79,9 +80,11 @@ builder.Services.AddAutoMapper(cfg => cfg.AddMaps(applicationAssembly));
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(connectionString, sql =>
-        sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+    options
+        .UseSqlServer(connectionString, sql =>
+            sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName))
+        .AddInterceptors(sp.GetRequiredService<MPS.Infrastructure.Persistence.Interceptors.AuditSaveChangesInterceptor>()));
 
 builder.Services.AddInfrastructure(builder.Configuration);
 
@@ -128,6 +131,10 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();
+// FT-39 — wrap middleware result handler để ghi audit AccessDenied trước khi trả 403.
+builder.Services.AddSingleton<
+    Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler,
+    AuditAccessDeniedHandler>();
 
 // ===== Rate Limiting =====
 builder.Services.AddRateLimiter(options =>

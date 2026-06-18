@@ -20,5 +20,9 @@ public class PositionCreateCommandValidator : AbstractValidator<PositionCreateCo
             .MaximumLength(100).WithMessage("Name must not exceed 100 characters.")
             .MustAsync(async (name, ct) => !await repository.NameExistsAsync(name, null, ct))
             .WithMessage("Position name already exists.");
+
+        RuleFor(x => x.Description)
+            .MaximumLength(4000).WithMessage("Description must not exceed 4000 characters.")
+            .When(x => !string.IsNullOrWhiteSpace(x.Description));
     }
 }

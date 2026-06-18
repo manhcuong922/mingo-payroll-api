@@ -110,6 +110,11 @@ public static class Permissions
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
     public const string LaborLawConstantsDeleteAll = "LaborLawConstants.Delete.All";
 
+    // ===== Audit Log module (FT-39) — System Admin only =====
+
+    public const string AuditLogReadAll = "AuditLog.Read.All";
+    // ===== LegalDocument module — IDs 89–90 =====
+
     public const string LegalDocumentReadAll = "LegalDocument.Read.All";
     public const string LegalDocumentWriteAll = "LegalDocument.Write.All";
 
@@ -224,16 +229,22 @@ public static class PermissionIds
     public const int AllowanceExemptThresholdUpdateAll = 79;
     public const int AllowanceExemptThresholdDeleteAll = 80;
 
-    public const int LaborLawConstantsReadAll = 81;
-    public const int LaborLawConstantsCreateAll = 82;
-    public const int LaborLawConstantsUpdateAll = 83;
-    public const int LaborLawConstantsDeleteAll = 84;
+    public const int LaborLawConstantsReadAll = 85;
+    public const int LaborLawConstantsCreateAll = 86;
+    public const int LaborLawConstantsUpdateAll = 87;
+    public const int LaborLawConstantsDeleteAll = 88;
 
-    public const int LegalDocumentReadAll = 85;
-    public const int LegalDocumentWriteAll = 86;
+    // ===== Audit Log module (FT-39) =====
 
-    // ===== Compliance Auto-Update module — IDs 89–90 (87/88 đã dùng cho LaborLawConstants trong seed master DB) =====
+    public const int AuditLogReadAll = 89;
 
-    public const int ComplianceAutoUpdateRunAll = 89;
-    public const int ComplianceAutoUpdateReadAll = 90;
+    // ===== LegalDocument module — IDs 90–91 =====
+
+    public const int LegalDocumentReadAll = 90;
+    public const int LegalDocumentWriteAll = 91;
+
+    // ===== Compliance Auto-Update module — IDs 92–93 =====
+
+    public const int ComplianceAutoUpdateRunAll = 92;
+    public const int ComplianceAutoUpdateReadAll = 93;
 }

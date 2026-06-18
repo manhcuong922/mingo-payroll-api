@@ -76,6 +76,158 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("AllowanceTypes", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.AuditLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<byte>("Action")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("DataDiff")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("RequestPath")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<byte>("Severity")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("Timestamp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UsernameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp")
+                        .IsDescending()
+                        .HasDatabaseName("IX_AuditLogs_Timestamp");
+
+                    b.HasIndex("Module", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AuditLogs_Module_Timestamp");
+
+                    b.HasIndex("Severity", "Timestamp")
+                        .HasDatabaseName("IX_AuditLogs_Severity_Timestamp");
+
+                    b.HasIndex("UserId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AuditLogs_User_Timestamp");
+
+                    b.HasIndex("Module", "RecordId", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("IX_AuditLogs_Record");
+
+                    b.ToTable("AuditLogs", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.AuditLogArchive", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte>("Action")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("ArchivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("DataDiff")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("RecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("RequestPath")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<byte>("Severity")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UsernameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp")
+                        .IsDescending()
+                        .HasDatabaseName("IX_AuditLogsArchive_Timestamp");
+
+                    b.HasIndex("Module", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AuditLogsArchive_Module_Timestamp");
+
+                    b.HasIndex("Severity", "Timestamp")
+                        .HasDatabaseName("IX_AuditLogsArchive_Severity_Timestamp");
+
+                    b.HasIndex("UserId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AuditLogsArchive_User_Timestamp");
+
+                    b.HasIndex("Module", "RecordId", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("IX_AuditLogsArchive_Record");
+
+                    b.ToTable("AuditLogsArchive", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>
                 {
                     b.Property<int>("Id")
@@ -2322,6 +2474,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -3513,6 +3668,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("TargetRolesId");
 
                     b.ToTable("PerformanceMetricRoles", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.AuditLog", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>

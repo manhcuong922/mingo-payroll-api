@@ -64,6 +64,8 @@ public class UserController : ControllerBase
         return Ok(result);
     }
 
+    // Fallback: tài khoản nhân viên được auto-provision khi kích hoạt hợp đồng.
+    // Endpoint này dành cho admin retry thủ công khi auto-provision lỗi.
     [HttpPost]
     [HasPermission(Permissions.UserCreateAll)]
     public async Task<IActionResult> Create(

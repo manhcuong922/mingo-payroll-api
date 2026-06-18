@@ -7,23 +7,23 @@ namespace MPS.Application.Mappings;
 
 public sealed class ComplianceMappingProfile : Profile
 {
-    private const string CreatedByParam = "createdBy";
-    private const string UpdatedByParam = "updatedBy";
-    private const string LegalDocumentsParam = "legalDocuments";
+    private const string CreatedByParam = "CreatedBy";
+    private const string UpdatedByParam = "UpdatedBy";
+    private const string LegalDocumentsParam = "LegalDocuments";
 
     public ComplianceMappingProfile()
     {
         CreateMap<User, AuditUserDto>()
-            .ForCtorParam("userId", opt => opt.MapFrom(s => s.Id))
-            .ForCtorParam("fullName", opt => opt.MapFrom(s => s.FullName))
-            .ForCtorParam("email", opt => opt.MapFrom(s => s.Email));
+            .ForCtorParam("UserId", opt => opt.MapFrom(s => s.Id))
+            .ForCtorParam("FullName", opt => opt.MapFrom(s => s.FullName))
+            .ForCtorParam("Email", opt => opt.MapFrom(s => s.Email));
 
         CreateMap<SocialInsuranceFundEntry, SocialInsuranceFundEntryDto>();
 
 #pragma warning disable CS0618 // Obsolete — still mapped for backward-compat DTO fields
         CreateMap<SocialInsuranceRateVersion, SocialInsuranceRateDto>()
-            .ForCtorParam("funds", opt => opt.MapFrom(s => s.Funds))
-            .ForCtorParam("eligibleContractSubtypes", opt => opt.MapFrom(s =>
+            .ForCtorParam("Funds", opt => opt.MapFrom(s => s.Funds))
+            .ForCtorParam("EligibleContractSubtypes", opt => opt.MapFrom(s =>
                 string.IsNullOrWhiteSpace(s.EligibleContractSubtypesCsv)
                     ? Array.Empty<string>()
                     : s.EligibleContractSubtypesCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)))
@@ -34,21 +34,21 @@ public sealed class ComplianceMappingProfile : Profile
 
         CreateMap<PitBracket, PitBracketDto>();
         CreateMap<PitRegulationVersion, PitRegulationDto>()
-            .ForCtorParam("brackets", opt => opt.MapFrom(s => s.Brackets.OrderBy(b => b.Order)))
+            .ForCtorParam("Brackets", opt => opt.MapFrom(s => s.Brackets.OrderBy(b => b.Order)))
             .ForCtorParam(LegalDocumentsParam, opt => opt.MapFrom(_ => Array.Empty<LegalDocumentSummaryDto>()))
             .ForCtorParam(CreatedByParam, opt => opt.MapFrom(s => s.CreatedByUser))
             .ForCtorParam(UpdatedByParam, opt => opt.MapFrom(s => s.UpdatedByUser));
 
         CreateMap<MinimumWageRegion, MinimumWageRegionDto>();
         CreateMap<MinimumWageVersion, MinimumWageDto>()
-            .ForCtorParam("regions", opt => opt.MapFrom(s => s.Regions))
+            .ForCtorParam("Regions", opt => opt.MapFrom(s => s.Regions))
             .ForCtorParam(LegalDocumentsParam, opt => opt.MapFrom(_ => Array.Empty<LegalDocumentSummaryDto>()))
             .ForCtorParam(CreatedByParam, opt => opt.MapFrom(s => s.CreatedByUser))
             .ForCtorParam(UpdatedByParam, opt => opt.MapFrom(s => s.UpdatedByUser));
 
         CreateMap<AllowanceExemptThresholdVersion, AllowanceExemptThresholdDto>()
-            .ForCtorParam("allowanceTypeCode", opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Code : string.Empty))
-            .ForCtorParam("allowanceTypeName", opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Name : string.Empty))
+            .ForCtorParam("AllowanceTypeCode", opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Code : string.Empty))
+            .ForCtorParam("AllowanceTypeName", opt => opt.MapFrom(s => s.AllowanceType != null ? s.AllowanceType.Name : string.Empty))
             .ForCtorParam(LegalDocumentsParam, opt => opt.MapFrom(_ => Array.Empty<LegalDocumentSummaryDto>()))
             .ForCtorParam(CreatedByParam, opt => opt.MapFrom(s => s.CreatedByUser))
             .ForCtorParam(UpdatedByParam, opt => opt.MapFrom(s => s.UpdatedByUser));

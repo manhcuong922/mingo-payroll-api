@@ -10,4 +10,20 @@ public interface IEmailSender
         string username,
         string plainPassword,
         CancellationToken cancellationToken = default);
+
+    Task SendContractActivationAsync(
+        string toEmail,
+        string fullName,
+        ContractActivationEmailPayload payload,
+        Stream pdfStream,
+        string pdfFileName,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record ContractActivationEmailPayload(
+    string ContractNo,
+    DateTime EffectiveFrom,
+    DateTime? EffectiveTo,
+    string? Username,
+    string? PlainPassword,
+    string? LoginUrl);
