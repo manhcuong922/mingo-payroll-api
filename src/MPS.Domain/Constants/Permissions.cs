@@ -122,6 +122,7 @@ public static class Permissions
 
     public const string ComplianceAutoUpdateRunAll = "ComplianceAutoUpdate.Run.All";
     public const string ComplianceAutoUpdateReadAll = "ComplianceAutoUpdate.Read.All";
+    public const string ComplianceAutoUpdateApproveAll = "ComplianceAutoUpdate.Approve.All";
 }
 
 public static class PermissionIds
@@ -247,4 +248,5 @@ public static class PermissionIds
 
     public const int ComplianceAutoUpdateRunAll = 92;
     public const int ComplianceAutoUpdateReadAll = 93;
+    public const int ComplianceAutoUpdateApproveAll = 94;
 }

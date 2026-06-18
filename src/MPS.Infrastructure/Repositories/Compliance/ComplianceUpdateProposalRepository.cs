@@ -23,4 +23,9 @@ public sealed class ComplianceUpdateProposalRepository : IComplianceUpdatePropos
             .Take(take)
             .ToListAsync(cancellationToken);
     }
+
+    public Task<ComplianceUpdateProposal?> GetByIdAsync(int id, CancellationToken cancellationToken) =>
+        _db.ComplianceUpdateProposals.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+
+    public Task SaveChangesAsync(CancellationToken cancellationToken) => _db.SaveChangesAsync(cancellationToken);
 }

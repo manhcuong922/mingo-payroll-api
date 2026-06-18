@@ -174,6 +174,9 @@ public static class InfrastructureServiceRegistration
         // Runner — đợt này CHỈ singleton, chạy thủ công qua endpoint. Chuyển background: xem chú thích trong class.
         services.AddSingleton<ComplianceAutoUpdateJob>();
 
+        // Áp proposal đã duyệt → tạo version compliance mới (tái dùng Create command sẵn có).
+        services.AddScoped<MPS.Application.Features.Compliance.AutoUpdate.Approval.ComplianceProposalApplier>();
+
         // Audit log module (FT-39)
         services.AddOptions<AuditLogOptions>()
             .Bind(configuration.GetSection(AuditLogOptions.SectionName))

@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using MPS.API.Authorization;
+using MPS.API.Requests.Compliance;
+using MPS.Application.Features.Compliance.AutoUpdate.Approval;
 using MPS.Application.Features.Compliance.AutoUpdate.Queries;
 using MPS.Domain.Constants;
 using MPS.Infrastructure.BackgroundJobs;
@@ -44,6 +46,26 @@ public class ComplianceAutoUpdateController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetComplianceProposalsQuery(status, take), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>Duyệt proposal → tạo version compliance mới (chờ hiệu lực theo ProposedValidFrom).</summary>
+    [HttpPost("proposals/{id:int}/approve")]
+    [HasPermission(Permissions.ComplianceAutoUpdateApproveAll)]
+    public async Task<IActionResult> Approve(
+        int id, [FromBody] ReviewProposalRequest? body, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ApproveComplianceProposalCommand(id, body?.Note), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>Từ chối proposal (không tạo version).</summary>
+    [HttpPost("proposals/{id:int}/reject")]
+    [HasPermission(Permissions.ComplianceAutoUpdateApproveAll)]
+    public async Task<IActionResult> Reject(
+        int id, [FromBody] ReviewProposalRequest? body, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RejectComplianceProposalCommand(id, body?.Note), cancellationToken);
         return Ok(result);
     }
 }
