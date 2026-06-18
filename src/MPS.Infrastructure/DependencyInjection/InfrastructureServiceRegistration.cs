@@ -57,10 +57,10 @@ public static class InfrastructureServiceRegistration
         // Compliance module repositories
         services.AddScoped<ISocialInsuranceRateRepository, SocialInsuranceRateRepository>();
         services.AddScoped<IPitRegulationRepository, PitRegulationRepository>();
-        services.AddScoped<IOtRateRepository, OtRateRepository>();
         services.AddScoped<IMinimumWageRepository, MinimumWageRepository>();
         services.AddScoped<IAllowanceExemptThresholdRepository, AllowanceExemptThresholdRepository>();
         services.AddScoped<ILaborLawConstantsRepository, LaborLawConstantsRepository>();
+        services.AddScoped<ILegalDocumentRepository, LegalDocumentRepository>();
 
         // Compliance module services
         services.AddSingleton<ComplianceCacheInvalidator>();

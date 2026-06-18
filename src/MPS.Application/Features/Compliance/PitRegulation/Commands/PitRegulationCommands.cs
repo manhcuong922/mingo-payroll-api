@@ -10,17 +10,25 @@ public sealed record CreatePitRegulationCommand(
     bool ApplyImmediately,
     decimal PersonalDeductionAmount,
     decimal DependentDeductionAmount,
+    int ShortTermContractMaxMonths,
+    decimal ShortTermFlatRatePercent,
+    decimal ShortTermTaxExemptMonthlyIncome,
     IReadOnlyList<PitBracketInput> Brackets,
-    string LegalReference,
-    string? Note) : IRequest<int>;
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds) : IRequest<int>;
 
 public sealed record UpdatePitRegulationCommand(
     int Id,
     DateOnly ValidFrom,
     decimal PersonalDeductionAmount,
     decimal DependentDeductionAmount,
+    int ShortTermContractMaxMonths,
+    decimal ShortTermFlatRatePercent,
+    decimal ShortTermTaxExemptMonthlyIncome,
     IReadOnlyList<PitBracketInput> Brackets,
-    string LegalReference,
-    string? Note) : IRequest<bool>;
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds) : IRequest<bool>;
 
 public sealed record DeletePitRegulationPendingCommand(int Id) : IRequest<bool>;

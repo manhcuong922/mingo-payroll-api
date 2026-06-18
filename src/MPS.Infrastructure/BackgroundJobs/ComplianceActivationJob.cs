@@ -77,8 +77,6 @@ public sealed class ComplianceActivationJob : BackgroundService
                 db, clock, publisher, today, "SocialInsuranceRateVersion", cancellationToken);
             totalActivated += await ActivateForTypeAsync<Domain.Entities.Compliance.PitRegulationVersion>(
                 db, clock, publisher, today, "PitRegulationVersion", cancellationToken);
-            totalActivated += await ActivateForTypeAsync<Domain.Entities.Compliance.OtRateVersion>(
-                db, clock, publisher, today, "OtRateVersion", cancellationToken);
             totalActivated += await ActivateForTypeAsync<Domain.Entities.Compliance.MinimumWageVersion>(
                 db, clock, publisher, today, "MinimumWageVersion", cancellationToken);
             totalActivated += await ActivateForTypeAsync<Domain.Entities.Compliance.LaborLawConstantsVersion>(

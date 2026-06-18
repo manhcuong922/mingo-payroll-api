@@ -15,6 +15,12 @@ public sealed record UpdateSocialInsuranceRateCommand(
     decimal EmployerUnionFundPercent,
     decimal ReferenceAmount,
     int SocialCapMultiplier,
+    int HealthCapMultiplier,
     int UnemploymentCapMultiplier,
-    string LegalReference,
-    string? Note) : IRequest<bool>;
+    IReadOnlyList<FundEntryInput> Funds,
+    string EligibilityMode,
+    IReadOnlyList<string>? EligibleContractSubtypes,
+    int? MinTenureMonths,
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds) : IRequest<bool>;

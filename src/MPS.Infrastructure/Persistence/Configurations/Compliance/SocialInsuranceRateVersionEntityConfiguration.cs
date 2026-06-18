@@ -18,9 +18,11 @@ public class SocialInsuranceRateVersionEntityConfiguration : IEntityTypeConfigur
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.IsArchived).IsRequired().HasDefaultValue(false);
 
-        builder.Property(e => e.EmployeeSocialPercent).HasColumnType("decimal(5,2)").IsRequired();
-        builder.Property(e => e.EmployerSocialPercent).HasColumnType("decimal(5,2)").IsRequired();
-        builder.Property(e => e.EmployerOccupationalDiseasePercent).HasColumnType("decimal(5,2)").IsRequired();
+#pragma warning disable CS0618 // Obsolete — backward-compat columns, still need EF configuration
+        builder.Property(e => e.EmployeeSocialPercent).HasColumnType("decimal(5,2)");
+        builder.Property(e => e.EmployerSocialPercent).HasColumnType("decimal(5,2)");
+        builder.Property(e => e.EmployerOccupationalDiseasePercent).HasColumnType("decimal(5,2)");
+#pragma warning restore CS0618
         builder.Property(e => e.EmployeeHealthPercent).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.EmployerHealthPercent).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.EmployeeUnemploymentPercent).HasColumnType("decimal(5,2)").IsRequired();
@@ -28,7 +30,12 @@ public class SocialInsuranceRateVersionEntityConfiguration : IEntityTypeConfigur
         builder.Property(e => e.EmployerUnionFundPercent).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.ReferenceAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.SocialCapMultiplier).IsRequired().HasDefaultValue(20);
+        builder.Property(e => e.HealthCapMultiplier).IsRequired().HasDefaultValue(20);
         builder.Property(e => e.UnemploymentCapMultiplier).IsRequired().HasDefaultValue(20);
+
+        builder.Property(e => e.EligibilityMode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.EligibleContractSubtypesCsv).HasMaxLength(100);
+        builder.Property(e => e.MinTenureMonths);
 
         builder.Property(e => e.LegalReference).HasMaxLength(500).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(2000);

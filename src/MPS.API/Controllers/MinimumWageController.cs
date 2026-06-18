@@ -69,9 +69,11 @@ public class MinimumWageController : ControllerBase
         var id = await _mediator.Send(new CreateMinimumWageCommand(
             request.ValidFrom,
             request.ApplyImmediately,
+            request.AppliedRegionCode,
             regions,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -89,9 +91,11 @@ public class MinimumWageController : ControllerBase
         var updated = await _mediator.Send(new UpdateMinimumWageCommand(
             id,
             request.ValidFrom,
+            request.AppliedRegionCode,
             regions,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }

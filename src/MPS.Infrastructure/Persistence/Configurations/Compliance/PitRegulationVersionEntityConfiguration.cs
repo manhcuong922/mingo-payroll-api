@@ -21,6 +21,10 @@ public class PitRegulationVersionEntityConfiguration : IEntityTypeConfiguration<
         builder.Property(e => e.PersonalDeductionAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.DependentDeductionAmount).HasColumnType("decimal(18,2)").IsRequired();
 
+        builder.Property(e => e.ShortTermContractMaxMonths).IsRequired().HasDefaultValue(3);
+        builder.Property(e => e.ShortTermFlatRatePercent).HasColumnType("decimal(5,2)").IsRequired().HasDefaultValue(10.00m);
+        builder.Property(e => e.ShortTermTaxExemptMonthlyIncome).HasColumnType("decimal(18,2)").IsRequired().HasDefaultValue(2_000_000m);
+
         builder.Property(e => e.LegalReference).HasMaxLength(500).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(2000);
 

@@ -7,14 +7,22 @@ public sealed record CreatePitRegulationRequest(
     bool ApplyImmediately,
     decimal PersonalDeductionAmount,
     decimal DependentDeductionAmount,
+    int ShortTermContractMaxMonths,
+    decimal ShortTermFlatRatePercent,
+    decimal ShortTermTaxExemptMonthlyIncome,
     IReadOnlyList<PitBracketInputRequest> Brackets,
-    string LegalReference,
-    string? Note);
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds);
 
 public sealed record UpdatePitRegulationRequest(
     DateOnly ValidFrom,
     decimal PersonalDeductionAmount,
     decimal DependentDeductionAmount,
+    int ShortTermContractMaxMonths,
+    decimal ShortTermFlatRatePercent,
+    decimal ShortTermTaxExemptMonthlyIncome,
     IReadOnlyList<PitBracketInputRequest> Brackets,
-    string LegalReference,
-    string? Note);
+    string? LegalReference,
+    string? Note,
+    IReadOnlyList<int> LegalDocumentIds);

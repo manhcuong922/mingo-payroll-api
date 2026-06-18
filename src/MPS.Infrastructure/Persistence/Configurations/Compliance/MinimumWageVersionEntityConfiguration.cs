@@ -18,6 +18,8 @@ public class MinimumWageVersionEntityConfiguration : IEntityTypeConfiguration<Mi
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.IsArchived).IsRequired().HasDefaultValue(false);
 
+        builder.Property(e => e.AppliedRegionCode).HasMaxLength(10).IsRequired();
+
         builder.Property(e => e.LegalReference).HasMaxLength(500).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(2000);
 
