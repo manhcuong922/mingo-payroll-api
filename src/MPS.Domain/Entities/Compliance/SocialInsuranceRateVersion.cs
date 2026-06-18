@@ -1,7 +1,9 @@
+using MPS.Domain.Attributes;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Domain.Entities.Compliance;
 
+[Auditable]
 public sealed class SocialInsuranceRateVersion : IComplianceVersion
 {
     public int Id { get; set; }

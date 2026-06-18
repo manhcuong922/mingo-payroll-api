@@ -1,5 +1,8 @@
+using MPS.Domain.Attributes;
+
 namespace MPS.Domain.Entities;
 
+[Auditable]
 public class Role
 {
     public int Id { get; set; }

@@ -1,7 +1,9 @@
 using ContractEnums = MPS.Domain.Enums.Contract;
+using MPS.Domain.Attributes;
 
 namespace MPS.Domain.Entities;
 
+[Auditable]
 public class Contract
 {
     public int Id { get; set; }

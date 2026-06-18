@@ -78,26 +78,25 @@ Composite indexes:
 ### `AuditLogsArchive`
 Schema giống `AuditLogs` + cột `ArchivedAt datetime2`. Indexes tương tự (đặc biệt cần `IX_AuditLogsArchive_Severity_Timestamp` để job xóa Low cũ).
 
-## Phân cấp Severity (3 tầng quy tắc)
+## Phân cấp Severity (2 tầng quy tắc)
 
-Mỗi audit event chạy qua 3 tầng theo thứ tự rẻ-trước → đắt-sau. Tầng nào match trước thì dừng:
+Mỗi audit event chạy qua 2 tầng theo thứ tự rẻ-trước → đắt-sau. Tầng nào match trước thì dừng.
 
-### Tầng 1 — Theo Action (rẻ nhất, chạy đầu)
-| Action | Severity |
-|---|---|
-| `Delete` | **High** (không thể đảo ngược) |
-| `AccessDenied` | **High** (bằng chứng vi phạm bảo mật) |
-| `Create`, `Update` | → tầng 2 |
+> **Triết lý**: High = thay đổi dữ liệu có ý nghĩa **pháp lý / không thể đảo ngược / ảnh hưởng tính lương toàn hệ thống**. Telemetry bảo mật (AccessDenied), CRUD nhẹ trên User (LastLoginAt, FullName, PhoneNo, …), và Delete trên module không đăng ký (vd notification user tự xóa) đều là Low — vẫn được audit nhưng không giữ vĩnh viễn để tránh phình archive.
 
-### Tầng 2 — Theo Module (lookup `HashSet<string>`)
-Module thuộc danh sách `AlwaysHighModules` → **High**:
-- `User`, `Role`, `Permission`, `RolePermission` (thay đổi quyền hạn)
-- `ContractTermination` (kết thúc lao động)
-- `SocialInsuranceRateVersion`, `PitRegulationVersion`, `OtRateVersion`, `MinimumWageVersion`, `AllowanceExemptThresholdVersion`, `LaborLawConstantsVersion` (compliance: ảnh hưởng tính lương toàn hệ thống)
+> _Lưu ý_: không còn shortcut "mọi Delete = High" như version trước. Delete giờ phụ thuộc vào module có nằm trong tầng 2 hoặc 3 hay không.
 
-Không match → tầng 3.
+### Tầng 1 — Theo Module (lookup `HashSet<string>`, 10 module)
+Module thuộc danh sách `AlwaysHighModules` → **High** với bất kỳ action nào (Create/Update/Delete):
+- **RBAC**: `Role`, `Permission`, `RolePermission` (thay đổi quyền hạn — ảnh hưởng cả hệ thống)
+- **HR/Contract đặc biệt**: `ContractTermination` (kết thúc lao động — pháp lý)
+- **Compliance** (ảnh hưởng tính lương toàn hệ thống): `SocialInsuranceRateVersion`, `PitRegulationVersion`, `OtRateVersion`, `MinimumWageVersion`, `AllowanceExemptThresholdVersion`, `LaborLawConstantsVersion`
 
-### Tầng 3 — Theo Field (chỉ chạy cho Update entity nghiệp vụ không nhạy cảm)
+> `User` **không** nằm trong tầng này — đẩy xuống tầng 2 với danh sách field bảo mật cụ thể, tránh High mỗi lần login/đổi tên/đổi SĐT.
+
+Không match → tầng 2.
+
+### Tầng 2 — Theo Field & Delete
 Lookup `Dictionary<string Module, HashSet<string> SensitiveFields>`:
 | Module | Field nhạy cảm → upgrade lên High |
 |---|---|
@@ -105,11 +104,16 @@ Lookup `Dictionary<string Module, HashSet<string> SensitiveFields>`:
 | `ContractAllowance` | `Amount`, `Status` |
 | `EmployeeInformation` | `BankNumber`, `CitizenId`, `TaxNo`, `SocialNo`, `UserId` |
 | `Position` | `BaseSalary`, `SalaryGradeId` |
+| `User` | `PasswordHash`, `RoleId`, `Status` (đổi mật khẩu / đổi role / khóa-mở tài khoản) |
 
-`changedFields ∩ SensitiveFields ≠ ∅` → **High**. Còn lại → **Low**.
+Module có trong dictionary → áp dụng 2 rule:
+- **Update**: `changedFields ∩ SensitiveFields ≠ ∅` → **High**. Còn lại → Low.
+- **Delete**: tự động **High** (bất kể changedFields) — mất entity nhạy cảm = mất evidence dài hạn.
 
 ### Default
 Không match tầng nào → **Low**.
+
+Ví dụ rơi vào default: `AccessDenied`, `Create User` mới, `Update User.LastLoginAt`, `Delete Notification` (nếu tương lai gắn `[Auditable]` lên module nhẹ).
 
 ## Critical files — sẽ thêm mới
 
@@ -213,13 +217,13 @@ Sửa file (chỉ thêm `[Auditable]` attribute, không sửa logic):
 Theo `testing.md` (coverage 80%+, TDD):
 
 ### Unit
-- `AuditSaveChangesInterceptorTests` (in-memory DbContext): CREATE → 1 row Action=Create với DataDiff `{new:...}`; UPDATE 2 field → DataDiff đúng 2 field; DELETE → `{old:...}`; entity không `[Auditable]` → 0 row; AuditLog tự thân → không lặp; multiple entities trong cùng SaveChanges → multi rows; **Severity gán đúng** cho từng case (Delete=High, Update User=High, Update Contract.Status=High, Update Contract.Note=Low).
-- `DefaultAuditSeverityClassifierTests`: cover từng tầng — Tầng 1 (Delete, AccessDenied → High); Tầng 2 (User/Role/Compliance modules → High); Tầng 3 (Contract.Status changed → High, Contract.Note changed → Low); fallback (Update EmployeeInformation.Address → Low).
+- `AuditSaveChangesInterceptorTests` (in-memory DbContext): CREATE → 1 row Action=Create với DataDiff `{new:...}`; UPDATE 2 field → DataDiff đúng 2 field; DELETE → `{old:...}`; entity không `[Auditable]` → 0 row; AuditLog tự thân → không lặp; multiple entities trong cùng SaveChanges → multi rows; **Severity gán đúng** (Delete=High, Create Role=High, Create User=Low, Update User.LastLoginAt=Low, Update User.PasswordHash=High, Update Contract.Status=High, Update Contract.Note=Low).
+- `DefaultAuditSeverityClassifierTests`: cover Module → Field → Default; Delete trên sensitive module → High qua tầng 2 (Contract.Delete → High); Delete trên AlwaysHigh module → High qua tầng 1 (Role.Delete → High); Delete trên module không đăng ký (vd "Notification") → Low; AccessDenied → Low; Update User.PasswordHash → High; Update User.LastLoginAt → Low.
 - `AuditLogRepositoryTests`: filter combinations (gồm Severity filter), max 50/page, sort desc, range 366 days.
 - `QueryAuditLogsQueryValidatorTests`: page/size bounds, date range > 366 → fail.
 - `AuditLogRetentionJobTests`: **3 bước** — (1) move-then-delete đúng cutoff; (2a) per-module override được tôn trọng (seed Low `EmployeeInformation` 6 năm + Low `Contract` 6 năm; override EI=2555, Contract không override default 1825 → EI giữ, Contract xóa); (2b) sweep default xóa module không khai báo (vd Low `Permission` 6 năm, dictionary rỗng → bị xóa theo 1825); (3) bỏ qua bước 3 khi `HighValueArchiveRetentionDays=null`; sub-step 2a fail 1 module không kéo module khác và 2b/3 down.
 - `AuditLogOptionsValidationTests`: `LowValueArchiveRetentionByModule["Contract"] = 100` với `ActiveRetentionDays = 365` → validation fail; key rỗng → fail; value > 36500 → fail.
-- `AuditLoggerTests`: AccessDenied row có `Action=AccessDenied` và `Severity=High`, `RequestPath` set.
+- `AuditLoggerTests`: AccessDenied row có `Action=AccessDenied` và `Severity=Low`, `RequestPath` set.
 
 ### Integration
 - `POST /api/contracts` → 1 row AuditLog (Module=Contract, Action=Create).

@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MPS.Domain.Attributes;
 
 namespace MPS.Domain.Entities
 {
+    [Auditable]
     public class Position
     {
         public int Id { get; set; }

@@ -114,6 +114,10 @@ public static class Permissions
     public const string LaborLawConstantsCreateAll = "LaborLawConstants.Create.All";
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
     public const string LaborLawConstantsDeleteAll = "LaborLawConstants.Delete.All";
+
+    // ===== Audit Log module (FT-39) — System Admin only =====
+
+    public const string AuditLogReadAll = "AuditLog.Read.All";
 }
 
 public static class PermissionIds
@@ -230,4 +234,8 @@ public static class PermissionIds
     public const int LaborLawConstantsCreateAll = 86;
     public const int LaborLawConstantsUpdateAll = 87;
     public const int LaborLawConstantsDeleteAll = 88;
+
+    // ===== Audit Log module (FT-39) =====
+
+    public const int AuditLogReadAll = 89;
 }

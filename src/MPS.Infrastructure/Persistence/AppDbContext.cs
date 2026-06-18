@@ -31,6 +31,10 @@ public class AppDbContext : DbContext
     public DbSet<ContractAppendix> ContractAppendices => Set<ContractAppendix>();
     public DbSet<ContractTermination> ContractTerminations => Set<ContractTermination>();
 
+    // Audit log module (FT-39)
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AuditLogArchive> AuditLogsArchive => Set<AuditLogArchive>();
+
     // Compliance module (FE-06)
     public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
     public DbSet<PitRegulationVersion> PitRegulationVersions => Set<PitRegulationVersion>();

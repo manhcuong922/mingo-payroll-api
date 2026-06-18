@@ -10,6 +10,7 @@ using MPS.Domain.Interfaces;
 using MPS.Infrastructure.BackgroundJobs;
 using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
+using MPS.Infrastructure.Persistence.Interceptors;
 using MPS.Infrastructure.Repositories;
 using MPS.Infrastructure.Repositories.Compliance;
 using MPS.Infrastructure.Security;
@@ -118,6 +119,32 @@ public static class InfrastructureServiceRegistration
         // Compliance module — background job
         services.AddSingleton<ComplianceActivationJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ComplianceActivationJob>());
+
+        // Audit log module (FT-39)
+        services.AddOptions<AuditLogOptions>()
+            .Bind(configuration.GetSection(AuditLogOptions.SectionName))
+            .Validate(o => o.ActiveRetentionDays is >= 90 and <= 3650,
+                "AuditLog:ActiveRetentionDays must be between 90 and 3650.")
+            .Validate(o => o.LowValueArchiveRetentionDays >= o.ActiveRetentionDays
+                           && o.LowValueArchiveRetentionDays <= 36500,
+                "AuditLog:LowValueArchiveRetentionDays must be ≥ ActiveRetentionDays and ≤ 36500.")
+            .Validate(o => o.LowValueArchiveRetentionByModule
+                .All(kv => !string.IsNullOrWhiteSpace(kv.Key)
+                           && kv.Value >= o.ActiveRetentionDays
+                           && kv.Value <= 36500),
+                "AuditLog:LowValueArchiveRetentionByModule entries must have non-empty keys and values ≥ ActiveRetentionDays and ≤ 36500.")
+            .Validate(o => !o.HighValueArchiveRetentionDays.HasValue
+                           || o.HighValueArchiveRetentionDays.Value >= o.LowValueArchiveRetentionDays,
+                "AuditLog:HighValueArchiveRetentionDays, if set, must be ≥ LowValueArchiveRetentionDays.")
+            .ValidateOnStart();
+
+        services.AddSingleton<IAuditSeverityClassifier, DefaultAuditSeverityClassifier>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditLogger, AuditLogger>();
+        services.AddScoped<AuditSaveChangesInterceptor>();
+
+        services.AddSingleton<AuditLogRetentionJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<AuditLogRetentionJob>());
 
         // Storage (MinIO)
         services.AddOptions<MinioOptions>()
