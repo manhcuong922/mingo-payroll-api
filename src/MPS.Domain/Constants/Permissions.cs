@@ -112,6 +112,11 @@ public static class Permissions
 
     public const string LegalDocumentReadAll = "LegalDocument.Read.All";
     public const string LegalDocumentWriteAll = "LegalDocument.Write.All";
+
+    // ===== Compliance Auto-Update module (crawl + AI đề xuất) =====
+
+    public const string ComplianceAutoUpdateRunAll = "ComplianceAutoUpdate.Run.All";
+    public const string ComplianceAutoUpdateReadAll = "ComplianceAutoUpdate.Read.All";
 }
 
 public static class PermissionIds
@@ -226,4 +231,9 @@ public static class PermissionIds
 
     public const int LegalDocumentReadAll = 85;
     public const int LegalDocumentWriteAll = 86;
+
+    // ===== Compliance Auto-Update module — IDs 89–90 (87/88 đã dùng cho LaborLawConstants trong seed master DB) =====
+
+    public const int ComplianceAutoUpdateRunAll = 89;
+    public const int ComplianceAutoUpdateReadAll = 90;
 }

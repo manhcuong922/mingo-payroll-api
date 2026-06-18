@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
 using MPS.Domain.Entities.Compliance;
+using MPS.Domain.Entities.Compliance.AutoUpdate;
 
 namespace MPS.Infrastructure.Persistence;
 
@@ -42,6 +43,11 @@ public class AppDbContext : DbContext
     public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLawConstantsVersion>();
     public DbSet<LegalDocument> LegalDocuments => Set<LegalDocument>();
     public DbSet<ComplianceVersionLegalDocument> ComplianceVersionLegalDocuments => Set<ComplianceVersionLegalDocument>();
+
+    // Compliance Auto-Update module (crawl + AI đề xuất cập nhật pháp luật)
+    public DbSet<SourceSnapshot> ComplianceSourceSnapshots => Set<SourceSnapshot>();
+    public DbSet<CrawledDocumentLog> ComplianceCrawledDocumentLogs => Set<CrawledDocumentLog>();
+    public DbSet<ComplianceUpdateProposal> ComplianceUpdateProposals => Set<ComplianceUpdateProposal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

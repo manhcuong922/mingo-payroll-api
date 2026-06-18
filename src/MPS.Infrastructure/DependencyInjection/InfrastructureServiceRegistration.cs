@@ -1,12 +1,20 @@
+using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Minio;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Options;
+using MPS.Application.Features.Compliance.AutoUpdate.Abstractions;
 using MPS.Application.Options;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.BackgroundJobs;
+using MPS.Infrastructure.ComplianceAutoUpdate.Ai;
+using MPS.Infrastructure.ComplianceAutoUpdate.Crawl;
+using MPS.Infrastructure.ComplianceAutoUpdate.Crawl.Adapters;
+using MPS.Infrastructure.ComplianceAutoUpdate.Pipeline;
+using MPS.Infrastructure.ComplianceAutoUpdate.Validation;
 using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Repositories;
@@ -114,6 +122,52 @@ public static class InfrastructureServiceRegistration
         // Compliance module — background job
         services.AddSingleton<ComplianceActivationJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ComplianceActivationJob>());
+
+        // ===== Compliance Auto-Update module (crawl + AI đề xuất cập nhật pháp luật) =====
+        services.AddOptions<ComplianceAutoUpdateOptions>()
+            .Bind(configuration.GetSection(ComplianceAutoUpdateOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<ComplianceAutoUpdateOptions>>().Value);
+
+        services.AddScoped<IComplianceUpdateProposalRepository, ComplianceUpdateProposalRepository>();
+        services.AddScoped<IListFingerprintDetector, ListFingerprintDetector>();
+        services.AddScoped<ICrawledDocumentTracker, CrawledDocumentTracker>();
+        services.AddScoped<IContentScopeFilter, ContentScopeFilter>();
+        services.AddScoped<ISourceGroundingValidator, SourceGroundingValidator>();
+        services.AddScoped<IComplianceLogicValidator, ComplianceLogicValidator>();
+        services.AddScoped<IComplianceDiffService, ComplianceDiffService>();
+        services.AddScoped<IComplianceCrawlPipeline, ComplianceCrawlPipeline>();
+
+        // HttpClient riêng cho crawler (bật giải nén tự động) — dùng chung cho các adapter.
+        services.AddHttpClient("compliance-crawler")
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All,
+            });
+        services.AddScoped<ILegalSourceAdapter>(sp => new CongBaoAdapter(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("compliance-crawler"),
+            sp.GetRequiredService<ComplianceAutoUpdateOptions>(),
+            sp.GetRequiredService<ILogger<CongBaoAdapter>>()));
+        services.AddScoped<ILegalSourceAdapter>(sp => new VbplAdapter(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("compliance-crawler"),
+            sp.GetRequiredService<ComplianceAutoUpdateOptions>(),
+            sp.GetRequiredService<ILogger<VbplAdapter>>()));
+
+        // Extractor: có API key + provider=anthropic → Anthropic; ngược lại Offline (regex, không cần mạng).
+        var llmKeyVar = configuration[$"{ComplianceAutoUpdateOptions.SectionName}:Llm:ApiKeyEnvVar"] ?? "OPERIX_LLM_API_KEY";
+        var llmProvider = configuration[$"{ComplianceAutoUpdateOptions.SectionName}:Llm:Provider"] ?? "anthropic";
+        var hasLlmKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(llmKeyVar));
+        if (hasLlmKey && llmProvider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddHttpClient<AnthropicComplianceExtractor>();
+            services.AddScoped<IComplianceExtractor>(sp => sp.GetRequiredService<AnthropicComplianceExtractor>());
+        }
+        else
+        {
+            services.AddScoped<IComplianceExtractor, OfflineComplianceExtractor>();
+        }
+
+        // Runner — đợt này CHỈ singleton, chạy thủ công qua endpoint. Chuyển background: xem chú thích trong class.
+        services.AddSingleton<ComplianceAutoUpdateJob>();
 
         // Storage (MinIO)
         services.AddOptions<MinioOptions>()
