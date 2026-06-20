@@ -8,12 +8,15 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Options;
 using MPS.Application.Common.Services;
 using MPS.Application.Features.Compliance.AutoUpdate.Abstractions;
+using MPS.Application.Features.Compliance.AutoUpdate.Ingestion;
+using MPS.Application.Features.Compliance.AutoUpdate.Watcher;
 using MPS.Application.Options;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.BackgroundJobs;
 using MPS.Infrastructure.ComplianceAutoUpdate.Ai;
 using MPS.Infrastructure.ComplianceAutoUpdate.Crawl;
 using MPS.Infrastructure.ComplianceAutoUpdate.Crawl.Adapters;
+using MPS.Infrastructure.ComplianceAutoUpdate.Intake;
 using MPS.Infrastructure.ComplianceAutoUpdate.Pipeline;
 using MPS.Infrastructure.ComplianceAutoUpdate.Validation;
 using MPS.Infrastructure.Email;
@@ -134,12 +137,16 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<ComplianceAutoUpdateOptions>>().Value);
 
         services.AddScoped<IComplianceUpdateProposalRepository, ComplianceUpdateProposalRepository>();
+        services.AddScoped<IComplianceAuthoritativeSourceRepository, ComplianceAuthoritativeSourceRepository>();
+        services.AddScoped<IComplianceLeadRepository, ComplianceLeadRepository>();
         services.AddScoped<IListFingerprintDetector, ListFingerprintDetector>();
         services.AddScoped<ICrawledDocumentTracker, CrawledDocumentTracker>();
         services.AddScoped<IContentScopeFilter, ContentScopeFilter>();
         services.AddScoped<ISourceGroundingValidator, SourceGroundingValidator>();
         services.AddScoped<IComplianceLogicValidator, ComplianceLogicValidator>();
         services.AddScoped<IComplianceDiffService, ComplianceDiffService>();
+        services.AddScoped<IComplianceDocumentProcessor, ComplianceDocumentProcessor>();
+        services.AddScoped<IDocumentTextFetcher, DocumentTextFetcher>();
         services.AddScoped<IComplianceCrawlPipeline, ComplianceCrawlPipeline>();
 
         // HttpClient riêng cho crawler (bật giải nén tự động) — dùng chung cho các adapter.
@@ -163,13 +170,28 @@ public static class InfrastructureServiceRegistration
         var hasLlmKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(llmKeyVar));
         if (hasLlmKey && llmProvider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddHttpClient<AnthropicComplianceExtractor>();
+            // LLM/vision có thể chạy lâu (đặc biệt OCR PDF nhiều trang) → nới timeout HttpClient (mặc định 100s).
+            var llmTimeout = TimeSpan.FromSeconds(300);
+            services.AddHttpClient<AnthropicComplianceExtractor>(c => c.Timeout = llmTimeout);
             services.AddScoped<IComplianceExtractor>(sp => sp.GetRequiredService<AnthropicComplianceExtractor>());
+            // OCR PDF scan/ảnh bằng vision — cùng điều kiện key như extractor.
+            services.AddHttpClient<AnthropicVisionTranscriber>(c => c.Timeout = llmTimeout);
+            services.AddScoped<IVisionTranscriber>(sp => sp.GetRequiredService<AnthropicVisionTranscriber>());
+            // Kênh B — web search discoverer (cùng điều kiện key).
+            services.AddHttpClient<AnthropicWebSearchDiscoverer>(c => c.Timeout = llmTimeout);
+            services.AddScoped<IWebSearchDiscoverer>(sp => sp.GetRequiredService<AnthropicWebSearchDiscoverer>());
         }
         else
         {
             services.AddScoped<IComplianceExtractor, OfflineComplianceExtractor>();
+            services.AddScoped<IVisionTranscriber, OfflineVisionTranscriber>();
+            services.AddScoped<IWebSearchDiscoverer, OfflineWebSearchDiscoverer>();
         }
+
+        // Kênh B — watcher chủ động + job định kỳ ("Dò ngay" + chạy nền).
+        services.AddScoped<IComplianceWatcher, ComplianceWatcher>();
+        services.AddSingleton<ComplianceWatcherJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<ComplianceWatcherJob>());
 
         // Runner — đợt này CHỈ singleton, chạy thủ công qua endpoint. Chuyển background: xem chú thích trong class.
         services.AddSingleton<ComplianceAutoUpdateJob>();

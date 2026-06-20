@@ -19,6 +19,42 @@ public sealed class ComplianceAutoUpdateOptions
 
     public Dictionary<string, SourceOptions> Sources { get; set; } = new();
     public LlmOptions Llm { get; set; } = new();
+    public OcrOptions Ocr { get; set; } = new();
+    public WatcherOptions Watcher { get; set; } = new();
+}
+
+/// <summary>Cấu hình Kênh B — watcher chủ động (LLM + web search → Lead).</summary>
+public sealed class WatcherOptions
+{
+    /// <summary>Bật chạy nền định kỳ. Tắt thì chỉ chạy khi bấm "Dò ngay".</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Số ngày giữa mỗi lần chạy nền (mặc định hằng tuần).</summary>
+    public int IntervalDays { get; set; } = 7;
+
+    /// <summary>Model riêng cho watcher (rẻ hơn extract/OCR để giảm chi phí web_search). Rỗng = dùng Llm.Model.</summary>
+    public string Model { get; set; } = "claude-sonnet-4-6";
+
+    /// <summary>Giới hạn số lượt web_search mỗi entity (kiểm soát chi phí token).</summary>
+    public int MaxSearchUses { get; set; } = 3;
+}
+
+/// <summary>
+/// Cấu hình OCR PDF scan/ảnh bằng Claude vision (fallback Kênh A khi PdfPig không bóc được text).
+/// </summary>
+public sealed class OcrOptions
+{
+    /// <summary>Bật fallback OCR. Tự hiệu lực khi có API key; đặt false để tắt hẳn.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Text PdfPig bóc được dưới ngưỡng này (ký tự) → coi là PDF scan/ảnh, gọi OCR.</summary>
+    public int MinPdfTextChars { get; set; } = 200;
+
+    /// <summary>Số trang tối đa gửi cho vision (kiểm soát token). Vượt → bỏ qua, báo lỗi.</summary>
+    public int MaxPdfPages { get; set; } = 30;
+
+    /// <summary>max_tokens cho bản phiên âm.</summary>
+    public int MaxOutputTokens { get; set; } = 16000;
 }
 
 public sealed class SourceOptions
