@@ -311,8 +311,85 @@ Khi chạy: migration tự áp lúc khởi động (`MigrateAsync`); thiếu `OP
 
 Còn lại (chạy thật, cần hạ tầng): set connection string SQL Server + (tuỳ) CLIProxyAPI/LLM key rồi gọi `POST /run`.
 
-## 11. Ngoài scope đợt này (ghi nhận)
-- Duyệt/áp proposal (Approve → ghi vào version active) — sẽ làm như module riêng sau.
-- Headless browser cho vbpl full-text (PuppeteerSharp) — bổ sung nếu cần nguồn vbpl.
-- Nguồn `thuvienphapluat` (WAF) — cần proxy IP sạch.
-- Vận hành CLIProxyAPI (Docker) — hạ tầng ngoài codebase, theo MOTA §9.
+## 10c. Mở rộng triển khai (cập nhật 2026-06-20)
+
+Sau bản crawl ban đầu (§10b), module được tiến hóa thành kiến trúc **"nhiều đường vào — một lõi dùng chung"**,
+bổ sung **rà soát chủ động (Kênh B)** và **tích hợp Frontend đầy đủ**. Phần làm thêm:
+
+### A. Tách lõi xử lý dùng chung
+- **Mới** `IComplianceDocumentProcessor` + `ComplianceDocumentProcessor`
+  (`Application/Features/Compliance/AutoUpdate/Ingestion/`): nhận toàn văn → `ContentScopeFilter` →
+  `IComplianceExtractor` → 3 lớp validation (grounding/logic/diff) → tạo `ComplianceUpdateProposal`
+  (PendingReview). Trả `IngestionOutcome` (Proposal/NoChange/NoScopedContent/Failed).
+- **Refactor** `ComplianceCrawlPipeline`: bỏ xử lý inline, chỉ còn discovery (fingerprint/tracker/tải toàn văn)
+  rồi gọi lõi → mọi "đường vào" tái dùng cùng grounding. `IComplianceUpdateProposalRepository` thêm `AddAsync`.
+
+### B. Kênh A — nạp văn bản thủ công (upload / URL)
+- **Mới** `IDocumentTextFetcher` + `DocumentTextFetcher` (`Infrastructure/ComplianceAutoUpdate/Intake/`):
+  rút text PDF (PdfPig) / HTML (HtmlAgilityPack) / txt; tải URL qua HttpClient `compliance-crawler`.
+- **Mới** `IngestDocumentCommand` + handler; endpoint `POST intake/upload` (multipart, ≤15MB, .pdf/.html/.htm/.txt)
+  và `POST intake/url`. SourceKey `manual-upload` / `manual-url`.
+
+### C. OCR PDF scan/ảnh bằng Claude vision (fallback Kênh A)
+- **Mới** `IVisionTranscriber` + `AnthropicVisionTranscriber` (Messages API kèm **document block** base64 PDF)
+  + `OfflineVisionTranscriber` + `TranscriptionPrompt`.
+- `DocumentTextFetcher.FromBytes` → **async**; PDF mà PdfPig bóc `< Ocr.MinPdfTextChars` (200 ký tự, vd bản ký số
+  dạng ảnh của Chính phủ) → fallback OCR; cap `Ocr.MaxPdfPages` (30). Thêm `OcrOptions` + khối `Ocr` trong appsettings.
+
+### D. AuthoritativeSource — "văn bản đang chi phối" (móng cho Kênh B)
+- **Mới** entity `ComplianceAuthoritativeSource` (`TargetEntityType` unique, `LegalDocumentId?`, `DocumentNo?`,
+  `DocumentUrl?`, `LastVerifiedAt?`, …) + EF config + DbSet + repo. **Migration `ComplianceAuthoritativeSource`**.
+- `ComplianceProposalApplier` **upsert** AuthoritativeSource khi duyệt; endpoint `GET authoritative-sources`.
+
+### E. Kênh B — watcher chủ động (LLM + web search → Lead)
+- **Mới** entity `ComplianceLead` (+ `LeadStatuses`: Proposal/NoChange/NeedsHuman/Dismissed) + EF config + DbSet +
+  repo. **Migration `ComplianceLead`**.
+- **Mới** `IWebSearchDiscoverer` + `AnthropicWebSearchDiscoverer` (Messages API + server tool
+  `web_search_20260209` → JSON `{hasNewer,documentNo,effectiveDate,sourceUrl,summary}`) + `OfflineWebSearchDiscoverer`
+  + `WatcherPrompt`. `WebSearchUnavailableException` để **degrade an toàn** (proxy không hỗ trợ web_search → Lead NeedsHuman).
+- **Mới** `IComplianceWatcher` + `ComplianceWatcher`: mỗi AuthoritativeSource → hỏi discoverer → có URL thì đẩy
+  vào **lõi** (grounding thật) → proposal; không xác minh được → Lead NeedsHuman. **LLM chỉ "chỉ điểm" URL**,
+  con số vào proposal vẫn bóc lại từ văn bản → chặn hallucination.
+- **Mới** `ComplianceWatcherJob` (BackgroundService, **hằng tuần**) + endpoint `POST watch/run` ("Dò ngay") +
+  `GET leads` + `GetComplianceLeadsQuery`. Thêm `WatcherOptions` + khối `Watcher` trong appsettings.
+
+### F. Duyệt / áp proposal (đã có sẵn — fix nhỏ)
+- Luồng Approve/Reject (`ComplianceProposalApplier`, `ProposalApprovalCommands`, endpoints approve/reject,
+  permission `ComplianceAutoUpdate.Approve.All` = 94) **đã có từ trước** — tái dùng.
+- **Fix**: applier chọn `ApplyImmediately` theo ngày hiệu lực — **quá khứ/hôm nay → kích hoạt ngay** (luật đã có
+  hiệu lực), **tương lai → chờ hiệu lực**. Hết lỗi `ValidFrom must be strictly after today`.
+
+### G. Hạ tầng / cấu hình
+- **Nới timeout `HttpClient` 300s** cho extractor + vision + web search (mặc định 100s → `TaskCanceledException`
+  lúc OCR/LLM chạy lâu).
+- `appsettings.Development.json`: `ComplianceAutoUpdate:Llm:BaseUrl = http://localhost:8317` (CLIProxyAPI/OAuth).
+
+### H. Frontend (`mingo-payroll-ui`) — tích hợp đầy đủ
+- Trang `/compliance/auto-update`: nút "Quét ngay" / "Nạp văn bản" (dialog upload/URL), bảng đề xuất (table `.dt`),
+  cột **Nguồn**, dialog **chi tiết** (diff + 3 lớp validation), **modal duyệt/từ chối** (thay `confirm()/prompt()`),
+  tab **"Rà soát chủ động (B)"** (panel Leads + "Dò ngay").
+- `services/types/config`: intake, leads, watch, authoritative-sources; timeout client 360s cho intake/watch.
+
+### Migrations mới (đã áp DB)
+`ComplianceAuthoritativeSource`, `ComplianceLead`.
+
+### Kiểm chứng
+`dotnet build` 0 lỗi; test BE **Application 211 / Infrastructure 174 pass** (thêm test cho
+processor, fetcher (OCR gate), watcher, web-search discoverer, applier áp-ngay). FE `tsc --noEmit` sạch.
+
+### Lưu ý vận hành
+- web_search qua CLIProxyAPI (OAuth) **nhiều khả năng không hỗ trợ server tool** → Kênh B degrade thành Lead
+  `NeedsHuman` (đúng thiết kế). Muốn web search thật: `Llm:BaseUrl=""` + key Anthropic thật (`sk-ant-…`).
+- OCR PDF scan: chỉ chạy khi có API key (qua proxy/Anthropic). PDF scan của cơ quan nhà nước thường là ảnh →
+  PdfPig trả rỗng → vision OCR đảm nhiệm.
+
+---
+
+## 11. Ngoài scope / theo dõi tiếp
+- ✅ **Duyệt/áp proposal (Approve → version chờ hiệu lực/active)** — ĐÃ XONG (§10c.F), gồm fix `ApplyImmediately`.
+- ✅ **Rà soát chủ động (Kênh B)** + **nạp tay (Kênh A)** + **OCR vision** — ĐÃ XONG (§10c).
+- ⏳ **web_search hoạt động thật** — phụ thuộc đổi sang Anthropic trực tiếp + key thật (hiện degrade qua proxy).
+- ⏳ Headless browser cho vbpl full-text (PuppeteerSharp) — bổ sung nếu cần nguồn vbpl (crawl).
+- ⏳ Nguồn `thuvienphapluat` (WAF) — cần proxy IP sạch.
+- ⏳ Quản lý vòng đời Lead (đánh dấu Dismissed, gán người xử lý) + chạy nền Kênh B đã bật mặc định (hằng tuần).
+- ⏳ Vận hành CLIProxyAPI (Docker) — hạ tầng ngoài codebase, theo MOTA §9.
