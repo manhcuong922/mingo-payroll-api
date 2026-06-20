@@ -28,7 +28,8 @@ public sealed class ProposalApprovalHandlerTests
         currentUser.SetupGet(u => u.UserId).Returns(1);
         return new ComplianceProposalApplier(
             mw.Object, Mock.Of<ISocialInsuranceRateRepository>(), Mock.Of<IPitRegulationRepository>(),
-            Mock.Of<ILaborLawConstantsRepository>(), legalDoc.Object, currentUser.Object, sender.Object, _clock.Object);
+            Mock.Of<ILaborLawConstantsRepository>(), legalDoc.Object, Mock.Of<IComplianceAuthoritativeSourceRepository>(),
+            currentUser.Object, sender.Object, _clock.Object);
     }
 
     [Fact]

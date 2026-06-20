@@ -32,6 +32,7 @@ public sealed class ComplianceProposalApplier
     private readonly IPitRegulationRepository _pitRepo;
     private readonly ILaborLawConstantsRepository _llRepo;
     private readonly ILegalDocumentRepository _legalDocRepo;
+    private readonly IComplianceAuthoritativeSourceRepository _authoritativeRepo;
     private readonly ICurrentUserService _currentUser;
     private readonly ISender _sender;
     private readonly IClock _clock;
@@ -42,6 +43,7 @@ public sealed class ComplianceProposalApplier
         IPitRegulationRepository pitRepo,
         ILaborLawConstantsRepository llRepo,
         ILegalDocumentRepository legalDocRepo,
+        IComplianceAuthoritativeSourceRepository authoritativeRepo,
         ICurrentUserService currentUser,
         ISender sender,
         IClock clock)
@@ -51,6 +53,7 @@ public sealed class ComplianceProposalApplier
         _pitRepo = pitRepo;
         _llRepo = llRepo;
         _legalDocRepo = legalDocRepo;
+        _authoritativeRepo = authoritativeRepo;
         _currentUser = currentUser;
         _sender = sender;
         _clock = clock;
@@ -72,22 +75,35 @@ public sealed class ComplianceProposalApplier
         var legalRef = $"Auto-update: {proposal.SourceKey} — {proposal.DocumentNo ?? proposal.DocumentUrl}";
         var note = $"Tạo tự động từ Compliance Auto-Update proposal #{proposal.Id}.";
 
-        // BR-15: cần ≥1 LegalDocument → tìm/tạo từ documentNo của proposal.
-        var legalDocIds = new[] { await EnsureLegalDocumentAsync(proposal, validFrom, ct) };
+        // Luật đã/đang hiệu lực (ngày hiệu lực ở quá khứ hoặc hôm nay) → kích hoạt NGAY;
+        // ngày ở tương lai → tạo version CHỜ HIỆU LỰC. Tránh lỗi "ValidFrom must be strictly after today".
+        var applyImmediately = validFrom <= DateOnly.FromDateTime(_clock.UtcNow);
 
-        return proposal.TargetEntityType switch
+        // BR-15: cần ≥1 LegalDocument → tìm/tạo từ documentNo của proposal.
+        var legalDocId = await EnsureLegalDocumentAsync(proposal, validFrom, ct);
+        var legalDocIds = new[] { legalDocId };
+
+        var versionId = proposal.TargetEntityType switch
         {
-            TargetEntityTypes.MinimumWageVersion => await ApplyMinimumWageAsync(values, validFrom, legalRef, note, legalDocIds, ct),
-            TargetEntityTypes.SocialInsuranceRateVersion => await ApplySocialInsuranceAsync(values, validFrom, legalRef, note, legalDocIds, ct),
-            TargetEntityTypes.PitRegulationVersion => await ApplyPitAsync(values, validFrom, legalRef, note, legalDocIds, ct),
-            TargetEntityTypes.LaborLawConstantsVersion => await ApplyLaborLawAsync(values, validFrom, legalRef, note, legalDocIds, ct),
+            TargetEntityTypes.MinimumWageVersion => await ApplyMinimumWageAsync(values, validFrom, applyImmediately, legalRef, note, legalDocIds, ct),
+            TargetEntityTypes.SocialInsuranceRateVersion => await ApplySocialInsuranceAsync(values, validFrom, applyImmediately, legalRef, note, legalDocIds, ct),
+            TargetEntityTypes.PitRegulationVersion => await ApplyPitAsync(values, validFrom, applyImmediately, legalRef, note, legalDocIds, ct),
+            TargetEntityTypes.LaborLawConstantsVersion => await ApplyLaborLawAsync(values, validFrom, applyImmediately, legalRef, note, legalDocIds, ct),
             _ => throw new DomainValidationException(
                 $"Loại '{proposal.TargetEntityType}' chưa hỗ trợ áp tự động — vui lòng tạo version thủ công."),
         };
+
+        // Cập nhật "văn bản đang chi phối" cho loại entity này (móng cho Kênh B).
+        await _authoritativeRepo.UpsertAsync(
+            proposal.TargetEntityType, legalDocId, proposal.DocumentNo,
+            string.IsNullOrWhiteSpace(proposal.DocumentUrl) ? null : proposal.DocumentUrl,
+            _clock.UtcNow, ct);
+
+        return versionId;
     }
 
     private async Task<int> ApplyMinimumWageAsync(
-        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, string legalRef, string note,
+        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, bool applyImmediately, string legalRef, string note,
         IReadOnlyList<int> legalDocIds, CancellationToken ct)
     {
         var active = await _mwRepo.GetActiveAsync(ct)
@@ -104,11 +120,11 @@ public sealed class ComplianceProposalApplier
             : regions.OrderByDescending(r => r.AmountPerMonth).First().RegionCode;
 
         return await _sender.Send(new CreateMinimumWageCommand(
-            validFrom, ApplyImmediately: false, appliedRegion, regions, legalRef, note, legalDocIds), ct);
+            validFrom, applyImmediately, appliedRegion, regions, legalRef, note, legalDocIds), ct);
     }
 
     private async Task<int> ApplySocialInsuranceAsync(
-        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, string legalRef, string note,
+        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, bool applyImmediately, string legalRef, string note,
         IReadOnlyList<int> legalDocIds, CancellationToken ct)
     {
         var active = await _siRepo.GetActiveAsync(ct)
@@ -127,7 +143,7 @@ public sealed class ComplianceProposalApplier
 
 #pragma warning disable CS0618 // cột obsolete — Create command vẫn yêu cầu, lấy nguyên từ version nền
         return await _sender.Send(new CreateSocialInsuranceRateCommand(
-            validFrom, ApplyImmediately: false,
+            validFrom, applyImmediately,
             active.EmployeeSocialPercent,
             active.EmployerSocialPercent,
             active.EmployerOccupationalDiseasePercent,
@@ -149,7 +165,7 @@ public sealed class ComplianceProposalApplier
     }
 
     private async Task<int> ApplyPitAsync(
-        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, string legalRef, string note,
+        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, bool applyImmediately, string legalRef, string note,
         IReadOnlyList<int> legalDocIds, CancellationToken ct)
     {
         var active = await _pitRepo.GetActiveAsync(ct)
@@ -161,7 +177,7 @@ public sealed class ComplianceProposalApplier
             .ToList();
 
         return await _sender.Send(new CreatePitRegulationCommand(
-            validFrom, ApplyImmediately: false,
+            validFrom, applyImmediately,
             D(values, "PersonalDeductionAmount", active.PersonalDeductionAmount),
             D(values, "DependentDeductionAmount", active.DependentDeductionAmount),
             active.ShortTermContractMaxMonths,
@@ -171,14 +187,14 @@ public sealed class ComplianceProposalApplier
     }
 
     private async Task<int> ApplyLaborLawAsync(
-        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, string legalRef, string note,
+        IReadOnlyDictionary<string, decimal> values, DateOnly validFrom, bool applyImmediately, string legalRef, string note,
         IReadOnlyList<int> legalDocIds, CancellationToken ct)
     {
         var active = await _llRepo.GetActiveAsync(ct)
             ?? throw new DomainValidationException("Chưa có hằng số luật lao động active làm nền — cần tạo thủ công.");
 
         return await _sender.Send(new CreateLaborLawConstantsCommand(
-            validFrom, ApplyImmediately: false,
+            validFrom, applyImmediately,
             D(values, "ProbationSalaryMinPercent", active.ProbationSalaryMinPercent),
             D(values, "NightShiftSurchargePercent", active.NightShiftSurchargePercent),
             D(values, "StandardWorkingHoursPerDay", active.StandardWorkingHoursPerDay),
