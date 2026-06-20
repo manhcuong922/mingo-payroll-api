@@ -24,6 +24,13 @@ public sealed class ComplianceUpdateProposalRepository : IComplianceUpdatePropos
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<int> AddAsync(ComplianceUpdateProposal proposal, CancellationToken cancellationToken)
+    {
+        _db.ComplianceUpdateProposals.Add(proposal);
+        await _db.SaveChangesAsync(cancellationToken);
+        return proposal.Id;
+    }
+
     public Task<ComplianceUpdateProposal?> GetByIdAsync(int id, CancellationToken cancellationToken) =>
         _db.ComplianceUpdateProposals.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 

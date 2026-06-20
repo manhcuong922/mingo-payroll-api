@@ -8,6 +8,9 @@ public interface IComplianceUpdateProposalRepository
     /// <summary>Danh sách proposal gần nhất, tuỳ chọn lọc theo <paramref name="status"/>.</summary>
     Task<IReadOnlyList<ComplianceUpdateProposal>> GetRecentAsync(string? status, int take, CancellationToken cancellationToken);
 
+    /// <summary>Thêm 1 proposal mới (PendingReview) và lưu. Trả Id vừa tạo.</summary>
+    Task<int> AddAsync(ComplianceUpdateProposal proposal, CancellationToken cancellationToken);
+
     /// <summary>Lấy 1 proposal (tracked) để cập nhật trạng thái duyệt.</summary>
     Task<ComplianceUpdateProposal?> GetByIdAsync(int id, CancellationToken cancellationToken);
 

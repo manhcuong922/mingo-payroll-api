@@ -1,25 +1,22 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MPS.Application.Features.Compliance.AutoUpdate.Abstractions;
+using MPS.Application.Features.Compliance.AutoUpdate.Ingestion;
 using MPS.Application.Features.Compliance.AutoUpdate.Models;
 using MPS.Application.Options;
 using MPS.Domain.Entities.Compliance.AutoUpdate;
-using MPS.Infrastructure.Persistence;
 
 namespace MPS.Infrastructure.ComplianceAutoUpdate.Pipeline;
 
-/// <summary>Ghép toàn bộ luồng. Mọi giai đoạn bọc try-catch để không làm chết caller.</summary>
+/// <summary>
+/// Ghép luồng CRAWL (discovery): fingerprint danh sách → lọc văn bản chưa xử lý → tải toàn văn
+/// → đẩy vào <see cref="IComplianceDocumentProcessor"/> (lõi dùng chung). Mọi giai đoạn bọc try-catch.
+/// </summary>
 public sealed class ComplianceCrawlPipeline : IComplianceCrawlPipeline
 {
     private readonly IEnumerable<ILegalSourceAdapter> _adapters;
     private readonly IListFingerprintDetector _fingerprint;
     private readonly ICrawledDocumentTracker _tracker;
-    private readonly IContentScopeFilter _scopeFilter;
-    private readonly IComplianceExtractor _extractor;
-    private readonly ISourceGroundingValidator _grounding;
-    private readonly IComplianceLogicValidator _logic;
-    private readonly IComplianceDiffService _diff;
-    private readonly AppDbContext _db;
+    private readonly IComplianceDocumentProcessor _processor;
     private readonly ComplianceAutoUpdateOptions _options;
     private readonly ILogger<ComplianceCrawlPipeline> _logger;
 
@@ -27,24 +24,14 @@ public sealed class ComplianceCrawlPipeline : IComplianceCrawlPipeline
         IEnumerable<ILegalSourceAdapter> adapters,
         IListFingerprintDetector fingerprint,
         ICrawledDocumentTracker tracker,
-        IContentScopeFilter scopeFilter,
-        IComplianceExtractor extractor,
-        ISourceGroundingValidator grounding,
-        IComplianceLogicValidator logic,
-        IComplianceDiffService diff,
-        AppDbContext db,
+        IComplianceDocumentProcessor processor,
         ComplianceAutoUpdateOptions options,
         ILogger<ComplianceCrawlPipeline> logger)
     {
         _adapters = adapters;
         _fingerprint = fingerprint;
         _tracker = tracker;
-        _scopeFilter = scopeFilter;
-        _extractor = extractor;
-        _grounding = grounding;
-        _logic = logic;
-        _diff = diff;
-        _db = db;
+        _processor = processor;
         _options = options;
         _logger = logger;
     }
@@ -116,7 +103,7 @@ public sealed class ComplianceCrawlPipeline : IComplianceCrawlPipeline
 
         try
         {
-            // ---- Tải toàn văn ----
+            // ---- Tải toàn văn (phần discovery riêng của crawl) ----
             var fullText = await adapter.FetchFullTextAsync(doc.Url, ct);
             if (string.IsNullOrWhiteSpace(fullText))
             {
@@ -126,81 +113,33 @@ public sealed class ComplianceCrawlPipeline : IComplianceCrawlPipeline
                 return DocOutcome.Failed;
             }
 
-            // ---- Lọc 2 tầng nội dung ----
-            var scoped = _scopeFilter.Filter(fullText);
-            _logger.LogInformation(
-                "[{RunId}] {Url}: lọc 2 tầng — {Total} điều → {Kept} điều trong scope.",
-                runId, doc.Url, scoped.TotalClauses, scoped.Clauses.Count);
+            // ---- Đẩy vào lõi dùng chung ----
+            var outcome = await _processor.ProcessAsync(
+                new RawDocument(adapter.SourceKey, doc.Url, doc.DocumentNo, fullText, _options.DryRun), ct);
 
-            if (!scoped.HasScopedContent)
+            switch (outcome.Kind)
             {
-                await SetStatus(doc.Url, ExtractStatuses.Skipped, "Không có điều khoản trong scope.", ct);
-                return DocOutcome.NoChange;
+                case IngestionKind.NoScopedContent:
+                    await SetStatus(doc.Url, ExtractStatuses.Skipped, outcome.Reason, ct);
+                    return DocOutcome.NoChange;
+
+                case IngestionKind.Failed:
+                    _logger.LogWarning("[{RunId}] {Url}: {Reason} → Failed.", runId, doc.Url, outcome.Reason);
+                    await SetStatus(doc.Url, ExtractStatuses.Failed, outcome.Reason, ct);
+                    return DocOutcome.Failed;
+
+                case IngestionKind.NoChange:
+                    await SetStatus(doc.Url, ExtractStatuses.NoChange, null, ct);
+                    return DocOutcome.NoChange;
+
+                case IngestionKind.Proposal:
+                    await SetStatus(doc.Url, ExtractStatuses.ProposalCreated, null, ct);
+                    _logger.LogInformation("[{RunId}] {Url}: tạo proposal #{Id}.", runId, doc.Url, outcome.ProposalId);
+                    return DocOutcome.Proposal;
+
+                default:
+                    return DocOutcome.Failed;
             }
-
-            // ---- AI extract ----
-            var result = await _extractor.ExtractAsync(scoped.ForLlm, ct);
-            if (result == null)
-            {
-                await SetStatus(doc.Url, ExtractStatuses.Failed, "AI extract/parse lỗi.", ct);
-                return DocOutcome.Failed;
-            }
-            result.DocumentNo ??= doc.DocumentNo;
-            _logger.LogInformation("[{RunId}] {Url}: AI bóc {Count} field, entity={Entity}.",
-                runId, doc.Url, result.Values.Count, result.TargetEntityType ?? "(?)");
-            await SetStatus(doc.Url, ExtractStatuses.Extracted, null, ct);
-
-            // ---- 3 lớp validation (tuần tự, độc lập) ----
-            var report = new ValidationReport();
-            _grounding.Validate(result, scoped.SourceText, report);
-            _logic.Validate(result, report);
-            var diff = await _diff.ComputeDiffAsync(result, report, ct);
-
-            // ---- Không khác biệt → không tạo proposal ----
-            if (!diff.HasSubstantiveChange)
-            {
-                _logger.LogInformation("[{RunId}] {Url}: data đã trùng — NoChange, không tạo proposal.", runId, doc.Url);
-                await SetStatus(doc.Url, ExtractStatuses.NoChange, null, ct);
-                return DocOutcome.NoChange;
-            }
-
-            // ---- Tạo proposal (PendingReview) ----
-            var proposal = new ComplianceUpdateProposal
-            {
-                SourceKey = adapter.SourceKey,
-                DocumentUrl = doc.Url,
-                DocumentNo = result.DocumentNo,
-                TargetEntityType = result.TargetEntityType ?? "(unknown)",
-                ProposedValidFrom = result.EffectiveDate,
-                ExtractedJson = result.RawJson,
-                DiffJson = JsonSerializer.Serialize(diff.Entries),
-                ValidationReport = JsonSerializer.Serialize(report.Items),
-                Status = ProposalStatuses.PendingReview,
-                CreatedAt = DateTime.UtcNow,
-            };
-
-            if (report.HasError)
-                _logger.LogWarning(
-                    "[{RunId}] {Url}: proposal có {Err} ERROR validation — vẫn tạo kèm cảnh báo để không bỏ sót.",
-                    runId, doc.Url, report.ErrorCount);
-
-            if (_options.DryRun)
-            {
-                _logger.LogInformation(
-                    "[{RunId}] [DryRun] BỎ ghi DB. Proposal dự kiến: entity={Entity}, docNo={DocNo}, changed={C}, warn={W}, err={E}.",
-                    runId, proposal.TargetEntityType, proposal.DocumentNo, diff.ChangedCount,
-                    report.WarningCount, report.ErrorCount);
-                return DocOutcome.Proposal;
-            }
-
-            _db.ComplianceUpdateProposals.Add(proposal);
-            await _db.SaveChangesAsync(ct);
-            await SetStatus(doc.Url, ExtractStatuses.ProposalCreated, null, ct);
-
-            _logger.LogInformation(
-                "[{RunId}] {Url}: TẠO proposal #{Id} entity={Entity} docNo={DocNo} status={Status}.",
-                runId, doc.Url, proposal.Id, proposal.TargetEntityType, proposal.DocumentNo, proposal.Status);
-            return DocOutcome.Proposal;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
