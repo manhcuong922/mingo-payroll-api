@@ -52,6 +52,8 @@ public class AppDbContext : DbContext
     public DbSet<SourceSnapshot> ComplianceSourceSnapshots => Set<SourceSnapshot>();
     public DbSet<CrawledDocumentLog> ComplianceCrawledDocumentLogs => Set<CrawledDocumentLog>();
     public DbSet<ComplianceUpdateProposal> ComplianceUpdateProposals => Set<ComplianceUpdateProposal>();
+    public DbSet<ComplianceAuthoritativeSource> ComplianceAuthoritativeSources => Set<ComplianceAuthoritativeSource>();
+    public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

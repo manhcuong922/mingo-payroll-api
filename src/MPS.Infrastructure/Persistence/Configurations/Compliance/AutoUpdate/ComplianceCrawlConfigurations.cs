@@ -39,6 +39,42 @@ public sealed class CrawledDocumentLogEntityConfiguration : IEntityTypeConfigura
     }
 }
 
+public sealed class ComplianceAuthoritativeSourceEntityConfiguration
+    : IEntityTypeConfiguration<ComplianceAuthoritativeSource>
+{
+    public void Configure(EntityTypeBuilder<ComplianceAuthoritativeSource> builder)
+    {
+        builder.ToTable("ComplianceAuthoritativeSources");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).UseIdentityColumn();
+        builder.Property(e => e.TargetEntityType).HasMaxLength(64).IsRequired();
+        builder.Property(e => e.DocumentNo).HasMaxLength(100);
+        builder.Property(e => e.DocumentUrl).HasMaxLength(2000);
+        builder.Property(e => e.UpdatedAt).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(2000);
+        builder.HasIndex(e => e.TargetEntityType).IsUnique();
+    }
+}
+
+public sealed class ComplianceLeadEntityConfiguration : IEntityTypeConfiguration<ComplianceLead>
+{
+    public void Configure(EntityTypeBuilder<ComplianceLead> builder)
+    {
+        builder.ToTable("ComplianceLeads");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).UseIdentityColumn();
+        builder.Property(e => e.TargetEntityType).HasMaxLength(64).IsRequired();
+        builder.Property(e => e.SourceKey).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.ClaimedDocumentNo).HasMaxLength(100);
+        builder.Property(e => e.ClaimedSourceUrl).HasMaxLength(2000);
+        builder.Property(e => e.ClaimSummary).HasMaxLength(4000);
+        builder.Property(e => e.Status).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(2000);
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.HasIndex(e => new { e.Status, e.CreatedAt });
+    }
+}
+
 public sealed class ComplianceUpdateProposalEntityConfiguration : IEntityTypeConfiguration<ComplianceUpdateProposal>
 {
     public void Configure(EntityTypeBuilder<ComplianceUpdateProposal> builder)
