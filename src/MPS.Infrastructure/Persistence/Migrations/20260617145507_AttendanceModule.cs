@@ -801,55 +801,55 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 table: "ShiftTemplates",
                 column: "UpdatedByUserId");
 
-            // ===== Seed permissions (IDs 89-123) — Attendance module + LeaveType =====
+            // ===== Seed permissions (IDs 95-129) — Attendance module + LeaveType =====
             migrationBuilder.InsertData(
                 table: "Permissions",
                 columns: new[] { "Id", "Action", "Code", "Description", "Resource", "Scope" },
                 values: new object[,]
                 {
-                    {  89, "Read",    "ShiftTemplate.Read.All",          "Xem ca làm việc mẫu.",                    "ShiftTemplate",        "All"  },
-                    {  90, "Create",  "ShiftTemplate.Create.All",        "Tạo ca làm việc mẫu mới.",                "ShiftTemplate",        "All"  },
-                    {  91, "Update",  "ShiftTemplate.Update.All",        "Cập nhật ca làm việc mẫu.",               "ShiftTemplate",        "All"  },
-                    {  92, "Delete",  "ShiftTemplate.Delete.All",        "Xóa hoặc ngưng kích hoạt ca mẫu.",        "ShiftTemplate",        "All"  },
+                    {  95, "Read",    "ShiftTemplate.Read.All",          "Xem ca làm việc mẫu.",                    "ShiftTemplate",        "All"  },
+                    {  96, "Create",  "ShiftTemplate.Create.All",        "Tạo ca làm việc mẫu mới.",                "ShiftTemplate",        "All"  },
+                    {  97, "Update",  "ShiftTemplate.Update.All",        "Cập nhật ca làm việc mẫu.",               "ShiftTemplate",        "All"  },
+                    {  98, "Delete",  "ShiftTemplate.Delete.All",        "Xóa hoặc ngưng kích hoạt ca mẫu.",        "ShiftTemplate",        "All"  },
 
-                    {  93, "Read",    "EmployeeShift.Read.All",          "Xem phân ca nhân viên.",                   "EmployeeShift",        "All"  },
-                    {  94, "Create",  "EmployeeShift.Create.All",        "Phân ca cho nhân viên.",                   "EmployeeShift",        "All"  },
-                    {  95, "Delete",  "EmployeeShift.Delete.All",        "Hủy phân ca nhân viên.",                   "EmployeeShift",        "All"  },
+                    {  99, "Read",    "EmployeeShift.Read.All",          "Xem phân ca nhân viên.",                   "EmployeeShift",        "All"  },
+                    { 100, "Create",  "EmployeeShift.Create.All",        "Phân ca cho nhân viên.",                   "EmployeeShift",        "All"  },
+                    { 101, "Delete",  "EmployeeShift.Delete.All",        "Hủy phân ca nhân viên.",                   "EmployeeShift",        "All"  },
 
-                    {  96, "Read",    "PublicHoliday.Read.All",          "Xem danh sách ngày lễ.",                   "PublicHoliday",        "All"  },
-                    {  97, "Create",  "PublicHoliday.Create.All",        "Tạo ngày lễ có hưởng lương.",              "PublicHoliday",        "All"  },
-                    {  98, "Update",  "PublicHoliday.Update.All",        "Cập nhật ngày lễ.",                        "PublicHoliday",        "All"  },
-                    {  99, "Delete",  "PublicHoliday.Delete.All",        "Xóa ngày lễ.",                             "PublicHoliday",        "All"  },
+                    { 102, "Read",    "PublicHoliday.Read.All",          "Xem danh sách ngày lễ.",                   "PublicHoliday",        "All"  },
+                    { 103, "Create",  "PublicHoliday.Create.All",        "Tạo ngày lễ có hưởng lương.",              "PublicHoliday",        "All"  },
+                    { 104, "Update",  "PublicHoliday.Update.All",        "Cập nhật ngày lễ.",                        "PublicHoliday",        "All"  },
+                    { 105, "Delete",  "PublicHoliday.Delete.All",        "Xóa ngày lễ.",                             "PublicHoliday",        "All"  },
 
-                    { 100, "Read",    "Attendance.Read.All",             "Xem chấm công của mọi nhân viên.",         "Attendance",           "All"  },
-                    { 101, "Read",    "Attendance.Read.Self",            "Xem chấm công của bản thân.",              "Attendance",           "Self" },
-                    { 102, "Create",  "Attendance.Create.All",           "Ghi nhận chấm công.",                      "Attendance",           "All"  },
-                    { 103, "Update",  "Attendance.Update.All",           "Cập nhật chấm công.",                      "Attendance",           "All"  },
+                    { 106, "Read",    "Attendance.Read.All",             "Xem chấm công của mọi nhân viên.",         "Attendance",           "All"  },
+                    { 107, "Read",    "Attendance.Read.Self",            "Xem chấm công của bản thân.",              "Attendance",           "Self" },
+                    { 108, "Create",  "Attendance.Create.All",           "Ghi nhận chấm công.",                      "Attendance",           "All"  },
+                    { 109, "Update",  "Attendance.Update.All",           "Cập nhật chấm công.",                      "Attendance",           "All"  },
 
-                    { 104, "Read",    "OvertimeRequest.Read.All",        "Xem yêu cầu tăng ca của mọi nhân viên.",   "OvertimeRequest",      "All"  },
-                    { 105, "Read",    "OvertimeRequest.Read.Self",       "Xem yêu cầu tăng ca của bản thân.",        "OvertimeRequest",      "Self" },
-                    { 106, "Create",  "OvertimeRequest.Create.Self",     "Tạo yêu cầu tăng ca cho bản thân.",        "OvertimeRequest",      "Self" },
-                    { 107, "Approve", "OvertimeRequest.Approve.All",     "Duyệt yêu cầu tăng ca.",                   "OvertimeRequest",      "All"  },
+                    { 110, "Read",    "OvertimeRequest.Read.All",        "Xem yêu cầu tăng ca của mọi nhân viên.",   "OvertimeRequest",      "All"  },
+                    { 111, "Read",    "OvertimeRequest.Read.Self",       "Xem yêu cầu tăng ca của bản thân.",        "OvertimeRequest",      "Self" },
+                    { 112, "Create",  "OvertimeRequest.Create.Self",     "Tạo yêu cầu tăng ca cho bản thân.",        "OvertimeRequest",      "Self" },
+                    { 113, "Approve", "OvertimeRequest.Approve.All",     "Duyệt yêu cầu tăng ca.",                   "OvertimeRequest",      "All"  },
 
-                    { 108, "Read",    "LeaveRequest.Read.All",           "Xem yêu cầu nghỉ phép của mọi nhân viên.", "LeaveRequest",         "All"  },
-                    { 109, "Read",    "LeaveRequest.Read.Self",          "Xem yêu cầu nghỉ phép của bản thân.",      "LeaveRequest",         "Self" },
-                    { 110, "Create",  "LeaveRequest.Create.Self",        "Tạo yêu cầu nghỉ phép cho bản thân.",      "LeaveRequest",         "Self" },
-                    { 111, "Approve", "LeaveRequest.Approve.All",        "Duyệt yêu cầu nghỉ phép.",                 "LeaveRequest",         "All"  },
+                    { 114, "Read",    "LeaveRequest.Read.All",           "Xem yêu cầu nghỉ phép của mọi nhân viên.", "LeaveRequest",         "All"  },
+                    { 115, "Read",    "LeaveRequest.Read.Self",          "Xem yêu cầu nghỉ phép của bản thân.",      "LeaveRequest",         "Self" },
+                    { 116, "Create",  "LeaveRequest.Create.Self",        "Tạo yêu cầu nghỉ phép cho bản thân.",      "LeaveRequest",         "Self" },
+                    { 117, "Approve", "LeaveRequest.Approve.All",        "Duyệt yêu cầu nghỉ phép.",                 "LeaveRequest",         "All"  },
 
-                    { 112, "Read",    "AttendanceAdjustment.Read.All",   "Xem yêu cầu điều chỉnh chấm công.",        "AttendanceAdjustment", "All"  },
-                    { 113, "Create",  "AttendanceAdjustment.Create.Self","Tạo yêu cầu điều chỉnh chấm công.",        "AttendanceAdjustment", "Self" },
-                    { 114, "Approve", "AttendanceAdjustment.Approve.All","Duyệt yêu cầu điều chỉnh.",                "AttendanceAdjustment", "All"  },
-                    { 115, "Update",  "AttendanceAdjustment.Override.All","HR ghi đè chấm công không qua workflow.", "AttendanceAdjustment", "All"  },
+                    { 118, "Read",    "AttendanceAdjustment.Read.All",   "Xem yêu cầu điều chỉnh chấm công.",        "AttendanceAdjustment", "All"  },
+                    { 119, "Create",  "AttendanceAdjustment.Create.Self","Tạo yêu cầu điều chỉnh chấm công.",        "AttendanceAdjustment", "Self" },
+                    { 120, "Approve", "AttendanceAdjustment.Approve.All","Duyệt yêu cầu điều chỉnh.",                "AttendanceAdjustment", "All"  },
+                    { 121, "Update",  "AttendanceAdjustment.Override.All","HR ghi đè chấm công không qua workflow.", "AttendanceAdjustment", "All"  },
 
-                    { 116, "Read",    "AttendanceRule.Read.All",         "Xem preset rule chấm công.",               "AttendanceRule",       "All"  },
-                    { 117, "Create",  "AttendanceRule.Create.All",       "Tạo preset rule chấm công.",               "AttendanceRule",       "All"  },
-                    { 118, "Update",  "AttendanceRule.Update.All",       "Cập nhật preset rule chấm công.",          "AttendanceRule",       "All"  },
-                    { 119, "Delete",  "AttendanceRule.Delete.All",       "Xóa preset rule chấm công.",               "AttendanceRule",       "All"  },
+                    { 122, "Read",    "AttendanceRule.Read.All",         "Xem preset rule chấm công.",               "AttendanceRule",       "All"  },
+                    { 123, "Create",  "AttendanceRule.Create.All",       "Tạo preset rule chấm công.",               "AttendanceRule",       "All"  },
+                    { 124, "Update",  "AttendanceRule.Update.All",       "Cập nhật preset rule chấm công.",          "AttendanceRule",       "All"  },
+                    { 125, "Delete",  "AttendanceRule.Delete.All",       "Xóa preset rule chấm công.",               "AttendanceRule",       "All"  },
 
-                    { 120, "Read",    "LeaveType.Read.All",              "Xem cấu hình loại nghỉ phép.",             "LeaveType",            "All"  },
-                    { 121, "Create",  "LeaveType.Create.All",            "Tạo loại nghỉ phép.",                      "LeaveType",            "All"  },
-                    { 122, "Update",  "LeaveType.Update.All",            "Cập nhật loại nghỉ phép.",                 "LeaveType",            "All"  },
-                    { 123, "Delete",  "LeaveType.Delete.All",            "Xóa/Deactivate loại nghỉ phép.",           "LeaveType",            "All"  }
+                    { 126, "Read",    "LeaveType.Read.All",              "Xem cấu hình loại nghỉ phép.",             "LeaveType",            "All"  },
+                    { 127, "Create",  "LeaveType.Create.All",            "Tạo loại nghỉ phép.",                      "LeaveType",            "All"  },
+                    { 128, "Update",  "LeaveType.Update.All",            "Cập nhật loại nghỉ phép.",                 "LeaveType",            "All"  },
+                    { 129, "Delete",  "LeaveType.Delete.All",            "Xóa/Deactivate loại nghỉ phép.",           "LeaveType",            "All"  }
                 });
 
             // ===== Role permissions seed =====
@@ -864,51 +864,51 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 values: new object[,]
                 {
                     // ── SystemAdmin (1) ─────────────────────────────────────────
-                    {  89, 1 }, {  90, 1 }, {  91, 1 }, {  92, 1 },
-                    {  93, 1 }, {  94, 1 }, {  95, 1 },
-                    {  96, 1 }, {  97, 1 }, {  98, 1 }, {  99, 1 },
-                    { 100, 1 }, { 102, 1 }, { 103, 1 },
-                    { 104, 1 }, { 107, 1 },
-                    { 108, 1 }, { 111, 1 },
-                    { 112, 1 }, { 114, 1 }, { 115, 1 },
-                    { 116, 1 }, { 117, 1 }, { 118, 1 }, { 119, 1 },
-                    { 120, 1 }, { 121, 1 }, { 122, 1 }, { 123, 1 },
+                    {  95, 1 }, {  96, 1 }, {  97, 1 }, {  98, 1 },
+                    {  99, 1 }, { 100, 1 }, { 101, 1 },
+                    { 102, 1 }, { 103, 1 }, { 104, 1 }, { 105, 1 },
+                    { 106, 1 }, { 108, 1 }, { 109, 1 },
+                    { 110, 1 }, { 113, 1 },
+                    { 114, 1 }, { 117, 1 },
+                    { 118, 1 }, { 120, 1 }, { 121, 1 },
+                    { 122, 1 }, { 123, 1 }, { 124, 1 }, { 125, 1 },
+                    { 126, 1 }, { 127, 1 }, { 128, 1 }, { 129, 1 },
 
                     // ── HR (2) ─────────────────────────────────────────────────
-                    {  89, 2 }, {  90, 2 }, {  91, 2 }, {  92, 2 },
-                    {  93, 2 }, {  94, 2 }, {  95, 2 },
-                    {  96, 2 }, {  97, 2 }, {  98, 2 }, {  99, 2 },
-                    { 100, 2 }, { 102, 2 }, { 103, 2 },
-                    { 104, 2 }, { 107, 2 },
-                    { 108, 2 }, { 111, 2 },
-                    { 112, 2 }, { 114, 2 }, { 115, 2 },
-                    { 116, 2 }, { 117, 2 }, { 118, 2 }, { 119, 2 },
-                    { 120, 2 }, { 121, 2 }, { 122, 2 }, { 123, 2 },
+                    {  95, 2 }, {  96, 2 }, {  97, 2 }, {  98, 2 },
+                    {  99, 2 }, { 100, 2 }, { 101, 2 },
+                    { 102, 2 }, { 103, 2 }, { 104, 2 }, { 105, 2 },
+                    { 106, 2 }, { 108, 2 }, { 109, 2 },
+                    { 110, 2 }, { 113, 2 },
+                    { 114, 2 }, { 117, 2 },
+                    { 118, 2 }, { 120, 2 }, { 121, 2 },
+                    { 122, 2 }, { 123, 2 }, { 124, 2 }, { 125, 2 },
+                    { 126, 2 }, { 127, 2 }, { 128, 2 }, { 129, 2 },
 
                     // ── Accountant (3) — read PublicHoliday + Attendance ───────
-                    {  96, 3 }, { 100, 3 },
+                    { 102, 3 }, { 106, 3 },
 
                     // ── Director (4) — read-only ──────────────────────────────
-                    {  89, 4 }, {  93, 4 }, {  96, 4 }, { 100, 4 }, { 104, 4 }, { 108, 4 },
-                    { 116, 4 }, { 120, 4 },
+                    {  95, 4 }, {  99, 4 }, { 102, 4 }, { 106, 4 }, { 110, 4 }, { 114, 4 },
+                    { 122, 4 }, { 126, 4 },
 
                     // ── DepartmentManager (5) — operational manager ───────────
-                    {  89, 5 }, {  90, 5 }, {  91, 5 }, {  92, 5 },
-                    {  93, 5 }, {  94, 5 }, {  95, 5 },
-                    {  96, 5 },
-                    { 100, 5 }, { 102, 5 }, { 103, 5 },
-                    { 104, 5 }, { 107, 5 },
-                    { 108, 5 }, { 111, 5 },
-                    { 112, 5 }, { 114, 5 },
-                    { 116, 5 }, { 117, 5 }, { 118, 5 }, { 119, 5 },
-                    { 120, 5 },
+                    {  95, 5 }, {  96, 5 }, {  97, 5 }, {  98, 5 },
+                    {  99, 5 }, { 100, 5 }, { 101, 5 },
+                    { 102, 5 },
+                    { 106, 5 }, { 108, 5 }, { 109, 5 },
+                    { 110, 5 }, { 113, 5 },
+                    { 114, 5 }, { 117, 5 },
+                    { 118, 5 }, { 120, 5 },
+                    { 122, 5 }, { 123, 5 }, { 124, 5 }, { 125, 5 },
+                    { 126, 5 },
 
                     // ── Employee (7) — self-service ───────────────────────────
-                    {  96, 7 }, { 101, 7 },
-                    { 105, 7 }, { 106, 7 },
-                    { 109, 7 }, { 110, 7 },
-                    { 113, 7 },
-                    { 120, 7 }
+                    { 102, 7 }, { 107, 7 },
+                    { 111, 7 }, { 112, 7 },
+                    { 115, 7 }, { 116, 7 },
+                    { 119, 7 },
+                    { 126, 7 }
                 });
 
             // AttendanceRules + LeaveTypes seed nằm trong DatabaseSeeder runtime
@@ -918,8 +918,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("DELETE FROM RolePermissions WHERE PermissionId BETWEEN 89 AND 123;");
-            migrationBuilder.Sql("DELETE FROM Permissions WHERE Id BETWEEN 89 AND 123;");
+            migrationBuilder.Sql("DELETE FROM RolePermissions WHERE PermissionId BETWEEN 95 AND 129;");
+            migrationBuilder.Sql("DELETE FROM Permissions WHERE Id BETWEEN 95 AND 129;");
 
 
             migrationBuilder.DropTable(
