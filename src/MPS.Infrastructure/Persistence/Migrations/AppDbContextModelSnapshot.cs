@@ -786,6 +786,63 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false);
 
                     b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("StandardDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(3,2)")
+                        .HasDefaultValue(1.00m);
+
+                    b.Property<decimal>("StandardHours")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("WorkRateHoliday")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(3.00m);
+
+                    b.Property<decimal>("WorkRateNormal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(1.00m);
+
+                    b.Property<decimal>("WorkRateWeeklyRest")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(2.00m);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliedAttendanceRuleId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("ShiftTemplates", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -4870,6 +4927,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("UpdatedByUser");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.AuditLog", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.User", "User")
@@ -5332,6 +5391,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("AttendanceRecords");
 
                     b.Navigation("EmployeeShiftAssignments");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.LegalDocument", b =>
                 {
                     b.Navigation("ComplianceVersions");
