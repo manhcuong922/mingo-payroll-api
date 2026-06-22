@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
+using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Entities.Compliance;
 
 namespace MPS.Infrastructure.Persistence;
@@ -41,6 +42,20 @@ public class AppDbContext : DbContext
     public DbSet<MinimumWageRegion> MinimumWageRegions => Set<MinimumWageRegion>();
     public DbSet<AllowanceExemptThresholdVersion> AllowanceExemptThresholdVersions => Set<AllowanceExemptThresholdVersion>();
     public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLawConstantsVersion>();
+
+    // Attendance module (FE-ATT)
+    public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
+    public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
+    public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<OvertimeRequest> OvertimeRequests => Set<OvertimeRequest>();
+    public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
+    public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
+    public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
+    public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
+    public DbSet<ScheduleTemplateEmployee> ScheduleTemplateEmployees => Set<ScheduleTemplateEmployee>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,0 +1,90 @@
+using MPS.Application.Common.Interfaces;
+using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces.Attendance;
+
+namespace MPS.Application.Features.Attendance.OvertimeRequest.Common;
+
+/// <summary>
+/// Tập trung kiểm tra giới hạn OT theo Điều 107 BLLĐ 2019.
+/// Dùng chung cho cả CreateOvertimeRequest và ApproveOvertimeRequest (re-check).
+/// Multi-shift: BR-5/6 cân nhắc TẤT CẢ ca trên ngày (tổng giờ chuẩn).
+/// </summary>
+public sealed class OvertimeCapChecker
+{
+    public const decimal MonthlyOvertimeCapHours = 40m;
+    public const decimal DailyTotalWorkCapHours = 12m;
+
+    private readonly IOvertimeRequestRepository _otRepository;
+    private readonly IEmployeeShiftAssignmentRepository _shiftRepository;
+    private readonly IComplianceLookupService _complianceLookup;
+
+    public OvertimeCapChecker(
+        IOvertimeRequestRepository otRepository,
+        IEmployeeShiftAssignmentRepository shiftRepository,
+        IComplianceLookupService complianceLookup)
+    {
+        _otRepository = otRepository;
+        _shiftRepository = shiftRepository;
+        _complianceLookup = complianceLookup;
+    }
+
+    public async Task CheckAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        TimeOnly otStartTime,
+        TimeOnly otEndTime,
+        decimal otHours,
+        CancellationToken cancellationToken)
+    {
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
+
+        // BR-5 + BR-6 (đa-ca: tổng giờ chuẩn của các ca trên ngày)
+        var assignments = await _shiftRepository.GetByEmployeeAndDateAsync(
+            employeeInformationId, workDate, cancellationToken);
+
+        if (assignments.Count > 0)
+        {
+            // BR-5: OT không được overlap bất kỳ ca chuẩn nào.
+            foreach (var a in assignments)
+            {
+                if (Overlaps(otStartTime, otEndTime, a.ShiftTemplate.StartTime, a.ShiftTemplate.EndTime))
+                    throw new DomainValidationException(
+                        $"BR-5: OT overlaps regular shift '{a.ShiftTemplate.Code}' ({a.ShiftTemplate.StartTime:HH\\:mm}–{a.ShiftTemplate.EndTime:HH\\:mm}).");
+            }
+
+            // BR-6: tổng giờ chuẩn các ca + OT ≤ 12h/ngày; OT ≤ 50% tổng giờ ca.
+            var totalShiftHours = assignments.Sum(a => a.ShiftTemplate.StandardHours);
+            var halfShift = totalShiftHours / 2m;
+            if (otHours > halfShift)
+                throw new DomainValidationException(
+                    $"BR-6: Daily OT cannot exceed 50% of total shift hours ({halfShift}h).");
+            if (totalShiftHours + otHours > DailyTotalWorkCapHours)
+                throw new DomainValidationException(
+                    $"BR-6: Total work (shifts {totalShiftHours}h + OT {otHours}h) exceeds {DailyTotalWorkCapHours}h/day.");
+        }
+        else
+        {
+            // Chưa phân ca: dùng OvertimeMaxHoursPerDay từ luật.
+            if (otHours > laborLaw.OvertimeMaxHoursPerDay)
+                throw new DomainValidationException(
+                    $"BR-6: Daily OT cap exceeded ({otHours}h > {laborLaw.OvertimeMaxHoursPerDay}h).");
+        }
+
+        // BR-7: monthly cap
+        var monthlyApproved = await _otRepository.GetTotalOtHoursInMonthAsync(
+            employeeInformationId, workDate.Year, workDate.Month, cancellationToken);
+        if (monthlyApproved + otHours > MonthlyOvertimeCapHours)
+            throw new DomainValidationException(
+                $"BR-7: Monthly OT cap exceeded. Approved={monthlyApproved}h, requested={otHours}h, cap={MonthlyOvertimeCapHours}h.");
+
+        // BR-8: yearly cap
+        var yearlyApproved = await _otRepository.GetTotalOtHoursInYearAsync(
+            employeeInformationId, workDate.Year, cancellationToken);
+        if (yearlyApproved + otHours > laborLaw.OvertimeMaxHoursPerYear)
+            throw new DomainValidationException(
+                $"BR-8: Yearly OT cap exceeded. Approved={yearlyApproved}h, requested={otHours}h, cap={laborLaw.OvertimeMaxHoursPerYear}h.");
+    }
+
+    private static bool Overlaps(TimeOnly aStart, TimeOnly aEnd, TimeOnly bStart, TimeOnly bEnd) =>
+        aStart < bEnd && bStart < aEnd;
+}

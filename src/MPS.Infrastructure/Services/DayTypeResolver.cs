@@ -1,0 +1,94 @@
+using Microsoft.EntityFrameworkCore;
+using MPS.Application.Common.Interfaces;
+using MPS.Infrastructure.Persistence;
+using AttendanceEnums = MPS.Domain.Enums.Attendance;
+
+namespace MPS.Infrastructure.Services;
+
+/// <summary>
+/// BR-23 — Resolve DayType theo thứ tự ưu tiên:
+/// (1) PublicHoliday → (2) PaidLeaveDay (LeaveRequest Approved + IsPaid) → (3) WeeklyRestDay (CN) → (4) Normal.
+/// </summary>
+public class DayTypeResolver : IDayTypeResolver
+{
+    private readonly AppDbContext _context;
+
+    public DayTypeResolver(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<AttendanceEnums.DayType> ResolveAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        CancellationToken cancellationToken = default)
+    {
+        var isHoliday = await _context.PublicHolidays.AsNoTracking()
+            .AnyAsync(h => h.HolidayDate == workDate, cancellationToken);
+        if (isHoliday)
+            return AttendanceEnums.DayType.PublicHoliday;
+
+        var hasPaidLeave = await _context.LeaveRequests.AsNoTracking()
+            .AnyAsync(l => l.EmployeeInformationId == employeeInformationId
+                          && l.Status == AttendanceEnums.LeaveRequestStatus.Approved
+                          && l.IsPaid
+                          && l.StartDate <= workDate
+                          && l.EndDate >= workDate,
+                cancellationToken);
+        if (hasPaidLeave)
+            return AttendanceEnums.DayType.PaidLeaveDay;
+
+        if (workDate.DayOfWeek == DayOfWeek.Sunday)
+            return AttendanceEnums.DayType.WeeklyRestDay;
+
+        return AttendanceEnums.DayType.Normal;
+    }
+
+    public async Task<IReadOnlyDictionary<DateOnly, AttendanceEnums.DayType>> ResolveRangeAsync(
+        int employeeInformationId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (toDate < fromDate)
+            return new Dictionary<DateOnly, AttendanceEnums.DayType>();
+
+        var holidays = await _context.PublicHolidays.AsNoTracking()
+            .Where(h => h.HolidayDate >= fromDate && h.HolidayDate <= toDate)
+            .Select(h => h.HolidayDate)
+            .ToListAsync(cancellationToken);
+        var holidaySet = holidays.ToHashSet();
+
+        var paidLeaves = await _context.LeaveRequests.AsNoTracking()
+            .Where(l => l.EmployeeInformationId == employeeInformationId
+                       && l.Status == AttendanceEnums.LeaveRequestStatus.Approved
+                       && l.IsPaid
+                       && l.StartDate <= toDate
+                       && l.EndDate >= fromDate)
+            .Select(l => new { l.StartDate, l.EndDate })
+            .ToListAsync(cancellationToken);
+
+        var paidLeaveDays = new HashSet<DateOnly>();
+        foreach (var leave in paidLeaves)
+        {
+            var start = leave.StartDate < fromDate ? fromDate : leave.StartDate;
+            var end = leave.EndDate > toDate ? toDate : leave.EndDate;
+            for (var d = start; d <= end; d = d.AddDays(1))
+                paidLeaveDays.Add(d);
+        }
+
+        var result = new Dictionary<DateOnly, AttendanceEnums.DayType>();
+        for (var d = fromDate; d <= toDate; d = d.AddDays(1))
+        {
+            if (holidaySet.Contains(d))
+                result[d] = AttendanceEnums.DayType.PublicHoliday;
+            else if (paidLeaveDays.Contains(d))
+                result[d] = AttendanceEnums.DayType.PaidLeaveDay;
+            else if (d.DayOfWeek == DayOfWeek.Sunday)
+                result[d] = AttendanceEnums.DayType.WeeklyRestDay;
+            else
+                result[d] = AttendanceEnums.DayType.Normal;
+        }
+        return result;
+    }
+}

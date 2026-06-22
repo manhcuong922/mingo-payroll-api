@@ -55,11 +55,6 @@ public class ShiftTemplateRepository : IShiftTemplateRepository
         return query.AnyAsync(cancellationToken);
     }
 
-    public Task<bool> IsInUseAsync(int shiftTemplateId, CancellationToken cancellationToken = default) =>
-        _context.EmployeeShiftAssignments
-            .AsNoTracking()
-            .AnyAsync(a => a.ShiftTemplateId == shiftTemplateId, cancellationToken);
-
     public async Task<int> AddAsync(ShiftTemplate entity, CancellationToken cancellationToken = default)
     {
         await _context.ShiftTemplates.AddAsync(entity, cancellationToken);
@@ -106,12 +101,4 @@ public class ShiftTemplateRepository : IShiftTemplateRepository
         return true;
     }
 
-    public async Task<bool> HardDeleteAsync(int id, CancellationToken cancellationToken = default)
-    {
-        var tracked = await _context.ShiftTemplates.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
-        if (tracked is null) return false;
-        _context.ShiftTemplates.Remove(tracked);
-        await _context.SaveChangesAsync(cancellationToken);
-        return true;
-    }
 }

@@ -29,10 +29,6 @@ public class DeleteShiftTemplateCommandHandler : IRequestHandler<DeleteShiftTemp
         var existing = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (existing is null) return false;
 
-        // Soft-delete (deactivate) if already in use; hard-delete otherwise
-        if (await _repository.IsInUseAsync(request.Id, cancellationToken))
-            return await _repository.DeactivateAsync(request.Id, userId, _clock.UtcNow, cancellationToken);
-
-        return await _repository.HardDeleteAsync(request.Id, cancellationToken);
+        return await _repository.DeactivateAsync(request.Id, userId, _clock.UtcNow, cancellationToken);
     }
 }

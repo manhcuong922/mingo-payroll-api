@@ -10,6 +10,13 @@ public interface IContractLookupReader
     Task<UserSnapshot?> GetUserSnapshotAsync(int userId, CancellationToken cancellationToken);
     Task<EmployeeInfoSnapshot?> GetEmployeeInfoSnapshotAsync(int employeeInformationId, CancellationToken cancellationToken);
     Task<int?> GetEmployeeInformationIdByUserIdAsync(int userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Trả về ngày NV chính thức gia nhập = MIN(Contract.EffectiveFrom) trong các HĐ
+    /// không bị Cancelled của employee. Dùng cho BR-15 (tính thâm niên nghỉ phép).
+    /// Null nếu NV chưa có HĐ hợp lệ.
+    /// </summary>
+    Task<DateTime?> GetEmployeeJoinDateAsync(int employeeInformationId, CancellationToken cancellationToken);
     Task<bool> IsActiveUserAsync(int userId, CancellationToken cancellationToken);
     Task<bool> IsActiveContractPartyAsync(int partyId, CancellationToken cancellationToken);
     Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken);

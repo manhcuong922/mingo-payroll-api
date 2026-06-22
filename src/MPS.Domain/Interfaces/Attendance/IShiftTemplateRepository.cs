@@ -16,13 +16,9 @@ public interface IShiftTemplateRepository
 
     Task<bool> ExistsByNameAsync(string name, int? excludeId, CancellationToken cancellationToken = default);
 
-    Task<bool> IsInUseAsync(int shiftTemplateId, CancellationToken cancellationToken = default);
-
     Task<int> AddAsync(ShiftTemplate entity, CancellationToken cancellationToken = default);
 
     Task<bool> UpdateAsync(ShiftTemplate entity, CancellationToken cancellationToken = default);
 
     Task<bool> DeactivateAsync(int id, int updatedByUserId, DateTime nowUtc, CancellationToken cancellationToken = default);
-
-    Task<bool> HardDeleteAsync(int id, CancellationToken cancellationToken = default);
 }

@@ -10,6 +10,7 @@ using MPS.Infrastructure.BackgroundJobs;
 using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Repositories;
+using MPS.Infrastructure.Repositories.Attendance;
 using MPS.Infrastructure.Repositories.Compliance;
 using MPS.Infrastructure.Security;
 using MPS.Infrastructure.Services;
@@ -63,6 +64,24 @@ public static class InfrastructureServiceRegistration
         // Compliance module services
         services.AddSingleton<ComplianceCacheInvalidator>();
         services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
+
+        // Attendance module — orchestrators
+        services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
+
+        // Attendance module repositories (FE-ATT)
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IShiftTemplateRepository, ShiftTemplateRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IEmployeeShiftAssignmentRepository, EmployeeShiftAssignmentRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IPublicHolidayRepository, PublicHolidayRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRecordRepository, AttendanceRecordRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeRequestRepository, OvertimeRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveTypeRepository, LeaveTypeRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveRequestRepository, LeaveRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceAdjustmentRepository, AttendanceAdjustmentRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleRepository, AttendanceRuleRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
+        services.AddScoped<IDayTypeResolver, DayTypeResolver>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IScheduleTemplateExpander, ScheduleTemplateExpander>();
 
         // Compliance options
         services.AddOptions<ComplianceOptions>()

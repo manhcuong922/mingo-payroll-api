@@ -76,6 +76,773 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("AllowanceTypes", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceAdjustment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendanceRecordId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly?>("NewCheckInTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("NewCheckOutTime")
+                        .HasColumnType("time");
+
+                    b.Property<byte>("NewStatus")
+                        .HasColumnType("tinyint");
+
+                    b.Property<TimeOnly?>("OriginalCheckInTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("OriginalCheckOutTime")
+                        .HasColumnType("time");
+
+                    b.Property<byte?>("OriginalStatus")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceRecordId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "Status");
+
+                    b.ToTable("AttendanceAdjustments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<TimeOnly?>("CheckInTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("CheckOutTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("WorkDate");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "ShiftTemplateId")
+                        .IsUnique();
+
+                    b.ToTable("AttendanceRecords", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("WorkRateHoliday")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(3.00m);
+
+                    b.Property<decimal>("WorkRateNormal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(1.00m);
+
+                    b.Property<decimal>("WorkRateWeeklyRest")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(2.00m);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("AttendanceRules", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.EmployeeShiftAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ScheduleTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ScheduleTemplateId");
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.HasIndex("WorkDate");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "ShiftTemplateId")
+                        .IsUnique();
+
+                    b.ToTable("EmployeeShiftAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveBalance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BaseDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,1)")
+                        .HasDefaultValue(12m);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LeaveTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SeniorityBonusDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,1)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("TotalDays")
+                        .HasColumnType("decimal(4,1)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UsedDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,1)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LeaveTypeId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "Year", "LeaveTypeId")
+                        .IsUnique();
+
+                    b.ToTable("LeaveBalances", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("LeaveTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("SupportingDocumentUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("TotalDays")
+                        .HasColumnType("decimal(4,1)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LeaveTypeId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "Status");
+
+                    b.HasIndex("StartDate", "EndDate");
+
+                    b.ToTable("LeaveRequests", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("DeductsBalance")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("MaxDaysPerRequest")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<decimal?>("PaidRate")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<bool>("RequireDocument")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("LeaveTypes", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("OtEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<decimal>("OtHours")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<TimeOnly>("OtStartTime")
+                        .HasColumnType("time");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "Status");
+
+                    b.ToTable("OvertimeRequests", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.PublicHoliday", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<byte>("Category")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("HolidayDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal?>("PayRateOverride")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("HolidayDate")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("PublicHolidays", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DaysOfMonthMask")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("DaysOfWeekMask")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("RepeatEvery")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("RepeatUnit")
+                        .HasColumnType("tinyint");
+
+                    b.Property<int>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("ScheduleTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateEmployee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ScheduleTemplateId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeInformationId");
+
+                    b.HasIndex("ScheduleTemplateId", "EmployeeInformationId")
+                        .IsUnique();
+
+                    b.ToTable("ScheduleTemplateEmployees", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AppliedAttendanceRuleId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly?>("BreakEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("BreakStartTime")
+                        .HasColumnType("time");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsNightShift")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("StandardDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(3,2)")
+                        .HasDefaultValue(1.00m);
+
+                    b.Property<decimal>("StandardHours")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("WorkRateHoliday")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(3.00m);
+
+                    b.Property<decimal>("WorkRateNormal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(1.00m);
+
+                    b.Property<decimal>("WorkRateWeeklyRest")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(2.00m);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliedAttendanceRuleId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("ShiftTemplates", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>
                 {
                     b.Property<int>("Id")
@@ -3271,6 +4038,347 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("PerformanceMetricRoles", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceAdjustment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.AttendanceRecord", "AttendanceRecord")
+                        .WithMany("AttendanceAdjustments")
+                        .HasForeignKey("AttendanceRecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AttendanceRecord");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRecord", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany("AttendanceRecords")
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ShiftTemplate");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.EmployeeShiftAssignment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ScheduleTemplate", "ScheduleTemplate")
+                        .WithMany()
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany("EmployeeShiftAssignments")
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ScheduleTemplate");
+
+                    b.Navigation("ShiftTemplate");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveBalance", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.LeaveType", "LeaveType")
+                        .WithMany()
+                        .HasForeignKey("LeaveTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("LeaveType");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveRequest", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.LeaveType", "LeaveType")
+                        .WithMany()
+                        .HasForeignKey("LeaveTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("LeaveType");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveType", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeRequest", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.PublicHoliday", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany()
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("ShiftTemplate");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateEmployee", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ScheduleTemplate", "ScheduleTemplate")
+                        .WithMany("Employees")
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ScheduleTemplate");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.AttendanceRule", "AppliedAttendanceRule")
+                        .WithMany()
+                        .HasForeignKey("AppliedAttendanceRuleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AppliedAttendanceRule");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.AllowanceType", "AllowanceType")
@@ -3687,6 +4795,23 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.AllowanceType", b =>
                 {
                     b.Navigation("ContractAllowances");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRecord", b =>
+                {
+                    b.Navigation("AttendanceAdjustments");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>
+                {
+                    b.Navigation("Employees");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
+                {
+                    b.Navigation("AttendanceRecords");
+
+                    b.Navigation("EmployeeShiftAssignments");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.MinimumWageVersion", b =>

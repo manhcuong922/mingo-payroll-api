@@ -114,6 +114,52 @@ public static class Permissions
     public const string LaborLawConstantsCreateAll = "LaborLawConstants.Create.All";
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
     public const string LaborLawConstantsDeleteAll = "LaborLawConstants.Delete.All";
+
+    // ===== Attendance module (FE-ATT) — IDs 89–115 =====
+
+    public const string ShiftTemplateReadAll = "ShiftTemplate.Read.All";
+    public const string ShiftTemplateCreateAll = "ShiftTemplate.Create.All";
+    public const string ShiftTemplateUpdateAll = "ShiftTemplate.Update.All";
+    public const string ShiftTemplateDeleteAll = "ShiftTemplate.Delete.All";
+
+    public const string EmployeeShiftReadAll = "EmployeeShift.Read.All";
+    public const string EmployeeShiftCreateAll = "EmployeeShift.Create.All";
+    public const string EmployeeShiftDeleteAll = "EmployeeShift.Delete.All";
+
+    public const string PublicHolidayReadAll = "PublicHoliday.Read.All";
+    public const string PublicHolidayCreateAll = "PublicHoliday.Create.All";
+    public const string PublicHolidayUpdateAll = "PublicHoliday.Update.All";
+    public const string PublicHolidayDeleteAll = "PublicHoliday.Delete.All";
+
+    public const string AttendanceReadAll = "Attendance.Read.All";
+    public const string AttendanceReadSelf = "Attendance.Read.Self";
+    public const string AttendanceCreateAll = "Attendance.Create.All";
+    public const string AttendanceUpdateAll = "Attendance.Update.All";
+
+    public const string OvertimeRequestReadAll = "OvertimeRequest.Read.All";
+    public const string OvertimeRequestReadSelf = "OvertimeRequest.Read.Self";
+    public const string OvertimeRequestCreateSelf = "OvertimeRequest.Create.Self";
+    public const string OvertimeRequestApproveAll = "OvertimeRequest.Approve.All";
+
+    public const string LeaveRequestReadAll = "LeaveRequest.Read.All";
+    public const string LeaveRequestReadSelf = "LeaveRequest.Read.Self";
+    public const string LeaveRequestCreateSelf = "LeaveRequest.Create.Self";
+    public const string LeaveRequestApproveAll = "LeaveRequest.Approve.All";
+
+    public const string AttendanceAdjustmentReadAll = "AttendanceAdjustment.Read.All";
+    public const string AttendanceAdjustmentCreateSelf = "AttendanceAdjustment.Create.Self";
+    public const string AttendanceAdjustmentApproveAll = "AttendanceAdjustment.Approve.All";
+    public const string AttendanceAdjustmentOverrideAll = "AttendanceAdjustment.Override.All";
+
+    public const string AttendanceRuleReadAll = "AttendanceRule.Read.All";
+    public const string AttendanceRuleCreateAll = "AttendanceRule.Create.All";
+    public const string AttendanceRuleUpdateAll = "AttendanceRule.Update.All";
+    public const string AttendanceRuleDeleteAll = "AttendanceRule.Delete.All";
+
+    public const string LeaveTypeReadAll = "LeaveType.Read.All";
+    public const string LeaveTypeCreateAll = "LeaveType.Create.All";
+    public const string LeaveTypeUpdateAll = "LeaveType.Update.All";
+    public const string LeaveTypeDeleteAll = "LeaveType.Delete.All";
 }
 
 public static class PermissionIds
@@ -230,4 +276,50 @@ public static class PermissionIds
     public const int LaborLawConstantsCreateAll = 86;
     public const int LaborLawConstantsUpdateAll = 87;
     public const int LaborLawConstantsDeleteAll = 88;
+
+    // ===== Attendance module (FE-ATT) — IDs 89–115 =====
+
+    public const int ShiftTemplateReadAll = 89;
+    public const int ShiftTemplateCreateAll = 90;
+    public const int ShiftTemplateUpdateAll = 91;
+    public const int ShiftTemplateDeleteAll = 92;
+
+    public const int EmployeeShiftReadAll = 93;
+    public const int EmployeeShiftCreateAll = 94;
+    public const int EmployeeShiftDeleteAll = 95;
+
+    public const int PublicHolidayReadAll = 96;
+    public const int PublicHolidayCreateAll = 97;
+    public const int PublicHolidayUpdateAll = 98;
+    public const int PublicHolidayDeleteAll = 99;
+
+    public const int AttendanceReadAll = 100;
+    public const int AttendanceReadSelf = 101;
+    public const int AttendanceCreateAll = 102;
+    public const int AttendanceUpdateAll = 103;
+
+    public const int OvertimeRequestReadAll = 104;
+    public const int OvertimeRequestReadSelf = 105;
+    public const int OvertimeRequestCreateSelf = 106;
+    public const int OvertimeRequestApproveAll = 107;
+
+    public const int LeaveRequestReadAll = 108;
+    public const int LeaveRequestReadSelf = 109;
+    public const int LeaveRequestCreateSelf = 110;
+    public const int LeaveRequestApproveAll = 111;
+
+    public const int AttendanceAdjustmentReadAll = 112;
+    public const int AttendanceAdjustmentCreateSelf = 113;
+    public const int AttendanceAdjustmentApproveAll = 114;
+    public const int AttendanceAdjustmentOverrideAll = 115;
+
+    public const int AttendanceRuleReadAll = 116;
+    public const int AttendanceRuleCreateAll = 117;
+    public const int AttendanceRuleUpdateAll = 118;
+    public const int AttendanceRuleDeleteAll = 119;
+
+    public const int LeaveTypeReadAll = 120;
+    public const int LeaveTypeCreateAll = 121;
+    public const int LeaveTypeUpdateAll = 122;
+    public const int LeaveTypeDeleteAll = 123;
 }
