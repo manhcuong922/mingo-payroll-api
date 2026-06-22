@@ -21,7 +21,7 @@ public sealed class CreateMinimumWageCommandValidator : AbstractValidator<Create
                 .LessThanOrEqualTo(today.AddDays(maxForward));
         });
 
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
         RuleFor(x => x.Regions).NotEmpty();
 
         RuleFor(x => x.Regions).Custom((regions, ctx) =>
@@ -57,6 +57,16 @@ public sealed class CreateMinimumWageCommandValidator : AbstractValidator<Create
                     ctx.AddFailure("Regions.AmountPerMonth", $"Region amounts must be in non-increasing order (Region I >= II >= III >= IV).");
             }
         });
+
+        RuleFor(x => x.AppliedRegionCode).NotEmpty();
+        RuleFor(x => x).Custom((cmd, ctx) =>
+        {
+            if (string.IsNullOrWhiteSpace(cmd.AppliedRegionCode) || cmd.Regions is null) return;
+            if (!cmd.Regions.Any(r => r.RegionCode == cmd.AppliedRegionCode))
+                ctx.AddFailure("AppliedRegionCode", $"AppliedRegionCode '{cmd.AppliedRegionCode}' must match one of the RegionCode values declared in Regions.");
+        });
+
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
     }
 }
 
@@ -66,7 +76,17 @@ public sealed class UpdateMinimumWageCommandValidator : AbstractValidator<Update
     {
         var today = DateOnly.FromDateTime(clock.UtcNow);
         RuleFor(x => x.ValidFrom).GreaterThan(today);
-        RuleFor(x => x.LegalReference).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.LegalReference).MaximumLength(500); // Obsolete — optional, LegalDocumentIds thay thế (BR-15)
         RuleFor(x => x.Regions).NotEmpty();
+
+        RuleFor(x => x.AppliedRegionCode).NotEmpty();
+        RuleFor(x => x).Custom((cmd, ctx) =>
+        {
+            if (string.IsNullOrWhiteSpace(cmd.AppliedRegionCode) || cmd.Regions is null) return;
+            if (!cmd.Regions.Any(r => r.RegionCode == cmd.AppliedRegionCode))
+                ctx.AddFailure("AppliedRegionCode", $"AppliedRegionCode '{cmd.AppliedRegionCode}' must match one of the RegionCode values declared in Regions.");
+        });
+
+        RuleFor(x => x.LegalDocumentIds).NotEmpty().WithMessage("At least one LegalDocumentId is required (BR-15).");
     }
 }

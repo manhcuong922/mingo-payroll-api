@@ -38,4 +38,32 @@ public sealed class LoggingEmailSender : IEmailSender
             fullName, toEmail, username, plainPassword);
         return Task.CompletedTask;
     }
+
+    public Task SendContractActivationAsync(
+        string toEmail,
+        string fullName,
+        ContractActivationEmailPayload payload,
+        Stream pdfStream,
+        string pdfFileName,
+        CancellationToken cancellationToken = default)
+    {
+        var attachmentSize = pdfStream.CanSeek ? pdfStream.Length : -1L;
+        if (payload.Username is not null)
+        {
+            _logger.LogWarning(
+                "[DEV EMAIL] Contract activation for {FullName} <{Email}>. Contract={ContractNo} From={From:d} To={To:d} " +
+                "Username={Username} Password={Password} PdfFile={PdfFile} PdfSize={PdfSize}.",
+                fullName, toEmail, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
+                payload.Username, payload.PlainPassword, pdfFileName, attachmentSize);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "[DEV EMAIL] Contract activation for {FullName} <{Email}>. Contract={ContractNo} From={From:d} To={To:d} " +
+                "(no credentials, account already exists). PdfFile={PdfFile} PdfSize={PdfSize}.",
+                fullName, toEmail, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
+                pdfFileName, attachmentSize);
+        }
+        return Task.CompletedTask;
+    }
 }

@@ -1,0 +1,9 @@
+# Ép LF cho các file sẽ chạy trên Linux/Docker để tránh lỗi CRLF khi deploy
+# (deploy.sh báo lỗi \r, giá trị .env dính \r làm sai mật khẩu, v.v.)
+*.sh                    text eol=lf
+Dockerfile              text eol=lf
+.dockerignore           text eol=lf
+*.yml                   text eol=lf
+*.yaml                  text eol=lf
+deploy/Caddyfile        text eol=lf
+deploy/.env.example     text eol=lf

@@ -1,0 +1,18 @@
+# Caddy tự xin & gia hạn chứng chỉ Let's Encrypt cho 2 subdomain.
+# Các biến {$...} lấy từ environment của container caddy (xem docker-compose.prod.yml).
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Frontend (UI tĩnh phục vụ bởi nginx)
+{$APP_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy ui:80
+}
+
+# Backend API (.NET Kestrel cổng 8080)
+{$API_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy api:8080
+}

@@ -1,7 +1,9 @@
+using MPS.Domain.Attributes;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Domain.Entities.Compliance;
 
+[Auditable]
 public sealed class PitRegulationVersion : IComplianceVersion
 {
     public int Id { get; set; }
@@ -11,6 +13,10 @@ public sealed class PitRegulationVersion : IComplianceVersion
 
     public decimal PersonalDeductionAmount { get; set; }
     public decimal DependentDeductionAmount { get; set; }
+
+    public int ShortTermContractMaxMonths { get; set; } = 3;
+    public decimal ShortTermFlatRatePercent { get; set; } = 10.00m;
+    public decimal ShortTermTaxExemptMonthlyIncome { get; set; } = 2_000_000m;
 
     public string LegalReference { get; set; } = string.Empty;
     public string? Note { get; set; }

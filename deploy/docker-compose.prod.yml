@@ -1,0 +1,123 @@
+# ===== Mingo Payroll — Production stack =====
+# Triển khai trên VPS tại /opt/mingo. Mọi secret nằm trong file .env (cùng thư mục, KHÔNG commit).
+# Chỉ container caddy publish port ra ngoài; các service còn lại chỉ giao tiếp trong network nội bộ.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: mingo-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - ui
+    networks:
+      - mingo
+
+  ui:
+    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-ui:${IMAGE_TAG:-latest}
+    container_name: mingo-ui
+    restart: unless-stopped
+    networks:
+      - mingo
+
+  api:
+    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-api:${IMAGE_TAG:-latest}
+    container_name: mingo-api
+    restart: unless-stopped
+    # Nạp toàn bộ biến cấu hình ứng dụng (Section__Key) từ .env
+    env_file:
+      - .env
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - mingo
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mingo-sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_PID: Developer
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      # Image mssql 2022 không kèm sqlcmd; kiểm tra cổng 1433 đã mở bằng bash TCP probe.
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/1433' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - mingo
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-01-31T20-20-33Z
+    container_name: mingo-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD --quiet && mc admin info local > /dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - mingo
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: mingo-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_BACKEND_USER: ${MINIO_BACKEND_USER}
+      MINIO_BACKEND_PASSWORD: ${MINIO_BACKEND_PASSWORD}
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+        (mc mb -p local/$$MINIO_BUCKET || true) &&
+        mc anonymous set none local/$$MINIO_BUCKET &&
+        printf '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:PutObject\",\"s3:DeleteObject\",\"s3:ListBucket\",\"s3:GetBucketLocation\",\"s3:GetObjectVersion\",\"s3:DeleteObjectVersion\",\"s3:GetBucketVersioning\",\"s3:PutBucketVersioning\"],\"Resource\":[\"arn:aws:s3:::%s\",\"arn:aws:s3:::%s/*\"]}]}' \"$$MINIO_BUCKET\" \"$$MINIO_BUCKET\" > /tmp/policy.json &&
+        (mc admin user add local \"$$MINIO_BACKEND_USER\" \"$$MINIO_BACKEND_PASSWORD\" || true) &&
+        (mc admin policy create local backend-rw /tmp/policy.json || true) &&
+        (mc admin policy attach local backend-rw --user \"$$MINIO_BACKEND_USER\" || true) &&
+        echo '=== MinIO bootstrap done ==='
+      "
+    restart: "no"
+    networks:
+      - mingo
+
+networks:
+  mingo:
+    driver: bridge
+
+volumes:
+  caddy-data:
+  caddy-config:
+  mssql-data:
+  minio-data:

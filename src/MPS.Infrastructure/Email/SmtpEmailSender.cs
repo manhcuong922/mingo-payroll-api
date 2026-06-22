@@ -3,7 +3,6 @@ using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
-using MimeKit.Text;
 using MPS.Application.Common.Interfaces;
 using MPS.Infrastructure.Email.Templates;
 
@@ -32,7 +31,7 @@ public sealed class SmtpEmailSender : IEmailSender
             $"Hết hạn lúc: {expiresAt:u}{Environment.NewLine}" +
             "Nếu bạn không yêu cầu, vui lòng bỏ qua email này.";
 
-        return SendAsync(toEmail, subject, htmlBody: null, plainBody: plain, cancellationToken);
+        return SendAsync(toEmail, subject, htmlBody: null, plainBody: plain, attachment: null, cancellationToken);
     }
 
     public Task SendAccountCredentialsAsync(
@@ -45,7 +44,27 @@ public sealed class SmtpEmailSender : IEmailSender
         var html = AccountCredentialsTemplate.BuildHtml(fullName, username, plainPassword, _options.LoginUrl);
         var plain = AccountCredentialsTemplate.BuildPlainText(fullName, username, plainPassword, _options.LoginUrl);
 
-        return SendAsync(toEmail, AccountCredentialsTemplate.Subject, html, plain, cancellationToken);
+        return SendAsync(toEmail, AccountCredentialsTemplate.Subject, html, plain, attachment: null, cancellationToken);
+    }
+
+    public Task SendContractActivationAsync(
+        string toEmail,
+        string fullName,
+        ContractActivationEmailPayload payload,
+        Stream pdfStream,
+        string pdfFileName,
+        CancellationToken cancellationToken = default)
+    {
+        var loginUrl = payload.LoginUrl ?? _options.LoginUrl;
+        var html = ContractActivationTemplate.BuildHtml(
+            fullName, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
+            payload.Username, payload.PlainPassword, loginUrl);
+        var plain = ContractActivationTemplate.BuildPlainText(
+            fullName, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
+            payload.Username, payload.PlainPassword, loginUrl);
+
+        var attachment = new EmailAttachment(pdfFileName, pdfStream, "application/pdf");
+        return SendAsync(toEmail, ContractActivationTemplate.Subject, html, plain, attachment, cancellationToken);
     }
 
     private async Task SendAsync(
@@ -53,6 +72,7 @@ public sealed class SmtpEmailSender : IEmailSender
         string subject,
         string? htmlBody,
         string plainBody,
+        EmailAttachment? attachment,
         CancellationToken cancellationToken)
     {
         if (!_options.IsConfigured)
@@ -71,6 +91,10 @@ public sealed class SmtpEmailSender : IEmailSender
         var builder = new BodyBuilder { TextBody = plainBody };
         if (!string.IsNullOrWhiteSpace(htmlBody))
             builder.HtmlBody = htmlBody;
+
+        if (attachment is not null)
+            builder.Attachments.Add(attachment.FileName, attachment.Content, ContentType.Parse(attachment.ContentType));
+
         message.Body = builder.ToMessageBody();
 
         using var client = new SmtpClient();
@@ -97,4 +121,6 @@ public sealed class SmtpEmailSender : IEmailSender
                 await client.DisconnectAsync(quit: true, cancellationToken);
         }
     }
+
+    private sealed record EmailAttachment(string FileName, Stream Content, string ContentType);
 }

@@ -18,7 +18,8 @@ public class PositionUpdateCommandHandler : IRequestHandler<PositionUpdateComman
         {
             Id = request.Id,
             Code = request.Code.Trim().ToUpperInvariant(),
-            Name = request.Name.Trim()
+            Name = request.Name.Trim(),
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
         };
 
         return await _repository.UpdateAsync(entity, cancellationToken);

@@ -1,13 +1,17 @@
+using MPS.Domain.Attributes;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Domain.Entities.Compliance;
 
+[Auditable]
 public sealed class MinimumWageVersion : IComplianceVersion
 {
     public int Id { get; set; }
     public DateOnly ValidFrom { get; set; }
     public bool IsActive { get; set; }
     public bool IsArchived { get; set; }
+
+    public string AppliedRegionCode { get; set; } = string.Empty;
 
     public string LegalReference { get; set; } = string.Empty;
     public string? Note { get; set; }

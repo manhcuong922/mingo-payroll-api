@@ -17,7 +17,8 @@ public class PositionCreateCommandHandler : IRequestHandler<PositionCreateComman
         var entity = new Domain.Entities.Position
         {
             Code = request.Code.Trim().ToUpperInvariant(),
-            Name = request.Name.Trim()
+            Name = request.Name.Trim(),
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
         };
 
         return await _repository.AddAsync(entity, cancellationToken);

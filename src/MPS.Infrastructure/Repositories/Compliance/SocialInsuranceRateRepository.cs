@@ -23,6 +23,7 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     public Task<SocialInsuranceRateVersion?> GetByIdAsync(int id, CancellationToken ct) =>
         _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.Funds)
             .Include(x => x.CreatedByUser)
             .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -31,6 +32,7 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     {
         var query = _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.Funds)
             .Include(x => x.CreatedByUser)
             .Include(x => x.UpdatedByUser)
             .AsQueryable();
@@ -42,6 +44,7 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     public Task<SocialInsuranceRateVersion?> GetActiveAsync(CancellationToken ct) =>
         _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.Funds)
             .Include(x => x.CreatedByUser)
             .Include(x => x.UpdatedByUser)
             .FirstOrDefaultAsync(x => x.IsActive && !x.IsArchived, ct);
@@ -50,6 +53,7 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     {
         var active = await _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.Funds)
             .Include(x => x.CreatedByUser)
             .Include(x => x.UpdatedByUser)
             .Where(x => x.IsActive && !x.IsArchived && x.ValidFrom <= date)
@@ -59,6 +63,7 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
 
         return await _context.SocialInsuranceRateVersions
             .AsNoTracking()
+            .Include(x => x.Funds)
             .Include(x => x.CreatedByUser)
             .Include(x => x.UpdatedByUser)
             .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom <= date)
@@ -129,6 +134,7 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
     {
         var today = DateOnly.FromDateTime(_clock.UtcNow);
         var tracked = await _context.SocialInsuranceRateVersions
+            .Include(x => x.Funds)
             .FirstOrDefaultAsync(x => x.Id == entity.Id, ct)
             ?? throw new NotFoundException($"SocialInsuranceRateVersion {entity.Id} not found.");
 
@@ -142,9 +148,11 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
             throw new ConflictException($"ValidFrom must be strictly after today ({today:yyyy-MM-dd}).");
 
         tracked.ValidFrom = entity.ValidFrom;
+#pragma warning disable CS0618 // Obsolete — backward compat fields, still settable via Update
         tracked.EmployeeSocialPercent = entity.EmployeeSocialPercent;
         tracked.EmployerSocialPercent = entity.EmployerSocialPercent;
         tracked.EmployerOccupationalDiseasePercent = entity.EmployerOccupationalDiseasePercent;
+#pragma warning restore CS0618
         tracked.EmployeeHealthPercent = entity.EmployeeHealthPercent;
         tracked.EmployerHealthPercent = entity.EmployerHealthPercent;
         tracked.EmployeeUnemploymentPercent = entity.EmployeeUnemploymentPercent;
@@ -152,11 +160,22 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
         tracked.EmployerUnionFundPercent = entity.EmployerUnionFundPercent;
         tracked.ReferenceAmount = entity.ReferenceAmount;
         tracked.SocialCapMultiplier = entity.SocialCapMultiplier;
+        tracked.HealthCapMultiplier = entity.HealthCapMultiplier;
         tracked.UnemploymentCapMultiplier = entity.UnemploymentCapMultiplier;
+        tracked.EligibilityMode = entity.EligibilityMode;
+        tracked.EligibleContractSubtypesCsv = entity.EligibleContractSubtypesCsv;
+        tracked.MinTenureMonths = entity.MinTenureMonths;
         tracked.LegalReference = entity.LegalReference;
         tracked.Note = entity.Note;
         tracked.UpdatedAt = _clock.UtcNow;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
+
+        _context.SocialInsuranceFundEntries.RemoveRange(tracked.Funds);
+        foreach (var f in entity.Funds)
+        {
+            f.SocialInsuranceRateVersionId = tracked.Id;
+            await _context.SocialInsuranceFundEntries.AddAsync(f, ct);
+        }
 
         await _context.SaveChangesAsync(ct);
         return true;

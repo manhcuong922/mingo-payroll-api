@@ -62,6 +62,10 @@ public class SocialInsuranceRateController : ControllerBase
         [FromBody] CreateSocialInsuranceRateRequest request,
         CancellationToken cancellationToken)
     {
+        var funds = request.Funds
+            .Select(f => new FundEntryInput(f.FundCode, f.FundName, f.EmployeePercent, f.EmployerPercent))
+            .ToList();
+
         var id = await _mediator.Send(new CreateSocialInsuranceRateCommand(
             request.ValidFrom,
             request.ApplyImmediately,
@@ -75,9 +79,15 @@ public class SocialInsuranceRateController : ControllerBase
             request.EmployerUnionFundPercent,
             request.ReferenceAmount,
             request.SocialCapMultiplier,
+            request.HealthCapMultiplier,
             request.UnemploymentCapMultiplier,
+            funds,
+            request.EligibilityMode,
+            request.EligibleContractSubtypes,
+            request.MinTenureMonths,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -88,6 +98,10 @@ public class SocialInsuranceRateController : ControllerBase
         [FromBody] UpdateSocialInsuranceRateRequest request,
         CancellationToken cancellationToken)
     {
+        var funds = request.Funds
+            .Select(f => new FundEntryInput(f.FundCode, f.FundName, f.EmployeePercent, f.EmployerPercent))
+            .ToList();
+
         var updated = await _mediator.Send(new UpdateSocialInsuranceRateCommand(
             id,
             request.ValidFrom,
@@ -101,9 +115,15 @@ public class SocialInsuranceRateController : ControllerBase
             request.EmployerUnionFundPercent,
             request.ReferenceAmount,
             request.SocialCapMultiplier,
+            request.HealthCapMultiplier,
             request.UnemploymentCapMultiplier,
+            funds,
+            request.EligibilityMode,
+            request.EligibleContractSubtypes,
+            request.MinTenureMonths,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }

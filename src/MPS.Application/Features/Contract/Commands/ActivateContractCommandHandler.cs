@@ -4,6 +4,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models.Storage;
 using MPS.Application.Common.Storage;
 using MPS.Application.Features.Contract.Common;
+using MPS.Domain.Constants;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
@@ -17,6 +18,9 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     private readonly IContractLookupReader _lookup;
     private readonly IFileStorageService _storage;
     private readonly ICurrentUserService _currentUser;
+    private readonly IEmployeeInformationRepository _eiRepository;
+    private readonly IEmployeeAccountProvisioner _accountProvisioner;
+    private readonly IEmailSender _emailSender;
     private readonly ILogger<ActivateContractCommandHandler> _logger;
 
     public ActivateContractCommandHandler(
@@ -24,12 +28,18 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         IContractLookupReader lookup,
         IFileStorageService storage,
         ICurrentUserService currentUser,
+        IEmployeeInformationRepository eiRepository,
+        IEmployeeAccountProvisioner accountProvisioner,
+        IEmailSender emailSender,
         ILogger<ActivateContractCommandHandler> logger)
     {
         _repository = repository;
         _lookup = lookup;
         _storage = storage;
         _currentUser = currentUser;
+        _eiRepository = eiRepository;
+        _accountProvisioner = accountProvisioner;
+        _emailSender = emailSender;
         _logger = logger;
     }
 
@@ -98,9 +108,10 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
             UploadedByUserId = userId,
         };
 
+        int activatedContractId;
         try
         {
-            return await _repository.ActivateDraftAsync(
+            activatedContractId = await _repository.ActivateDraftAsync(
                 contractId: request.ContractId,
                 snapshotAmount: grade.BaseSalary,
                 snapshotCurrency: grade.Currency,
@@ -124,6 +135,83 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
                     metadata.ObjectKey, request.ContractId);
             }
             throw;
+        }
+
+        // Post-activation side effects (best-effort). Activation has already committed —
+        // any failure here is logged but does NOT roll back the contract.
+        await TrySendActivationEmailAsync(contract, metadata, request.FileName, cancellationToken);
+
+        return activatedContractId;
+    }
+
+    private async Task TrySendActivationEmailAsync(
+        Domain.Entities.Contract contract,
+        StoredFileMetadata metadata,
+        string pdfFileName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var ei = await _eiRepository.GetByIdAsync(contract.EmployeeInformationId, cancellationToken);
+            if (ei is null)
+            {
+                _logger.LogWarning(
+                    "Skip activation email for contract {ContractId}: EmployeeInformation {EmployeeInformationId} not found.",
+                    contract.Id, contract.EmployeeInformationId);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(ei.Email))
+            {
+                _logger.LogWarning(
+                    "Skip activation email for contract {ContractId}: EmployeeInformation {EmployeeInformationId} has no email.",
+                    contract.Id, ei.Id);
+                return;
+            }
+
+            string? username = null;
+            string? plainPassword = null;
+            if (!ei.UserId.HasValue)
+            {
+                try
+                {
+                    var credentials = await _accountProvisioner.ProvisionAsync(
+                        ei.Id, SystemRoles.EmployeeId, cancellationToken);
+                    username = credentials.Username;
+                    plainPassword = credentials.PlainPassword;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Auto-provision account failed for EmployeeInformation {EmployeeInformationId} during contract {ContractId} activation. " +
+                        "Sending contract PDF only; admin can retry via POST /api/users.",
+                        ei.Id, contract.Id);
+                }
+            }
+
+            var download = await _storage.DownloadAsync(metadata.ObjectKey, metadata.Bucket, cancellationToken);
+            await using var pdfStream = download.Content;
+
+            var payload = new ContractActivationEmailPayload(
+                ContractNo: contract.ContractNo,
+                EffectiveFrom: contract.EffectiveFrom,
+                EffectiveTo: contract.EffectiveTo,
+                Username: username,
+                PlainPassword: plainPassword,
+                LoginUrl: null);
+
+            await _emailSender.SendContractActivationAsync(
+                ei.Email!, ei.FullName, payload, pdfStream, pdfFileName, cancellationToken);
+
+            _logger.LogInformation(
+                "Contract activation email sent for contract {ContractId} to {Email} (credentials included: {HasCredentials}).",
+                contract.Id, ei.Email, username is not null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to send activation email for contract {ContractId}; activation itself succeeded.",
+                contract.Id);
         }
     }
 }

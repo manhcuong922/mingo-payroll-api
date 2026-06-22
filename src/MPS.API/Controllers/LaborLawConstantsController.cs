@@ -73,7 +73,8 @@ public class LaborLawConstantsController : ControllerBase
             request.OvertimeMaxHoursPerDay,
             request.OvertimeMaxHoursPerYear,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -95,7 +96,8 @@ public class LaborLawConstantsController : ControllerBase
             request.OvertimeMaxHoursPerDay,
             request.OvertimeMaxHoursPerYear,
             request.LegalReference,
-            request.Note), cancellationToken);
+            request.Note,
+            request.LegalDocumentIds), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }

@@ -1,5 +1,8 @@
+using MPS.Domain.Attributes;
+
 namespace MPS.Domain.Entities;
 
+[Auditable]
 public class ContractAllowance
 {
     public int Id { get; set; }

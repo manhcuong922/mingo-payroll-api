@@ -22,6 +22,9 @@ namespace MPS.Infrastructure.Persistence.Configurations
             builder.Property(e => e.Name)
                 .HasMaxLength(100)
                 .IsRequired();
+
+            builder.Property(e => e.Description)
+                .HasColumnType("nvarchar(max)");
         }
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Entities.Compliance;
+using MPS.Domain.Entities.Compliance.AutoUpdate;
 
 namespace MPS.Infrastructure.Persistence;
 
@@ -32,16 +33,28 @@ public class AppDbContext : DbContext
     public DbSet<ContractAppendix> ContractAppendices => Set<ContractAppendix>();
     public DbSet<ContractTermination> ContractTerminations => Set<ContractTermination>();
 
+    // Audit log module (FT-39)
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AuditLogArchive> AuditLogsArchive => Set<AuditLogArchive>();
+
     // Compliance module (FE-06)
     public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
+    public DbSet<SocialInsuranceFundEntry> SocialInsuranceFundEntries => Set<SocialInsuranceFundEntry>();
     public DbSet<PitRegulationVersion> PitRegulationVersions => Set<PitRegulationVersion>();
     public DbSet<PitBracket> PitBrackets => Set<PitBracket>();
-    public DbSet<OtRateVersion> OtRateVersions => Set<OtRateVersion>();
-    public DbSet<OtRateEntry> OtRateEntries => Set<OtRateEntry>();
     public DbSet<MinimumWageVersion> MinimumWageVersions => Set<MinimumWageVersion>();
     public DbSet<MinimumWageRegion> MinimumWageRegions => Set<MinimumWageRegion>();
     public DbSet<AllowanceExemptThresholdVersion> AllowanceExemptThresholdVersions => Set<AllowanceExemptThresholdVersion>();
     public DbSet<LaborLawConstantsVersion> LaborLawConstantsVersions => Set<LaborLawConstantsVersion>();
+    public DbSet<LegalDocument> LegalDocuments => Set<LegalDocument>();
+    public DbSet<ComplianceVersionLegalDocument> ComplianceVersionLegalDocuments => Set<ComplianceVersionLegalDocument>();
+
+    // Compliance Auto-Update module (crawl + AI đề xuất cập nhật pháp luật)
+    public DbSet<SourceSnapshot> ComplianceSourceSnapshots => Set<SourceSnapshot>();
+    public DbSet<CrawledDocumentLog> ComplianceCrawledDocumentLogs => Set<CrawledDocumentLog>();
+    public DbSet<ComplianceUpdateProposal> ComplianceUpdateProposals => Set<ComplianceUpdateProposal>();
+    public DbSet<ComplianceAuthoritativeSource> ComplianceAuthoritativeSources => Set<ComplianceAuthoritativeSource>();
+    public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
 
     // Attendance module (FE-ATT)
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
