@@ -113,7 +113,7 @@ public static class Permissions
     // ===== Audit Log module (FT-39) — System Admin only =====
 
     public const string AuditLogReadAll = "AuditLog.Read.All";
-    // ===== LegalDocument module — IDs 89–90 =====
+    // ===== LegalDocument module — IDs 90–91 =====
 
     public const string LegalDocumentReadAll = "LegalDocument.Read.All";
     public const string LegalDocumentWriteAll = "LegalDocument.Write.All";
@@ -124,7 +124,7 @@ public static class Permissions
     public const string ComplianceAutoUpdateReadAll = "ComplianceAutoUpdate.Read.All";
     public const string ComplianceAutoUpdateApproveAll = "ComplianceAutoUpdate.Approve.All";
 
-    // ===== Attendance module (FE-ATT) — IDs 89–115 =====
+    // ===== Attendance module (FE-ATT) — IDs 95–129 =====
 
     public const string ShiftTemplateReadAll = "ShiftTemplate.Read.All";
     public const string ShiftTemplateCreateAll = "ShiftTemplate.Create.All";
@@ -285,60 +285,60 @@ public static class PermissionIds
 
     public const int AuditLogReadAll = 89;
 
-    // ===== LegalDocument module — IDs 89–90 =====
+    // ===== LegalDocument module — IDs 90–91 =====
 
     public const int LegalDocumentReadAll = 90;
     public const int LegalDocumentWriteAll = 91;
 
-    // ===== Compliance Auto-Update module — IDs 92–93 =====
+    // ===== Compliance Auto-Update module — IDs 92–94 =====
 
     public const int ComplianceAutoUpdateRunAll = 92;
     public const int ComplianceAutoUpdateReadAll = 93;
     public const int ComplianceAutoUpdateApproveAll = 94;
 
-    // ===== Attendance module (FE-ATT) — IDs 89–115 =====
+    // ===== Attendance module (FE-ATT) — IDs 95–129 =====
 
-    public const int ShiftTemplateReadAll = 89;
-    public const int ShiftTemplateCreateAll = 90;
-    public const int ShiftTemplateUpdateAll = 91;
-    public const int ShiftTemplateDeleteAll = 92;
+    public const int ShiftTemplateReadAll = 95;
+    public const int ShiftTemplateCreateAll = 96;
+    public const int ShiftTemplateUpdateAll = 97;
+    public const int ShiftTemplateDeleteAll = 98;
 
-    public const int EmployeeShiftReadAll = 93;
-    public const int EmployeeShiftCreateAll = 94;
-    public const int EmployeeShiftDeleteAll = 95;
+    public const int EmployeeShiftReadAll = 99;
+    public const int EmployeeShiftCreateAll = 100;
+    public const int EmployeeShiftDeleteAll = 101;
 
-    public const int PublicHolidayReadAll = 96;
-    public const int PublicHolidayCreateAll = 97;
-    public const int PublicHolidayUpdateAll = 98;
-    public const int PublicHolidayDeleteAll = 99;
+    public const int PublicHolidayReadAll = 102;
+    public const int PublicHolidayCreateAll = 103;
+    public const int PublicHolidayUpdateAll = 104;
+    public const int PublicHolidayDeleteAll = 105;
 
-    public const int AttendanceReadAll = 100;
-    public const int AttendanceReadSelf = 101;
-    public const int AttendanceCreateAll = 102;
-    public const int AttendanceUpdateAll = 103;
+    public const int AttendanceReadAll = 106;
+    public const int AttendanceReadSelf = 107;
+    public const int AttendanceCreateAll = 108;
+    public const int AttendanceUpdateAll = 109;
 
-    public const int OvertimeRequestReadAll = 104;
-    public const int OvertimeRequestReadSelf = 105;
-    public const int OvertimeRequestCreateSelf = 106;
-    public const int OvertimeRequestApproveAll = 107;
+    public const int OvertimeRequestReadAll = 110;
+    public const int OvertimeRequestReadSelf = 111;
+    public const int OvertimeRequestCreateSelf = 112;
+    public const int OvertimeRequestApproveAll = 113;
 
-    public const int LeaveRequestReadAll = 108;
-    public const int LeaveRequestReadSelf = 109;
-    public const int LeaveRequestCreateSelf = 110;
-    public const int LeaveRequestApproveAll = 111;
+    public const int LeaveRequestReadAll = 114;
+    public const int LeaveRequestReadSelf = 115;
+    public const int LeaveRequestCreateSelf = 116;
+    public const int LeaveRequestApproveAll = 117;
 
-    public const int AttendanceAdjustmentReadAll = 112;
-    public const int AttendanceAdjustmentCreateSelf = 113;
-    public const int AttendanceAdjustmentApproveAll = 114;
-    public const int AttendanceAdjustmentOverrideAll = 115;
+    public const int AttendanceAdjustmentReadAll = 118;
+    public const int AttendanceAdjustmentCreateSelf = 119;
+    public const int AttendanceAdjustmentApproveAll = 120;
+    public const int AttendanceAdjustmentOverrideAll = 121;
 
-    public const int AttendanceRuleReadAll = 116;
-    public const int AttendanceRuleCreateAll = 117;
-    public const int AttendanceRuleUpdateAll = 118;
-    public const int AttendanceRuleDeleteAll = 119;
+    public const int AttendanceRuleReadAll = 122;
+    public const int AttendanceRuleCreateAll = 123;
+    public const int AttendanceRuleUpdateAll = 124;
+    public const int AttendanceRuleDeleteAll = 125;
 
-    public const int LeaveTypeReadAll = 120;
-    public const int LeaveTypeCreateAll = 121;
-    public const int LeaveTypeUpdateAll = 122;
-    public const int LeaveTypeDeleteAll = 123;
+    public const int LeaveTypeReadAll = 126;
+    public const int LeaveTypeCreateAll = 127;
+    public const int LeaveTypeUpdateAll = 128;
+    public const int LeaveTypeDeleteAll = 129;
 }
