@@ -17,6 +17,8 @@ public record EmployeeInformationDto(
     string? EducationLevel,
     int PositionId,
     string PositionName,
+    int? DepartmentId,
+    string? DepartmentName,
     int DependentsNo,
     string? TaxNo,
     string? SocialNo,

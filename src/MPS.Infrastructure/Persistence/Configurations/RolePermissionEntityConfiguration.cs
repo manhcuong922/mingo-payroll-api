@@ -43,6 +43,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.EmployeeInformationUpdateSelf, PermissionIds.EmployeeInformationDeleteAll,
                 PermissionIds.PositionReadAll, PermissionIds.PositionCreateAll,
                 PermissionIds.PositionUpdateAll, PermissionIds.PositionDeleteAll,
+                PermissionIds.DepartmentReadAll, PermissionIds.DepartmentCreateAll,
+                PermissionIds.DepartmentUpdateAll, PermissionIds.DepartmentDeleteAll,
                 PermissionIds.PerformanceMetricReadAll, PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.TypePerformanceMetricReadAll,
                 // Contract module (HRManager + HRStaff perms collapsed onto single HR role)
@@ -66,6 +68,7 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.EmployeeInformationReadAll, PermissionIds.EmployeeInformationReadSelf,
                 PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
+                PermissionIds.DepartmentReadAll,
                 // Contract: read-only để chạy payroll
                 PermissionIds.ContractReadAll,
                 PermissionIds.ContractAppendixReadAll,
@@ -80,6 +83,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll, PermissionIds.PositionCreateAll,
                 PermissionIds.PositionUpdateAll, PermissionIds.PositionDeleteAll,
+                PermissionIds.DepartmentReadAll, PermissionIds.DepartmentCreateAll,
+                PermissionIds.DepartmentUpdateAll, PermissionIds.DepartmentDeleteAll,
                 PermissionIds.PerformanceMetricReadAll, PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.PerformanceMetricApproveAll,
                 PermissionIds.TypePerformanceMetricReadAll, PermissionIds.TypePerformanceMetricCreateAll,
@@ -88,10 +93,11 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
 
             (SystemRoles.DepartmentManagerId, new[]
             {
-                PermissionIds.UserReadAll, PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
-                PermissionIds.EmployeeInformationReadAll, PermissionIds.EmployeeInformationReadSelf,
+                PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
+                PermissionIds.EmployeeInformationReadDepartment, PermissionIds.EmployeeInformationReadSelf,
                 PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
+                PermissionIds.DepartmentReadAll,
                 PermissionIds.PerformanceMetricReadAll, PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.PerformanceMetricCreateAll, PermissionIds.PerformanceMetricUpdateAll,
                 PermissionIds.PerformanceMetricDeleteAll, PermissionIds.PerformanceMetricApproveAll,
@@ -103,6 +109,7 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
                 PermissionIds.EmployeeInformationReadSelf, PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
+                PermissionIds.DepartmentReadAll,
                 PermissionIds.PerformanceMetricReadAll, PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.PerformanceMetricCreateAll, PermissionIds.PerformanceMetricUpdateAll,
                 PermissionIds.PerformanceMetricDeleteAll,
@@ -114,6 +121,7 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
                 PermissionIds.EmployeeInformationReadSelf, PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
+                PermissionIds.DepartmentReadAll,
                 PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.TypePerformanceMetricReadAll,
                 // Contract: chỉ xem HĐ của chính mình (self-scope)
@@ -162,5 +170,9 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
         PermissionIds.ContractTemplateReadAll, PermissionIds.ContractTemplateCreateAll,
         PermissionIds.ContractTemplateUpdateAll, PermissionIds.ContractTemplateDeleteAll,
         PermissionIds.ContractPartyReadAll, PermissionIds.ContractPartyCreateAll,
+        // Department module
+        PermissionIds.DepartmentReadAll, PermissionIds.DepartmentCreateAll,
+        PermissionIds.DepartmentUpdateAll, PermissionIds.DepartmentDeleteAll,
+        PermissionIds.EmployeeInformationReadDepartment,
     };
 }

@@ -1762,6 +1762,40 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("ManagerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("ManagerId");
+
+                    b.ToTable("Departments", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.EmployeeInformation", b =>
                 {
                     b.Property<int>("Id")
@@ -1789,6 +1823,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<string>("ContactAddress")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
 
                     b.Property<int>("DependentsNo")
                         .HasColumnType("int");
@@ -1857,6 +1894,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CitizenId")
                         .IsUnique();
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("PositionId");
 
@@ -2558,6 +2597,51 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "Tạo phiên bản pháp nhân NSDLĐ mới (append-only).",
                             Resource = "ContractParty",
                             Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 95,
+                            Action = "Read",
+                            Code = "Department.Read.All",
+                            Description = "Xem danh sách phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 96,
+                            Action = "Create",
+                            Code = "Department.Create.All",
+                            Description = "Tạo phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 97,
+                            Action = "Update",
+                            Code = "Department.Update.All",
+                            Description = "Cập nhật phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 98,
+                            Action = "Delete",
+                            Code = "Department.Delete.All",
+                            Description = "Xóa phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 99,
+                            Action = "Read",
+                            Code = "EmployeeInformation.Read.Department",
+                            Description = "Xem nhân viên trong phòng ban mình quản lý.",
+                            Resource = "EmployeeInformation",
+                            Scope = "Department"
                         });
                 });
 
@@ -3070,6 +3154,31 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 1,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 96
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 97
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 98
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 99
+                        },
+                        new
+                        {
                             RoleId = 2,
                             PermissionId = 1
                         },
@@ -3147,6 +3256,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 2,
                             PermissionId = 16
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 96
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 97
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 98
                         },
                         new
                         {
@@ -3321,6 +3450,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 3,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 3,
                             PermissionId = 33
                         },
                         new
@@ -3391,6 +3525,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 4,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 96
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 97
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 98
+                        },
+                        new
+                        {
+                            RoleId = 4,
                             PermissionId = 17
                         },
                         new
@@ -3426,11 +3580,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 5,
-                            PermissionId = 1
-                        },
-                        new
-                        {
-                            RoleId = 5,
                             PermissionId = 2
                         },
                         new
@@ -3441,7 +3590,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 5,
-                            PermissionId = 7
+                            PermissionId = 99
                         },
                         new
                         {
@@ -3457,6 +3606,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 5,
                             PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 95
                         },
                         new
                         {
@@ -3521,6 +3675,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 6,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 6,
                             PermissionId = 17
                         },
                         new
@@ -3572,6 +3731,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 95
                         },
                         new
                         {
@@ -4105,8 +4269,23 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("WrittenNoticeFile");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "Manager")
+                        .WithMany()
+                        .HasForeignKey("ManagerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Manager");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.EmployeeInformation", b =>
                 {
+                    b.HasOne("MPS.Domain.Entities.Department", "Department")
+                        .WithMany("Employees")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("MPS.Domain.Entities.Position", "Position")
                         .WithMany("EmployeeInformations")
                         .HasForeignKey("PositionId")
@@ -4117,6 +4296,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .WithOne("EmployeeInformation")
                         .HasForeignKey("MPS.Domain.Entities.EmployeeInformation", "UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Department");
 
                     b.Navigation("Position");
 
@@ -4266,6 +4447,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.ContractTerminationReasonRef", b =>
                 {
                     b.Navigation("ContractTerminations");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.Navigation("Employees");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Permission", b =>

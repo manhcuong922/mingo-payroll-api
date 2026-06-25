@@ -109,6 +109,18 @@ public class PermissionEntityConfiguration : IEntityTypeConfiguration<Permission
 
         P(PermissionIds.ContractPartyReadAll, Permissions.ContractPartyReadAll, "ContractParty", "Read", PermissionScope.All, "Xem pháp nhân NSDLĐ."),
         P(PermissionIds.ContractPartyCreateAll, Permissions.ContractPartyCreateAll, "ContractParty", "Create", PermissionScope.All, "Tạo phiên bản pháp nhân NSDLĐ mới (append-only)."),
+
+        // ===== Department module — IDs 95–99 =====
+        // LegalDocument (89/91), AuditLog (90), ComplianceAutoUpdate (92-94) được seed
+        // qua migrations riêng — KHÔNG đặt ở đây để tránh EF sinh INSERT duplicate.
+
+        P(PermissionIds.DepartmentReadAll,   Permissions.DepartmentReadAll,   "Department", "Read",   PermissionScope.All, "Xem danh sách phòng ban."),
+        P(PermissionIds.DepartmentCreateAll, Permissions.DepartmentCreateAll, "Department", "Create", PermissionScope.All, "Tạo phòng ban."),
+        P(PermissionIds.DepartmentUpdateAll, Permissions.DepartmentUpdateAll, "Department", "Update", PermissionScope.All, "Cập nhật phòng ban."),
+        P(PermissionIds.DepartmentDeleteAll, Permissions.DepartmentDeleteAll, "Department", "Delete", PermissionScope.All, "Xóa phòng ban."),
+
+        P(PermissionIds.EmployeeInformationReadDepartment, Permissions.EmployeeInformationReadDepartment,
+            "EmployeeInformation", "Read", "Department", "Xem nhân viên trong phòng ban mình quản lý."),
     };
 
     private static Permission P(int id, string code, string resource, string action, string scope, string description) => new()

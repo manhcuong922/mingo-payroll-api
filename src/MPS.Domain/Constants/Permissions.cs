@@ -123,6 +123,15 @@ public static class Permissions
     public const string ComplianceAutoUpdateRunAll = "ComplianceAutoUpdate.Run.All";
     public const string ComplianceAutoUpdateReadAll = "ComplianceAutoUpdate.Read.All";
     public const string ComplianceAutoUpdateApproveAll = "ComplianceAutoUpdate.Approve.All";
+
+    // ===== Department module — IDs 95–99 =====
+
+    public const string DepartmentReadAll   = "Department.Read.All";
+    public const string DepartmentCreateAll = "Department.Create.All";
+    public const string DepartmentUpdateAll = "Department.Update.All";
+    public const string DepartmentDeleteAll = "Department.Delete.All";
+
+    public const string EmployeeInformationReadDepartment = "EmployeeInformation.Read.Department";
 }
 
 public static class PermissionIds
@@ -235,18 +244,27 @@ public static class PermissionIds
     public const int LaborLawConstantsUpdateAll = 87;
     public const int LaborLawConstantsDeleteAll = 88;
 
-    // ===== Audit Log module (FT-39) =====
+    // ===== LegalDocument module — ID 89 (đã seed trong DB trước AuditLog) =====
 
-    public const int AuditLogReadAll = 89;
-
-    // ===== LegalDocument module — IDs 89–90 =====
-
-    public const int LegalDocumentReadAll = 90;
+    public const int LegalDocumentReadAll = 89;
     public const int LegalDocumentWriteAll = 91;
+
+    // ===== Audit Log module (FT-39) — ID 90 =====
+
+    public const int AuditLogReadAll = 90;
 
     // ===== Compliance Auto-Update module — IDs 92–93 =====
 
     public const int ComplianceAutoUpdateRunAll = 92;
     public const int ComplianceAutoUpdateReadAll = 93;
     public const int ComplianceAutoUpdateApproveAll = 94;
+
+    // ===== Department module — IDs 95–99 =====
+
+    public const int DepartmentReadAll   = 95;
+    public const int DepartmentCreateAll = 96;
+    public const int DepartmentUpdateAll = 97;
+    public const int DepartmentDeleteAll = 98;
+
+    public const int EmployeeInformationReadDepartment = 99;
 }

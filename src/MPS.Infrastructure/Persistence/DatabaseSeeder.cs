@@ -32,6 +32,7 @@ public sealed class DatabaseSeeder
     {
         await SeedDefaultAdminAsync(cancellationToken);
         await SeedDefaultRoleUsersAsync(cancellationToken);
+        await SeedDefaultDepartmentsAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
@@ -155,6 +156,32 @@ public sealed class DatabaseSeeder
         {
             _logger.LogDebug("All default role users already exist; skipping.");
         }
+    }
+
+    private async Task SeedDefaultDepartmentsAsync(CancellationToken cancellationToken)
+    {
+        var departmentExists = await _context.Departments
+            .AsNoTracking()
+            .AnyAsync(cancellationToken);
+
+        if (departmentExists)
+        {
+            _logger.LogDebug("Departments already seeded; skipping.");
+            return;
+        }
+
+        var departments = new List<Department>
+        {
+            new() { Code = "BGD", Name = "Ban Giám đốc", Description = "Ban điều hành công ty." },
+            new() { Code = "HR", Name = "Phòng Nhân sự", Description = "Quản lý nhân sự, tuyển dụng, chế độ." },
+            new() { Code = "ACC", Name = "Phòng Kế toán", Description = "Kế toán, tài chính, lương." },
+            new() { Code = "BIZ", Name = "Phòng Kinh doanh", Description = "Kinh doanh, dự án, khách hàng." },
+            new() { Code = "IT", Name = "Phòng Công nghệ thông tin", Description = "Phát triển & vận hành hệ thống." },
+        };
+
+        await _context.Departments.AddRangeAsync(departments, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded {Count} default Department(s).", departments.Count);
     }
 
     private async Task SeedDefaultContractPartyAsync(CancellationToken cancellationToken)
