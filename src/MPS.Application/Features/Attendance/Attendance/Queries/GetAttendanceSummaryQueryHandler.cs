@@ -36,6 +36,7 @@ public class GetAttendanceSummaryQueryHandler
                 g.Count(r => r.Status == AttendanceStatus.Late),
                 g.Count(r => r.Status == AttendanceStatus.HalfDay),
                 g.Count(r => r.Status == AttendanceStatus.OnLeave),
+                g.Count(r => r.Status == AttendanceStatus.EarlyLeave),
                 g.Count()))
             .OrderBy(d => d.EmployeeFullName)
             .ToList();

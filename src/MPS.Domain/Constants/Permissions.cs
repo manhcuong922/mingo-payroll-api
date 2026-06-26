@@ -169,6 +169,11 @@ public static class Permissions
     public const string LeaveTypeCreateAll = "LeaveType.Create.All";
     public const string LeaveTypeUpdateAll = "LeaveType.Update.All";
     public const string LeaveTypeDeleteAll = "LeaveType.Delete.All";
+
+    // ===== FaceRegistration (Track B) =====
+    public const string FaceRegistrationSubmitSelf = "FaceRegistration.Submit.Self";
+    public const string FaceRegistrationReadAll    = "FaceRegistration.Read.All";
+    public const string FaceRegistrationApproveAll = "FaceRegistration.Approve.All";
 }
 
 public static class PermissionIds
@@ -341,4 +346,9 @@ public static class PermissionIds
     public const int LeaveTypeCreateAll = 127;
     public const int LeaveTypeUpdateAll = 128;
     public const int LeaveTypeDeleteAll = 129;
+
+    // ===== FaceRegistration (Track B) — IDs 130–132 =====
+    public const int FaceRegistrationSubmitSelf = 130;
+    public const int FaceRegistrationReadAll    = 131;
+    public const int FaceRegistrationApproveAll = 132;
 }

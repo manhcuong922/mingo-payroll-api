@@ -171,10 +171,16 @@ public sealed class MinioFileStorageService : IFileStorageService
 
         try
         {
-            return await _client.PresignedGetObjectAsync(new PresignedGetObjectArgs()
+            var url = await _client.PresignedGetObjectAsync(new PresignedGetObjectArgs()
                 .WithBucket(resolvedBucket)
                 .WithObject(objectKey)
                 .WithExpiry((int)expiry.TotalSeconds));
+
+            if (!string.IsNullOrWhiteSpace(_options.ExternalEndpoint))
+            {
+                url = url.Replace(_options.Endpoint, _options.ExternalEndpoint, StringComparison.OrdinalIgnoreCase);
+            }
+            return url;
         }
         catch (Exception ex) when (IsTransient(ex))
         {
@@ -205,6 +211,11 @@ public sealed class MinioFileStorageService : IFileStorageService
                 .WithBucket(resolvedBucket)
                 .WithObject(objectKey)
                 .WithExpiry((int)expiry.TotalSeconds));
+
+            if (!string.IsNullOrWhiteSpace(_options.ExternalEndpoint))
+            {
+                url = url.Replace(_options.Endpoint, _options.ExternalEndpoint, StringComparison.OrdinalIgnoreCase);
+            }
 
             return new PresignedUploadResult(
                 Url: url,

@@ -128,6 +128,7 @@ public sealed record EmployeeAttendanceSummaryDto(
     int LateDays,
     int HalfDays,
     int OnLeaveDays,
+    int EarlyLeaveDays,
     int TotalRecords);
 
 public sealed record OvertimeRequestDto(

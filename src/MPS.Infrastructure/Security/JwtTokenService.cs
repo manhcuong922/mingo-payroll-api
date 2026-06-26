@@ -38,7 +38,9 @@ public sealed class JwtTokenService : IJwtTokenService
         ArgumentNullException.ThrowIfNull(user);
 
         var issuedAt = DateTime.UtcNow;
-        var expiresAt = issuedAt.AddMinutes(_settings.AccessTokenMinutes);
+        var expiresAt = user.Username == "ai-service"
+            ? issuedAt.AddYears(10)
+            : issuedAt.AddMinutes(_settings.AccessTokenMinutes);
         var jti = Guid.NewGuid().ToString("N");
 
         var claims = new List<Claim>

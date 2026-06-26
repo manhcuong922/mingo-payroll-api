@@ -51,6 +51,9 @@ public static class ObjectKeyBuilder
         return key;
     }
 
+    public static string ForFacePhoto(int employeeId, Guid registrationId) =>
+        $"face-photos/{employeeId}/{registrationId:N}.jpg";
+
     public static void EnsureValid(string objectKey)
     {
         if (string.IsNullOrWhiteSpace(objectKey))
