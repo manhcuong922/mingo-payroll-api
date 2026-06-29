@@ -70,7 +70,8 @@ public class ReapplyScheduleTemplateCommandHandler
             new BatchUpdateShiftAssignmentsCommand(
                 operations,
                 BatchShiftConflictPolicy.ReplaceIfNoAttendance,
-                SourceScheduleTemplateId: template.Id),
+                SourceScheduleTemplateId: template.Id,
+                AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings),
             cancellationToken);
 
         return new ScheduleTemplateApplyResultDto(

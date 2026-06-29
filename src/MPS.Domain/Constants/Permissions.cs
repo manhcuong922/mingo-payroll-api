@@ -169,6 +169,13 @@ public static class Permissions
     public const string LeaveTypeCreateAll = "LeaveType.Create.All";
     public const string LeaveTypeUpdateAll = "LeaveType.Update.All";
     public const string LeaveTypeDeleteAll = "LeaveType.Delete.All";
+
+    // ===== Company Policy module — IDs 130–133 =====
+
+    public const string CompanyPolicyReadAll = "CompanyPolicy.Read.All";
+    public const string CompanyPolicyCreateAll = "CompanyPolicy.Create.All";
+    public const string CompanyPolicyUpdateAll = "CompanyPolicy.Update.All";
+    public const string CompanyPolicyDeleteAll = "CompanyPolicy.Delete.All";
 }
 
 public static class PermissionIds
@@ -341,4 +348,11 @@ public static class PermissionIds
     public const int LeaveTypeCreateAll = 127;
     public const int LeaveTypeUpdateAll = 128;
     public const int LeaveTypeDeleteAll = 129;
+
+    // ===== Company Policy module — IDs 130–133 =====
+
+    public const int CompanyPolicyReadAll = 130;
+    public const int CompanyPolicyCreateAll = 131;
+    public const int CompanyPolicyUpdateAll = 132;
+    public const int CompanyPolicyDeleteAll = 133;
 }

@@ -71,6 +71,7 @@ public class AttendanceRuleRepository : IAttendanceRuleRepository
         tracked.WorkRateNormal = entity.WorkRateNormal;
         tracked.WorkRateWeeklyRest = entity.WorkRateWeeklyRest;
         tracked.WorkRateHoliday = entity.WorkRateHoliday;
+        tracked.WorkRateNight = entity.WorkRateNight;
         tracked.IsActive = entity.IsActive;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;

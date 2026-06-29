@@ -12,11 +12,7 @@ public sealed record CreateShiftTemplateRequest(
     TimeOnly? BreakEndTime,
     decimal StandardHours,
     decimal StandardDays,
-    decimal WorkRateNormal,
-    decimal WorkRateWeeklyRest,
-    decimal WorkRateHoliday,
-    bool IsNightShift,
-    int? AppliedAttendanceRuleId,
+    int AppliedAttendanceRuleId,
     string? Notes);
 
 public sealed record UpdateShiftTemplateRequest(
@@ -28,24 +24,17 @@ public sealed record UpdateShiftTemplateRequest(
     TimeOnly? BreakEndTime,
     decimal StandardHours,
     decimal StandardDays,
-    bool IsNightShift,
-    int? AppliedAttendanceRuleId,
+    int AppliedAttendanceRuleId,
     bool IsActive,
     string? Notes);
-
-public sealed record UpdateShiftPayRatesRequest(
-    decimal WorkRateNormal,
-    decimal WorkRateWeeklyRest,
-    decimal WorkRateHoliday);
-
-public sealed record ReapplyAttendanceRuleRequest(int AttendanceRuleId);
 
 public sealed record CreateAttendanceRuleRequest(
     string Name,
     string? Description,
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
-    decimal WorkRateHoliday);
+    decimal WorkRateHoliday,
+    decimal WorkRateNight);
 
 public sealed record UpdateAttendanceRuleRequest(
     string Name,
@@ -53,6 +42,7 @@ public sealed record UpdateAttendanceRuleRequest(
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
     decimal WorkRateHoliday,
+    decimal WorkRateNight,
     bool IsActive);
 
 public sealed record BatchShiftOperationRequest(
@@ -63,4 +53,5 @@ public sealed record BatchShiftOperationRequest(
 
 public sealed record BatchUpdateShiftAssignmentsRequest(
     IReadOnlyList<BatchShiftOperationRequest> Operations,
-    BatchShiftConflictPolicy ConflictPolicy);
+    BatchShiftConflictPolicy ConflictPolicy,
+    bool AcknowledgeWeeklyOvertimeWarnings = false);

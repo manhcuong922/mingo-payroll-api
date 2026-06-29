@@ -52,8 +52,6 @@ public class ShiftTemplateController : ControllerBase
             request.Code, request.Name, request.StartTime, request.EndTime,
             request.BreakStartTime, request.BreakEndTime,
             request.StandardHours, request.StandardDays,
-            request.WorkRateNormal, request.WorkRateWeeklyRest, request.WorkRateHoliday,
-            request.IsNightShift,
             request.AppliedAttendanceRuleId, request.Notes), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
@@ -69,37 +67,9 @@ public class ShiftTemplateController : ControllerBase
             id, request.Code, request.Name, request.StartTime, request.EndTime,
             request.BreakStartTime, request.BreakEndTime,
             request.StandardHours, request.StandardDays,
-            request.IsNightShift, request.AppliedAttendanceRuleId,
+            request.AppliedAttendanceRuleId,
             request.IsActive, request.Notes), cancellationToken);
         if (!updated) return NotFound();
-        return NoContent();
-    }
-
-    [HttpPut("{id:int}/pay-rates")]
-    [HasPermission(Permissions.ShiftTemplateUpdateAll)]
-    public async Task<IActionResult> UpdatePayRates(
-        int id,
-        [FromBody] UpdateShiftPayRatesRequest request,
-        CancellationToken cancellationToken)
-    {
-        var updated = await _mediator.Send(new UpdateShiftPayRatesCommand(
-            id,
-            request.WorkRateNormal,
-            request.WorkRateWeeklyRest,
-            request.WorkRateHoliday), cancellationToken);
-        if (!updated) return NotFound();
-        return NoContent();
-    }
-
-    [HttpPost("{id:int}/reapply-rule")]
-    [HasPermission(Permissions.ShiftTemplateUpdateAll)]
-    public async Task<IActionResult> ReapplyRule(
-        int id,
-        [FromBody] ReapplyAttendanceRuleRequest request,
-        CancellationToken cancellationToken)
-    {
-        var ok = await _mediator.Send(new ReapplyAttendanceRuleCommand(id, request.AttendanceRuleId), cancellationToken);
-        if (!ok) return NotFound();
         return NoContent();
     }
 

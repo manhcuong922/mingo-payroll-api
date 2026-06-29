@@ -1,5 +1,7 @@
 using MediatR;
+using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
@@ -17,15 +19,21 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
 
     private readonly IAttendanceRecordRepository _repository;
     private readonly ICurrentUserService _currentUser;
+    private readonly IWorkHourSplitter _splitter;
+    private readonly IRegularHoursCapChecker _capChecker;
     private readonly IClock _clock;
 
     public UpdateAttendanceCommandHandler(
         IAttendanceRecordRepository repository,
         ICurrentUserService currentUser,
+        IWorkHourSplitter splitter,
+        IRegularHoursCapChecker capChecker,
         IClock clock)
     {
         _repository = repository;
         _currentUser = currentUser;
+        _splitter = splitter;
+        _capChecker = capChecker;
         _clock = clock;
     }
 
@@ -56,6 +64,28 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
                     "BR-3: OverrideReason is required when HR edits an attendance record outside the 3-day edit window.");
         }
 
+        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+            _splitter, request.Status, request.CheckInTime, request.CheckOutTime, existing.ShiftTemplate);
+
+        // §9 Phase 1b — Cap 48h/tuần warn-then-confirm (Điều 105 BLLĐ).
+        // Check TRƯỚC khi mutate existing — tránh EF change tracker làm lệch existing total trong checker query.
+        if (!request.AcknowledgeWeeklyOvertimeWarnings)
+        {
+            var delta = (dayHours + nightHours) - (existing.DayHours + existing.NightHours);
+            if (delta != 0)
+            {
+                var deltas = new[] { new WeeklyCapDelta(request.EmployeeInformationId, request.WorkDate, delta) };
+                var dailyWarnings = await _capChecker.CheckDailyAttendanceAsync(
+                    deltas,
+                    cancellationToken);
+                var weeklyWarnings = await _capChecker.CheckAttendanceAsync(
+                    deltas,
+                    cancellationToken);
+                if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
+                    throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
+            }
+        }
+
         existing.CheckInTime = request.CheckInTime;
         existing.CheckOutTime = request.CheckOutTime;
         existing.Status = request.Status;
@@ -63,6 +93,8 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
         existing.OverrideReason = !string.IsNullOrWhiteSpace(request.OverrideReason)
             ? request.OverrideReason
             : existing.OverrideReason;
+        existing.DayHours = dayHours;
+        existing.NightHours = nightHours;
         existing.UpdatedAt = _clock.UtcNow;
         existing.UpdatedByUserId = userId;
 

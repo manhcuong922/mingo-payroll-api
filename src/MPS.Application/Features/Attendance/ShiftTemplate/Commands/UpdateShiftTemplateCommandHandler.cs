@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.ShiftTemplate.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
@@ -33,16 +34,19 @@ public class UpdateShiftTemplateCommandHandler : IRequestHandler<UpdateShiftTemp
         var existing = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (existing is null) return false;
 
-        var code = request.Code.Trim();
         var name = request.Name.Trim();
 
-        CreateShiftTemplateCommandHandler.EnsureValidCode(code);
-
-        if (await _repository.ExistsByCodeAsync(code, excludeId: request.Id, cancellationToken))
-            throw new ConflictException($"Shift template with code '{code}' already exists.");
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainValidationException("Tên ca làm việc không được rỗng.");
 
         if (await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
             throw new ConflictException($"Shift template with name '{name}' already exists.");
+
+        var code = await ShiftTemplateCodeGenerator.GenerateUniqueAsync(
+            name,
+            _repository,
+            excludeId: request.Id,
+            cancellationToken);
 
         if (request.EndTime <= request.StartTime)
             throw new DomainValidationException("EndTime must be greater than StartTime.");
@@ -54,12 +58,11 @@ public class UpdateShiftTemplateCommandHandler : IRequestHandler<UpdateShiftTemp
             request.BreakEndTime,
             request.StandardHours);
 
-        if (request.AppliedAttendanceRuleId is { } presetId)
-        {
-            var preset = await _attendanceRuleRepository.GetByIdAsync(presetId, cancellationToken);
-            if (preset is null)
-                throw new NotFoundException($"AttendanceRule {presetId} not found.");
-        }
+        var rule = await _attendanceRuleRepository.GetByIdAsync(request.AppliedAttendanceRuleId, cancellationToken)
+            ?? throw new NotFoundException($"AttendanceRule {request.AppliedAttendanceRuleId} not found.");
+
+        if (!rule.IsActive)
+            throw new DomainValidationException($"AttendanceRule {rule.Id} is inactive and cannot be applied.");
 
         var entity = new ShiftTemplateEntity
         {
@@ -72,11 +75,7 @@ public class UpdateShiftTemplateCommandHandler : IRequestHandler<UpdateShiftTemp
             BreakEndTime = request.BreakEndTime,
             StandardHours = request.StandardHours,
             StandardDays = request.StandardDays,
-            WorkRateNormal = existing.WorkRateNormal,
-            WorkRateWeeklyRest = existing.WorkRateWeeklyRest,
-            WorkRateHoliday = existing.WorkRateHoliday,
-            IsNightShift = request.IsNightShift,
-            AppliedAttendanceRuleId = request.AppliedAttendanceRuleId,
+            AppliedAttendanceRuleId = rule.Id,
             IsActive = request.IsActive,
             Notes = request.Notes,
             UpdatedAt = _clock.UtcNow,

@@ -2,6 +2,11 @@ using MPS.Domain.Enums.Attendance;
 
 namespace MPS.Application.DTOs.Attendance;
 
+/// <summary>
+/// ShiftTemplate response — nest <see cref="AttendanceRuleSummaryDto"/> để FE
+/// có sẵn rate mà không cần gọi 2 endpoint. Rate ở rule là single source of truth
+/// sau §11 cleanup; ShiftTemplate KHÔNG còn lưu rate riêng.
+/// </summary>
 public sealed record ShiftTemplateDto(
     int Id,
     string Code,
@@ -12,15 +17,21 @@ public sealed record ShiftTemplateDto(
     TimeOnly? BreakEndTime,
     decimal StandardHours,
     decimal StandardDays,
-    decimal WorkRateNormal,
-    decimal WorkRateWeeklyRest,
-    decimal WorkRateHoliday,
-    bool IsNightShift,
-    int? AppliedAttendanceRuleId,
+    int AppliedAttendanceRuleId,
+    AttendanceRuleSummaryDto AppliedAttendanceRule,
     bool IsActive,
     string? Notes,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
+
+public sealed record AttendanceRuleSummaryDto(
+    int Id,
+    string Name,
+    decimal WorkRateNormal,
+    decimal WorkRateWeeklyRest,
+    decimal WorkRateHoliday,
+    decimal WorkRateNight,
+    bool IsActive);
 
 public sealed record AttendanceRuleDto(
     int Id,
@@ -29,6 +40,7 @@ public sealed record AttendanceRuleDto(
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
     decimal WorkRateHoliday,
+    decimal WorkRateNight,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
@@ -114,6 +126,8 @@ public sealed record AttendanceRecordDto(
     string? ShiftTemplateName,
     TimeOnly? CheckInTime,
     TimeOnly? CheckOutTime,
+    decimal DayHours,
+    decimal NightHours,
     AttendanceStatus Status,
     string? Notes,
     string? OverrideReason,

@@ -9,14 +9,16 @@ public sealed record RecordAttendanceRequest(
     TimeOnly? CheckInTime,
     TimeOnly? CheckOutTime,
     AttendanceStatus Status,
-    string? Notes);
+    string? Notes,
+    bool AcknowledgeWeeklyOvertimeWarnings = false);
 
 public sealed record UpdateAttendanceRequest(
     TimeOnly? CheckInTime,
     TimeOnly? CheckOutTime,
     AttendanceStatus Status,
     string? Notes,
-    string? OverrideReason);
+    string? OverrideReason,
+    bool AcknowledgeWeeklyOvertimeWarnings = false);
 
 public sealed record BulkRecordAttendanceRowRequest(
     int EmployeeInformationId,
@@ -29,4 +31,5 @@ public sealed record BulkRecordAttendanceRowRequest(
 
 public sealed record BulkRecordAttendanceRequest(
     DateOnly WorkDate,
-    IReadOnlyList<BulkRecordAttendanceRowRequest> Records);
+    IReadOnlyList<BulkRecordAttendanceRowRequest> Records,
+    bool AcknowledgeWeeklyOvertimeWarnings = false);

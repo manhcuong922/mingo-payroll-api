@@ -47,45 +47,12 @@ public sealed class ShiftTemplateCommandValidatorTests
     }
 
     [Fact]
-    public async Task Pay_Rates_Must_Not_Be_Below_Floor()
-    {
-        var validator = new UpdateShiftPayRatesCommandValidator();
-        var result = await validator.TestValidateAsync(new UpdateShiftPayRatesCommand(
-            ShiftTemplateId: 1,
-            WorkRateNormal: 1.0m,
-            WorkRateWeeklyRest: 1.9m,
-            WorkRateHoliday: 3.0m));
-
-        result.ShouldHaveValidationErrorFor(c => c.WorkRateWeeklyRest);
-    }
-
-    [Fact]
-    public async Task Create_Pay_Rates_Must_Not_Be_Below_Floor()
+    public async Task AppliedAttendanceRuleId_Is_Required()
     {
         var validator = new CreateShiftTemplateCommandValidator();
-        var result = await validator.TestValidateAsync(ValidCreate() with
-        {
-            WorkRateNormal = 0.9m
-        });
+        var result = await validator.TestValidateAsync(ValidCreate() with { AppliedAttendanceRuleId = 0 });
 
-        result.ShouldHaveValidationErrorFor(c => c.WorkRateNormal);
-    }
-
-    [Fact]
-    public async Task Create_With_Preset_Does_Not_Validate_Client_Pay_Rates()
-    {
-        var validator = new CreateShiftTemplateCommandValidator();
-        var result = await validator.TestValidateAsync(ValidCreate() with
-        {
-            AppliedAttendanceRuleId = 1,
-            WorkRateNormal = 0.0m,
-            WorkRateWeeklyRest = 0.0m,
-            WorkRateHoliday = 0.0m
-        });
-
-        result.ShouldNotHaveValidationErrorFor(c => c.WorkRateNormal);
-        result.ShouldNotHaveValidationErrorFor(c => c.WorkRateWeeklyRest);
-        result.ShouldNotHaveValidationErrorFor(c => c.WorkRateHoliday);
+        result.ShouldHaveValidationErrorFor(c => c.AppliedAttendanceRuleId);
     }
 
     [Fact]
@@ -106,10 +73,6 @@ public sealed class ShiftTemplateCommandValidatorTests
         BreakEndTime: new TimeOnly(13, 0),
         StandardHours: 8.0m,
         StandardDays: 1.0m,
-        WorkRateNormal: 1.0m,
-        WorkRateWeeklyRest: 2.0m,
-        WorkRateHoliday: 3.0m,
-        IsNightShift: false,
-        AppliedAttendanceRuleId: null,
+        AppliedAttendanceRuleId: 1,
         Notes: null);
 }

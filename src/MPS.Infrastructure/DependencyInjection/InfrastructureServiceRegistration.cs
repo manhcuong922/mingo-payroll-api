@@ -66,6 +66,9 @@ public static class InfrastructureServiceRegistration
         // Contract module — termination (Phase 8)
         services.AddScoped<IContractTerminationRepository, ContractTerminationRepository>();
 
+        // Company Policy module
+        services.AddScoped<ICompanyPolicyRepository, CompanyPolicyRepository>();
+
         // Compliance module repositories
         services.AddScoped<ISocialInsuranceRateRepository, SocialInsuranceRateRepository>();
         services.AddScoped<IPitRegulationRepository, PitRegulationRepository>();
@@ -94,7 +97,11 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleRepository, AttendanceRuleRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
         services.AddScoped<IDayTypeResolver, DayTypeResolver>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IWorkHourSplitter, WorkHourSplitter>();
         services.AddScoped<MPS.Application.Common.Interfaces.IScheduleTemplateExpander, ScheduleTemplateExpander>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IRegularHoursCapChecker, RegularHoursCapChecker>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleExcelParser, MonthlyScheduleExcelParser>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleImportCache, MonthlyScheduleImportCache>();
 
         // Compliance options
         services.AddOptions<ComplianceOptions>()

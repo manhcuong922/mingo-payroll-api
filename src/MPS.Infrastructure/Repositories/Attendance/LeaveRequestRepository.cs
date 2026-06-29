@@ -144,6 +144,8 @@ public class LeaveRequestRepository : ILeaveRequestRepository
             if (existingByDate.TryGetValue(date, out var existing))
             {
                 existing.Status = AttendanceStatus.OnLeave;
+                existing.DayHours = 0m;
+                existing.NightHours = 0m;
                 existing.Notes = $"Auto-applied from approved leave request #{request.Id}";
                 existing.UpdatedAt = nowUtc;
                 existing.UpdatedByUserId = reviewedByUserId;
@@ -155,6 +157,8 @@ public class LeaveRequestRepository : ILeaveRequestRepository
                     EmployeeInformationId = request.EmployeeInformationId,
                     WorkDate = date,
                     Status = AttendanceStatus.OnLeave,
+                    DayHours = 0m,
+                    NightHours = 0m,
                     Notes = $"Auto-applied from approved leave request #{request.Id}",
                     CreatedAt = nowUtc,
                     CreatedByUserId = reviewedByUserId

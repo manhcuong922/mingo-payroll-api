@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Exceptions;
@@ -24,17 +25,20 @@ public class BatchUpdateShiftAssignmentsCommandHandler
 
     private readonly IEmployeeShiftAssignmentRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IRegularHoursCapChecker _capChecker;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
     public BatchUpdateShiftAssignmentsCommandHandler(
         IEmployeeShiftAssignmentRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IRegularHoursCapChecker capChecker,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _capChecker = capChecker;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -132,6 +136,38 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         {
             throw new ConflictException(
                 $"Batch dừng do ConflictPolicy=Fail: {failConflicts.Count} op xung đột (overlap, ngày khoá, hoặc không tìm thấy assignment).");
+        }
+
+        // §9 Phase 1b — Cap 48h/tuần warn-then-confirm (Điều 105 BLLĐ).
+        // Build delta từ toAdd/toUpdate/toRemoveIds (state thực sẽ ghi),
+        // KHÔNG dùng raw ops vì Replace overlap có thể remove ngầm.
+        var existingById = existingAssignments.ToDictionary(a => a.Id);
+        var deltas = new List<WeeklyCapDelta>();
+        foreach (var add in toAdd)
+        {
+            if (shiftTemplates.TryGetValue(add.ShiftTemplateId, out var newShift))
+                deltas.Add(new WeeklyCapDelta(add.EmployeeInformationId, add.WorkDate, newShift.StandardHours));
+        }
+        foreach (var (existingId, newShiftId, _) in toUpdate)
+        {
+            if (!existingById.TryGetValue(existingId, out var existing)) continue;
+            var newHours = shiftTemplates.TryGetValue(newShiftId, out var newShift) ? newShift.StandardHours : 0m;
+            var oldHours = shiftTemplates.TryGetValue(existing.ShiftTemplateId, out var oldShift) ? oldShift.StandardHours : 0m;
+            deltas.Add(new WeeklyCapDelta(existing.EmployeeInformationId, existing.WorkDate, newHours - oldHours));
+        }
+        foreach (var removeId in toRemoveIds)
+        {
+            if (!existingById.TryGetValue(removeId, out var existing)) continue;
+            var oldHours = shiftTemplates.TryGetValue(existing.ShiftTemplateId, out var oldShift) ? oldShift.StandardHours : 0m;
+            deltas.Add(new WeeklyCapDelta(existing.EmployeeInformationId, existing.WorkDate, -oldHours));
+        }
+
+        if (deltas.Count > 0 && !request.AcknowledgeWeeklyOvertimeWarnings)
+        {
+            var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
+            var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
+            if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
+                throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
         }
 
         await _repository.ApplyBatchAsync(toAdd, toUpdate, toRemoveIds, cancellationToken);

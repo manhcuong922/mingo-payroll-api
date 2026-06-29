@@ -22,4 +22,8 @@
     <ProjectReference Include="..\MPS.Shared\MPS.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\sample-monthly-shift-import.xlsx" />
+  </ItemGroup>
+
 </Project>

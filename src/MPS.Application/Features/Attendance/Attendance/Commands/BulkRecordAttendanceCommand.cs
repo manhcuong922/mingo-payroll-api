@@ -14,7 +14,8 @@ public sealed record BulkRecordAttendanceItem(
 
 public sealed record BulkRecordAttendanceCommand(
     DateOnly WorkDate,
-    IReadOnlyList<BulkRecordAttendanceItem> Records) : IRequest<BulkRecordAttendanceResult>;
+    IReadOnlyList<BulkRecordAttendanceItem> Records,
+    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<BulkRecordAttendanceResult>;
 
 public sealed record BulkRecordAttendanceItemResult(
     int EmployeeInformationId,

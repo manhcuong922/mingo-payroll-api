@@ -7,4 +7,5 @@ public sealed record CreateAttendanceRuleCommand(
     string? Description,
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
-    decimal WorkRateHoliday) : IRequest<int>;
+    decimal WorkRateHoliday,
+    decimal WorkRateNight) : IRequest<int>;

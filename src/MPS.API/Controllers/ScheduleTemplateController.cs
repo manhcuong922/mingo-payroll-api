@@ -1,3 +1,4 @@
+using System.Reflection;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -58,7 +59,8 @@ public class ScheduleTemplateController : ControllerBase
             request.DaysOfWeek,
             request.DaysOfMonth,
             request.EmployeeInformationIds,
-            request.Notes), cancellationToken);
+            request.Notes,
+            request.AcknowledgeWeeklyOvertimeWarnings), cancellationToken);
         return Created($"/api/schedule-templates/{result.ScheduleTemplateId}", result);
     }
 
@@ -87,9 +89,14 @@ public class ScheduleTemplateController : ControllerBase
 
     [HttpPost("{id:int}/reapply")]
     [HasPermission(Permissions.EmployeeShiftCreateAll)]
-    public async Task<IActionResult> Reapply(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Reapply(
+        int id,
+        [FromQuery] bool acknowledgeWeeklyOvertimeWarnings = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _mediator.Send(new ReapplyScheduleTemplateCommand(id), cancellationToken);
+        var result = await _mediator.Send(
+            new ReapplyScheduleTemplateCommand(id, acknowledgeWeeklyOvertimeWarnings),
+            cancellationToken);
         return Ok(result);
     }
 
@@ -99,5 +106,55 @@ public class ScheduleTemplateController : ControllerBase
     {
         var deleted = await _mediator.Send(new DeleteScheduleTemplateCommand(id), cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    [HttpGet("import-monthly/template")]
+    [HasPermission(Permissions.EmployeeShiftCreateAll)]
+    public IActionResult DownloadMonthlyImportTemplate()
+    {
+        const string resourceName = "MPS.API.Resources.sample-monthly-shift-import.xlsx";
+        var assembly = typeof(ScheduleTemplateController).Assembly;
+        var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+            return NotFound(new { error = "Template resource not found." });
+
+        return File(
+            stream,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "phan-ca-thang-mau.xlsx");
+    }
+
+    [HttpPost("import-monthly/preview")]
+    [HasPermission(Permissions.EmployeeShiftCreateAll)]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<IActionResult> PreviewMonthlyImport(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "File is required." });
+
+        // Copy sang MemoryStream rồi đóng IFormFile gốc — tránh lifetime issue khi
+        // stream gốc bị ASP.NET dispose trước khi handler đọc xong.
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        buffer.Position = 0;
+
+        var result = await _mediator.Send(new PreviewMonthlyScheduleImportCommand(buffer), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("import-monthly/confirm")]
+    [HasPermission(Permissions.EmployeeShiftCreateAll)]
+    public async Task<IActionResult> ConfirmMonthlyImport(
+        [FromBody] ConfirmMonthlyScheduleImportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new ConfirmMonthlyScheduleImportCommand(
+                request.PreviewToken,
+                request.AcknowledgeWeeklyOvertimeWarnings),
+            cancellationToken);
+        return Ok(result);
     }
 }

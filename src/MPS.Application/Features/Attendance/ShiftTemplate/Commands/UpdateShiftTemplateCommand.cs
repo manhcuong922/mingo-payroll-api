@@ -12,7 +12,6 @@ public sealed record UpdateShiftTemplateCommand(
     TimeOnly? BreakEndTime,
     decimal StandardHours,
     decimal StandardDays,
-    bool IsNightShift,
-    int? AppliedAttendanceRuleId,
+    int AppliedAttendanceRuleId,
     bool IsActive,
     string? Notes) : IRequest<bool>, IShiftTemplateCommand;

@@ -76,7 +76,8 @@ public class AttendanceController : ControllerBase
     {
         var id = await _mediator.Send(new RecordAttendanceCommand(
             request.EmployeeInformationId, request.WorkDate, request.ShiftTemplateId,
-            request.CheckInTime, request.CheckOutTime, request.Status, request.Notes), cancellationToken);
+            request.CheckInTime, request.CheckOutTime, request.Status, request.Notes,
+            request.AcknowledgeWeeklyOvertimeWarnings), cancellationToken);
         return Created($"/api/attendance/{request.EmployeeInformationId}/{request.WorkDate:yyyy-MM-dd}/{request.ShiftTemplateId}", new { id });
     }
 
@@ -89,7 +90,9 @@ public class AttendanceController : ControllerBase
         var rows = request.Records.Select(r => new BulkRecordAttendanceItem(
             r.EmployeeInformationId, r.ShiftTemplateId, r.CheckInTime,
             r.CheckOutTime, r.Status, r.Notes, r.OverrideReason)).ToList();
-        var result = await _mediator.Send(new BulkRecordAttendanceCommand(request.WorkDate, rows), cancellationToken);
+        var result = await _mediator.Send(
+            new BulkRecordAttendanceCommand(request.WorkDate, rows, request.AcknowledgeWeeklyOvertimeWarnings),
+            cancellationToken);
         return Ok(result);
     }
 
@@ -105,7 +108,8 @@ public class AttendanceController : ControllerBase
         var updated = await _mediator.Send(new UpdateAttendanceCommand(
             employeeInformationId, workDate, shiftTemplateId,
             request.CheckInTime, request.CheckOutTime, request.Status,
-            request.Notes, request.OverrideReason), cancellationToken);
+            request.Notes, request.OverrideReason,
+            request.AcknowledgeWeeklyOvertimeWarnings), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }

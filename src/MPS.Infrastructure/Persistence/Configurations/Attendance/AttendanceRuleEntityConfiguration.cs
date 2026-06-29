@@ -19,6 +19,7 @@ public class AttendanceRuleEntityConfiguration : IEntityTypeConfiguration<Attend
         builder.Property(e => e.WorkRateNormal).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(1.00m);
         builder.Property(e => e.WorkRateWeeklyRest).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(2.00m);
         builder.Property(e => e.WorkRateHoliday).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(3.00m);
+        builder.Property(e => e.WorkRateNight).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(1.30m);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
 
         builder.Property(e => e.CreatedAt).IsRequired();

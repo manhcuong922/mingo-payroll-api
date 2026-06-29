@@ -35,7 +35,8 @@ public class CreateAttendanceRuleCommandHandler : IRequestHandler<CreateAttendan
         PayRuleFloor.EnsureValid(
             request.WorkRateNormal,
             request.WorkRateWeeklyRest,
-            request.WorkRateHoliday);
+            request.WorkRateHoliday,
+            request.WorkRateNight);
 
         var now = _clock.UtcNow;
         var entity = new AttendanceRuleEntity
@@ -45,6 +46,7 @@ public class CreateAttendanceRuleCommandHandler : IRequestHandler<CreateAttendan
             WorkRateNormal = request.WorkRateNormal,
             WorkRateWeeklyRest = request.WorkRateWeeklyRest,
             WorkRateHoliday = request.WorkRateHoliday,
+            WorkRateNight = request.WorkRateNight,
             IsActive = true,
             CreatedAt = now,
             CreatedByUserId = userId

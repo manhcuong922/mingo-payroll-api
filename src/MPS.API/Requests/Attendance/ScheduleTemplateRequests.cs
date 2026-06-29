@@ -12,7 +12,8 @@ public sealed record CreateScheduleTemplateRequest(
     IReadOnlyList<int>? DaysOfWeek,
     IReadOnlyList<int>? DaysOfMonth,
     IReadOnlyList<int> EmployeeInformationIds,
-    string? Notes);
+    string? Notes,
+    bool AcknowledgeWeeklyOvertimeWarnings = false);
 
 public sealed record UpdateScheduleTemplateRequest(
     string Name,
@@ -26,3 +27,7 @@ public sealed record UpdateScheduleTemplateRequest(
     IReadOnlyList<int> EmployeeInformationIds,
     bool IsActive,
     string? Notes);
+
+public sealed record ConfirmMonthlyScheduleImportRequest(
+    string PreviewToken,
+    bool AcknowledgeWeeklyOvertimeWarnings = false);

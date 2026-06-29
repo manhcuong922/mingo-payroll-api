@@ -11,4 +11,5 @@ public sealed record UpdateAttendanceCommand(
     TimeOnly? CheckOutTime,
     AttendanceStatus Status,
     string? Notes,
-    string? OverrideReason) : IRequest<bool>;
+    string? OverrideReason,
+    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<bool>;

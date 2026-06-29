@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
@@ -17,6 +18,7 @@ public class CreateScheduleTemplateCommandHandler
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
+    private readonly IRegularHoursCapChecker _capChecker;
     private readonly IMediator _mediator;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
@@ -26,6 +28,7 @@ public class CreateScheduleTemplateCommandHandler
         IShiftTemplateRepository shiftRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
+        IRegularHoursCapChecker capChecker,
         IMediator mediator,
         ICurrentUserService currentUser,
         IClock clock)
@@ -34,6 +37,7 @@ public class CreateScheduleTemplateCommandHandler
         _shiftRepository = shiftRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
+        _capChecker = capChecker;
         _mediator = mediator;
         _currentUser = currentUser;
         _clock = clock;
@@ -91,6 +95,15 @@ public class CreateScheduleTemplateCommandHandler
             excludeTemplateId: null,
             cancellationToken);
 
+        // §9 Phase 1b — Pre-check cap 48h/tuần TRƯỚC khi AddAsync. Tránh tạo
+        // ScheduleTemplate row rồi mới throw warning từ inner BatchUpdate — gây
+        // orphan row + "tên đã tồn tại" khi user retry.
+        if (!request.AcknowledgeWeeklyOvertimeWarnings)
+        {
+            await EnsureRegularHoursCapAsync(
+                request.EmployeeInformationIds, templateShape, shift.StandardHours, cancellationToken);
+        }
+
         var now = _clock.UtcNow;
         var entity = new ScheduleTemplateEntity
         {
@@ -111,12 +124,36 @@ public class CreateScheduleTemplateCommandHandler
         var id = await _repository.AddAsync(entity, request.EmployeeInformationIds, cancellationToken);
         entity.Id = id;
 
-        return await ApplyAsync(entity, request.EmployeeInformationIds, cancellationToken);
+        // Pre-check đã pass (hoặc user ack) → forward ack=true xuống inner
+        // BatchUpdate để khỏi check lại lần nữa (data state không đổi trong cùng scope).
+        return await ApplyAsync(entity, request.EmployeeInformationIds,
+            acknowledgeWeeklyOvertimeWarnings: true, cancellationToken);
+    }
+
+    private async Task EnsureRegularHoursCapAsync(
+        IReadOnlyList<int> employeeIds,
+        ScheduleTemplateEntity templateShape,
+        decimal standardHoursPerOp,
+        CancellationToken cancellationToken)
+    {
+        var dates = _expander.ExpandDates(templateShape);
+        if (dates.Count == 0 || employeeIds.Count == 0) return;
+
+        var deltas = new List<WeeklyCapDelta>(dates.Count * employeeIds.Count);
+        foreach (var empId in employeeIds)
+        foreach (var date in dates)
+            deltas.Add(new WeeklyCapDelta(empId, date, standardHoursPerOp));
+
+        var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
+        var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
+        if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
+            throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
     }
 
     private async Task<ScheduleTemplateApplyResultDto> ApplyAsync(
         ScheduleTemplateEntity template,
         IReadOnlyCollection<int> employeeIds,
+        bool acknowledgeWeeklyOvertimeWarnings,
         CancellationToken cancellationToken)
     {
         var dates = _expander.ExpandDates(template);
@@ -143,7 +180,8 @@ public class CreateScheduleTemplateCommandHandler
             new BatchUpdateShiftAssignmentsCommand(
                 operations,
                 BatchShiftConflictPolicy.ReplaceIfNoAttendance,
-                SourceScheduleTemplateId: template.Id),
+                SourceScheduleTemplateId: template.Id,
+                AcknowledgeWeeklyOvertimeWarnings: acknowledgeWeeklyOvertimeWarnings),
             cancellationToken);
 
         return new ScheduleTemplateApplyResultDto(

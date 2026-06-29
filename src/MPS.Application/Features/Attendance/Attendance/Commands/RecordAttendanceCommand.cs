@@ -10,4 +10,5 @@ public sealed record RecordAttendanceCommand(
     TimeOnly? CheckInTime,
     TimeOnly? CheckOutTime,
     AttendanceStatus Status,
-    string? Notes) : IRequest<int>;
+    string? Notes,
+    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<int>;

@@ -53,7 +53,12 @@ public class EmployeeShiftController : ControllerBase
             .ToList();
 
         var result = await _mediator.Send(
-            new BatchUpdateShiftAssignmentsCommand(operations, request.ConflictPolicy), cancellationToken);
+            new BatchUpdateShiftAssignmentsCommand(
+                operations,
+                request.ConflictPolicy,
+                SourceScheduleTemplateId: null,
+                AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings),
+            cancellationToken);
         return Ok(result);
     }
 }

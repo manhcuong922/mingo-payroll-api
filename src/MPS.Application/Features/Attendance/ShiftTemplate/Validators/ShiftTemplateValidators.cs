@@ -9,13 +9,9 @@ public class CreateShiftTemplateCommandValidator : AbstractValidator<CreateShift
     public CreateShiftTemplateCommandValidator()
     {
         Include(new ShiftTemplateBaseValidator());
-
-        When(x => x.AppliedAttendanceRuleId is null, () =>
-        {
-            RuleFor(x => x.WorkRateNormal).GreaterThanOrEqualTo(PayRuleFloor.Normal);
-            RuleFor(x => x.WorkRateWeeklyRest).GreaterThanOrEqualTo(PayRuleFloor.WeeklyRest);
-            RuleFor(x => x.WorkRateHoliday).GreaterThanOrEqualTo(PayRuleFloor.Holiday);
-        });
+        RuleFor(x => x.AppliedAttendanceRuleId)
+            .GreaterThan(0)
+            .WithMessage("AppliedAttendanceRuleId is required.");
     }
 }
 
@@ -24,18 +20,10 @@ public class UpdateShiftTemplateCommandValidator : AbstractValidator<UpdateShift
     public UpdateShiftTemplateCommandValidator()
     {
         RuleFor(x => x.Id).GreaterThan(0);
+        RuleFor(x => x.AppliedAttendanceRuleId)
+            .GreaterThan(0)
+            .WithMessage("AppliedAttendanceRuleId is required.");
         Include(new ShiftTemplateBaseValidator());
-    }
-}
-
-public class UpdateShiftPayRatesCommandValidator : AbstractValidator<UpdateShiftPayRatesCommand>
-{
-    public UpdateShiftPayRatesCommandValidator()
-    {
-        RuleFor(x => x.ShiftTemplateId).GreaterThan(0);
-        RuleFor(x => x.WorkRateNormal).GreaterThanOrEqualTo(PayRuleFloor.Normal);
-        RuleFor(x => x.WorkRateWeeklyRest).GreaterThanOrEqualTo(PayRuleFloor.WeeklyRest);
-        RuleFor(x => x.WorkRateHoliday).GreaterThanOrEqualTo(PayRuleFloor.Holiday);
     }
 }
 
@@ -53,7 +41,10 @@ internal sealed class ShiftTemplateBaseValidator : AbstractValidator<IShiftTempl
         RuleFor(x => x.EndTime).GreaterThan(x => x.StartTime)
             .WithMessage("EndTime must be greater than StartTime.");
 
-        RuleFor(x => x.StandardHours).InclusiveBetween(0.5m, 24m);
+        RuleFor(x => x.StandardHours)
+            .InclusiveBetween(0.5m, RegularHoursCap.MaxPerDay)
+            .WithMessage(
+                $"StandardHours phải trong khoảng 0.5..{RegularHoursCap.MaxPerDay}h — Điều 105.1 BLLĐ giới hạn ≤ 8h/ngày khi áp mode Daily.");
         RuleFor(x => x.StandardDays).InclusiveBetween(0.25m, 1.00m);
         RuleFor(x => x.Notes).MaximumLength(500);
 

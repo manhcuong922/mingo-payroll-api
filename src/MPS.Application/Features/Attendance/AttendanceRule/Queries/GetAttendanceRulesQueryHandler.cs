@@ -28,6 +28,7 @@ public class GetAttendanceRulesQueryHandler : IRequestHandler<GetAttendanceRules
             r.WorkRateNormal,
             r.WorkRateWeeklyRest,
             r.WorkRateHoliday,
+            r.WorkRateNight,
             r.IsActive,
             r.CreatedAt,
             r.UpdatedAt,

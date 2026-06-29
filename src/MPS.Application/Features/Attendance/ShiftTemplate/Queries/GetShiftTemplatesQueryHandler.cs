@@ -21,26 +21,7 @@ public class GetShiftTemplatesQueryHandler : IRequestHandler<GetShiftTemplatesQu
 
         var (items, total) = await _repository.GetPagedAsync(request.IsActive, page, size, cancellationToken);
 
-        var dtos = items.Select(t => new ShiftTemplateDto(
-            t.Id,
-            t.Code,
-            t.Name,
-            t.StartTime,
-            t.EndTime,
-            t.BreakStartTime,
-            t.BreakEndTime,
-            t.StandardHours,
-            t.StandardDays,
-            t.WorkRateNormal,
-            t.WorkRateWeeklyRest,
-            t.WorkRateHoliday,
-            t.IsNightShift,
-            t.AppliedAttendanceRuleId,
-            t.IsActive,
-            t.Notes,
-            t.CreatedAt,
-            t.UpdatedAt)).ToList();
-
+        var dtos = items.Select(ShiftTemplateMapper.ToDto).ToList();
         return new PagedResult<ShiftTemplateDto>(dtos, total, page, size);
     }
 }

@@ -1,5 +1,7 @@
 using MediatR;
+using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -13,6 +15,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IContractRepository _contractRepository;
     private readonly ICurrentUserService _currentUser;
+    private readonly IWorkHourSplitter _splitter;
+    private readonly IRegularHoursCapChecker _capChecker;
     private readonly IClock _clock;
 
     public RecordAttendanceCommandHandler(
@@ -20,12 +24,16 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         IShiftTemplateRepository shiftRepository,
         IContractRepository contractRepository,
         ICurrentUserService currentUser,
+        IWorkHourSplitter splitter,
+        IRegularHoursCapChecker capChecker,
         IClock clock)
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
         _contractRepository = contractRepository;
         _currentUser = currentUser;
+        _splitter = splitter;
+        _capChecker = capChecker;
         _clock = clock;
     }
 
@@ -51,6 +59,27 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
             throw new ConflictException(
                 $"Attendance record already exists for employee {request.EmployeeInformationId} on {request.WorkDate:yyyy-MM-dd} shift {shift.Code}.");
 
+        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+            _splitter, request.Status, request.CheckInTime, request.CheckOutTime, shift);
+
+        // §9 Phase 1b — Cap 48h/tuần warn-then-confirm (Điều 105 BLLĐ).
+        if (!request.AcknowledgeWeeklyOvertimeWarnings)
+        {
+            var delta = dayHours + nightHours;
+            if (delta > 0)
+            {
+                var deltas = new[] { new WeeklyCapDelta(request.EmployeeInformationId, request.WorkDate, delta) };
+                var dailyWarnings = await _capChecker.CheckDailyAttendanceAsync(
+                    deltas,
+                    cancellationToken);
+                var weeklyWarnings = await _capChecker.CheckAttendanceAsync(
+                    deltas,
+                    cancellationToken);
+                if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
+                    throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
+            }
+        }
+
         var entity = new AttendanceRecordEntity
         {
             EmployeeInformationId = request.EmployeeInformationId,
@@ -58,6 +87,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
             ShiftTemplateId = request.ShiftTemplateId,
             CheckInTime = request.CheckInTime,
             CheckOutTime = request.CheckOutTime,
+            DayHours = dayHours,
+            NightHours = nightHours,
             Status = request.Status,
             Notes = request.Notes,
             CreatedAt = _clock.UtcNow,

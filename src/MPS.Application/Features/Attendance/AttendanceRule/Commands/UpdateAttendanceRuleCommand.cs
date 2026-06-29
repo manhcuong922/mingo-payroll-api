@@ -9,4 +9,5 @@ public sealed record UpdateAttendanceRuleCommand(
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
     decimal WorkRateHoliday,
+    decimal WorkRateNight,
     bool IsActive) : IRequest<bool>;

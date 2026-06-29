@@ -24,10 +24,6 @@ public class ShiftTemplateEntityConfiguration : IEntityTypeConfiguration<ShiftTe
         builder.Property(e => e.BreakEndTime);
         builder.Property(e => e.StandardHours).HasColumnType("decimal(4,2)").IsRequired();
         builder.Property(e => e.StandardDays).HasColumnType("decimal(3,2)").IsRequired().HasDefaultValue(1.00m);
-        builder.Property(e => e.WorkRateNormal).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(1.00m);
-        builder.Property(e => e.WorkRateWeeklyRest).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(2.00m);
-        builder.Property(e => e.WorkRateHoliday).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(3.00m);
-        builder.Property(e => e.IsNightShift).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(e => e.Notes).HasMaxLength(500);
 
@@ -49,7 +45,7 @@ public class ShiftTemplateEntityConfiguration : IEntityTypeConfiguration<ShiftTe
         builder.HasOne(e => e.AppliedAttendanceRule)
             .WithMany()
             .HasForeignKey(e => e.AppliedAttendanceRuleId)
-            .IsRequired(false)
+            .IsRequired()
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

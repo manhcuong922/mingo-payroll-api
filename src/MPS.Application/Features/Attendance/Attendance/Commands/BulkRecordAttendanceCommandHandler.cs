@@ -1,6 +1,8 @@
 using MediatR;
+using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Attendance.Common;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -22,6 +24,8 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IContractRepository _contractRepository;
     private readonly ICurrentUserService _currentUser;
+    private readonly IWorkHourSplitter _splitter;
+    private readonly IRegularHoursCapChecker _capChecker;
     private readonly IClock _clock;
 
     public BulkRecordAttendanceCommandHandler(
@@ -29,12 +33,16 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         IShiftTemplateRepository shiftRepository,
         IContractRepository contractRepository,
         ICurrentUserService currentUser,
+        IWorkHourSplitter splitter,
+        IRegularHoursCapChecker capChecker,
         IClock clock)
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
         _contractRepository = contractRepository;
         _currentUser = currentUser;
+        _splitter = splitter;
+        _capChecker = capChecker;
         _clock = clock;
     }
 
@@ -46,6 +54,38 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         var hasOverride = _currentUser.HasPermission(Permissions.AttendanceAdjustmentOverrideAll);
         var today = DateOnly.FromDateTime(_clock.UtcNow);
         var daysSince = today.DayNumber - request.WorkDate.DayNumber;
+
+        // §9 Phase 1b — Pre-pass: compute deltas của các row có dữ liệu valid, check cap warn-then-confirm.
+        // Row sai (shift inactive, future time, no contract) skip khỏi cap calc — sẽ fail riêng.
+        if (!request.AcknowledgeWeeklyOvertimeWarnings)
+        {
+            var deltas = new List<WeeklyCapDelta>();
+            foreach (var row in request.Records)
+            {
+                if (AttendanceTimeRules.ValidateNotInFuture(
+                        request.WorkDate, row.CheckInTime, row.CheckOutTime, _clock.UtcNow) is not null)
+                    continue;
+                var shift = await _shiftRepository.GetByIdAsync(row.ShiftTemplateId, cancellationToken);
+                if (shift is null || !shift.IsActive) continue;
+
+                var (newDay, newNight) = AttendanceHourCalculator.Compute(
+                    _splitter, row.Status, row.CheckInTime, row.CheckOutTime, shift);
+                var existing = await _repository.GetByKeyAsync(
+                    row.EmployeeInformationId, request.WorkDate, row.ShiftTemplateId, cancellationToken);
+                var oldTotal = existing is null ? 0m : existing.DayHours + existing.NightHours;
+                var delta = (newDay + newNight) - oldTotal;
+                if (delta != 0)
+                    deltas.Add(new WeeklyCapDelta(row.EmployeeInformationId, request.WorkDate, delta));
+            }
+
+            if (deltas.Count > 0)
+            {
+                var dailyWarnings = await _capChecker.CheckDailyAttendanceAsync(deltas, cancellationToken);
+                var weeklyWarnings = await _capChecker.CheckAttendanceAsync(deltas, cancellationToken);
+                if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
+                    throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
+            }
+        }
 
         var created = 0;
         var updated = 0;
@@ -71,6 +111,9 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                 var existing = await _repository.GetByKeyAsync(
                     row.EmployeeInformationId, request.WorkDate, row.ShiftTemplateId, cancellationToken);
 
+                var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+                    _splitter, row.Status, row.CheckInTime, row.CheckOutTime, shift);
+
                 if (existing is null)
                 {
                     if (!await _contractRepository.HasActiveContractAsync(row.EmployeeInformationId, cancellationToken))
@@ -84,6 +127,8 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                         ShiftTemplateId = row.ShiftTemplateId,
                         CheckInTime = row.CheckInTime,
                         CheckOutTime = row.CheckOutTime,
+                        DayHours = dayHours,
+                        NightHours = nightHours,
                         Status = row.Status,
                         Notes = row.Notes,
                         CreatedAt = _clock.UtcNow,
@@ -105,6 +150,8 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
 
                     existing.CheckInTime = row.CheckInTime;
                     existing.CheckOutTime = row.CheckOutTime;
+                    existing.DayHours = dayHours;
+                    existing.NightHours = nightHours;
                     existing.Status = row.Status;
                     existing.Notes = row.Notes;
                     if (!string.IsNullOrWhiteSpace(row.OverrideReason))

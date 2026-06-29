@@ -118,6 +118,8 @@ public class AttendanceRecordRepository : IAttendanceRecordRepository
         tracked.ShiftTemplateId = entity.ShiftTemplateId;
         tracked.CheckInTime = entity.CheckInTime;
         tracked.CheckOutTime = entity.CheckOutTime;
+        tracked.DayHours = entity.DayHours;
+        tracked.NightHours = entity.NightHours;
         tracked.Status = entity.Status;
         tracked.Notes = entity.Notes;
         tracked.OverrideReason = entity.OverrideReason;

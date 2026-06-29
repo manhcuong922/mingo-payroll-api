@@ -30,6 +30,8 @@ public class GetEmployeeAttendanceDetailQueryHandler
             r.ShiftTemplate?.Name,
             r.CheckInTime,
             r.CheckOutTime,
+            r.DayHours,
+            r.NightHours,
             r.Status,
             r.Notes,
             r.OverrideReason,

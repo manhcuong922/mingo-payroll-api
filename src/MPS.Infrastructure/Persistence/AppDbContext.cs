@@ -37,6 +37,10 @@ public class AppDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AuditLogArchive> AuditLogsArchive => Set<AuditLogArchive>();
 
+    // Company Policy module
+    public DbSet<CompanyPolicy> CompanyPolicies => Set<CompanyPolicy>();
+    public DbSet<CompanyPolicyFile> CompanyPolicyFiles => Set<CompanyPolicyFile>();
+
     // Compliance module (FE-06)
     public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
     public DbSet<SocialInsuranceFundEntry> SocialInsuranceFundEntries => Set<SocialInsuranceFundEntry>();

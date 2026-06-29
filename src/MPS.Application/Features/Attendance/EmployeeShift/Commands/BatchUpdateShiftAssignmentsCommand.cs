@@ -51,7 +51,14 @@ public sealed record BatchUpdateShiftAssignmentsResult(
     int Conflicts,
     IReadOnlyList<BatchShiftItemResult> Items);
 
+/// <summary>
+/// Batch phân ca với cap §9 Điều 105 BLLĐ — warn-then-confirm khi vượt 48h/tuần regular.
+/// Khi <see cref="AcknowledgeWeeklyOvertimeWarnings"/> = false và cap bị vượt, handler throw
+/// <c>WeeklyRegularHoursCapWarningException</c> → middleware trả 409 + warning list để FE
+/// hiển thị popup xác nhận. FE retry với flag = true để apply.
+/// </summary>
 public sealed record BatchUpdateShiftAssignmentsCommand(
     IReadOnlyList<BatchShiftOperation> Operations,
     BatchShiftConflictPolicy ConflictPolicy,
-    int? SourceScheduleTemplateId = null) : IRequest<BatchUpdateShiftAssignmentsResult>;
+    int? SourceScheduleTemplateId = null,
+    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<BatchUpdateShiftAssignmentsResult>;
