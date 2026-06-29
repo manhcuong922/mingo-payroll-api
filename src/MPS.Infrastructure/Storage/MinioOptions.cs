@@ -14,4 +14,5 @@ public sealed class MinioOptions
     public bool EnableBucketBootstrap { get; init; } = true;
     public bool EnableVersioning { get; init; } = true;
     public int RetryCount { get; init; } = 3;
+    public string? ExternalEndpoint { get; init; }
 }

@@ -176,6 +176,10 @@ public static class Permissions
     public const string CompanyPolicyCreateAll = "CompanyPolicy.Create.All";
     public const string CompanyPolicyUpdateAll = "CompanyPolicy.Update.All";
     public const string CompanyPolicyDeleteAll = "CompanyPolicy.Delete.All";
+    // ===== FaceRegistration (Track B) =====
+    public const string FaceRegistrationSubmitSelf = "FaceRegistration.Submit.Self";
+    public const string FaceRegistrationReadAll    = "FaceRegistration.Read.All";
+    public const string FaceRegistrationApproveAll = "FaceRegistration.Approve.All";
 }
 
 public static class PermissionIds
@@ -355,4 +359,8 @@ public static class PermissionIds
     public const int CompanyPolicyCreateAll = 131;
     public const int CompanyPolicyUpdateAll = 132;
     public const int CompanyPolicyDeleteAll = 133;
+    // ===== FaceRegistration (Track B) — IDs 134–136 =====
+    public const int FaceRegistrationSubmitSelf = 134;
+    public const int FaceRegistrationReadAll    = 135;
+    public const int FaceRegistrationApproveAll = 136;
 }

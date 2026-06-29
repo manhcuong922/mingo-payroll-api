@@ -32,6 +32,7 @@ public sealed class DatabaseSeeder
     {
         await SeedDefaultAdminAsync(cancellationToken);
         await SeedDefaultRoleUsersAsync(cancellationToken);
+        await SeedAiServiceAccountAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
@@ -155,6 +156,47 @@ public sealed class DatabaseSeeder
         {
             _logger.LogDebug("All default role users already exist; skipping.");
         }
+    }
+
+    private async Task SeedAiServiceAccountAsync(CancellationToken cancellationToken)
+    {
+        const string username = "ai-service";
+        var exists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Username == username, cancellationToken);
+
+        if (exists)
+        {
+            _logger.LogDebug("AI service account already exists; skipping seed.");
+            return;
+        }
+
+        var section = _configuration.GetSection("AiServiceAccount");
+        var password = section["Password"];
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            _logger.LogWarning("AiServiceAccount:Password is not configured; skipping AI service account seed.");
+            return;
+        }
+
+        var aiUser = new User
+        {
+            EmployeeCode = "AI-SVC-001",
+            FullName = "AI Attendance Service",
+            RoleId = SystemRoles.AiServiceId,
+            Username = username,
+            PasswordHash = _passwordHasher.Hash(password),
+            Email = "ai-service@mingo.local",
+            Dob = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            PhoneNo = "0000000000",
+            Status = 1,
+            PasswordChangedAt = DateTime.UtcNow,
+        };
+
+        await _context.Users.AddAsync(aiUser, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded AI service account '{Username}'.", username);
     }
 
     private async Task SeedDefaultContractPartyAsync(CancellationToken cancellationToken)

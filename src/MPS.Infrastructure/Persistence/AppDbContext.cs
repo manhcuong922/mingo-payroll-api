@@ -61,6 +61,7 @@ public class AppDbContext : DbContext
     public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
 
     // Attendance module (FE-ATT)
+    public DbSet<FaceRegistration> FaceRegistrations => Set<FaceRegistration>();
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
