@@ -189,9 +189,8 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
                 }
             }
 
-            var download = await _storage.DownloadAsync(metadata.ObjectKey, metadata.Bucket, cancellationToken);
-            await using var pdfStream = download.Content;
-
+            // Không tải PDF ở đây nữa: chỉ chuyển vị trí MinIO. Bên gửi thật (worker) sẽ tự tải
+            // khi thực sự gửi — giữ request path nhẹ và message-friendly cho outbox.
             var payload = new ContractActivationEmailPayload(
                 ContractNo: contract.ContractNo,
                 EffectiveFrom: contract.EffectiveFrom,
@@ -201,7 +200,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
                 LoginUrl: null);
 
             await _emailSender.SendContractActivationAsync(
-                ei.Email!, ei.FullName, payload, pdfStream, pdfFileName, cancellationToken);
+                ei.Email!, ei.FullName, payload, metadata.Bucket, metadata.ObjectKey, pdfFileName, cancellationToken);
 
             _logger.LogInformation(
                 "Contract activation email sent for contract {ContractId} to {Email} (credentials included: {HasCredentials}).",
