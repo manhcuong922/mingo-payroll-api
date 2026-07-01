@@ -15,4 +15,11 @@ public sealed class MinioOptions
     public bool EnableVersioning { get; init; } = true;
     public int RetryCount { get; init; } = 3;
     public string? ExternalEndpoint { get; init; }
+
+    /// <summary>
+    /// SSL flag for the browser-facing <see cref="ExternalEndpoint"/>.
+    /// Null inherits <see cref="UseSsl"/>. Set true when ExternalEndpoint is served over TLS
+    /// (e.g. behind a reverse proxy) while the internal endpoint stays plain HTTP.
+    /// </summary>
+    public bool? ExternalUseSsl { get; init; }
 }

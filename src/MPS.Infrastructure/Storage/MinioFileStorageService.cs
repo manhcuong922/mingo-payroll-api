@@ -16,6 +16,7 @@ namespace MPS.Infrastructure.Storage;
 public sealed class MinioFileStorageService : IFileStorageService
 {
     private readonly IMinioClient _client;
+    private readonly IMinioClient _presignClient;
     private readonly MinioOptions _options;
     private readonly ILogger<MinioFileStorageService> _logger;
     private readonly ResiliencePipeline _retryPipeline;
@@ -29,6 +30,30 @@ public sealed class MinioFileStorageService : IFileStorageService
         _options = options.Value;
         _logger = logger;
         _retryPipeline = BuildRetryPipeline(_options.RetryCount, logger);
+        _presignClient = BuildPresignClient(_client, _options);
+    }
+
+    // Presigned SigV4 URLs sign the Host header, so they must be signed with the exact
+    // endpoint the browser will call. When the internal endpoint (e.g. "minio:9000") differs
+    // from the browser-facing one, signing with the internal host and string-replacing it
+    // afterwards breaks the signature (403 SignatureDoesNotMatch). Instead, sign with a
+    // dedicated client bound to ExternalEndpoint. Region is set explicitly so presigning stays
+    // a local computation and never attempts a GetBucketLocation call to the (unreachable)
+    // external endpoint.
+    private static IMinioClient BuildPresignClient(IMinioClient mainClient, MinioOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.ExternalEndpoint))
+            return mainClient;
+
+        var client = new MinioClient()
+            .WithEndpoint(options.ExternalEndpoint)
+            .WithCredentials(options.AccessKey, options.SecretKey)
+            .WithRegion("us-east-1");
+
+        if (options.ExternalUseSsl ?? options.UseSsl)
+            client = client.WithSSL();
+
+        return client.Build();
     }
 
     public async Task<StoredFileMetadata> UploadAsync(
@@ -171,15 +196,11 @@ public sealed class MinioFileStorageService : IFileStorageService
 
         try
         {
-            var url = await _client.PresignedGetObjectAsync(new PresignedGetObjectArgs()
+            var url = await _presignClient.PresignedGetObjectAsync(new PresignedGetObjectArgs()
                 .WithBucket(resolvedBucket)
                 .WithObject(objectKey)
                 .WithExpiry((int)expiry.TotalSeconds));
 
-            if (!string.IsNullOrWhiteSpace(_options.ExternalEndpoint))
-            {
-                url = url.Replace(_options.Endpoint, _options.ExternalEndpoint, StringComparison.OrdinalIgnoreCase);
-            }
             return url;
         }
         catch (Exception ex) when (IsTransient(ex))
@@ -207,15 +228,10 @@ public sealed class MinioFileStorageService : IFileStorageService
 
         try
         {
-            var url = await _client.PresignedPutObjectAsync(new PresignedPutObjectArgs()
+            var url = await _presignClient.PresignedPutObjectAsync(new PresignedPutObjectArgs()
                 .WithBucket(resolvedBucket)
                 .WithObject(objectKey)
                 .WithExpiry((int)expiry.TotalSeconds));
-
-            if (!string.IsNullOrWhiteSpace(_options.ExternalEndpoint))
-            {
-                url = url.Replace(_options.Endpoint, _options.ExternalEndpoint, StringComparison.OrdinalIgnoreCase);
-            }
 
             return new PresignedUploadResult(
                 Url: url,
