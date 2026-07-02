@@ -21,9 +21,11 @@ public class DepartmentController : ControllerBase
 
     [HttpGet]
     [HasPermission(Permissions.DepartmentReadAll)]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] bool includeInactive = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _mediator.Send(new DepartmentGetAllQuery(), cancellationToken);
+        var result = await _mediator.Send(new DepartmentGetAllQuery(includeInactive), cancellationToken);
         return Ok(result);
     }
 
@@ -33,10 +35,11 @@ public class DepartmentController : ControllerBase
         [FromQuery] string? keyword,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] bool includeInactive = false,
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(
-            new DepartmentGetPagedQuery(keyword, page, pageSize), cancellationToken);
+            new DepartmentGetPagedQuery(keyword, page, pageSize, includeInactive), cancellationToken);
         return Ok(result);
     }
 

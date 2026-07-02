@@ -8,6 +8,9 @@ public interface IEmployeeInformationRepository
     Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(CancellationToken cancellationToken = default);
 
+    // Scoped access: danh sách nhân viên thuộc 1 phòng ban (dùng cho EmployeeInformation.Read.Department).
+    Task<IReadOnlyList<EmployeeInformation>> GetByDepartmentIdAsync(int departmentId, CancellationToken cancellationToken = default);
+
     Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
         string? keyword,
         int? positionId,

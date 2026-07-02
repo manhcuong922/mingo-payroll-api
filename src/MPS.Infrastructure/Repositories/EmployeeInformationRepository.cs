@@ -20,6 +20,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 
     public Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default) =>
@@ -27,6 +28,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.UserId == userId, cancellationToken);
 
     public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(CancellationToken cancellationToken = default) =>
@@ -34,6 +36,17 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<EmployeeInformation>> GetByDepartmentIdAsync(
+        int departmentId, CancellationToken cancellationToken = default) =>
+        await _context.EmployeeInformations
+            .AsNoTracking()
+            .Include(e => e.Position)
+            .Include(e => e.User)
+            .Include(e => e.Department)
+            .Where(e => e.DepartmentId == departmentId)
             .ToListAsync(cancellationToken);
 
     public async Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
@@ -48,6 +61,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(keyword))
@@ -135,6 +149,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         existing.SocialNo = entity.SocialNo;
         existing.BankNumber = entity.BankNumber;
         existing.PositionId = entity.PositionId;
+        existing.DepartmentId = entity.DepartmentId;
         existing.DependentsNo = entity.DependentsNo;
         existing.GuardianFullName = entity.GuardianFullName;
         existing.GuardianRelationship = entity.GuardianRelationship;

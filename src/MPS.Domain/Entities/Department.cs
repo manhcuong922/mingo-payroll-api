@@ -13,5 +13,8 @@ public class Department
     public int? ManagerId { get; set; }
     public EmployeeInformation? Manager { get; set; }
 
+    // Soft-delete: "giải tán xưởng" = set false. KHÔNG hard-delete để giữ lịch sử đơn/task.
+    public bool IsActive { get; set; } = true;
+
     public List<EmployeeInformation> Employees { get; set; } = new();
 }

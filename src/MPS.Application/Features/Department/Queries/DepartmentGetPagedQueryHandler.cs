@@ -20,7 +20,7 @@ public class DepartmentGetPagedQueryHandler : IRequestHandler<DepartmentGetPaged
     public async Task<PagedResult<DepartmentDto>> Handle(DepartmentGetPagedQuery request, CancellationToken cancellationToken)
     {
         var (items, total) = await _repository.GetPagedAsync(
-            request.Keyword, request.Page, request.PageSize, cancellationToken);
+            request.Keyword, request.IncludeInactive, request.Page, request.PageSize, cancellationToken);
 
         return new PagedResult<DepartmentDto>(
             _mapper.Map<IReadOnlyList<DepartmentDto>>(items),

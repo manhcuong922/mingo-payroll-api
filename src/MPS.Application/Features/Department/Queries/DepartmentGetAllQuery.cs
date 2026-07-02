@@ -3,4 +3,5 @@ using MPS.Application.DTOs;
 
 namespace MPS.Application.Features.Department.Queries;
 
-public sealed record DepartmentGetAllQuery : IRequest<IReadOnlyList<DepartmentDto>>;
+public sealed record DepartmentGetAllQuery(bool IncludeInactive = false)
+    : IRequest<IReadOnlyList<DepartmentDto>>;

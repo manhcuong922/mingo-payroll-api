@@ -25,5 +25,11 @@ public class DepartmentUpdateCommandValidator : AbstractValidator<DepartmentUpda
         RuleFor(x => x.Description)
             .MaximumLength(4000).WithMessage("Description must not exceed 4000 characters.")
             .When(x => !string.IsNullOrWhiteSpace(x.Description));
+
+        // Lưu ý #9: tổ trưởng xưởng phải có tài khoản (UserId) để đăng nhập duyệt Done.
+        RuleFor(x => x.ManagerId)
+            .MustAsync((managerId, ct) => repository.ManagerExistsWithUserAsync(managerId!.Value, ct))
+            .WithMessage("Selected manager must be an employee that has a linked user account.")
+            .When(x => x.ManagerId.HasValue);
     }
 }

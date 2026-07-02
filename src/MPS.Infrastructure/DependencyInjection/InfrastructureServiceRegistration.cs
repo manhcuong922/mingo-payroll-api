@@ -41,6 +41,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IEmployeeInformationRepository, EmployeeInformationRepository>();
         services.AddScoped<IPositionRepository, PositionRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+        services.AddScoped<MPS.Application.Services.IDepartmentManagerAuthorizer,
+            MPS.Application.Services.DepartmentManagerAuthorizer>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();

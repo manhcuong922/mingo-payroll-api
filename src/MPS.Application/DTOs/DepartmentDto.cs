@@ -7,4 +7,5 @@ public record DepartmentDto(
     string? Description,
     int? ManagerId,
     string? ManagerName,
+    bool IsActive,
     int EmployeeCount);

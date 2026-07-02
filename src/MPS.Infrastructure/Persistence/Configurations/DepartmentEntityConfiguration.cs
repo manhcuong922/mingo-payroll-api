@@ -25,6 +25,12 @@ public class DepartmentEntityConfiguration : IEntityTypeConfiguration<Department
         builder.Property(e => e.Description)
             .HasColumnType("nvarchar(max)");
 
+        builder.Property(e => e.IsActive)
+            .HasDefaultValue(true);
+
+        // Query danh sách xưởng thường lọc IsActive == true
+        builder.HasIndex(e => e.IsActive);
+
         // Trưởng phòng — nullable, SetNull khi employee bị xóa
         builder.HasOne(d => d.Manager)
             .WithMany()

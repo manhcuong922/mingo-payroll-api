@@ -1778,6 +1778,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<int?>("ManagerId")
                         .HasColumnType("int");
 
@@ -1790,6 +1795,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Code")
                         .IsUnique();
+
+                    b.HasIndex("IsActive");
 
                     b.HasIndex("ManagerId");
 
@@ -3590,7 +3597,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 5,
-                            PermissionId = 99
+                            PermissionId = 7
                         },
                         new
                         {
@@ -3656,6 +3663,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 6,
                             PermissionId = 5
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 99
                         },
                         new
                         {

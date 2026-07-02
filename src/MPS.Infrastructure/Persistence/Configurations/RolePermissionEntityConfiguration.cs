@@ -91,10 +91,11 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.TypePerformanceMetricUpdateAll, PermissionIds.TypePerformanceMetricDeleteAll,
             }),
 
+            // DepartmentManager = Ban kế hoạch cấp công ty → xem nhân sự đa xưởng (Read.All).
             (SystemRoles.DepartmentManagerId, new[]
             {
                 PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
-                PermissionIds.EmployeeInformationReadDepartment, PermissionIds.EmployeeInformationReadSelf,
+                PermissionIds.EmployeeInformationReadAll, PermissionIds.EmployeeInformationReadSelf,
                 PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
                 PermissionIds.DepartmentReadAll,
@@ -104,10 +105,12 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.TypePerformanceMetricReadAll,
             }),
 
+            // ProjectManager = tổ trưởng xưởng (Department.ManagerId) → chỉ xem nhân viên xưởng mình (Read.Department).
             (SystemRoles.ProjectManagerId, new[]
             {
                 PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
-                PermissionIds.EmployeeInformationReadSelf, PermissionIds.EmployeeInformationUpdateSelf,
+                PermissionIds.EmployeeInformationReadDepartment, PermissionIds.EmployeeInformationReadSelf,
+                PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
                 PermissionIds.DepartmentReadAll,
                 PermissionIds.PerformanceMetricReadAll, PermissionIds.PerformanceMetricReadSelf,

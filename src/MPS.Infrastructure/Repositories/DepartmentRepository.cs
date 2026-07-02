@@ -14,12 +14,19 @@ public class DepartmentRepository : IDepartmentRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<Department>> GetAllAsync(CancellationToken ct) =>
-        await _context.Departments
+    public async Task<IReadOnlyList<Department>> GetAllAsync(bool includeInactive, CancellationToken ct)
+    {
+        var query = _context.Departments
             .AsNoTracking()
             .Include(d => d.Manager)
-            .OrderBy(d => d.Name)
-            .ToListAsync(ct);
+            .Include(d => d.Employees)
+            .AsQueryable();
+
+        if (!includeInactive)
+            query = query.Where(d => d.IsActive);
+
+        return await query.OrderBy(d => d.Name).ToListAsync(ct);
+    }
 
     public Task<Department?> GetByIdAsync(int id, CancellationToken ct) =>
         _context.Departments
@@ -31,15 +38,19 @@ public class DepartmentRepository : IDepartmentRepository
     public Task<Department?> GetByManagerEmployeeIdAsync(int employeeId, CancellationToken ct) =>
         _context.Departments
             .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.ManagerId == employeeId, ct);
+            .FirstOrDefaultAsync(d => d.ManagerId == employeeId && d.IsActive, ct);
 
     public async Task<(IReadOnlyList<Department> Items, int Total)> GetPagedAsync(
-        string? keyword, int page, int pageSize, CancellationToken ct)
+        string? keyword, bool includeInactive, int page, int pageSize, CancellationToken ct)
     {
         var query = _context.Departments
             .AsNoTracking()
             .Include(d => d.Manager)
+            .Include(d => d.Employees)
             .AsQueryable();
+
+        if (!includeInactive)
+            query = query.Where(d => d.IsActive);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
@@ -77,6 +88,11 @@ public class DepartmentRepository : IDepartmentRepository
             .AsNoTracking()
             .AnyAsync(e => e.DepartmentId == id, ct);
 
+    public Task<bool> ManagerExistsWithUserAsync(int managerEmployeeId, CancellationToken ct) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.Id == managerEmployeeId && e.UserId != null, ct);
+
     public async Task<int> AddAsync(Department entity, CancellationToken ct)
     {
         await _context.Departments.AddAsync(entity, ct);
@@ -100,15 +116,31 @@ public class DepartmentRepository : IDepartmentRepository
         return true;
     }
 
-    public async Task<bool> DeleteAsync(int id, CancellationToken ct)
+    public async Task<bool> ArchiveAsync(int id, CancellationToken ct)
     {
         var existing = await _context.Departments
             .FirstOrDefaultAsync(d => d.Id == id, ct);
 
         if (existing is null) return false;
 
-        _context.Departments.Remove(existing);
+        // Soft-delete: giữ bản ghi để đơn/task cũ vẫn tham chiếu được xưởng.
+        existing.IsActive = false;
         await _context.SaveChangesAsync(ct);
         return true;
     }
+
+    // ===== Bắc cầu User ↔ Department =====
+
+    public Task<Department?> GetByManagerUserIdAsync(int userId, CancellationToken ct) =>
+        _context.Departments
+            .AsNoTracking()
+            .Where(d => d.IsActive && d.Manager != null && d.Manager.UserId == userId)
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyList<int>> GetMemberUserIdsAsync(int departmentId, CancellationToken ct) =>
+        await _context.EmployeeInformations
+            .AsNoTracking()
+            .Where(e => e.DepartmentId == departmentId && e.UserId != null)
+            .Select(e => e.UserId!.Value)
+            .ToListAsync(ct);
 }
