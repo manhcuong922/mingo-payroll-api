@@ -33,6 +33,7 @@ public sealed class DatabaseSeeder
         await SeedDefaultAdminAsync(cancellationToken);
         await SeedDefaultRoleUsersAsync(cancellationToken);
         await SeedDefaultDepartmentsAsync(cancellationToken);
+        await SeedDefaultPositionsAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
@@ -182,6 +183,50 @@ public sealed class DatabaseSeeder
         await _context.Departments.AddRangeAsync(departments, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded {Count} default Department(s).", departments.Count);
+    }
+
+    private async Task SeedDefaultPositionsAsync(CancellationToken cancellationToken)
+    {
+        var positionExists = await _context.Positions
+            .AsNoTracking()
+            .AnyAsync(cancellationToken);
+
+        if (positionExists)
+        {
+            _logger.LogDebug("Positions already seeded; skipping.");
+            return;
+        }
+
+        var positions = new List<Position>
+        {
+            // Ban Giám đốc
+            new() { Code = "GD", Name = "Giám đốc", Description = "Điều hành chung toàn công ty." },
+            new() { Code = "PGD", Name = "Phó Giám đốc", Description = "Hỗ trợ Giám đốc điều hành." },
+
+            // Phòng Nhân sự
+            new() { Code = "TPHR", Name = "Trưởng phòng Nhân sự", Description = "Quản lý phòng Nhân sự." },
+            new() { Code = "NVHR", Name = "Nhân viên Nhân sự", Description = "Tuyển dụng, chế độ, hành chính nhân sự." },
+
+            // Phòng Kế toán
+            new() { Code = "KTT", Name = "Kế toán trưởng", Description = "Quản lý phòng Kế toán." },
+            new() { Code = "KT", Name = "Kế toán viên", Description = "Kế toán, tài chính, lương." },
+
+            // Phòng Kinh doanh
+            new() { Code = "TPKD", Name = "Trưởng phòng Kinh doanh", Description = "Quản lý phòng Kinh doanh." },
+            new() { Code = "SALE", Name = "Nhân viên Kinh doanh", Description = "Kinh doanh, chăm sóc khách hàng." },
+
+            // Phòng IT
+            new() { Code = "TPIT", Name = "Trưởng phòng IT", Description = "Quản lý phòng Công nghệ thông tin." },
+            new() { Code = "DEV", Name = "Lập trình viên", Description = "Phát triển phần mềm." },
+            new() { Code = "QA", Name = "Kiểm thử viên", Description = "Kiểm thử chất lượng phần mềm." },
+
+            // Chung
+            new() { Code = "TT", Name = "Thực tập sinh", Description = "Thử việc, đào tạo — chưa thuộc phòng ban cố định." },
+        };
+
+        await _context.Positions.AddRangeAsync(positions, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded {Count} default Position(s).", positions.Count);
     }
 
     private async Task SeedDefaultContractPartyAsync(CancellationToken cancellationToken)

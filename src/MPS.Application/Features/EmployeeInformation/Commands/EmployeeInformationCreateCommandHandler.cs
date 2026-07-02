@@ -29,6 +29,7 @@ public class EmployeeInformationCreateCommandHandler : IRequestHandler<EmployeeI
             PhoneNo = request.PhoneNo?.Trim(),
             EducationLevel = request.EducationLevel?.Trim(),
             PositionId = request.PositionId,
+            DepartmentId = request.DepartmentId,
             DependentsNo = request.DependentsNo,
             TaxNo = request.TaxNo?.Trim(),
             SocialNo = request.SocialNo?.Trim(),

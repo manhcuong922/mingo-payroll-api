@@ -167,9 +167,9 @@ Xóa phòng ban.
   - `404 Not Found` — id không tồn tại
   - `400 Bad Request` — phòng ban còn nhân viên, không cho xóa:
     ```json
-    { "error": "Cannot delete a department that still has employees." }
+    { "errors": ["Cannot delete a department that still has employees."] }
     ```
-    > Lưu ý: lỗi này dùng field `error` (object đơn), **không phải** `errors` (mảng) như lỗi validate Create/Update.
+    > Lưu ý: lỗi này cũng dùng field `errors` (mảng), giống lỗi validate Create/Update — không phải field `error` đơn.
 
 ---
 

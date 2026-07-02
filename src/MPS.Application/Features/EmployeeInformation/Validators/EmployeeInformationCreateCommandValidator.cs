@@ -6,7 +6,9 @@ namespace MPS.Application.Features.EmployeeInformation.Validators;
 
 public class EmployeeInformationCreateCommandValidator : AbstractValidator<EmployeeInformationCreateCommand>
 {
-    public EmployeeInformationCreateCommandValidator(IEmployeeInformationRepository repository)
+    public EmployeeInformationCreateCommandValidator(
+        IEmployeeInformationRepository repository,
+        IDepartmentRepository departmentRepository)
     {
         RuleFor(x => x.FullName)
             .NotEmpty().WithMessage("FullName is required.")
@@ -51,6 +53,13 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
             .GreaterThan(0).WithMessage("PositionId is required.")
             .MustAsync(async (positionId, ct) => await repository.PositionExistsAsync(positionId, ct))
             .WithMessage("Position does not exist.");
+
+        RuleFor(x => x.DepartmentId)
+            .Must(departmentId => departmentId == null || departmentId > 0)
+            .WithMessage("DepartmentId must be greater than 0 when specified.")
+            .MustAsync(async (departmentId, ct) =>
+                !departmentId.HasValue || await departmentRepository.GetByIdAsync(departmentId.Value, ct) is not null)
+            .WithMessage("Department does not exist.");
 
         RuleFor(x => x.DependentsNo)
             .GreaterThanOrEqualTo(0).WithMessage("DependentsNo must be 0 or greater.");
