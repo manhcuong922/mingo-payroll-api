@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -16,7 +17,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     private readonly IContractRepository _contractRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
-    private readonly IRegularHoursCapChecker _capChecker;
+    private readonly IComplianceLookupService _complianceLookup;
+    private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly IClock _clock;
 
     public RecordAttendanceCommandHandler(
@@ -25,7 +27,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         IContractRepository contractRepository,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
-        IRegularHoursCapChecker capChecker,
+        IComplianceLookupService complianceLookup,
+        IAttendanceEditLockChecker lockChecker,
         IClock clock)
     {
         _repository = repository;
@@ -33,7 +36,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         _contractRepository = contractRepository;
         _currentUser = currentUser;
         _splitter = splitter;
-        _capChecker = capChecker;
+        _complianceLookup = complianceLookup;
+        _lockChecker = lockChecker;
         _clock = clock;
     }
 
@@ -41,6 +45,9 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     {
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
+
+        await _lockChecker.EnsureCanModifyAsync(
+            request.WorkDate, request.OverrideReason, cancellationToken);
 
         if (!await _contractRepository.HasActiveContractAsync(request.EmployeeInformationId, cancellationToken))
             throw new DomainValidationException(
@@ -59,38 +66,35 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
             throw new ConflictException(
                 $"Attendance record already exists for employee {request.EmployeeInformationId} on {request.WorkDate:yyyy-MM-dd} shift {shift.Code}.");
 
-        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
-            _splitter, request.Status, request.CheckInTime, request.CheckOutTime, shift);
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
+        var checkInAt = request.CheckInAt;
+        var checkOutAt = request.CheckOutAt;
+        if (!AttendanceTimeRules.HasValidObservedRange(checkInAt, checkOutAt))
+            throw new DomainValidationException("CheckOutAt must be later than CheckInAt.");
 
-        // §9 Phase 1b — Cap 48h/tuần warn-then-confirm (Điều 105 BLLĐ).
-        if (!request.AcknowledgeWeeklyOvertimeWarnings)
-        {
-            var delta = dayHours + nightHours;
-            if (delta > 0)
-            {
-                var deltas = new[] { new WeeklyCapDelta(request.EmployeeInformationId, request.WorkDate, delta) };
-                var dailyWarnings = await _capChecker.CheckDailyAttendanceAsync(
-                    deltas,
-                    cancellationToken);
-                var weeklyWarnings = await _capChecker.CheckAttendanceAsync(
-                    deltas,
-                    cancellationToken);
-                if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
-                    throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
-            }
-        }
+        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+            _splitter,
+            request.Status,
+            checkInAt,
+            checkOutAt,
+            laborLaw.NightStartTime,
+            laborLaw.NightEndTime,
+            shift);
 
         var entity = new AttendanceRecordEntity
         {
             EmployeeInformationId = request.EmployeeInformationId,
             WorkDate = request.WorkDate,
             ShiftTemplateId = request.ShiftTemplateId,
-            CheckInTime = request.CheckInTime,
-            CheckOutTime = request.CheckOutTime,
+            CheckInAt = checkInAt,
+            CheckOutAt = checkOutAt,
             DayHours = dayHours,
             NightHours = nightHours,
             Status = request.Status,
             Notes = request.Notes,
+            OverrideReason = !string.IsNullOrWhiteSpace(request.OverrideReason)
+                ? request.OverrideReason.Trim()
+                : null,
             CreatedAt = _clock.UtcNow,
             CreatedByUserId = userId
         };

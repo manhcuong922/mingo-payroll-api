@@ -8,5 +8,6 @@ public sealed record EmployeeInformationGetPagedQuery(
     string? Keyword,
     int? PositionId,
     bool? HasAccount,
+    bool? HasActiveContract,
     int Page,
     int PageSize) : IRequest<PagedResult<EmployeeInformationDto>>;

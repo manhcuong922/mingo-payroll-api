@@ -16,6 +16,10 @@ public interface ILeaveRequestRepository
 
     Task<LeaveRequest?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<EmployeeLeaveMonthlySummary>> GetYearlyEmployeeSummaryAsync(
+        int year,
+        CancellationToken cancellationToken = default);
+
     Task<int> AddAsync(LeaveRequest entity, CancellationToken cancellationToken = default);
 
     Task<bool> UpdateAsync(LeaveRequest entity, CancellationToken cancellationToken = default);
@@ -36,3 +40,11 @@ public interface ILeaveRequestRepository
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
 }
+
+public sealed record EmployeeLeaveMonthlySummary(
+    int EmployeeInformationId,
+    int Month,
+    decimal ApprovedDays,
+    int ApprovedRequestCount,
+    decimal PendingDays,
+    int PendingRequestCount);

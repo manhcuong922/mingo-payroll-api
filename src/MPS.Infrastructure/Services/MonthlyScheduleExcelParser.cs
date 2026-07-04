@@ -1,13 +1,16 @@
 using System.Globalization;
-using MiniExcelLibs;
+using System.IO.Compression;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Attendance;
 
 namespace MPS.Infrastructure.Services;
 
 /// <summary>
-/// Parser cho file excel "bảng phân ca theo tháng" — dùng MiniExcel để tránh
-/// first-chance exception spam của DocumentFormat.OpenXml khi chạy với debugger.
+/// Parser cho file excel "bảng phân ca theo tháng".
+/// Đọc trực tiếp cấu trúc xlsx (zip/xml) để tránh crash runtime từ các thư viện Excel
+/// trong môi trường debug/local.
 ///
 /// Layout chính (1 sheet duy nhất):
 ///   Row 1..n: metadata key/value (cột A = nhãn, cột B = giá trị). Nhãn nhận diện:
@@ -23,6 +26,8 @@ namespace MPS.Infrastructure.Services;
 /// </summary>
 public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
 {
+    private sealed record SheetRef(string Name, string RelationshipId, string Path);
+
     private const string LegacyAssignmentsSheet = "Assignments";
     private const string LegacyScheduleInfoSheet = "ScheduleInfo";
 
@@ -38,16 +43,18 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         ["Ghi chú", "Notes"];
     private static readonly string[] OffMarkers =
         ["OFF", "NGHỈ", "NGHI", "N", "-"];
+    private static readonly Regex MonthInTitleRegex =
+        new(@"(?<month>\d{1,2})\s*/\s*(?<year>\d{4})", RegexOptions.Compiled);
+    private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+    private static readonly XNamespace OfficeRelationshipNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    private static readonly XNamespace PackageRelationshipNs = "http://schemas.openxmlformats.org/package/2006/relationships";
 
     public MonthlyScheduleParseResult Parse(Stream stream)
     {
         var errors = new List<MonthlyScheduleParseError>();
         var assignments = new List<MonthlyScheduleParsedAssignment>();
 
-        // Đọc 1 lần ra byte[] rồi mỗi MiniExcel call mở MemoryStream RIÊNG +
-        // dispose deterministic. Lý do: nếu reuse 1 stream giữa nhiều MiniExcel
-        // call, có rủi ro stream-state/finalizer chạy ngoài tầm kiểm soát (đặc
-        // biệt khi debugger giữ object lâu hơn) gây process crash khó debug.
+        // Đọc 1 lần ra byte[] rồi các bước parse mở MemoryStream riêng.
         byte[] fileBytes;
         try
         {
@@ -63,11 +70,10 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
             return new MonthlyScheduleParseResult(null, null, null, null, assignments, errors);
         }
 
-        List<string> sheetNames;
+        IReadOnlyList<SheetRef> sheets;
         try
         {
-            using var sheetStream = new MemoryStream(fileBytes, writable: false);
-            sheetNames = MiniExcel.GetSheetNames(sheetStream).ToList();
+            sheets = ReadWorkbookSheets(fileBytes);
         }
         catch (Exception ex)
         {
@@ -76,24 +82,31 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
             return new MonthlyScheduleParseResult(null, null, null, null, assignments, errors);
         }
 
-        if (sheetNames.Count == 0)
+        if (sheets.Count == 0)
         {
             errors.Add(new MonthlyScheduleParseError(null, null, "NO_SHEET",
                 "File excel không có worksheet nào."));
             return new MonthlyScheduleParseResult(null, null, null, null, assignments, errors);
         }
 
-        var hasLegacyInfo = sheetNames.Any(s =>
-            string.Equals(s, LegacyScheduleInfoSheet, StringComparison.OrdinalIgnoreCase));
-        var hasLegacyAssignments = sheetNames.Any(s =>
-            string.Equals(s, LegacyAssignmentsSheet, StringComparison.OrdinalIgnoreCase));
-
-        if (hasLegacyInfo && hasLegacyAssignments)
+        try
         {
-            return ParseLegacyTwoSheet(fileBytes, assignments, errors);
-        }
+            var hasLegacyInfo = sheets.Any(s =>
+                string.Equals(s.Name, LegacyScheduleInfoSheet, StringComparison.OrdinalIgnoreCase));
+            var hasLegacyAssignments = sheets.Any(s =>
+                string.Equals(s.Name, LegacyAssignmentsSheet, StringComparison.OrdinalIgnoreCase));
 
-        return ParseSingleSheet(fileBytes, sheetNames[0], assignments, errors);
+            if (hasLegacyInfo && hasLegacyAssignments)
+                return ParseLegacyTwoSheet(fileBytes, assignments, errors);
+
+            return ParseSingleSheet(fileBytes, sheets[0].Name, assignments, errors);
+        }
+        catch (Exception ex)
+        {
+            errors.Add(new MonthlyScheduleParseError(null, null, "INVALID_XLSX",
+                $"Không đọc được nội dung file xlsx ({ex.GetType().Name}: {ex.Message})."));
+            return new MonthlyScheduleParseResult(null, null, null, null, assignments, errors);
+        }
     }
 
     private static MonthlyScheduleParseResult ParseSingleSheet(
@@ -139,7 +152,13 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
             var value = GetCellString(row, "B");
             if (string.IsNullOrEmpty(key)) continue;
 
-            if (IsAnyAlias(key, ScheduleNameKeyAliases))
+            if (TryParseScheduleTitle(key, out var titleYear, out var titleMonth))
+            {
+                scheduleName ??= $"Bảng phân ca tháng {titleMonth:00}/{titleYear}";
+                year ??= titleYear;
+                month ??= titleMonth;
+            }
+            else if (IsAnyAlias(key, ScheduleNameKeyAliases))
             {
                 scheduleName = value;
             }
@@ -164,10 +183,10 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
 
         if (scheduleName is null)
             errors.Add(new MonthlyScheduleParseError(null, null, "MISSING_SCHEDULE_NAME",
-                "Thiếu dòng 'Tên bảng phân ca' ở đầu sheet."));
+                "Thiếu tiêu đề hoặc dòng 'Tên bảng phân ca' ở đầu sheet."));
         if (year is null || month is null)
             errors.Add(new MonthlyScheduleParseError(null, null, "MISSING_MONTH",
-                "Thiếu dòng 'Tháng' (định dạng MM/YYYY) ở đầu sheet."));
+                "Thiếu tiêu đề tháng hoặc dòng 'Tháng' (định dạng MM/YYYY) ở đầu sheet."));
 
         if (headerRowIndex < 0)
         {
@@ -339,16 +358,193 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         }
     }
 
-    // ─── MiniExcel helpers ──────────────────────────────────────────────────────
+    // ─── Lightweight xlsx helpers ──────────────────────────────────────────────
 
     private static List<IDictionary<string, object>> QueryRows(byte[] fileBytes, string sheetName)
     {
-        // MemoryStream riêng + using → MiniExcel chỉ "thấy" stream này trong scope
-        // của method, không có cách nào giữ reference sống lâu hơn (race với GC).
         using var stream = new MemoryStream(fileBytes, writable: false);
-        return MiniExcel.Query(stream, useHeaderRow: false, sheetName: sheetName)
-            .Cast<IDictionary<string, object>>()
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+
+        var sheet = ReadWorkbookSheets(archive)
+            .FirstOrDefault(s => string.Equals(s.Name, sheetName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException($"Worksheet '{sheetName}' not found.");
+
+        var worksheet = LoadXmlEntry(archive, sheet.Path)
+            ?? throw new InvalidDataException($"Worksheet entry '{sheet.Path}' not found.");
+        var sharedStrings = ReadSharedStrings(archive);
+        var sheetData = worksheet.Root?.Element(SpreadsheetNs + "sheetData");
+        if (sheetData is null) return [];
+
+        var rows = new List<IDictionary<string, object>>();
+        var fallbackRowNumber = 1;
+        foreach (var rowElement in sheetData.Elements(SpreadsheetNs + "row"))
+        {
+            var rowNumber = TryParseInt((string?)rowElement.Attribute("r")) ?? fallbackRowNumber;
+            fallbackRowNumber = rowNumber + 1;
+
+            var row = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            var fallbackColumnIndex = 1;
+            foreach (var cell in rowElement.Elements(SpreadsheetNs + "c"))
+            {
+                var reference = (string?)cell.Attribute("r");
+                var column = !string.IsNullOrWhiteSpace(reference)
+                    ? ExtractColumnLetter(reference)
+                    : ColumnName(fallbackColumnIndex);
+
+                fallbackColumnIndex = ColumnLetterToIndex(column) + 2;
+                var value = ReadCellValue(cell, sharedStrings);
+                if (value is not null)
+                    row[column] = value;
+            }
+
+            while (rows.Count < rowNumber - 1)
+                rows.Add(new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase));
+
+            if (rows.Count == rowNumber - 1)
+                rows.Add(row);
+            else
+                rows[rowNumber - 1] = row;
+        }
+
+        return rows;
+    }
+
+    private static IReadOnlyList<SheetRef> ReadWorkbookSheets(byte[] fileBytes)
+    {
+        using var stream = new MemoryStream(fileBytes, writable: false);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+        return ReadWorkbookSheets(archive);
+    }
+
+    private static IReadOnlyList<SheetRef> ReadWorkbookSheets(ZipArchive archive)
+    {
+        var workbook = LoadXmlEntry(archive, "xl/workbook.xml")
+            ?? throw new InvalidDataException("Missing xl/workbook.xml.");
+        var relationships = LoadXmlEntry(archive, "xl/_rels/workbook.xml.rels")
+            ?? throw new InvalidDataException("Missing xl/_rels/workbook.xml.rels.");
+
+        var relationshipTargets = relationships.Root?
+            .Elements(PackageRelationshipNs + "Relationship")
+            .Where(e => ((string?)e.Attribute("Type"))?.EndsWith("/worksheet", StringComparison.OrdinalIgnoreCase) == true)
+            .Select(e => new
+            {
+                Id = (string?)e.Attribute("Id"),
+                Target = (string?)e.Attribute("Target"),
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id) && !string.IsNullOrWhiteSpace(x.Target))
+            .ToDictionary(x => x.Id!, x => NormalizePackagePath(x.Target!), StringComparer.OrdinalIgnoreCase)
+            ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var result = new List<SheetRef>();
+        var sheetElements = workbook.Root?
+            .Element(SpreadsheetNs + "sheets")?
+            .Elements(SpreadsheetNs + "sheet") ?? [];
+
+        foreach (var sheet in sheetElements)
+        {
+            var name = (string?)sheet.Attribute("name");
+            var relationshipId = (string?)sheet.Attribute(OfficeRelationshipNs + "id");
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(relationshipId))
+                continue;
+            if (!relationshipTargets.TryGetValue(relationshipId, out var path))
+                continue;
+
+            result.Add(new SheetRef(name, relationshipId, path));
+        }
+
+        return result;
+    }
+
+    private static List<string> ReadSharedStrings(ZipArchive archive)
+    {
+        var document = LoadXmlEntry(archive, "xl/sharedStrings.xml");
+        if (document?.Root is null) return [];
+
+        return document.Root
+            .Elements(SpreadsheetNs + "si")
+            .Select(si => string.Concat(si.Descendants(SpreadsheetNs + "t").Select(t => (string?)t ?? string.Empty)))
             .ToList();
+    }
+
+    private static XDocument? LoadXmlEntry(ZipArchive archive, string path)
+    {
+        var entry = archive.GetEntry(path);
+        if (entry is null) return null;
+        using var entryStream = entry.Open();
+        return XDocument.Load(entryStream, LoadOptions.None);
+    }
+
+    private static object? ReadCellValue(XElement cell, IReadOnlyList<string> sharedStrings)
+    {
+        var type = (string?)cell.Attribute("t");
+        if (string.Equals(type, "inlineStr", StringComparison.OrdinalIgnoreCase))
+            return ReadInlineString(cell);
+
+        var raw = (string?)cell.Element(SpreadsheetNs + "v");
+        if (string.IsNullOrEmpty(raw))
+            return null;
+
+        if (string.Equals(type, "s", StringComparison.OrdinalIgnoreCase))
+        {
+            var index = TryParseInt(raw);
+            return index is not null && index.Value >= 0 && index.Value < sharedStrings.Count
+                ? sharedStrings[index.Value]
+                : raw;
+        }
+
+        if (string.Equals(type, "b", StringComparison.OrdinalIgnoreCase))
+            return raw == "1" ? "TRUE" : "FALSE";
+
+        if (string.Equals(type, "d", StringComparison.OrdinalIgnoreCase)
+            && DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date))
+        {
+            return date;
+        }
+
+        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
+            ? number
+            : raw;
+    }
+
+    private static string? ReadInlineString(XElement cell)
+    {
+        var inlineString = cell.Element(SpreadsheetNs + "is");
+        if (inlineString is null) return null;
+        var text = string.Concat(inlineString.Descendants(SpreadsheetNs + "t").Select(t => (string?)t ?? string.Empty));
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+    private static string NormalizePackagePath(string target)
+    {
+        var normalized = target.Replace('\\', '/');
+        if (normalized.StartsWith("/", StringComparison.Ordinal))
+            return normalized.TrimStart('/');
+
+        var parts = new List<string>();
+        foreach (var part in ("xl/" + normalized).Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part == ".") continue;
+            if (part == "..")
+            {
+                if (parts.Count > 0) parts.RemoveAt(parts.Count - 1);
+                continue;
+            }
+
+            parts.Add(part);
+        }
+
+        return string.Join('/', parts);
+    }
+
+    private static int? TryParseInt(string? value) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result)
+            ? result
+            : null;
+
+    private static string ExtractColumnLetter(string cellReference)
+    {
+        var letters = new string(cellReference.TakeWhile(char.IsLetter).ToArray());
+        return string.IsNullOrEmpty(letters) ? "A" : letters;
     }
 
     private static string? GetCellString(IDictionary<string, object> row, string columnLetter) =>
@@ -381,6 +577,12 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
             month = dt.Month;
             return true;
         }
+        if (value is double serial && TryParseExcelSerialDate(serial, out var serialDate))
+        {
+            year = serialDate.Year;
+            month = serialDate.Month;
+            return true;
+        }
 
         var text = value is string s ? s.Trim() : value.ToString()?.Trim();
         if (string.IsNullOrWhiteSpace(text)) return false;
@@ -391,7 +593,43 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
             month = parsed.Month;
             return true;
         }
+        if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed))
+        {
+            year = parsed.Year;
+            month = parsed.Month;
+            return true;
+        }
         return false;
+    }
+
+    private static bool TryParseExcelSerialDate(double serial, out DateTime date)
+    {
+        date = default;
+        if (serial is < 20000 or > 80000) return false;
+
+        try
+        {
+            date = DateTime.FromOADate(serial);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static string ColumnName(int columnIndex)
+    {
+        var dividend = columnIndex;
+        var columnName = string.Empty;
+        while (dividend > 0)
+        {
+            var modulo = (dividend - 1) % 26;
+            columnName = Convert.ToChar('A' + modulo) + columnName;
+            dividend = (dividend - modulo) / 26;
+        }
+
+        return columnName;
     }
 
     private static bool TryParseDay(string text, out int day)
@@ -402,6 +640,23 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         if (d is < 1 or > 31) return false;
         day = d;
         return true;
+    }
+
+    private static bool TryParseScheduleTitle(string? text, out int year, out int month)
+    {
+        year = 0;
+        month = 0;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (!text.Contains("PHÂN CA", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var match = MonthInTitleRegex.Match(text);
+        if (!match.Success) return false;
+        if (!int.TryParse(match.Groups["year"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out year))
+            return false;
+        if (!int.TryParse(match.Groups["month"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out month))
+            return false;
+
+        return month is >= 1 and <= 12;
     }
 
     private static bool IsAnyAlias(string? value, IReadOnlyList<string> aliases) =>

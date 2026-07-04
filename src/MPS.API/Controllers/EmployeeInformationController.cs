@@ -21,9 +21,11 @@ public class EmployeeInformationController : ControllerBase
 
     [HttpGet]
     [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] bool? hasActiveContract,
+        CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new EmployeeInformationGetAllQuery(), cancellationToken);
+        var result = await _mediator.Send(new EmployeeInformationGetAllQuery(hasActiveContract), cancellationToken);
         return Ok(result);
     }
 
@@ -33,6 +35,7 @@ public class EmployeeInformationController : ControllerBase
         [FromQuery] string? keyword,
         [FromQuery] int? positionId,
         [FromQuery] bool? hasAccount,
+        [FromQuery] bool? hasActiveContract,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
@@ -41,7 +44,7 @@ public class EmployeeInformationController : ControllerBase
         if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
         var result = await _mediator.Send(
-            new EmployeeInformationGetPagedQuery(keyword, positionId, hasAccount, page, pageSize),
+            new EmployeeInformationGetPagedQuery(keyword, positionId, hasAccount, hasActiveContract, page, pageSize),
             cancellationToken);
         return Ok(result);
     }

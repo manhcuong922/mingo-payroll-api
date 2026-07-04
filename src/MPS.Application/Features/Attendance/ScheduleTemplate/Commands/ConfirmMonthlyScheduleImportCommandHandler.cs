@@ -7,6 +7,7 @@ using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using ScheduleTemplateEntity = MPS.Domain.Entities.Attendance.ScheduleTemplate;
 
@@ -21,6 +22,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
     private readonly IClock _clock;
     private readonly IScheduleTemplateRepository _scheduleRepository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IContractRepository _contractRepository;
     private readonly IRegularHoursCapChecker _capChecker;
 
     public ConfirmMonthlyScheduleImportCommandHandler(
@@ -30,6 +32,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         IClock clock,
         IScheduleTemplateRepository scheduleRepository,
         IShiftTemplateRepository shiftRepository,
+        IContractRepository contractRepository,
         IRegularHoursCapChecker capChecker)
     {
         _cache = cache;
@@ -38,6 +41,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         _clock = clock;
         _scheduleRepository = scheduleRepository;
         _shiftRepository = shiftRepository;
+        _contractRepository = contractRepository;
         _capChecker = capChecker;
     }
 
@@ -71,6 +75,10 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         var fromDate = entry.Operations.Min(o => o.WorkDate);
         var toDate = entry.Operations.Max(o => o.WorkDate);
 
+        await EnsureEmployeesHaveActiveContractsAsync(
+            entry.Operations.Select(o => o.EmployeeInformationId).Distinct().ToArray(),
+            cancellationToken);
+
         // Group ops by shift để tạo 1 ScheduleTemplate per shift code.
         var groups = entry.Operations
             .GroupBy(o => o.ShiftTemplateId!.Value)
@@ -87,23 +95,23 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
             shiftHoursById[shiftId] = shift?.StandardHours ?? 0m;
         }
 
-        // §9 Phase 1b — Pre-check cap 48h/tuần TRƯỚC khi tạo bất kỳ ScheduleTemplate nào.
-        // Nếu cap warning throw GIỮA chừng loop, các template group trước đã commit DB → orphan.
-        if (!request.AcknowledgeWeeklyOvertimeWarnings)
+        // Pre-check cap before creating any ScheduleTemplate.
+        // If this fails in the loop below, earlier groups may already be committed.
+        var deltas = entry.Operations
+            .Where(o => o.ShiftTemplateId.HasValue)
+            .Select(o => new WeeklyCapDelta(
+                o.EmployeeInformationId,
+                o.WorkDate,
+                shiftHoursById.TryGetValue(o.ShiftTemplateId!.Value, out var h) ? h : 0m))
+            .ToList();
+        if (deltas.Count > 0)
         {
-            var deltas = entry.Operations
-                .Where(o => o.ShiftTemplateId.HasValue)
-                .Select(o => new WeeklyCapDelta(
-                    o.EmployeeInformationId,
-                    o.WorkDate,
-                    shiftHoursById.TryGetValue(o.ShiftTemplateId!.Value, out var h) ? h : 0m))
-                .ToList();
-            if (deltas.Count > 0)
+            var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
+            var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
+            if (!request.AcknowledgeWeeklyOvertimeWarnings
+                && (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0))
             {
-                var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
-                var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
-                if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
-                    throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
+                throw new RegularHoursCapExceededException(dailyWarnings, weeklyWarnings);
             }
         }
 
@@ -148,7 +156,6 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
                         o.Kind, o.EmployeeInformationId, o.WorkDate, o.ShiftTemplateId))
                     .ToList();
 
-                // Pre-check đã pass (hoặc user ack) → forward ack=true để skip duplicate check inside.
                 var batchResult = await _mediator.Send(
                     new BatchUpdateShiftAssignmentsCommand(
                         opsForBatch,
@@ -188,6 +195,24 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
             // Token chỉ dùng 1 lần — luôn xoá kể cả khi throw.
             _cache.Remove(request.PreviewToken);
         }
+    }
+
+    private async Task EnsureEmployeesHaveActiveContractsAsync(
+        IReadOnlyCollection<int> employeeIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
+        if (ids.Length == 0) return;
+
+        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeSet = activeIds.ToHashSet();
+        var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
+        if (inactiveIds.Length == 0) return;
+
+        var preview = string.Join(", ", inactiveIds.Take(10));
+        var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
+        throw new DomainValidationException(
+            $"Không thể import phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
     }
 
     private static string BuildBatchLabel(MonthlyScheduleImportCacheEntry entry, DateTime now)

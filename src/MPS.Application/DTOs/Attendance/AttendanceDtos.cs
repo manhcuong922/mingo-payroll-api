@@ -30,7 +30,6 @@ public sealed record AttendanceRuleSummaryDto(
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
     decimal WorkRateHoliday,
-    decimal WorkRateNight,
     bool IsActive);
 
 public sealed record AttendanceRuleDto(
@@ -40,7 +39,6 @@ public sealed record AttendanceRuleDto(
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
     decimal WorkRateHoliday,
-    decimal WorkRateNight,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
@@ -110,8 +108,7 @@ public sealed record PublicHolidayDto(
     int Id,
     string Name,
     DateOnly HolidayDate,
-    PublicHolidayCategory Category,
-    decimal? PayRateOverride,
+    DateOnly HolidayEndDate,
     string? Description,
     bool IsActive,
     DateTime CreatedAt,
@@ -124,8 +121,8 @@ public sealed record AttendanceRecordDto(
     DateOnly WorkDate,
     int? ShiftTemplateId,
     string? ShiftTemplateName,
-    TimeOnly? CheckInTime,
-    TimeOnly? CheckOutTime,
+    DateTime? CheckInAt,
+    DateTime? CheckOutAt,
     decimal DayHours,
     decimal NightHours,
     AttendanceStatus Status,
@@ -145,6 +142,28 @@ public sealed record EmployeeAttendanceSummaryDto(
     int EarlyLeaveDays,
     int TotalRecords);
 
+public sealed record AttendanceSettingDto(
+    int Id,
+    bool IsEditLockEnabled,
+    TimeOnly DailyEditCutoffTime,
+    int LockAfterDays,
+    bool AllowAdminOverride,
+    bool RequireOverrideReason,
+    string TimezoneId,
+    string? Notes,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt);
+
+public sealed record AttendanceLockStatusDto(
+    DateOnly WorkDate,
+    bool IsEditLockEnabled,
+    bool IsLocked,
+    DateTime? LockedAtUtc,
+    DateTime? LockedAtLocal,
+    bool CanOverride,
+    bool RequiresOverrideReason,
+    string? Message);
+
 public sealed record OvertimeRequestDto(
     int Id,
     int EmployeeInformationId,
@@ -153,12 +172,42 @@ public sealed record OvertimeRequestDto(
     TimeOnly OtStartTime,
     TimeOnly OtEndTime,
     decimal OtHours,
+    decimal OtDayHours,
+    decimal OtNightHours,
+    int? OvertimeSlotTemplateId,
+    OvertimeSlotSummaryDto? OvertimeSlotTemplate,
     OtRequestStatus Status,
     string? Reason,
     string? ReviewNote,
     int? ReviewedByUserId,
     DateTime? ReviewedAt,
     DateTime CreatedAt);
+
+public sealed record OvertimeSlotSummaryDto(
+    int Id,
+    string Code,
+    TimeOnly StartTime,
+    TimeOnly EndTime,
+    bool IsActive);
+
+public sealed record OvertimeSlotTemplateDto(
+    int Id,
+    string Code,
+    TimeOnly StartTime,
+    TimeOnly EndTime,
+    bool IsNightSlot,
+    // Override multiplier %; null = dùng sàn luật (composer Phase C resolve).
+    decimal? MultiplierNormalDay,
+    decimal? MultiplierWeeklyRestDay,
+    decimal? MultiplierHolidayDay,
+    decimal? MultiplierNormalNightNoPrevOt,
+    decimal? MultiplierNormalNightWithPrevOt,
+    decimal? MultiplierWeeklyRestNight,
+    decimal? MultiplierHolidayNight,
+    string? Description,
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt);
 
 public sealed record LeaveTypeDto(
     int Id,
@@ -168,6 +217,13 @@ public sealed record LeaveTypeDto(
     bool IsPaid,
     decimal? PaidRate,
     decimal? MaxDaysPerRequest,
+    bool AllowEmployeeSelection,
+    decimal? MaxDaysPerYear,
+    decimal? MaxDaysPerMonth,
+    decimal? MaxDaysPerWeek,
+    string ApplyScope,
+    string? TargetDepartmentIds,
+    string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
     bool IsActive,
@@ -206,6 +262,17 @@ public sealed record LeaveBalanceDto(
     decimal UsedDays,
     decimal RemainingDays);
 
+public sealed record EmployeeLeaveYearlySummaryDto(
+    int EmployeeInformationId,
+    string EmployeeFullName,
+    string? EmployeeCode,
+    int Year,
+    IReadOnlyList<decimal> MonthlyApprovedDays,
+    decimal TotalApprovedDays,
+    int ApprovedRequestCount,
+    decimal PendingDays,
+    int PendingRequestCount);
+
 public sealed record AttendanceAdjustmentDto(
     int Id,
     int AttendanceRecordId,
@@ -213,11 +280,11 @@ public sealed record AttendanceAdjustmentDto(
     string EmployeeFullName,
     DateOnly WorkDate,
     AttendanceStatus NewStatus,
-    TimeOnly? NewCheckInTime,
-    TimeOnly? NewCheckOutTime,
+    DateTime? NewCheckInAt,
+    DateTime? NewCheckOutAt,
     AttendanceStatus? OriginalStatus,
-    TimeOnly? OriginalCheckInTime,
-    TimeOnly? OriginalCheckOutTime,
+    DateTime? OriginalCheckInAt,
+    DateTime? OriginalCheckOutAt,
     string Reason,
     AdjustmentStatus Status,
     string? ReviewNote,

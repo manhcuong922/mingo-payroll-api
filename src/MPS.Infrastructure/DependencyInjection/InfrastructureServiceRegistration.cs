@@ -89,7 +89,9 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IEmployeeShiftAssignmentRepository, EmployeeShiftAssignmentRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IPublicHolidayRepository, PublicHolidayRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRecordRepository, AttendanceRecordRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceSettingRepository, AttendanceSettingRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeRequestRepository, OvertimeRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeSlotTemplateRepository, OvertimeSlotTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveTypeRepository, LeaveTypeRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveRequestRepository, LeaveRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();
@@ -101,6 +103,7 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<MPS.Application.Common.Interfaces.IWorkHourSplitter, WorkHourSplitter>();
         services.AddScoped<MPS.Application.Common.Interfaces.IScheduleTemplateExpander, ScheduleTemplateExpander>();
         services.AddScoped<MPS.Application.Common.Interfaces.IRegularHoursCapChecker, RegularHoursCapChecker>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IAttendanceEditLockChecker, MPS.Application.Features.Attendance.AttendanceSetting.Common.AttendanceEditLockChecker>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleExcelParser, MonthlyScheduleExcelParser>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleImportCache, MonthlyScheduleImportCache>();
 

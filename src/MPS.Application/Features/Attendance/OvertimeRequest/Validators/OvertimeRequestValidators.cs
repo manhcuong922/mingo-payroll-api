@@ -7,8 +7,9 @@ public class CreateOvertimeRequestCommandValidator : AbstractValidator<CreateOve
 {
     public CreateOvertimeRequestCommandValidator()
     {
-        RuleFor(x => x.OtEndTime).GreaterThan(x => x.OtStartTime)
-            .WithMessage("OtEndTime must be greater than OtStartTime.");
+        RuleFor(x => x)
+            .Must(x => x.OtStartTime != x.OtEndTime)
+            .WithMessage("OtEndTime must be different from OtStartTime.");
         RuleFor(x => x.Reason).MaximumLength(500);
     }
 }

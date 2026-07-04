@@ -143,11 +143,19 @@ public sealed class LaborLawConstantsRepository : ILaborLawConstantsRepository
 
         tracked.ValidFrom = entity.ValidFrom;
         tracked.ProbationSalaryMinPercent = entity.ProbationSalaryMinPercent;
-        tracked.NightShiftSurchargePercent = entity.NightShiftSurchargePercent;
+        tracked.OvertimeNightExtraPercent = entity.OvertimeNightExtraPercent;
+        tracked.NightWorkSurchargePercent = entity.NightWorkSurchargePercent;
+        tracked.NightStartTime = entity.NightStartTime;
+        tracked.NightEndTime = entity.NightEndTime;
         tracked.StandardWorkingHoursPerDay = entity.StandardWorkingHoursPerDay;
+        tracked.MaxRegularHoursPerWeek = entity.MaxRegularHoursPerWeek;
         tracked.StandardWorkingDaysPerMonth = entity.StandardWorkingDaysPerMonth;
         tracked.AnnualLeaveMinDays = entity.AnnualLeaveMinDays;
+        tracked.WorkRateNormalFloor = entity.WorkRateNormalFloor;
+        tracked.WorkRateWeeklyRestFloor = entity.WorkRateWeeklyRestFloor;
+        tracked.WorkRateHolidayFloor = entity.WorkRateHolidayFloor;
         tracked.OvertimeMaxHoursPerDay = entity.OvertimeMaxHoursPerDay;
+        tracked.OvertimeMaxHoursPerMonth = entity.OvertimeMaxHoursPerMonth;
         tracked.OvertimeMaxHoursPerYear = entity.OvertimeMaxHoursPerYear;
         tracked.LegalReference = entity.LegalReference;
         tracked.Note = entity.Note;

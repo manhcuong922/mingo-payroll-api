@@ -1,12 +1,13 @@
 using System.Globalization;
 using MPS.Application.Common.Interfaces;
-using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Infrastructure.Services;
 
 /// <summary>
 /// Checks regular working-hour caps from Điều 105 BLLĐ.
+/// Caps (8h/day, 48h/week) are read from <c>LaborLawConstantsVersion</c> via
+/// <see cref="IComplianceLookupService"/> — not hardcoded.
 /// Caller is responsible for computing each delta correctly for add/remove/update.
 /// </summary>
 public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
@@ -14,15 +15,18 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IAttendanceRecordRepository _attendanceRepository;
+    private readonly IComplianceLookupService _complianceLookup;
 
     public RegularHoursCapChecker(
         IEmployeeShiftAssignmentRepository assignmentRepository,
         IShiftTemplateRepository shiftRepository,
-        IAttendanceRecordRepository attendanceRepository)
+        IAttendanceRecordRepository attendanceRepository,
+        IComplianceLookupService complianceLookup)
     {
         _assignmentRepository = assignmentRepository;
         _shiftRepository = shiftRepository;
         _attendanceRepository = attendanceRepository;
+        _complianceLookup = complianceLookup;
     }
 
     public async Task<IReadOnlyList<DailyCapWarning>> CheckDailyAssignmentsAsync(
@@ -31,6 +35,9 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
     {
         var grouped = GroupByEmployeeDate(deltas);
         if (grouped.Count == 0) return Array.Empty<DailyCapWarning>();
+
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
+        var maxPerDay = laborLaw.StandardWorkingHoursPerDay;
 
         var employeeIds = grouped.Select(g => g.Key.EmployeeId).Distinct().ToList();
         var fromDate = grouped.Min(g => g.Key.WorkDate);
@@ -52,10 +59,10 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
                 .Sum(a => shiftHours.TryGetValue(a.ShiftTemplateId, out var h) ? h : 0m);
 
             var totalAfter = existingHours + group.Value;
-            if (totalAfter > RegularHoursCap.MaxPerDay)
+            if (totalAfter > maxPerDay)
             {
                 warnings.Add(new DailyCapWarning(
-                    empId, workDate, totalAfter, RegularHoursCap.MaxPerDay));
+                    empId, workDate, totalAfter, maxPerDay));
             }
         }
 
@@ -68,6 +75,9 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
     {
         var grouped = GroupByEmployeeWeek(deltas);
         if (grouped.Count == 0) return Array.Empty<WeeklyCapWarning>();
+
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
+        var maxPerWeek = laborLaw.MaxRegularHoursPerWeek;
 
         var employeeIds = grouped.Select(g => g.Key.EmployeeId).Distinct().ToList();
         var fromDate = grouped.Min(g => g.Key.WeekStart);
@@ -91,10 +101,10 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
                 .Sum(a => shiftHours.TryGetValue(a.ShiftTemplateId, out var h) ? h : 0m);
 
             var totalAfter = existingHours + group.Value;
-            if (totalAfter > RegularHoursCap.MaxPerWeek)
+            if (totalAfter > maxPerWeek)
             {
                 warnings.Add(new WeeklyCapWarning(
-                    empId, isoYear, isoWeek, weekStart, weekEnd, totalAfter, RegularHoursCap.MaxPerWeek));
+                    empId, isoYear, isoWeek, weekStart, weekEnd, totalAfter, maxPerWeek));
             }
         }
 
@@ -108,6 +118,9 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
         var grouped = GroupByEmployeeDate(deltas);
         if (grouped.Count == 0) return Array.Empty<DailyCapWarning>();
 
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
+        var maxPerDay = laborLaw.StandardWorkingHoursPerDay;
+
         var warnings = new List<DailyCapWarning>();
         foreach (var group in grouped)
         {
@@ -117,10 +130,10 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
             var existingHours = records.Sum(r => r.DayHours + r.NightHours);
 
             var totalAfter = existingHours + group.Value;
-            if (totalAfter > RegularHoursCap.MaxPerDay)
+            if (totalAfter > maxPerDay)
             {
                 warnings.Add(new DailyCapWarning(
-                    empId, workDate, totalAfter, RegularHoursCap.MaxPerDay));
+                    empId, workDate, totalAfter, maxPerDay));
             }
         }
 
@@ -134,6 +147,9 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
         var grouped = GroupByEmployeeWeek(deltas);
         if (grouped.Count == 0) return Array.Empty<WeeklyCapWarning>();
 
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
+        var maxPerWeek = laborLaw.MaxRegularHoursPerWeek;
+
         var warnings = new List<WeeklyCapWarning>();
         foreach (var group in grouped)
         {
@@ -143,10 +159,10 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
             var existingHours = records.Sum(r => r.DayHours + r.NightHours);
 
             var totalAfter = existingHours + group.Value;
-            if (totalAfter > RegularHoursCap.MaxPerWeek)
+            if (totalAfter > maxPerWeek)
             {
                 warnings.Add(new WeeklyCapWarning(
-                    empId, isoYear, isoWeek, weekStart, weekEnd, totalAfter, RegularHoursCap.MaxPerWeek));
+                    empId, isoYear, isoWeek, weekStart, weekEnd, totalAfter, maxPerWeek));
             }
         }
 

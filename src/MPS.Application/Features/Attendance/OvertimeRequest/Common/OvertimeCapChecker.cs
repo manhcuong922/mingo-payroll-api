@@ -38,20 +38,31 @@ public sealed class OvertimeCapChecker
     {
         var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
 
-        // BR-5 + BR-6 (đa-ca: tổng giờ chuẩn của các ca trên ngày)
-        var assignments = await _shiftRepository.GetByEmployeeAndDateAsync(
-            employeeInformationId, workDate, cancellationToken);
+        // BR-5 needs nearby dates because either the OT or the regular shift can cross midnight.
+        var overlapAssignments = await _shiftRepository.GetByEmployeesAndDateRangeAsync(
+            new[] { employeeInformationId },
+            workDate.AddDays(-1),
+            workDate.AddDays(1),
+            cancellationToken);
+
+        // BR-6 still uses the shifts assigned to the OT business date.
+        var assignments = overlapAssignments
+            .Where(a => a.WorkDate == workDate)
+            .ToList();
+
+        foreach (var a in overlapAssignments)
+        {
+            if (Overlaps(
+                    workDate, otStartTime, otEndTime,
+                    a.WorkDate, a.ShiftTemplate.StartTime, a.ShiftTemplate.EndTime))
+            {
+                throw new DomainValidationException(
+                    $"BR-5: OT overlaps regular shift '{a.ShiftTemplate.Code}' on {a.WorkDate:yyyy-MM-dd} ({a.ShiftTemplate.StartTime:HH\\:mm}–{a.ShiftTemplate.EndTime:HH\\:mm}).");
+            }
+        }
 
         if (assignments.Count > 0)
         {
-            // BR-5: OT không được overlap bất kỳ ca chuẩn nào.
-            foreach (var a in assignments)
-            {
-                if (Overlaps(otStartTime, otEndTime, a.ShiftTemplate.StartTime, a.ShiftTemplate.EndTime))
-                    throw new DomainValidationException(
-                        $"BR-5: OT overlaps regular shift '{a.ShiftTemplate.Code}' ({a.ShiftTemplate.StartTime:HH\\:mm}–{a.ShiftTemplate.EndTime:HH\\:mm}).");
-            }
-
             // BR-6: tổng giờ chuẩn các ca + OT ≤ 12h/ngày; OT ≤ 50% tổng giờ ca.
             var totalShiftHours = assignments.Sum(a => a.ShiftTemplate.StandardHours);
             var halfShift = totalShiftHours / 2m;
@@ -85,6 +96,34 @@ public sealed class OvertimeCapChecker
                 $"BR-8: Yearly OT cap exceeded. Approved={yearlyApproved}h, requested={otHours}h, cap={laborLaw.OvertimeMaxHoursPerYear}h.");
     }
 
-    private static bool Overlaps(TimeOnly aStart, TimeOnly aEnd, TimeOnly bStart, TimeOnly bEnd) =>
-        aStart < bEnd && bStart < aEnd;
+    private static bool Overlaps(
+        DateOnly aDate,
+        TimeOnly aStart,
+        TimeOnly aEnd,
+        DateOnly bDate,
+        TimeOnly bStart,
+        TimeOnly bEnd)
+    {
+        var (aAbsoluteStart, aAbsoluteEnd) = ToAbsoluteRange(aDate, aStart, aEnd);
+        var (bAbsoluteStart, bAbsoluteEnd) = ToAbsoluteRange(bDate, bStart, bEnd);
+
+        return aAbsoluteStart < bAbsoluteEnd && bAbsoluteStart < aAbsoluteEnd;
+    }
+
+    private static (long Start, long End) ToAbsoluteRange(
+        DateOnly date,
+        TimeOnly start,
+        TimeOnly end)
+    {
+        var baseTicks = (long)date.DayNumber * TimeSpan.TicksPerDay;
+        var absoluteStart = baseTicks + start.Ticks;
+        var absoluteEnd = baseTicks + end.Ticks;
+
+        if (absoluteEnd <= absoluteStart)
+        {
+            absoluteEnd += TimeSpan.TicksPerDay;
+        }
+
+        return (absoluteStart, absoluteEnd);
+    }
 }

@@ -18,7 +18,6 @@ internal static class ShiftTemplateMapper
             rule.WorkRateNormal,
             rule.WorkRateWeeklyRest,
             rule.WorkRateHoliday,
-            rule.WorkRateNight,
             rule.IsActive);
 
         return new ShiftTemplateDto(

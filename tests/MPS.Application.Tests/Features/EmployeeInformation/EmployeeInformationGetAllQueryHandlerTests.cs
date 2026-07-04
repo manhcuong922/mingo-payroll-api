@@ -34,7 +34,7 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
             new() { Id = 2, UserId = 22 },
         };
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(true);
-        _repo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(entities);
+        _repo.Setup(r => r.GetAllAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(entities);
         _mapper.Setup(m => m.Map<IReadOnlyList<EmployeeInformationDto>>(entities))
             .Returns(new List<EmployeeInformationDto> { MakeDto(1, 11), MakeDto(2, 22) });
 
@@ -56,7 +56,7 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
 
         result.Should().HaveCount(1);
         result[0].UserId.Should().Be(99);
-        _repo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.GetAllAsync(It.IsAny<bool?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

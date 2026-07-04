@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -54,13 +55,18 @@ public class CreateAttendanceAdjustmentCommandHandler : IRequestHandler<CreateAt
             throw new ConflictException(
                 $"A pending adjustment already exists for AttendanceRecord {request.AttendanceRecordId}.");
 
+        var newCheckInAt = request.NewCheckInAt;
+        var newCheckOutAt = request.NewCheckOutAt;
+        if (!AttendanceTimeRules.HasValidObservedRange(newCheckInAt, newCheckOutAt))
+            throw new DomainValidationException("NewCheckOutAt must be later than NewCheckInAt.");
+
         var entity = new AttendanceAdjustmentEntity
         {
             AttendanceRecordId = request.AttendanceRecordId,
             EmployeeInformationId = employeeId,
             NewStatus = request.NewStatus,
-            NewCheckInTime = request.NewCheckInTime,
-            NewCheckOutTime = request.NewCheckOutTime,
+            NewCheckInAt = newCheckInAt,
+            NewCheckOutAt = newCheckOutAt,
             Reason = request.Reason.Trim(),
             Status = AdjustmentStatus.Pending,
             CreatedAt = _clock.UtcNow,

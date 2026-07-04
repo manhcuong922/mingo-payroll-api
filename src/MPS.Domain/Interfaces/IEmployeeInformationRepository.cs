@@ -6,12 +6,15 @@ public interface IEmployeeInformationRepository
 {
     Task<EmployeeInformation?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
+        bool? hasActiveContract = null,
+        CancellationToken cancellationToken = default);
 
     Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
         string? keyword,
         int? positionId,
         bool? hasAccount,
+        bool? hasActiveContract,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);

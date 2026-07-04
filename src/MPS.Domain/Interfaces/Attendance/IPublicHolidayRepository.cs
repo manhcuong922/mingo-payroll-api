@@ -10,7 +10,7 @@ public interface IPublicHolidayRepository
 
     Task<bool> IsHolidayAsync(DateOnly date, CancellationToken cancellationToken = default);
 
-    Task<bool> ExistsByDateAsync(DateOnly date, int? excludeId, CancellationToken cancellationToken = default);
+    Task<bool> ExistsOverlapAsync(DateOnly startDate, DateOnly endDate, int? excludeId, CancellationToken cancellationToken = default);
 
     Task<int> AddAsync(PublicHoliday entity, CancellationToken cancellationToken = default);
 

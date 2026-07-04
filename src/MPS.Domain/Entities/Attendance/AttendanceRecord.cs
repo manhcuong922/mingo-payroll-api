@@ -14,8 +14,8 @@ public class AttendanceRecord
     public int ShiftTemplateId { get; set; }
     public ShiftTemplate ShiftTemplate { get; set; } = null!;
 
-    public TimeOnly? CheckInTime { get; set; }
-    public TimeOnly? CheckOutTime { get; set; }
+    public DateTime? CheckInAt { get; set; }
+    public DateTime? CheckOutAt { get; set; }
 
     /// <summary>
     /// Giờ làm rơi NGOÀI khung đêm (22h–6h). Compute từ CheckIn/CheckOut và

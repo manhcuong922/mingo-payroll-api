@@ -20,11 +20,14 @@ public class PublicHolidayRepository : IPublicHolidayRepository
         var end = new DateOnly(year, 12, 31);
         var query = _context.PublicHolidays
             .AsNoTracking()
-            .Where(h => h.HolidayDate >= start && h.HolidayDate <= end);
+            .Where(h => h.HolidayDate <= end && h.HolidayEndDate >= start);
+
         if (!includeInactive)
             query = query.Where(h => h.IsActive);
+
         return await query
             .OrderBy(h => h.HolidayDate)
+            .ThenBy(h => h.HolidayEndDate)
             .ToListAsync(cancellationToken);
     }
 
@@ -32,14 +35,19 @@ public class PublicHolidayRepository : IPublicHolidayRepository
         _context.PublicHolidays.AsNoTracking().FirstOrDefaultAsync(h => h.Id == id, cancellationToken);
 
     public Task<bool> IsHolidayAsync(DateOnly date, CancellationToken cancellationToken = default) =>
-        _context.PublicHolidays.AsNoTracking().AnyAsync(h => h.HolidayDate == date && h.IsActive, cancellationToken);
+        _context.PublicHolidays.AsNoTracking()
+            .AnyAsync(h => h.HolidayDate <= date && h.HolidayEndDate >= date && h.IsActive, cancellationToken);
 
-    public Task<bool> ExistsByDateAsync(DateOnly date, int? excludeId, CancellationToken cancellationToken = default)
+    public Task<bool> ExistsOverlapAsync(DateOnly startDate, DateOnly endDate, int? excludeId, CancellationToken cancellationToken = default)
     {
         var query = _context.PublicHolidays.AsNoTracking()
-            .Where(h => h.HolidayDate == date && h.IsActive);
+            .Where(h => h.HolidayDate <= endDate
+                     && h.HolidayEndDate >= startDate
+                     && h.IsActive);
+
         if (excludeId.HasValue)
             query = query.Where(h => h.Id != excludeId.Value);
+
         return query.AnyAsync(cancellationToken);
     }
 
@@ -57,8 +65,7 @@ public class PublicHolidayRepository : IPublicHolidayRepository
 
         tracked.Name = entity.Name;
         tracked.HolidayDate = entity.HolidayDate;
-        tracked.Category = entity.Category;
-        tracked.PayRateOverride = entity.PayRateOverride;
+        tracked.HolidayEndDate = entity.HolidayEndDate;
         tracked.Description = entity.Description;
         tracked.IsActive = entity.IsActive;
         tracked.UpdatedAt = entity.UpdatedAt;

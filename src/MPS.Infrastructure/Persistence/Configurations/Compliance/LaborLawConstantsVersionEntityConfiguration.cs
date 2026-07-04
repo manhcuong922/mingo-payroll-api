@@ -19,11 +19,20 @@ public class LaborLawConstantsVersionEntityConfiguration : IEntityTypeConfigurat
         builder.Property(e => e.IsArchived).IsRequired().HasDefaultValue(false);
 
         builder.Property(e => e.ProbationSalaryMinPercent).HasColumnType("decimal(5,2)").IsRequired();
-        builder.Property(e => e.NightShiftSurchargePercent).HasColumnType("decimal(5,2)").IsRequired();
+        builder.Property(e => e.OvertimeNightExtraPercent).HasColumnType("decimal(5,2)").IsRequired();
+        builder.Property(e => e.NightWorkSurchargePercent).HasColumnType("decimal(5,2)").IsRequired();
+        builder.Property(e => e.OvertimeNormalUpliftPercent).HasColumnType("decimal(5,2)").IsRequired();
+        builder.Property(e => e.NightStartTime).HasColumnType("time").IsRequired();
+        builder.Property(e => e.NightEndTime).HasColumnType("time").IsRequired();
         builder.Property(e => e.StandardWorkingHoursPerDay).HasColumnType("decimal(4,2)").IsRequired();
+        builder.Property(e => e.MaxRegularHoursPerWeek).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.StandardWorkingDaysPerMonth).HasColumnType("decimal(4,2)").IsRequired();
         builder.Property(e => e.AnnualLeaveMinDays).IsRequired();
+        builder.Property(e => e.WorkRateNormalFloor).HasColumnType("decimal(4,2)").IsRequired();
+        builder.Property(e => e.WorkRateWeeklyRestFloor).HasColumnType("decimal(4,2)").IsRequired();
+        builder.Property(e => e.WorkRateHolidayFloor).HasColumnType("decimal(4,2)").IsRequired();
         builder.Property(e => e.OvertimeMaxHoursPerDay).HasColumnType("decimal(4,2)").IsRequired();
+        builder.Property(e => e.OvertimeMaxHoursPerMonth).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.OvertimeMaxHoursPerYear).IsRequired();
 
         builder.Property(e => e.LegalReference).HasMaxLength(500).IsRequired();

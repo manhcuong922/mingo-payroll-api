@@ -3,6 +3,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.ScheduleTemplate.Commands;
@@ -13,17 +14,20 @@ public class ReapplyScheduleTemplateCommandHandler
     private readonly IScheduleTemplateRepository _repository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
+    private readonly IContractRepository _contractRepository;
     private readonly IMediator _mediator;
 
     public ReapplyScheduleTemplateCommandHandler(
         IScheduleTemplateRepository repository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
+        IContractRepository contractRepository,
         IMediator mediator)
     {
         _repository = repository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
+        _contractRepository = contractRepository;
         _mediator = mediator;
     }
 
@@ -47,6 +51,8 @@ public class ReapplyScheduleTemplateCommandHandler
             return new ScheduleTemplateApplyResultDto(
                 template.Id, dates.Count, 0, 0, 0, Array.Empty<ScheduleTemplateApplyConflictDto>());
         }
+
+        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
 
         // Sweep stale assignments: ngày nào đã bị bỏ khỏi pattern mới (VD: bỏ T7)
         // cần xóa trước khi apply, tránh false-conflict khi tạo template khác.
@@ -90,5 +96,23 @@ public class ReapplyScheduleTemplateCommandHandler
                     i.Status,
                     i.Reason))
                 .ToList());
+    }
+
+    private async Task EnsureEmployeesHaveActiveContractsAsync(
+        IReadOnlyCollection<int> employeeIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
+        if (ids.Length == 0) return;
+
+        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeSet = activeIds.ToHashSet();
+        var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
+        if (inactiveIds.Length == 0) return;
+
+        var preview = string.Join(", ", inactiveIds.Take(10));
+        var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
+        throw new DomainValidationException(
+            $"Không thể áp dụng lại bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
     }
 }

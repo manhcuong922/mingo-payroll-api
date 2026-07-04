@@ -1,4 +1,3 @@
-using System.Reflection;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -114,12 +113,15 @@ public class ScheduleTemplateController : ControllerBase
     {
         const string resourceName = "MPS.API.Resources.sample-monthly-shift-import.xlsx";
         var assembly = typeof(ScheduleTemplateController).Assembly;
-        var stream = assembly.GetManifestResourceStream(resourceName);
+        using var stream = assembly.GetManifestResourceStream(resourceName);
         if (stream is null)
             return NotFound(new { error = "Template resource not found." });
 
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+
         return File(
-            stream,
+            buffer.ToArray(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "phan-ca-thang-mau.xlsx");
     }

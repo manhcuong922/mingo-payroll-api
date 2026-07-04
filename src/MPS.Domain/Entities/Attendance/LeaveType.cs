@@ -24,6 +24,20 @@ public class LeaveType
     /// <summary>Giới hạn ngày tối đa cho mỗi đơn nghỉ. Null = không giới hạn.</summary>
     public decimal? MaxDaysPerRequest { get; set; }
 
+    public bool AllowEmployeeSelection { get; set; } = true;
+
+    public decimal? MaxDaysPerYear { get; set; }
+
+    public decimal? MaxDaysPerMonth { get; set; }
+
+    public decimal? MaxDaysPerWeek { get; set; }
+
+    public string ApplyScope { get; set; } = "AllEmployees";
+
+    public string? TargetDepartmentIds { get; set; }
+
+    public string? TargetEmployeeIds { get; set; }
+
     /// <summary>Loại nghỉ này có yêu cầu chứng từ đính kèm hay không.</summary>
     public bool RequireDocument { get; set; }
 

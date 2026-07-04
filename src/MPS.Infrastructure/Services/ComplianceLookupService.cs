@@ -191,8 +191,12 @@ public sealed class ComplianceLookupService : IComplianceLookupService
             v.AppliesToTax, v.AppliesToSocial, v.LegalReference);
 
     private static LaborLawConstantsSnapshot MapLaborLaw(Domain.Entities.Compliance.LaborLawConstantsVersion v) =>
-        new(v.Id, v.ValidFrom, v.ProbationSalaryMinPercent, v.NightShiftSurchargePercent,
-            v.StandardWorkingHoursPerDay, v.StandardWorkingDaysPerMonth,
-            v.AnnualLeaveMinDays, v.OvertimeMaxHoursPerDay, v.OvertimeMaxHoursPerYear,
-            v.LegalReference);
+        new(v.Id, v.ValidFrom, v.ProbationSalaryMinPercent, v.OvertimeNightExtraPercent,
+            v.NightWorkSurchargePercent, v.OvertimeNormalUpliftPercent,
+            v.NightStartTime, v.NightEndTime,
+            v.StandardWorkingHoursPerDay, v.MaxRegularHoursPerWeek,
+            v.StandardWorkingDaysPerMonth, v.AnnualLeaveMinDays,
+            v.WorkRateNormalFloor, v.WorkRateWeeklyRestFloor, v.WorkRateHolidayFloor,
+            v.OvertimeMaxHoursPerDay, v.OvertimeMaxHoursPerMonth,
+            v.OvertimeMaxHoursPerYear, v.LegalReference);
 }

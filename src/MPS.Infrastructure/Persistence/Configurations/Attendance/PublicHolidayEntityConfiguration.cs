@@ -14,14 +14,11 @@ public class PublicHolidayEntityConfiguration : IEntityTypeConfiguration<PublicH
 
         builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
         builder.Property(e => e.HolidayDate).IsRequired();
-        builder.Property(e => e.Category).HasConversion<byte>().IsRequired();
-        builder.Property(e => e.PayRateOverride).HasColumnType("decimal(4,2)");
+        builder.Property(e => e.HolidayEndDate).IsRequired();
         builder.Property(e => e.Description).HasMaxLength(500);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
 
-        builder.HasIndex(e => e.HolidayDate)
-            .IsUnique()
-            .HasFilter("[IsActive] = 1");
+        builder.HasIndex(e => new { e.HolidayDate, e.HolidayEndDate });
 
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt);

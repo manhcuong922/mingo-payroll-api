@@ -11,4 +11,13 @@ public interface ILeaveBalanceRepository
     Task<int> AddAsync(LeaveBalance entity, CancellationToken cancellationToken = default);
 
     Task<bool> UpdateAsync(LeaveBalance entity, CancellationToken cancellationToken = default);
+
+    Task UpsertForLeaveTypeAsync(
+        int leaveTypeId,
+        int year,
+        IReadOnlyCollection<int> employeeInformationIds,
+        decimal totalDays,
+        int userId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
 }

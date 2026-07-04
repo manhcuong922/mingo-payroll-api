@@ -14,17 +14,20 @@ public class CreateShiftTemplateCommandHandler : IRequestHandler<CreateShiftTemp
     private readonly IAttendanceRuleRepository _attendanceRuleRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IComplianceLookupService _complianceLookup;
 
     public CreateShiftTemplateCommandHandler(
         IShiftTemplateRepository repository,
         IAttendanceRuleRepository attendanceRuleRepository,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IComplianceLookupService complianceLookup)
     {
         _repository = repository;
         _attendanceRuleRepository = attendanceRuleRepository;
         _currentUser = currentUser;
         _clock = clock;
+        _complianceLookup = complianceLookup;
     }
 
     public async Task<int> Handle(CreateShiftTemplateCommand request, CancellationToken cancellationToken)
@@ -46,15 +49,15 @@ public class CreateShiftTemplateCommandHandler : IRequestHandler<CreateShiftTemp
             excludeId: null,
             cancellationToken);
 
-        if (request.EndTime <= request.StartTime)
-            throw new DomainValidationException("EndTime must be greater than StartTime.");
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
 
         ValidateBreakAndStandardHours(
             request.StartTime,
             request.EndTime,
             request.BreakStartTime,
             request.BreakEndTime,
-            request.StandardHours);
+            request.StandardHours,
+            laborLaw.StandardWorkingHoursPerDay);
 
         var rule = await _attendanceRuleRepository.GetByIdAsync(request.AppliedAttendanceRuleId, cancellationToken)
             ?? throw new NotFoundException($"AttendanceRule {request.AppliedAttendanceRuleId} not found.");
@@ -88,33 +91,30 @@ public class CreateShiftTemplateCommandHandler : IRequestHandler<CreateShiftTemp
         TimeOnly endTime,
         TimeOnly? breakStartTime,
         TimeOnly? breakEndTime,
-        decimal standardHours)
+        decimal standardHours,
+        decimal maxHoursPerDay)
     {
         if (breakStartTime.HasValue != breakEndTime.HasValue)
             throw new DomainValidationException("BR-28: BreakStartTime and BreakEndTime must be set together.");
 
-        var netHours = (decimal)(endTime - startTime).TotalHours;
+        if (!ShiftTimeCalculator.HasValidRange(startTime, endTime))
+            throw new DomainValidationException("StartTime and EndTime must be different.");
 
-        if (breakStartTime.HasValue && breakEndTime.HasValue)
-        {
-            var breakStart = breakStartTime.Value;
-            var breakEnd = breakEndTime.Value;
+        if (!ShiftTimeCalculator.HasValidBreakRange(startTime, endTime, breakStartTime, breakEndTime))
+            throw new DomainValidationException("BR-28: Break time must be within the shift time range.");
 
-            if (breakEnd <= breakStart)
-                throw new DomainValidationException("BR-28: BreakEndTime must be greater than BreakStartTime.");
-
-            if (breakStart < startTime || breakStart > endTime || breakEnd < startTime || breakEnd > endTime)
-                throw new DomainValidationException("BR-28: Break time must be within the shift time range.");
-
-            netHours -= (decimal)(breakEnd - breakStart).TotalHours;
-        }
+        var netHours = ShiftTimeCalculator.NetHours(
+            startTime,
+            endTime,
+            breakStartTime,
+            breakEndTime);
 
         if (standardHours > netHours)
             throw new DomainValidationException(
                 $"StandardHours ({standardHours}) cannot exceed net shift hours ({netHours}).");
 
-        if (standardHours > RegularHoursCap.MaxPerDay)
+        if (standardHours > maxHoursPerDay)
             throw new DomainValidationException(
-                $"StandardHours ({standardHours}) vượt cap {RegularHoursCap.MaxPerDay}h/ngày — Điều 105.1 BLLĐ.");
+                $"StandardHours ({standardHours}) vượt cap {maxHoursPerDay}h/ngày — Điều 105.1 BLLĐ.");
     }
 }

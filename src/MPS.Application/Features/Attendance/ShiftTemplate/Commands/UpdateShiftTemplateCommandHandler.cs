@@ -13,17 +13,20 @@ public class UpdateShiftTemplateCommandHandler : IRequestHandler<UpdateShiftTemp
     private readonly IAttendanceRuleRepository _attendanceRuleRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IComplianceLookupService _complianceLookup;
 
     public UpdateShiftTemplateCommandHandler(
         IShiftTemplateRepository repository,
         IAttendanceRuleRepository attendanceRuleRepository,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IComplianceLookupService complianceLookup)
     {
         _repository = repository;
         _attendanceRuleRepository = attendanceRuleRepository;
         _currentUser = currentUser;
         _clock = clock;
+        _complianceLookup = complianceLookup;
     }
 
     public async Task<bool> Handle(UpdateShiftTemplateCommand request, CancellationToken cancellationToken)
@@ -48,15 +51,15 @@ public class UpdateShiftTemplateCommandHandler : IRequestHandler<UpdateShiftTemp
             excludeId: request.Id,
             cancellationToken);
 
-        if (request.EndTime <= request.StartTime)
-            throw new DomainValidationException("EndTime must be greater than StartTime.");
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
 
         CreateShiftTemplateCommandHandler.ValidateBreakAndStandardHours(
             request.StartTime,
             request.EndTime,
             request.BreakStartTime,
             request.BreakEndTime,
-            request.StandardHours);
+            request.StandardHours,
+            laborLaw.StandardWorkingHoursPerDay);
 
         var rule = await _attendanceRuleRepository.GetByIdAsync(request.AppliedAttendanceRuleId, cancellationToken)
             ?? throw new NotFoundException($"AttendanceRule {request.AppliedAttendanceRuleId} not found.");

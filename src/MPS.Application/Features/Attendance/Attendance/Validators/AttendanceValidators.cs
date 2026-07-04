@@ -12,13 +12,17 @@ public class RecordAttendanceCommandValidator : AbstractValidator<RecordAttendan
         RuleFor(x => x.EmployeeInformationId).GreaterThan(0);
         RuleFor(x => x.ShiftTemplateId).GreaterThan(0).WithMessage("ShiftTemplateId là bắt buộc.");
         RuleFor(x => x.Notes).MaximumLength(500);
-        RuleFor(x => x).Must(c => c.CheckInTime is null || c.CheckOutTime is null || c.CheckInTime <= c.CheckOutTime)
-            .WithMessage("CheckOutTime must be on/after CheckInTime.");
+        RuleFor(x => x.OverrideReason).MaximumLength(1000);
+        RuleFor(x => x).Must(c => AttendanceTimeRules.HasValidObservedRange(c.CheckInAt, c.CheckOutAt))
+            .WithMessage("CheckOutAt must be later than CheckInAt.");
 
         RuleFor(x => x).Custom((cmd, ctx) =>
         {
             var error = AttendanceTimeRules.ValidateNotInFuture(
-                cmd.WorkDate, cmd.CheckInTime, cmd.CheckOutTime, clock.UtcNow);
+                cmd.WorkDate,
+                cmd.CheckInAt,
+                cmd.CheckOutAt,
+                clock.UtcNow);
             if (error is not null)
                 ctx.AddFailure(nameof(cmd.WorkDate), error);
         });
@@ -33,13 +37,16 @@ public class UpdateAttendanceCommandValidator : AbstractValidator<UpdateAttendan
         RuleFor(x => x.ShiftTemplateId).GreaterThan(0).WithMessage("ShiftTemplateId là bắt buộc.");
         RuleFor(x => x.Notes).MaximumLength(500);
         RuleFor(x => x.OverrideReason).MaximumLength(1000);
-        RuleFor(x => x).Must(c => c.CheckInTime is null || c.CheckOutTime is null || c.CheckInTime <= c.CheckOutTime)
-            .WithMessage("CheckOutTime must be on/after CheckInTime.");
+        RuleFor(x => x).Must(c => AttendanceTimeRules.HasValidObservedRange(c.CheckInAt, c.CheckOutAt))
+            .WithMessage("CheckOutAt must be later than CheckInAt.");
 
         RuleFor(x => x).Custom((cmd, ctx) =>
         {
             var error = AttendanceTimeRules.ValidateNotInFuture(
-                cmd.WorkDate, cmd.CheckInTime, cmd.CheckOutTime, clock.UtcNow);
+                cmd.WorkDate,
+                cmd.CheckInAt,
+                cmd.CheckOutAt,
+                clock.UtcNow);
             if (error is not null)
                 ctx.AddFailure(nameof(cmd.WorkDate), error);
         });
@@ -62,8 +69,8 @@ public class BulkRecordAttendanceCommandValidator : AbstractValidator<BulkRecord
         {
             items.RuleFor(r => r.EmployeeInformationId).GreaterThan(0);
             items.RuleFor(r => r.ShiftTemplateId).GreaterThan(0).WithMessage("ShiftTemplateId là bắt buộc.");
-            items.RuleFor(r => r).Must(r => r.CheckInTime is null || r.CheckOutTime is null || r.CheckInTime <= r.CheckOutTime)
-                .WithMessage("CheckOutTime must be on/after CheckInTime.");
+            items.RuleFor(r => r).Must(r => AttendanceTimeRules.HasValidObservedRange(r.CheckInAt, r.CheckOutAt))
+                .WithMessage("CheckOutAt must be later than CheckInAt.");
             items.RuleFor(r => r.Notes).MaximumLength(500);
             items.RuleFor(r => r.OverrideReason).MaximumLength(1000);
         });

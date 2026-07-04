@@ -59,6 +59,75 @@ public class LeaveRequestRepository : ILeaveRequestRepository
             .Include(r => r.LeaveType)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<EmployeeLeaveMonthlySummary>> GetYearlyEmployeeSummaryAsync(
+        int year,
+        CancellationToken cancellationToken = default)
+    {
+        var yearStart = new DateOnly(year, 1, 1);
+        var yearEnd = new DateOnly(year, 12, 31);
+
+        var requests = await _context.LeaveRequests
+            .AsNoTracking()
+            .Where(r => r.StartDate <= yearEnd
+                && r.EndDate >= yearStart
+                && (r.Status == LeaveRequestStatus.Approved || r.Status == LeaveRequestStatus.Pending))
+            .Select(r => new
+            {
+                r.EmployeeInformationId,
+                r.StartDate,
+                r.EndDate,
+                r.Status
+            })
+            .ToListAsync(cancellationToken);
+
+        var buckets = new Dictionary<(int EmployeeInformationId, int Month), SummaryBucket>();
+
+        foreach (var request in requests)
+        {
+            for (var month = 1; month <= 12; month++)
+            {
+                var monthStart = new DateOnly(year, month, 1);
+                var monthEnd = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+                var start = request.StartDate > monthStart ? request.StartDate : monthStart;
+                var end = request.EndDate < monthEnd ? request.EndDate : monthEnd;
+                if (end < start) continue;
+
+                var days = CountWorkingDays(start, end);
+                if (days <= 0m) continue;
+
+                var key = (request.EmployeeInformationId, month);
+                if (!buckets.TryGetValue(key, out var bucket))
+                {
+                    bucket = new SummaryBucket();
+                    buckets[key] = bucket;
+                }
+
+                if (request.Status == LeaveRequestStatus.Approved)
+                {
+                    bucket.ApprovedDays += days;
+                    bucket.ApprovedRequestCount += 1;
+                }
+                else if (request.Status == LeaveRequestStatus.Pending)
+                {
+                    bucket.PendingDays += days;
+                    bucket.PendingRequestCount += 1;
+                }
+            }
+        }
+
+        return buckets
+            .OrderBy(item => item.Key.EmployeeInformationId)
+            .ThenBy(item => item.Key.Month)
+            .Select(item => new EmployeeLeaveMonthlySummary(
+                item.Key.EmployeeInformationId,
+                item.Key.Month,
+                item.Value.ApprovedDays,
+                item.Value.ApprovedRequestCount,
+                item.Value.PendingDays,
+                item.Value.PendingRequestCount))
+            .ToList();
+    }
+
     public async Task<int> AddAsync(LeaveRequest entity, CancellationToken cancellationToken = default)
     {
         await _context.LeaveRequests.AddAsync(entity, cancellationToken);
@@ -107,8 +176,9 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         if (request.CreatedByUserId == reviewedByUserId)
             throw new DomainValidationException("BR-10: Self-approval is forbidden.");
 
-        // FT-13: deduct balance only when the leave type is configured to do so (vd Annual)
-        if (request.LeaveType.DeductsBalance)
+        // FT-13: leave types with a yearly quota are tracked in LeaveBalances.
+        var tracksBalance = request.LeaveType.DeductsBalance || request.LeaveType.MaxDaysPerYear.HasValue;
+        if (tracksBalance)
         {
             var balance = await _context.LeaveBalances.FirstOrDefaultAsync(
                 b => b.EmployeeInformationId == request.EmployeeInformationId
@@ -116,9 +186,35 @@ public class LeaveRequestRepository : ILeaveRequestRepository
                   && b.LeaveTypeId == request.LeaveTypeId,
                 cancellationToken);
 
+            var yearlyQuota = request.LeaveType.MaxDaysPerYear ?? request.LeaveType.MaxDaysPerRequest ?? 0m;
             if (balance is null)
-                throw new DomainValidationException(
-                    $"No '{request.LeaveType.Code}' balance exists for employee {request.EmployeeInformationId} in {request.StartDate.Year}.");
+            {
+                if (yearlyQuota <= 0m)
+                    throw new DomainValidationException(
+                        $"No '{request.LeaveType.Code}' balance exists for employee {request.EmployeeInformationId} in {request.StartDate.Year}.");
+
+                balance = new LeaveBalance
+                {
+                    EmployeeInformationId = request.EmployeeInformationId,
+                    Year = request.StartDate.Year,
+                    LeaveTypeId = request.LeaveTypeId,
+                    BaseDays = yearlyQuota,
+                    SeniorityBonusDays = 0m,
+                    TotalDays = yearlyQuota,
+                    UsedDays = 0m,
+                    CreatedAt = nowUtc,
+                    CreatedByUserId = reviewedByUserId
+                };
+                await _context.LeaveBalances.AddAsync(balance, cancellationToken);
+            }
+            else if (balance.TotalDays <= 0m && yearlyQuota > 0m)
+            {
+                balance.BaseDays = yearlyQuota;
+                balance.SeniorityBonusDays = 0m;
+                balance.TotalDays = yearlyQuota;
+                balance.UpdatedAt = nowUtc;
+                balance.UpdatedByUserId = reviewedByUserId;
+            }
 
             var remaining = balance.TotalDays - balance.UsedDays;
             if (remaining < request.TotalDays)
@@ -176,5 +272,23 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         await _context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return true;
+    }
+
+    private static decimal CountWorkingDays(DateOnly start, DateOnly end)
+    {
+        var count = 0;
+        for (var date = start; date <= end; date = date.AddDays(1))
+        {
+            if (date.DayOfWeek != DayOfWeek.Sunday) count++;
+        }
+        return count;
+    }
+
+    private sealed class SummaryBucket
+    {
+        public decimal ApprovedDays { get; set; }
+        public int ApprovedRequestCount { get; set; }
+        public decimal PendingDays { get; set; }
+        public int PendingRequestCount { get; set; }
     }
 }

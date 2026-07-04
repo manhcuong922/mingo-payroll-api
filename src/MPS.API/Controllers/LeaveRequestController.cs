@@ -38,6 +38,19 @@ public class LeaveRequestController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("summary/yearly")]
+    [HasPermission(Permissions.LeaveRequestReadAll)]
+    public async Task<IActionResult> GetYearlySummary(
+        [FromQuery] int year,
+        CancellationToken cancellationToken)
+    {
+        if (year < 1900 || year > 9999)
+            return BadRequest(new { error = "Year must be between 1900 and 9999." });
+
+        var result = await _mediator.Send(new GetEmployeeLeaveYearlySummaryQuery(year), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("me")]
     [HasPermission(Permissions.LeaveRequestReadSelf)]
     public async Task<IActionResult> GetMine(

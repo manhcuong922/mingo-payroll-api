@@ -2,6 +2,7 @@ using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using ScheduleTemplateEntity = MPS.Domain.Entities.Attendance.ScheduleTemplate;
 
@@ -14,6 +15,7 @@ public class UpdateScheduleTemplateCommandHandler
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
+    private readonly IContractRepository _contractRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -22,6 +24,7 @@ public class UpdateScheduleTemplateCommandHandler
         IShiftTemplateRepository shiftRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
+        IContractRepository contractRepository,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -29,6 +32,7 @@ public class UpdateScheduleTemplateCommandHandler
         _shiftRepository = shiftRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
+        _contractRepository = contractRepository;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -70,6 +74,8 @@ public class UpdateScheduleTemplateCommandHandler
             throw new DomainValidationException($"Shift template {request.ShiftTemplateId} không active.");
         }
 
+        await EnsureEmployeesHaveActiveContractsAsync(request.EmployeeInformationIds, cancellationToken);
+
         // Hướng mới: pattern-date overlap check chỉ chặn khi ca mới giao thoa thời gian với ca đã có.
         var newShape = new ScheduleTemplateEntity
         {
@@ -104,6 +110,24 @@ public class UpdateScheduleTemplateCommandHandler
         await _repository.UpdateAsync(existing, request.EmployeeInformationIds, cancellationToken);
 
         return Unit.Value;
+    }
+
+    private async Task EnsureEmployeesHaveActiveContractsAsync(
+        IReadOnlyCollection<int> employeeIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
+        if (ids.Length == 0) return;
+
+        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeSet = activeIds.ToHashSet();
+        var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
+        if (inactiveIds.Length == 0) return;
+
+        var preview = string.Join(", ", inactiveIds.Take(10));
+        var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
+        throw new DomainValidationException(
+            $"Không thể cập nhật bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
     }
 
     private async Task EnsureNoPatternOverlapAsync(

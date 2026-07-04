@@ -71,6 +71,18 @@ public class ExceptionHandlingMiddleware
                 weeklyCapWarnings = rcex.WeeklyWarnings,
             }, JsonOptions));
         }
+        catch (RegularHoursCapExceededException rhex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = "REGULAR_HOURS_CAP_EXCEEDED",
+                error = rhex.Message,
+                dailyCapViolations = rhex.DailyViolations,
+                weeklyCapViolations = rhex.WeeklyViolations,
+            }, JsonOptions));
+        }
         catch (WeeklyRegularHoursCapWarningException wcex)
         {
             context.Response.StatusCode = (int)HttpStatusCode.Conflict;

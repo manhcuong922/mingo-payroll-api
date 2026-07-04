@@ -1,4 +1,5 @@
 using FluentValidation;
+using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.AttendanceAdjustment.Commands;
 
 namespace MPS.Application.Features.Attendance.AttendanceAdjustment.Validators;
@@ -9,8 +10,8 @@ public class CreateAttendanceAdjustmentCommandValidator : AbstractValidator<Crea
     {
         RuleFor(x => x.AttendanceRecordId).GreaterThan(0);
         RuleFor(x => x.Reason).NotEmpty().MaximumLength(1000);
-        RuleFor(x => x).Must(c => c.NewCheckInTime is null || c.NewCheckOutTime is null || c.NewCheckInTime <= c.NewCheckOutTime)
-            .WithMessage("NewCheckOutTime must be on/after NewCheckInTime.");
+        RuleFor(x => x).Must(c => AttendanceTimeRules.HasValidObservedRange(c.NewCheckInAt, c.NewCheckOutAt))
+            .WithMessage("NewCheckOutAt must be later than NewCheckInAt.");
     }
 }
 
@@ -20,8 +21,8 @@ public class OverrideAttendanceCommandValidator : AbstractValidator<OverrideAtte
     {
         RuleFor(x => x.EmployeeInformationId).GreaterThan(0);
         RuleFor(x => x.OverrideReason).NotEmpty().MaximumLength(1000);
-        RuleFor(x => x).Must(c => c.NewCheckInTime is null || c.NewCheckOutTime is null || c.NewCheckInTime <= c.NewCheckOutTime)
-            .WithMessage("NewCheckOutTime must be on/after NewCheckInTime.");
+        RuleFor(x => x).Must(c => AttendanceTimeRules.HasValidObservedRange(c.NewCheckInAt, c.NewCheckOutAt))
+            .WithMessage("NewCheckOutAt must be later than NewCheckInAt.");
     }
 }
 

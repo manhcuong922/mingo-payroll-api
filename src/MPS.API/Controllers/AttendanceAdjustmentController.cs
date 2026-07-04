@@ -53,7 +53,8 @@ public class AttendanceAdjustmentController : ControllerBase
     {
         var id = await _mediator.Send(new CreateAttendanceAdjustmentCommand(
             request.AttendanceRecordId, request.NewStatus,
-            request.NewCheckInTime, request.NewCheckOutTime, request.Reason), cancellationToken);
+            request.NewCheckInAt, request.NewCheckOutAt,
+            request.Reason), cancellationToken);
         return Created($"/api/attendance-adjustments/{id}", new { id });
     }
 
@@ -92,7 +93,8 @@ public class AttendanceAdjustmentController : ControllerBase
     {
         var id = await _mediator.Send(new OverrideAttendanceCommand(
             employeeInformationId, workDate, shiftTemplateId, request.NewStatus,
-            request.NewCheckInTime, request.NewCheckOutTime, request.OverrideReason), cancellationToken);
+            request.NewCheckInAt, request.NewCheckOutAt,
+            request.OverrideReason), cancellationToken);
         return Created($"/api/attendance-adjustments/{id}", new { id });
     }
 }

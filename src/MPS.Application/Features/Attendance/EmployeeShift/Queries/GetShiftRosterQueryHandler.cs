@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.DTOs.Attendance;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.EmployeeShift.Queries;
@@ -10,10 +11,14 @@ public class GetShiftRosterQueryHandler : IRequestHandler<GetShiftRosterQuery, S
     private const int MaxRosterDays = 366;
 
     private readonly IEmployeeShiftAssignmentRepository _repository;
+    private readonly IContractRepository _contractRepository;
 
-    public GetShiftRosterQueryHandler(IEmployeeShiftAssignmentRepository repository)
+    public GetShiftRosterQueryHandler(
+        IEmployeeShiftAssignmentRepository repository,
+        IContractRepository contractRepository)
     {
         _repository = repository;
+        _contractRepository = contractRepository;
     }
 
     public async Task<ShiftRosterDto> Handle(GetShiftRosterQuery request, CancellationToken cancellationToken)
@@ -32,7 +37,15 @@ public class GetShiftRosterQueryHandler : IRequestHandler<GetShiftRosterQuery, S
             throw new DomainValidationException($"Khoảng ngày tối đa {MaxRosterDays} ngày, hiện {span}.");
         }
 
-        var employeeIds = request.EmployeeInformationIds.Distinct().ToList();
+        var requestedEmployeeIds = request.EmployeeInformationIds.Distinct().ToArray();
+        var activeEmployeeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(
+            requestedEmployeeIds,
+            cancellationToken);
+        var employeeIds = activeEmployeeIds.OrderBy(id => id).ToList();
+        if (employeeIds.Count == 0)
+        {
+            return new ShiftRosterDto(request.FromDate, request.ToDate, employeeIds, Array.Empty<EmployeeShiftAssignmentDto>(), Array.Empty<ShiftRosterLockedDateDto>());
+        }
 
         var assignments = await _repository.GetByEmployeesAndDateRangeAsync(
             employeeIds, request.FromDate, request.ToDate, cancellationToken);

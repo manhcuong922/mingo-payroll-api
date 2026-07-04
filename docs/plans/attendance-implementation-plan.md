@@ -4,12 +4,12 @@
 **Project:** `mingo-payroll-api` (.NET 8, Clean Architecture, EF Core, MediatR CQRS).
 **Module:** Attendance
 **SRS mapping:** FT-09, FT-10, FT-11, FT-12, FT-13, FT-14
-**Last updated:** 2026-06-28 (§9 Phase 1a + 1a.1 + 1b — code đã land. 8h/ngày và 48h/tuần vượt → 409 + warning list → FE hiển thị popup xác nhận → user OK thì retry với ack=true. Phase 1c còn pending, phụ thuộc §10.)
+**Last updated:** 2026-07-02 (§9 Phase 1a + 1a.1 + 1b đã land; §10 wiring partial: cap đọc từ snapshot, `RegularHoursCap.cs` drop, `PayRuleFloor` → `WorkRateFloorValidator`. Option 4 OT formulas: `LaborLawConstantsVersion.OvertimeNormalUpliftPercent = 50m` (Điều 98.1.a) đã land; bảng §7.3.6 thêm case 210%. **OT Slot Template module** (entity + CRUD + permissions IDs 137–140 + controller `/api/overtime-slot-templates`) + **§7 Phase B** (split `OvertimeRequest.OtDayHours/OtNightHours` qua splitter) đã land. `OvertimeRequest.Create` giờ require `OvertimeSlotTemplateId`; raw start/end drop khỏi API contract. Migration `20260630150000_Attendance_OvertimeSlotTemplate`. **FE (`mingo-payroll-ui`) 2026-07-02**: page `OvertimeSlotTemplatesPage` + `OvertimeSlotTemplateFormDialog` + service/hook/types + route `/overtime-slot-templates` + sidebar link ("Khung giờ OT") + additive fields `otDayHours/otNightHours/overtimeSlotTemplate` trên `OvertimeRequestDto`. **Slot override multipliers (2026-07-02)**: `OvertimeSlotTemplate` thêm `IsNightSlot` + 7 field nullable decimal override (3 day + 4 night); `OvertimeMultiplierFloors` chứa sàn luật (Điều 98); validator ép `override ≥ floor`; migration `20260702120000_OvertimeSlotTemplate_AddOverrideMultipliers`; FE form expand 3/4 field theo `IsNightSlot` với placeholder = sàn, auto-suggest từ overlap 22:00–06:00.)
 
 §1–6 + §11 là snapshot code đã shipped. §7 Phase A + §9 Phase 1a/1a.1/1b đã land; §7 Phase B/C, §9 Phase 1c, §8/§10 là plan mở rộng:
 - §7 **Phase A: domain + splitter + breakdown wiring — DONE ✅**. Phase B (OT split) + Phase C (composer + payroll) còn pending.
 - §8 WIP + cleanup nhỏ
-- §9 Điều 105 caps (regular hours) — **Phase 1a (8h/ngày ShiftTemplate) + Phase 1a.1 (tổng 8h/ngày khi multi-shift) + Phase 1b (48h/tuần warn-then-confirm cho batch + record/bulk/update) DONE ✅**. Phase 1c (WorkingTimeMode) còn pending, phụ thuộc §10.
+- §9 Điều 105 caps (regular hours) — **Phase 1a (8h/ngày ShiftTemplate) + Phase 1a.1 (tổng 8h/ngày khi multi-shift) + Phase 1b (phân ca hard-block khi vượt 8h/ngày hoặc 48h/tuần) DONE ✅**. Phase 1c (WorkingTimeMode) còn pending, phụ thuộc §10.
 - §10 centralize legal constants vào Compliance (foundation cho §7 Phase C composer và §9 Phase 1c — làm trước Phase C)
 - §11 Option 1 cleanup — single source of truth (DONE ✅)
 
@@ -34,14 +34,15 @@ Source: `src/MPS.Domain/Entities/Attendance/`
 
 | Entity | Vai trò chính |
 |---|---|
-| `AttendanceRule` | **Single source of truth** cho 4 hệ số công: `WorkRateNormal`, `WorkRateWeeklyRest`, `WorkRateHoliday`, **`WorkRateNight`** (default 1.30 — Điều 98.2). ShiftTemplate ref qua FK, không snapshot. |
+| `AttendanceRule` | **Single source of truth** cho 3 hệ số theo loại ngày: `WorkRateNormal`, `WorkRateWeeklyRest`, `WorkRateHoliday`. ShiftTemplate ref qua FK, không snapshot. Ca đêm không nằm trên rule; chỉ lưu breakdown giờ để composer/payroll xử lý sau. |
 | `ShiftTemplate` | Mẫu ca làm việc: code, giờ vào/ra, giờ nghỉ, công chuẩn, `AppliedAttendanceRuleId` (NOT NULL). Hệ số đọc qua FK navigation, không lưu tại đây. |
 | `ScheduleTemplate` | Bảng phân ca theo pattern lặp: `Day`, `Week`, `Month` |
 | `ScheduleTemplateEmployee` | Link `ScheduleTemplate` với nhân viên |
 | `EmployeeShiftAssignment` | Source of truth phân ca theo grain `(EmployeeInformationId, WorkDate, ShiftTemplateId)` (unique index), có thể trỏ `ScheduleTemplateId`. Multi-shift/ngày được hỗ trợ; handler check overlap thời gian. |
 | `PublicHoliday` | Ngày lễ, loại ngày lễ, `PayRateOverride` |
-| `AttendanceRecord` | Bản ghi chấm công theo grain `(EmployeeInformationId, WorkDate, ShiftTemplateId)` (unique index). 1 NV/1 ngày có thể có nhiều record nếu phân nhiều ca. **Sau Phase A**: thêm `DayHours` + `NightHours` (decimal(5,2)) — compute từ CheckIn/Out × shift break × night window 22h–6h khi record được tạo/update. |
-| `OvertimeRequest` | Yêu cầu tăng ca |
+| `AttendanceRecord` | Bản ghi chấm công theo grain `(EmployeeInformationId, WorkDate, ShiftTemplateId)` (unique index). 1 NV/1 ngày có thể có nhiều record nếu phân nhiều ca. **Sau Phase A**: thêm `DayHours` + `NightHours` (decimal(5,2)) — compute từ CheckIn/Out × shift break × `LaborLawConstantsVersion.NightStartTime/NightEndTime` khi record được tạo/update. |
+| `OvertimeRequest` | Yêu cầu tăng ca. Sau Phase B + slot template: thêm `OvertimeSlotTemplateId` (required khi create) + `OtDayHours/OtNightHours` (compute qua splitter). |
+| `OvertimeSlotTemplate` | Khung giờ OT do HR/Manager tạo sẵn để employee chọn khi đăng ký. Code auto-gen `OT-*`, `AppliesToDayTypes` flag enum, không lưu multiplier (composer derive từ DayType × Compliance constants). |
 | `LeaveType` | Cấu hình loại nghỉ phép: tên, trả lương hay không, giới hạn ngày, yêu cầu chứng từ |
 | `LeaveRequest` | Yêu cầu nghỉ phép, trỏ `LeaveTypeId` |
 | `LeaveBalance` | Số dư phép theo nhân viên/năm/`LeaveTypeId` |
@@ -52,9 +53,9 @@ Enums attendance sau khi tách `LeaveType` ra entity: `AdjustmentStatus`, `Atten
 Lưu ý:
 
 - `LeaveType` là entity (không còn enum `LeaveType`/`LeaveTypePolicy`); rule policy query từ bảng `LeaveTypes`. Field/rule chi tiết ở §3.7.
-- `AttendanceRule` là single source of truth cho **4 hệ số công** (sau §7 Phase A). ShiftTemplate ref qua `AppliedAttendanceRuleId` (NOT NULL sau §11). Không có entity con `AttendanceRulePayRule`/`ShiftPayRule`.
-- `ShiftTemplate.IsNightShift` ĐÃ DROP trong §11 — night không phải category mà là khung giờ; splitter Phase A tính từ time × window 22h–6h.
-- **Phase A (§7) đã land**: model có `WorkRateNight` trên rule + `DayHours/NightHours` trên record; splitter compute mỗi khi record được tạo/sửa. Composer Điều 98 (Phase C) chưa có — payroll engine chưa wire.
+- `AttendanceRule` là single source of truth cho **3 hệ số theo loại ngày**: ngày thường, ngày nghỉ tuần, ngày lễ. ShiftTemplate ref qua `AppliedAttendanceRuleId` (NOT NULL sau §11). Không có entity con `AttendanceRulePayRule`/`ShiftPayRule`.
+- `ShiftTemplate.IsNightShift` ĐÃ DROP trong §11 — night không phải category mà là khung giờ; splitter Phase A tính từ time × `LaborLawConstantsVersion.NightStartTime/NightEndTime`.
+- **Phase A (§7) đã land**: model có `DayHours/NightHours` trên record; splitter compute mỗi khi record được tạo/sửa. Composer Điều 98 (Phase C) chưa có — payroll engine chưa wire.
 
 ### 2.2. Persistence và DI
 
@@ -105,7 +106,8 @@ Migration attendance hiện gói trong 1 file duy nhất:
 Migrations bổ sung sau khi §11 + §7 Phase A land:
 
 - `20260626000000_Attendance_RuleSourceOfTruth` — §11 cleanup (drop `ShiftTemplate.WorkRate*` + `IsNightShift`; `AppliedAttendanceRuleId` NOT NULL).
-- `20260626120000_Attendance_NightSplit` — §7 Phase A (add `AttendanceRules.WorkRateNight`, `AttendanceRecords.DayHours/NightHours`).
+- `20260626120000_Attendance_NightSplit` — §7 Phase A (add `AttendanceRecords.DayHours/NightHours`).
+- `20260629120000_Attendance_RemoveNightRateFromRule` — bỏ cột `AttendanceRules.WorkRateNight` để `AttendanceRule` chỉ còn hệ số theo loại ngày.
 
 ---
 
@@ -147,7 +149,7 @@ Quy tắc chính:
 
 - `Name` bắt buộc, unique.
 - `Code` **auto-generate** server-side từ `Name` qua `ShiftTemplateCodeGenerator` (slug ASCII upper, prefix `CA-`, max 20 ký tự, suffix số nếu trùng). Field `Code` ở `CreateShiftTemplateCommand` hiện vẫn còn nhưng bị handler discard — TODO cleanup (xem §8).
-- `EndTime > StartTime`.
+- `StartTime` và `EndTime` phải khác nhau. Nếu `EndTime < StartTime` thì hiểu là ca kết thúc vào ngày hôm sau, ví dụ `22:00 -> 06:00`.
 - Break time phải set đủ cặp và nằm trong ca.
 - `StandardHours` không vượt net shift hours.
 - `StandardDays` trong khoảng `0.25..1.00`.
@@ -226,36 +228,52 @@ Quy tắc chính:
 
 #### 3.5.1. Backend validation — chống future time
 
-Áp dụng cho cả `RecordAttendanceCommandValidator`, `UpdateAttendanceCommandValidator`, và per-item bên trong `BulkRecordAttendanceCommandHandler`:
+Áp dụng cho `RecordAttendanceCommandValidator`, `UpdateAttendanceCommandValidator`, per-item bên trong `BulkRecordAttendanceCommandValidator`, và các validator `AttendanceAdjustment`:
 
 - `WorkDate` không vượt ngày hiện tại theo `DateOnly.FromDateTime(_clock.UtcNow)`. Ngày tương lai dành cho `Schedule/Roster`, không phải `Attendance`.
 - `CheckInTime`: nếu `WorkDate = today`, `(WorkDate + CheckInTime)` không vượt `_clock.UtcNow`. Nếu `WorkDate < today`, bất kỳ giờ nào trong [00:00, 23:59] đều OK.
-- `CheckOutTime`: cùng rule như `CheckInTime`.
-- Vẫn giữ rule cũ: `CheckOutTime ≥ CheckInTime` khi cả 2 đều có giá trị.
+- `CheckOutTime`: nếu `CheckOutTime < CheckInTime` thì hiểu là checkout vào ngày hôm sau; check future-time dùng timestamp tuyệt đối `(WorkDate + 1 + CheckOutTime)`.
+- `CheckOutTime == CheckInTime` bị reject ở validator để tránh nhập nhầm ca 24h trên bản ghi chấm công/điều chỉnh. Ca template vẫn có rule riêng.
 - Validator inject `IClock` để test deterministic (xem [[backend-patterns]] cho DI vào FluentValidation).
 
 ### 3.6. OvertimeRequest
 
 Có command/query:
 
-- `CreateOvertimeRequestCommand`
-- `ApproveOvertimeRequestCommand`
+- `CreateOvertimeRequestCommand` — nhận `OvertimeSlotTemplateId` (required), snapshot start/end từ slot
+- `ApproveOvertimeRequestCommand` — recompute split `OtDayHours/OtNightHours` từ Compliance snapshot
 - `RejectOvertimeRequestCommand`
-- `GetOvertimeRequestsQuery`
-- `GetMyOvertimeRequestsQuery`
-- `GetOvertimeRequestByIdQuery`
+- `GetOvertimeRequestsQuery` / `GetMyOvertimeRequestsQuery` / `GetOvertimeRequestByIdQuery`
 
 Quy tắc chính (cross-ref Điều 107.2.b BLLĐ):
 
-- Employee tạo request, DM duyệt/từ chối.
+- Employee tạo request — **bắt buộc chọn `OvertimeSlotTemplate`** do HR/Manager tạo sẵn (xem §3.10); raw `OtStartTime/OtEndTime` đã drop khỏi API contract.
+- DM duyệt/từ chối; approve recompute split để tương thích nếu Compliance version đổi giữa create và approve.
 - `OvertimeCapChecker` kiểm tra OT overlap ca + 4 cap:
-  - **BR-5 (overlap):** OT không được overlap thời gian ca chuẩn (xem code line 47-53).
-  - **BR-6 (daily):** OT ≤ 50% tổng giờ ca chuẩn của ngày (Điều 107.2.b); và tổng (giờ ca + OT) ≤ 12h/ngày. Lưu ý 12h luật chỉ quy định cho mode `Weekly` (xem §9), code đang áp universally → strict hơn luật cho mode `Daily` (an toàn).
-  - **BR-7 (monthly):** OT ≤ 40h/tháng (`MonthlyOvertimeCapHours = 40m`, khớp Điều 107.2.b).
-  - **BR-8 (yearly):** đọc `OvertimeMaxHoursPerYear` từ `IComplianceLookupService.GetActiveLaborLawConstantsAsync` (Điều 107.2.c: 200h/năm chuẩn, 300h/năm cho ngành đặc thù).
+  - **BR-5 (overlap):** OT không được overlap thời gian ca chuẩn.
+  - **BR-6 (daily):** OT ≤ 50% tổng giờ ca chuẩn của ngày (Điều 107.2.b); và tổng (giờ ca + OT) ≤ 12h/ngày.
+  - **BR-7 (monthly):** OT ≤ 40h/tháng (Điều 107.2.b).
+  - **BR-8 (yearly):** đọc `OvertimeMaxHoursPerYear` từ snapshot (Điều 107.2.c: 200/300h/năm).
 - Approve re-check cap để tránh race condition.
+- ✅ **Phase B (DONE 2026-06-30):** `OvertimeRequest.OtDayHours/OtNightHours` compute qua `IWorkHourSplitter` × `LaborLawConstantsSnapshot.NightStartTime/NightEndTime` khi Create + recompute khi Approve. Composer Phase C consume để áp Điều 98.3 (OT đêm extra +20%).
 
-> **Gap (xem §7):** `OvertimeRequest` chỉ giữ tổng `OtHours`, **chưa tách** `OtDayHours`/`OtNightHours`. Cần thiết khi tính phụ trội đêm ≥20% theo Điều 98 BLLĐ.
+### 3.10. OvertimeSlotTemplate (mới — 2026-06-30)
+
+Có command/query:
+
+- `CreateOvertimeSlotTemplateCommand` / `UpdateOvertimeSlotTemplateCommand` / `DeleteOvertimeSlotTemplateCommand`
+- `GetOvertimeSlotTemplatesQuery` (paged) / `GetOvertimeSlotTemplateByIdQuery`
+- `GetActiveOvertimeSlotTemplatesByDayTypeQuery` — FE filter dropdown theo DayType resolve từ WorkDate
+
+Quy tắc chính:
+
+- HR/Manager (permission `OvertimeSlotTemplate.*` IDs 137–140) tạo sẵn các khung giờ OT.
+- Employee chọn 1 slot khi tạo `OvertimeRequest` thay vì nhập tay; bắt buộc per validator.
+- Code auto-gen prefix `OT-` qua `OvertimeSlotCodeGenerator`.
+- `AppliesToDayTypes` là flag enum `[Normal|WeeklyRest|Holiday]` — bitmask, có thể `All`.
+- StartTime/EndTime khác nhau; cross-midnight được hiểu là kết thúc ngày hôm sau.
+- Slot **không lưu hệ số multiplier** — composer Phase C derive từ DayType (resolve từ `WorkDate`) × Compliance constants (`OvertimeNormalUpliftPercent`, `NightWorkSurchargePercent`, `OvertimeNightExtraPercent`).
+- Delete = soft-deactivate (giữ audit cho OT request đã reference). Hard-delete chỉ khi không có reference.
 
 ### 3.7. LeaveType
 
@@ -359,9 +377,10 @@ Permissions attendance hiện khai báo trong `src/MPS.Domain/Constants/Permissi
 File test attendance:
 
 - `tests/MPS.Application.Tests/Features/Attendance/ShiftTemplateCommandValidatorTests.cs` cover format Code, break time, StandardHours vs net shift hours, `AppliedAttendanceRuleId` required, valid command pass (cập nhật sau §11).
+- `tests/MPS.Application.Tests/Features/Attendance/AttendanceCrossMidnightValidatorTests.cs` cover `AttendanceTimeRules` + `Record/Update/BulkAttendance` validators + `AttendanceAdjustment` validators cho ca qua ngày `22:00–06:00`, check future-time ngày hôm sau, và reject `CheckInTime == CheckOutTime`.
 - `tests/MPS.Infrastructure.Tests/Services/WorkHourSplitterTests.cs` — **13 case** cover ca thường, ca đêm, cross-midnight (18h–02h, 22h–06h), break trùng/không trùng night window, edge `CheckOut == NightStart`/`CheckIn == NightEnd`, half-hour, ca 24h.
 
-> **Gap test (xem §8):** vẫn chưa có test cho `AttendanceTimeRules`, `RecordAttendance*Validator`, `BulkRecordAttendance*Handler`, `OvertimeCapChecker`, `DayTypeResolver`, `ScheduleTemplateExpander`. Trước đây plan ghi nhầm là có `AttendanceTimeValidationTests.cs` — file đó chưa tồn tại.
+> **Gap test (xem §8):** vẫn chưa có test handler-level cho `BulkRecordAttendance*Handler`, `OvertimeCapChecker`, `DayTypeResolver`, `ScheduleTemplateExpander`. Cross-midnight validator/time-rule test đã có ở `AttendanceCrossMidnightValidatorTests.cs`.
 
 ---
 
@@ -400,8 +419,8 @@ Hệ quả thực tế: **1 ca có thể trộn nhiều rate.** Ví dụ:
 
 | Khía cạnh | Hiện trạng | Phase tương ứng |
 |---|---|---|
-| `AttendanceRule.WorkRateNight` | ✅ Đã add Phase A (default 1.30, EF config, DTO, validator floor 1.30) | A — DONE |
-| Night window 22h–6h config | ✅ `AttendanceConstants.NightStart/NightEnd` (hardcoded — TODO §10 chuyển vào Compliance) | A — DONE |
+| Night multiplier | Không nằm trên `AttendanceRule`. Composer/payroll Phase C sẽ đọc constant từ Compliance (`NightWorkSurchargePercent`, `OvertimeNightExtraPercent`) khi tính lương. | Phase C — pending |
+| Night window config | ✅ `LaborLawConstantsVersion.NightStartTime/NightEndTime`; default seed `22:00–06:00`. Nếu `NightEndTime < NightStartTime` thì hiểu là qua ngày hôm sau. | A — DONE |
 | `ShiftTemplate.IsNightShift` | ✅ Đã drop trong §11 | §11 — DONE |
 | `AttendanceRecord.DayHours/NightHours` | ✅ Phase A (decimal(5,2) default 0, mapped vào DTO, compute mỗi command) | A — DONE |
 | `IWorkHourSplitter` + tests | ✅ Phase A (Singleton DI, 13 unit test phủ ma trận) | A — DONE |
@@ -414,9 +433,9 @@ Hệ quả thực tế: **1 ca có thể trộn nhiều rate.** Ví dụ:
 
 Splitter tự tách giờ ngày/đêm trong cùng 1 record, không đổi grain `(emp, date, shift)`.
 
-1. **`AttendanceRule.WorkRateNight` (decimal(4,2) default 1.30)** ✅ Phase A. Floor 1.30 hiện hardcoded trong `PayRuleFloor.Night`. TODO §10: đọc floor + night window từ `LaborLawConstantsVersion`.
+1. **`AttendanceRule` chỉ giữ hệ số theo loại ngày** ✅. Rule hiện có `WorkRateNormal`, `WorkRateWeeklyRest`, `WorkRateHoliday`. Ca đêm không lưu thành hệ số riêng trên rule; Phase C sẽ tính bằng composer dựa trên breakdown `DayHours/NightHours` và constants từ Compliance.
 
-2. **`ShiftTemplate` đọc `WorkRateNight` qua FK navigation** ✅ — single source of truth là rule (§11). `IsNightShift` đã drop; splitter tính night hours từ time + window.
+2. **`ShiftTemplate` đọc 3 hệ số theo loại ngày qua FK navigation** ✅ — single source of truth là rule (§11). `IsNightShift` đã drop; splitter tính night hours từ time + window.
 
 3. **`IWorkHourSplitter`** ✅ Phase A:
    - Interface: `Application.Common.Interfaces.IWorkHourSplitter`
@@ -429,7 +448,8 @@ Splitter tự tách giờ ngày/đêm trong cùng 1 record, không đổi grain 
      - Build night windows trong range cover được shift (`[NightStart−1440, NightEnd]` cho hôm qua, `[NightStart, NightEnd+1440]` cho hôm nay).
      - Tính tổng giao của shift segments × night windows → `nightMin`. `dayMin = totalMin − nightMin`.
 
-4. **`AttendanceRecord.DayHours/NightHours` (decimal(5,2) default 0)** ✅ Phase A. Recompute khi: `RecordAttendance`, `UpdateAttendance`, `BulkRecordAttendance`, `OverrideAttendance` + `ApproveAttendanceAdjustment` (qua `AttendanceAdjustmentRepository`). Khi `ApproveLeaveRequest` upsert record `OnLeave` → `DayHours = 0`, `NightHours = 0`. Helper `AttendanceHourCalculator.Compute(splitter, status, checkIn, checkOut, shift)` ở `Application/Features/Attendance/Common`.
+4. **`AttendanceRecord.DayHours/NightHours` (decimal(5,2) default 0)** ✅ Phase A. Recompute khi: `RecordAttendance`, `UpdateAttendance`, `BulkRecordAttendance`, `OverrideAttendance` + `ApproveAttendanceAdjustment` (qua `AttendanceAdjustmentRepository`). Khi `ApproveLeaveRequest` upsert record `OnLeave` → `DayHours = 0`, `NightHours = 0`. Helper `AttendanceHourCalculator.Compute(splitter, status, checkIn, checkOut, nightStart, nightEnd, shift)` ở `Application/Features/Attendance/Common`; `nightStart/nightEnd` lấy từ `LaborLawConstantsVersion` theo `WorkDate`.
+   - Validator chấm công/điều chỉnh không chặn `CheckOutTime < CheckInTime`; case này được hiểu là checkout ngày hôm sau và đi qua `IWorkHourSplitter` để tách `DayHours/NightHours`.
 
 5. **`OvertimeRequest.OtDayHours/OtNightHours`** — **Phase B (pending)**. Compute khi Create + recompute khi Approve. `OvertimeCapChecker` vẫn dùng tổng `OtHours` cho cap; payroll consumer dùng split.
 
@@ -438,22 +458,31 @@ Splitter tự tách giờ ngày/đêm trong cùng 1 record, không đổi grain 
    - Điều 98.2: Night uplift = +30% so với đơn giá ngày bình thường.
    - Điều 98.3: OT ban đêm cộng thêm 20% (áp dụng cho cả ngày thường / nghỉ tuần / lễ).
 
-   Bảng tổ hợp `(DayType × Night × OT)`:
+   Bảng tổ hợp `(DayType × Night × OT)` — cập nhật 2026-06-30 sau Option 4 + MOLISA Thông tư 18/2021 cho case `Night OT (with day OT)`:
 
-   | DayType | Day Regular | Night Regular | Day OT | Night OT |
-   |---|---|---|---|---|
-   | Normal | 100% | 130% | 150% | 200% |
-   | WeeklyRest | 200% | 230% | 200% (đã là OT theo Điều 98.1.b) | 250% |
-   | Holiday | 300% | 330% | 300% (đã là OT theo Điều 98.1.c) | 350% |
+   | DayType | Day Regular | Night Regular | Day OT | Night OT (no day OT) | Night OT (with day OT) |
+   |---|---|---|---|---|---|
+   | Normal | 100% | 130% | 150% | **200%** | **210%** |
+   | WeeklyRest | 200% | 230% | 200% | 270% | 270% (same) |
+   | Holiday | 300% | 330% | 300% | 390% | 390% (same) |
 
-   Lưu ý: làm việc vào ngày nghỉ tuần/lễ luật coi là OT (đơn giá 200/300%); nếu thực tế có khái niệm "regular" cho ngày này thì áp dụng cùng đơn giá (cell `*` Regular = `*` OT).
+   Lưu ý:
+   - Làm việc vào ngày nghỉ tuần/lễ luật coi là OT (đơn giá 200/300%); cell `*` Regular = `*` OT.
+   - Case Normal 200% vs 210%: case 200% = OT đêm thuần (không có OT ngày cùng day); case 210% = có OT ngày cùng day → night-extra base = day OT rate (150%) thay vì 100%. Composer phải **cross-record** (gom OT theo `(emp, date)`).
+   - Công thức tổng quát:
+     ```
+     nightExtraBase = hasDaytimeOtSameDay ? (1 + OvertimeNormalUpliftPercent/100) : 1.0
+     OT night multiplier = 1 + dayTypeUpliftOverBase + NightWorkSurchargePercent/100
+                         + (OvertimeNightExtraPercent/100) × nightExtraBase
+     ```
+   - Constants từ `LaborLawConstantsSnapshot` (sau Option 4): `OvertimeNormalUpliftPercent=50` (Điều 98.1.a — MỚI), `NightWorkSurchargePercent=30` (Điều 98.2), `OvertimeNightExtraPercent=20` (Điều 98.3). Day-type uplift over base: Normal=`OvertimeNormalUpliftPercent` (50), WeeklyRest=`WorkRateWeeklyRest×100 − 100` (100), Holiday=`WorkRateHoliday×100 − 100` (200).
 
-7. **Migration `20260626120000_Attendance_NightSplit`** ✅ Phase A — add `AttendanceRules.WorkRateNight` + `AttendanceRecords.DayHours/NightHours` (3 column total). Hiện không seed lại (record cũ giữ 0; sẽ recompute khi update lần tới). Migration phụ thuộc §11.
+7. **Migration Phase A** ✅ — `20260626120000_Attendance_NightSplit` thêm `AttendanceRecords.DayHours/NightHours`; `20260629120000_Attendance_RemoveNightRateFromRule` giữ `AttendanceRule` chỉ còn 3 hệ số theo loại ngày. Hiện không seed lại (record cũ giữ 0; sẽ recompute khi update lần tới).
 
 ### 7.4. Plan triển khai theo phase
 
-- **Phase A (DONE 2026-06-26):** Domain (`WorkRateNight` + `DayHours/NightHours`) + migration `Attendance_NightSplit` + `PayRuleFloor.Night` floor 1.30 + `AttendanceConstants.NightStart/End` + `IWorkHourSplitter` + 13 unit test + wire vào 5+ handler.
-- **Phase B (pending):** `OvertimeRequest.OtDayHours/OtNightHours` — compute khi Create + recompute khi Approve; DTO breakdown; UI thấy OT đêm.
+- **Phase A (DONE):** Domain (`DayHours/NightHours`) + migration `Attendance_NightSplit` + `LaborLawConstantsVersion.NightStartTime/NightEndTime` + `IWorkHourSplitter` + 13 unit test + wire vào 5+ handler.
+- ✅ **Phase B (DONE 2026-06-30):** `OvertimeRequest.OtDayHours/OtNightHours` compute khi Create + recompute khi Approve qua `IWorkHourSplitter`; DTO breakdown qua `OvertimeRequestMapper`; migration `Attendance_OvertimeSlotTemplate` add columns default 0; existing rows backfill 0 và sẽ recompute khi approve.
 - **Phase C (pending — phụ thuộc §10):** `IMultiplierComposer` đọc constants từ Compliance snapshot; payroll engine consume breakdown.
 
 ### 7.5. Acceptance test
@@ -463,10 +492,11 @@ Splitter tự tách giờ ngày/đêm trong cùng 1 record, không đổi grain 
 - [x] Ca 18:00–02:00 ngày thường (cross-midnight, không break) → `DayHours = 4`, `NightHours = 4`.
 - [x] Ca 08:00–17:00 ngày thường (break 12:00–13:00) → `DayHours = 8`, `NightHours = 0`.
 - [x] Ca 22:00–06:00 → `DayHours = 0`, `NightHours = 8`.
+- [x] Validator cho phép record/update/bulk/adjustment `CheckInTime = 22:00`, `CheckOutTime = 06:00` và hiểu `CheckOutTime` là ngày hôm sau; `CheckInTime == CheckOutTime` bị reject.
 - [x] Cross-midnight ca 18h–02h, break 23h–00h → `DayHours = 4`, `NightHours = 3`.
 - [x] Half-hour ca 21:30–23:30 → `DayHours = 0.5`, `NightHours = 1.5`.
 - [x] Ca 24h (06h–06h next day) → `DayHours = 16`, `NightHours = 8`.
-- [ ] **Phase B** — Approve OT 22:00–24:00 → `OtDayHours = 0`, `OtNightHours = 2`.
+- [x] **Phase B** — Approve OT 22:00–24:00 → `OtDayHours = 0`, `OtNightHours = 2` (compute qua splitter từ Compliance night window).
 - [ ] **Phase C** — Composer trả `multiplier = 2.30` cho (DayType=WeeklyRest, isNight=true, isOvertime=false).
 
 ---
@@ -512,11 +542,11 @@ Flow dự kiến: HR upload Excel → Preview (parse + cache + validate, trả d
 
 ### 9.2. Khoảng cách so với code hiện tại
 
-> **Cập nhật 2026-06-27**: Phase 1a + 1b đã land. Phần này giữ làm lịch sử để track thay đổi. Phase 1c (WorkingTimeMode) còn pending.
+> **Cập nhật 2026-06-29**: Phase 1a + 1a.1 + 1b đã land. Phân ca hiện chặn cứng khi vượt cap; Phase 1c (WorkingTimeMode) còn pending.
 
 - ~~`ShiftTemplateValidator` chỉ check `StandardHours ∈ [0.5, 24]` và ≤ net shift hours — không check vs 8/10h.~~ ✅ Phase 1a: validator + handler check `≤ RegularHoursCap.MaxPerDay (8h)`.
 - `OvertimeCapChecker.DailyTotalWorkCapHours = 12m` là cap tổng (regular + OT) theo Điều 107.2.b — đây là cap OT, KHÔNG phải cap regular của Điều 105. Vẫn áp universally → Phase 1c sẽ tách theo mode.
-- ~~Không có nơi nào sum `StandardHours`/`actualHours` theo tuần cho 1 NV → có thể assign 7 ca 8h/tuần = 56h regular mà hệ thống không cản.~~ ✅ Phase 1b: `IRegularHoursCapChecker` sum theo ISO week, vượt 48h → throw `WeeklyRegularHoursCapWarningException` → middleware trả **409 Conflict** + warning list → FE hiển thị popup xác nhận. User confirm → retry với `acknowledgeWeeklyOvertimeWarnings=true` → apply thành công.
+- ~~Không có nơi nào sum `StandardHours`/`actualHours` theo tuần cho 1 NV → có thể assign 7 ca 8h/tuần = 56h regular mà hệ thống không cản.~~ ✅ Phase 1b: `IRegularHoursCapChecker` sum theo ISO week. Với phân ca, vượt 8h/ngày hoặc 48h/tuần → throw `RegularHoursCapExceededException` → middleware trả **409 Conflict** + `REGULAR_HOURS_CAP_EXCEEDED` → KHÔNG apply và không bypass bằng `acknowledgeWeeklyOvertimeWarnings`.
 
 ### 9.2.1. Liên kết với cap OT (Điều 107.2.b)
 
@@ -531,15 +561,15 @@ Hệ quả: `OvertimeCapChecker` cần đọc `WorkingTimeMode` (sau khi §9 lan
 
 ### 9.3. Hướng giải quyết theo phase
 
-Phân làm 3 phase để tách biệt scope: Phase 1a nhỏ nhất (cap ngày tại form), Phase 1b vừa (cap tuần với warn-then-confirm), Phase 1c lớn nhất (Daily/Weekly mode).
+Phân làm 3 phase để tách biệt scope: Phase 1a nhỏ nhất (cap ngày tại form), Phase 1b vừa (cap ngày/tuần hard-block cho phân ca), Phase 1c lớn nhất (Daily/Weekly mode).
 
 #### Phase 1a (DONE 2026-06-27) — cap 8h/ngày tại ShiftTemplate
 
 Cap cứng tại điểm tạo ca:
 
-1. ✅ Constant class `Application/Features/Attendance/Common/RegularHoursCap.cs` chứa `MaxPerDay = 8m`, `MaxPerWeek = 48m`. Note TODO §10 chuyển sang Compliance khi land Phase 1c.
-2. ✅ `ShiftTemplateBaseValidator.StandardHours` đổi `InclusiveBetween(0.5m, 24m)` → `InclusiveBetween(0.5m, RegularHoursCap.MaxPerDay)` với message tham chiếu Điều 105.1.
-3. ✅ `CreateShiftTemplateCommandHandler.ValidateBreakAndStandardHours` thêm check inline `if (standardHours > MaxPerDay) throw ...` (phòng trường hợp validator bypass; cũng cover Update vì handler reuse method).
+1. ✅ ~~Constant class `Application/Features/Attendance/Common/RegularHoursCap.cs` chứa `MaxPerDay = 8m`, `MaxPerWeek = 48m`.~~ **Đã drop sau §10 wiring partial (2026-06-30)**: handler đọc trực tiếp `laborLaw.StandardWorkingHoursPerDay` từ snapshot.
+2. ✅ `ShiftTemplateBaseValidator` inject `IComplianceLookupService` qua ctor, dùng `CustomAsync` đọc `laborLaw.StandardWorkingHoursPerDay` từ snapshot và reject `StandardHours` vượt cap. Cap pháp lý enforce ngay tại validator (400 fast-fail) — không chỉ handler.
+3. ✅ `CreateShiftTemplateCommandHandler.ValidateBreakAndStandardHours` nhận `maxHoursPerDay` param từ snapshot, throw `DomainValidationException` nếu vượt. `UpdateShiftTemplateCommandHandler` reuse method cùng pattern.
 4. ⏳ FE form `ShiftTemplateFormDialog`: zod schema `max(8)`, `<input max="8">`, `title` tooltip Điều 105.1 — backend done, FE còn pending bên FE repo.
 
 → Tạo ca > 8h bị reject ngay tại form. Không đụng schema, không migration.
@@ -549,18 +579,13 @@ Cap cứng tại điểm tạo ca:
 Sau multi-shift refactor, một NV có thể có nhiều ca không overlap trong cùng ngày. Vì vậy chỉ chặn `ShiftTemplate.StandardHours > 8` là chưa đủ cho Điều 105.1. Đã bổ sung daily aggregate cap:
 
 1. ✅ `IRegularHoursCapChecker` thêm `CheckDailyAssignmentsAsync` và `CheckDailyAttendanceAsync`.
-2. ✅ `RegularHoursCapChecker` group delta theo `(EmployeeInformationId, WorkDate)`, cộng existing regular hours + delta, vượt `RegularHoursCap.MaxPerDay (8h)` → `DailyCapWarning`.
-3. ✅ Batch phân ca, tạo/reapply/import ScheduleTemplate, record/update/bulk attendance đều check daily + weekly cùng lúc.
-4. ✅ Middleware trả `REGULAR_HOURS_CAP_WARNING` với `dailyCapWarnings` + `weeklyCapWarnings`; FE popup hiển thị cả “Vượt 8h/ngày” và “Vượt 48h/tuần”.
+2. ✅ `RegularHoursCapChecker` group delta theo `(EmployeeInformationId, WorkDate)`, cộng existing regular hours + delta, vượt `laborLaw.StandardWorkingHoursPerDay` (đọc từ snapshot, default 8h) → `DailyCapWarning`.
+3. ✅ Batch phân ca, tạo/reapply/import ScheduleTemplate đều check daily + weekly cùng lúc.
+4. ✅ Với phân ca, middleware trả `REGULAR_HOURS_CAP_EXCEEDED` với `dailyCapViolations` + `weeklyCapViolations`; FE hiển thị lỗi và không retry bằng ack.
 
-#### Phase 1b (DONE 2026-06-27) — cap 48h/tuần warn-then-confirm popup
+#### Phase 1b (DONE 2026-06-29) — cap 48h/tuần hard-block cho phân ca
 
-User feedback timeline:
-- 2026-06-27 sáng: "khi phân 7 ca thì ít ra cũng phải cảnh báo" → plan warn-then-confirm.
-- 2026-06-27 chiều (lần 1): user nói "chặn đi" → flip sang hard reject (400). Code rewrite drop Acknowledge flag.
-- 2026-06-27 chiều (lần 2): user nói "hơi cứng ngắc, hiện popup xác nhận, ấn xác nhận thì tạo, không thì hủy" → **flip lại warn-then-confirm với popup**. Code restore Acknowledge flag + `WeeklyRegularHoursCapWarningException` + 409 mapping.
-
-**Quyết định cuối:** warn-then-confirm popup. KHÔNG có HR Override.All bypass — HR có Override.All cũng thấy popup, click confirm để tiếp tục.
+**Quyết định hiện tại cho module phân ca:** vượt `8h/ngày` hoặc `48h/tuần` là lỗi nghiệp vụ và **chặn cứng**. Không có popup xác nhận để tiếp tục. Flag `AcknowledgeWeeklyOvertimeWarnings` vẫn giữ trong request/command để tương thích contract cũ, nhưng không còn bypass cap phân ca.
 
 1. ✅ **Service `IRegularHoursCapChecker` (Application/Common/Interfaces):** 2 method tách theo source:
    ```csharp
@@ -570,20 +595,27 @@ User feedback timeline:
    public sealed record WeeklyCapDelta(int EmployeeInformationId, DateOnly WorkDate, decimal AdditionalHours);
    public sealed record WeeklyCapWarning(int EmployeeInformationId, int IsoYear, int IsoWeek, DateOnly WeekStart, DateOnly WeekEnd, decimal TotalHoursAfter, decimal CapHours);
    ```
-   Group deltas theo `(EmployeeId, ISO Week)` qua `System.Globalization.ISOWeek`. Mỗi group: load existing hours theo source (assignment: `EmployeeShiftAssignment × ShiftTemplate.StandardHours`; attendance: `AttendanceRecord.DayHours + NightHours`). Sum existing + delta. Vượt 48h → 1 warning. Impl: `Infrastructure/Services/RegularHoursCapChecker.cs` (Scoped DI).
+   Group deltas theo `(EmployeeId, ISO Week)` qua `System.Globalization.ISOWeek`. Mỗi group: load existing hours theo source (assignment: `EmployeeShiftAssignment × ShiftTemplate.StandardHours`; attendance: `AttendanceRecord.DayHours + NightHours`). Sum existing + delta. Vượt cap → trả danh sách violation/warning cho caller quyết định hard-block hay warn-confirm. Impl: `Infrastructure/Services/RegularHoursCapChecker.cs` (Scoped DI).
 
-2. ✅ **`BatchUpdateShiftAssignmentsCommand`** thêm flag `AcknowledgeWeeklyOvertimeWarnings: bool = false`. Handler:
+2. ✅ **`BatchUpdateShiftAssignmentsCommand`** giữ flag `AcknowledgeWeeklyOvertimeWarnings: bool = false` để backward-compatible. Handler:
    - Build delta từ `toAdd`/`toUpdate`/`toRemoveIds` (state thực sự sẽ ghi sau khi handle ConflictPolicy/overlap).
    - Add: delta = +newShift.StandardHours. Change: delta = +newHours − oldHours. Remove: delta = −oldHours.
-   - Nếu flag=false → gọi `IRegularHoursCapChecker.CheckAssignmentsAsync`; có warning → throw `WeeklyRegularHoursCapWarningException`. KHÔNG apply.
-   - Nếu flag=true → skip check, apply luôn (FE đã show popup, user confirmed).
+   - Luôn gọi `CheckDailyAssignmentsAsync` + `CheckAssignmentsAsync` trước `ApplyBatchAsync`.
+   - Có violation → throw `RegularHoursCapExceededException`. KHÔNG apply.
+   - Flag ack không còn làm skip check cho phân ca.
 
-3. ✅ **Exception → HTTP**: `WeeklyRegularHoursCapWarningException` (`Application/Common/Exceptions`) carry `IReadOnlyList<WeeklyCapWarning> Warnings`. `ExceptionHandlingMiddleware` map → `409 Conflict` body:
+3. ✅ **Outer commands của module phân ca**:
+   - `CreateScheduleTemplateCommandHandler`: pre-check cap trước khi `ScheduleTemplateRepository.AddAsync`, tránh tạo orphan template nếu assignment sẽ bị chặn.
+   - `ConfirmMonthlyScheduleImportCommandHandler`: pre-check cap toàn bộ import trước khi tạo bất kỳ `ScheduleTemplate` nào.
+   - `ReapplyScheduleTemplateCommandHandler`: đi qua inner `BatchUpdateShiftAssignmentsCommand`, nên cũng bị hard-block bởi cùng rule.
+
+4. ✅ **Exception → HTTP**: `RegularHoursCapExceededException` (`Application/Common/Exceptions`) carry `DailyViolations` + `WeeklyViolations`. `ExceptionHandlingMiddleware` map → `409 Conflict` body:
    ```json
    {
-     "code": "WEEKLY_REGULAR_HOURS_CAP_WARNING",
-     "error": "Phát hiện 1 cảnh báo vượt cap 48h/tuần (Điều 105 BLLĐ). Xác nhận để tiếp tục.",
-     "weeklyCapWarnings": [
+     "code": "REGULAR_HOURS_CAP_EXCEEDED",
+     "error": "Không thể phân ca: phát hiện 1 vi phạm giới hạn giờ làm việc bình thường (8h/ngày hoặc 48h/tuần).",
+     "dailyCapViolations": [],
+     "weeklyCapViolations": [
        { "employeeInformationId": 5, "isoYear": 2026, "isoWeek": 27,
          "weekStart": "2026-06-29", "weekEnd": "2026-07-05",
          "totalHoursAfter": 56, "capHours": 48 }
@@ -591,31 +623,19 @@ User feedback timeline:
    }
    ```
 
-4. ⏳ **FE popup** — catch 409 với `code=WEEKLY_REGULAR_HOURS_CAP_WARNING`:
-   - Modal giữa màn hình liệt kê NV vượt cap (tuần + tổng giờ vs 48h).
-   - 2 button: "Huỷ" / "Tiếp tục dù vượt 48h".
-   - Confirm → retry POST với `acknowledgeWeeklyOvertimeWarnings: true`.
-   - Cancel → đóng modal, không tạo.
-
-5. ✅ **Record attendance** (`RecordAttendance`, `BulkRecord`, `Update`) cùng pattern warn-then-confirm:
+5. ✅ **Record attendance** (`RecordAttendance`, `BulkRecord`, `Update`) vẫn là track riêng:
    - `RecordAttendanceCommandHandler`: compute `delta = DayHours + NightHours` của record mới; check khi flag=false.
    - `UpdateAttendanceCommandHandler`: compute `delta = (newDay + newNight) − (oldDay + oldNight)`; check TRƯỚC khi mutate `existing` (tránh EF change tracker làm lệch query trong checker).
    - `BulkRecordAttendanceCommandHandler`: pre-pass loop tính delta cho row hợp lệ (skip row sai format/shift inactive — sẽ fail riêng), gộp gọi `CheckAttendanceAsync` 1 lần với toàn bộ deltas. Vượt → throw cả batch.
-   - **KHÔNG có Override.All bypass** — HR Override.All cũng phải confirm popup giống user thường. Override.All chỉ dùng cho edit late-window (audit trail), không bypass legal cap.
+   - Hiện vẫn dùng `RegularHoursCapWarningException` warn-confirm theo behavior cũ của chấm công actual; phần hard-block ở trên áp dụng cho module phân ca.
 
 → Không đụng schema, không migration.
 
-#### Phase 1c (pending) — `WorkingTimeMode` (Daily 8h / Weekly 10h)
+#### Phase 1c (deferred) — `WorkingTimeMode` theo tuần
 
-Điều 105.2 cho phép 10h/day nếu công ty áp Weekly mode + thông báo NLĐ.
+Hệ thống hiện tại chưa hỗ trợ chế độ làm việc theo tuần. Không thêm field `WorkingTimeMode`, không thêm cap 10h/ngày theo tuần và không thêm cap tổng giờ/ngày theo tuần vào schema hiện tại.
 
-1. `AttendanceRule` thêm `WorkingTimeMode` enum (`Daily` | `Weekly`), default `Daily`. Migration `AttendanceRule_WorkingTimeMode` add column byte.
-2. Derive `MaxRegularHoursPerDay` = 8 nếu Daily, 10 nếu Weekly. `MaxRegularHoursPerWeek` = constant 48.
-3. ShiftTemplate validator + handler đọc cap qua `rule.MaxRegularHoursPerDay` thay vì hằng số `RegularHoursCap.MaxPerDay`.
-4. `OvertimeCapChecker` đọc `rule.WorkingTimeMode`: bỏ cap 12h/day cho mode Daily (Điều 107.2.b chỉ áp Weekly).
-5. FE rule form thêm select "Chế độ làm việc" (Daily/Weekly).
-
-> **Phụ thuộc §10:** Phase 1c (cùng các constant 8h/10h/48h/40h) nên đọc từ `LaborLawConstantsVersion` qua `IComplianceLookupService` thay vì hardcode trong `RegularHoursCap`. Drop `RegularHoursCap` constants sau khi §10 land.
+Khi cần hỗ trợ mode Weekly, thiết kế lại trọn gói từ AttendanceRule, phân ca, OT cap, UI và compliance constants thay vì map trước vào schema hiện tại.
 
 ### 9.4. Acceptance test
 
@@ -627,16 +647,18 @@ User feedback timeline:
 - [ ] Manual smoke: tạo `ShiftTemplate.StandardHours = 8h` → accept.
 - [ ] FE form không cho nhập > 8 + tooltip hiển thị Điều 105.1 (FE repo).
 
-**Phase 1b (DONE warn-then-confirm popup — manual smoke pending integration test):**
+**Phase 1b (DONE hard-block phân ca — manual smoke pending integration test):**
 - [x] `IRegularHoursCapChecker` DI registered (Scoped) trong `InfrastructureServiceRegistration`.
-- [x] `WeeklyRegularHoursCapWarningException` map → 409 với `code=WEEKLY_REGULAR_HOURS_CAP_WARNING` + `weeklyCapWarnings` body.
-- [x] Batch handler build delta từ `toAdd`/`toUpdate`/`toRemoveIds`; check trước `ApplyBatchAsync` khi `acknowledgeWeeklyOvertimeWarnings=false`.
-- [x] Record/Update/Bulk handler check trước khi persist; KHÔNG có Override.All bypass — Override.All cũng phải confirm popup.
-- [x] 3 outer command (CreateSchedule, Reapply, ConfirmMonthlyImport) plumb flag qua inner BatchUpdate.
+- [x] `RegularHoursCapExceededException` map → 409 với `code=REGULAR_HOURS_CAP_EXCEEDED` + `dailyCapViolations`/`weeklyCapViolations` body.
+- [x] Batch handler build delta từ `toAdd`/`toUpdate`/`toRemoveIds`; luôn check trước `ApplyBatchAsync`, không phụ thuộc `acknowledgeWeeklyOvertimeWarnings`.
+- [x] CreateSchedule pre-check trước khi insert template; ConfirmMonthlyImport pre-check trước khi tạo bất kỳ template nào; Reapply bị chặn qua inner BatchUpdate.
 - [ ] Integration: batch assign 6 ca 8h cho 1 NV trong tuần → accept (đúng 48h).
-- [ ] Integration: batch assign 7 ca 8h cho 1 NV trong tuần → **409** + warning list (56h > 48h), KHÔNG apply.
-- [ ] Integration: FE catch 409 → popup giữa màn hình → user confirm → retry với `acknowledgeWeeklyOvertimeWarnings=true` → 200 apply OK.
-- [ ] Integration: FE catch 409 → user cancel → đóng popup, không tạo.
+- [ ] Integration: batch assign 7 ca 8h cho 1 NV trong tuần → **409 `REGULAR_HOURS_CAP_EXCEEDED`** + violation list (56h > 48h), KHÔNG apply.
+- [ ] Integration: retry cùng payload với `acknowledgeWeeklyOvertimeWarnings=true` → vẫn **409 `REGULAR_HOURS_CAP_EXCEEDED`**, KHÔNG apply.
+- [ ] Integration: tạo ScheduleTemplate/import tháng gây vượt 8h/ngày hoặc 48h/tuần → 409 trước khi tạo orphan template.
+- [ ] FE: catch `REGULAR_HOURS_CAP_EXCEEDED` → hiển thị lỗi, không mở popup xác nhận tiếp tục.
+
+**Attendance record cap (legacy warn-confirm — không thuộc hard-block phân ca):**
 - [ ] Integration: record attendance làm 8h ngày T7, tuần đã có 40h Present → accept (tổng 48h).
 - [ ] Integration: record attendance làm 9h ngày T7, tuần đã có 40h Present → 409 + warning (49h > 48h).
 - [ ] Integration: user có `AttendanceAdjustment.Override.All` ghi vượt 48h → vẫn nhận 409 + popup (Override.All KHÔNG bypass legal cap, chỉ bypass 3-day window).
@@ -645,7 +667,7 @@ User feedback timeline:
 **Phase 1c (pending):**
 - [ ] Tạo `ShiftTemplate.StandardHours = 10h` với rule `Weekly` → accept.
 - [ ] Tạo `ShiftTemplate.StandardHours = 10h` với rule `Daily` → reject.
-- [ ] Batch assign 5 ca 8h + 1 ca 10h trong tuần (Weekly) → 409 warning (50h > 48h).
+- [ ] Batch assign 5 ca 8h + 1 ca 10h trong tuần (Weekly) → 409 `REGULAR_HOURS_CAP_EXCEEDED` (50h > 48h).
 
 ---
 
@@ -659,54 +681,74 @@ Constants pháp lý hiện rải 3 nơi với tính chất khác nhau:
 
 | Nơi | Constants | Updateability |
 |---|---|---|
-| `PayRuleFloor.cs` (Attendance) | `Normal=1.00`, `WeeklyRest=2.00`, `Holiday=3.00` (Điều 98.1) | Hardcode `const` → cần deploy khi luật sửa |
+| ~~`PayRuleFloor.cs`~~ → `WorkRateFloorValidator.cs` (Attendance) | Class chỉ validate, **không còn chứa floor**. Floor đọc từ `LaborLawConstantsSnapshot.WorkRate*Floor` (đã wire trong AttendanceRule handlers từ trước). | ✅ Đã rename 2026-06-30 — đọc từ snapshot |
 | `OvertimeCapChecker.cs` (Attendance) | `MonthlyOvertimeCapHours=40`, `DailyTotalWorkCapHours=12` (Điều 107.2.b) | Hardcode `const` → cần deploy |
-| `LaborLawConstantsVersion` (Compliance) | `StandardWorkingHoursPerDay=8`, `OvertimeMaxHoursPerDay=4`, `OvertimeMaxHoursPerYear=300`, `NightShiftSurchargePercent=20`, `AnnualLeaveMinDays=12`, `ProbationSalaryMinPercent=85`, `StandardWorkingDaysPerMonth=26` | Versioned, ValidFrom/IsArchived, update qua HR UI, audit trail |
+| `LaborLawConstantsVersion` (Compliance) | Quản lý các mức sàn/trần luật: `StandardWorkingHoursPerDay=8`, `MaxRegularHoursPerWeek=48`, khung giờ đêm `22:00–06:00`, phụ trội làm đêm `NightWorkSurchargePercent=30`, phụ trội OT đêm `OvertimeNightExtraPercent=20`, sàn hệ số ngày thường/nghỉ/lễ và các cap OT. | Versioned, ValidFrom/IsArchived, update qua HR UI, audit trail |
 
 Khi BLLĐ sửa (đã từng có nghị quyết sửa cap năm 300h→200h hoặc OT cap thay đổi), (1)(2) yêu cầu deploy code; (3) chỉ cần HR tạo version mới. Centralize → 1 nơi duy nhất.
 
-### 10.2. Field cần thêm vào `LaborLawConstantsVersion`
+### 10.2. Schema mục tiêu của `LaborLawConstantsVersion`
 
-| Field mới | Default | Điều khoản | Hiện đang ở đâu |
-|---|---|---|---|
-| `WorkRateNormalFloorPercent` | `100m` | 98.1.a | `PayRuleFloor.Normal = 1.00` |
-| `WorkRateWeeklyRestFloorPercent` | `200m` | 98.1.b | `PayRuleFloor.WeeklyRest = 2.00` |
-| `WorkRateHolidayFloorPercent` | `300m` | 98.1.c | `PayRuleFloor.Holiday = 3.00` |
-| `NightWorkSurchargePercent` | `30m` | 98.2 (uplift đêm) | CHƯA có — `NightShiftSurchargePercent=20` hiện là Điều 98.3 |
-| `MaxRegularHoursPerDay_WeeklyMode` | `10m` | 105.2 | CHƯA có (`StandardWorkingHoursPerDay=8` là cho Daily mode) |
-| `MaxRegularHoursPerWeek` | `48m` | 105.1+2 | CHƯA có |
-| `OvertimeMaxHoursPerMonth` | `40m` | 107.2.b | `OvertimeCapChecker.MonthlyOvertimeCapHours = 40m` |
-| `OvertimeMaxTotalDailyHours_WeeklyMode` | `12m` | 107.2.b | `OvertimeCapChecker.DailyTotalWorkCapHours = 12m` |
+`LaborLawConstantsVersion` là nơi quản lý mức sàn/trần theo luật. Các giá trị này không nằm trên `AttendanceRule`, vì chúng không phải chính sách riêng của từng ca mà là ngưỡng pháp lý dùng chung để validate/tính lương.
+
+| Field | Default | Trạng thái | Điều khoản | Ghi chú |
+|---|---:|---|---|---|
+| `StandardWorkingHoursPerDay` | `8m` | Đã có | 105.1 | Dùng làm cap ngày của mode Daily; thay cho hardcode `RegularHoursCap.MaxPerDay`. |
+| `MaxRegularHoursPerWeek` | `48m` | Thêm mới | 105.1+2 | Dùng thay cho hardcode `RegularHoursCap.MaxPerWeek`. |
+| `NightStartTime` | `22:00` | Đã thêm | 106 | Dùng làm mốc bắt đầu khung giờ đêm. |
+| `NightEndTime` | `06:00` | Đã thêm | 106 | Dùng làm mốc kết thúc khung giờ đêm; nếu nhỏ hơn `NightStartTime` thì hiểu là qua ngày hôm sau. |
+| `NightWorkSurchargePercent` | `30m` | Thêm mới | 98.2 | Là phần trả thêm khi làm ca đêm thường; hệ số ca đêm = `1 + 30% = 1.3`. |
+| `OvertimeNightExtraPercent` | `20m` | Rename từ `NightShiftSurchargePercent` | 98.3 | Là phần cộng thêm cho OT ban đêm; KHÔNG phải hệ số ca đêm thường 1.3. Note: composer Phase C nhân với `OT day-type uplift` (vd weekend × 2, holiday × 3, normal-with-day-OT × 1.5). |
+| `OvertimeNormalUpliftPercent` | `50m` | ✅ Thêm 2026-06-30 (Option 4) | 98.1.a | Phần trả thêm cho OT ngày thường so với regular. Composer Phase C tính OT normal = `WorkRateNormal × (1 + OvertimeNormalUpliftPercent/100)`. Không lưu vào AttendanceRule (giữ AttendanceRule chỉ 3 field `WorkRate*` theo loại ngày). |
+| `WorkRateNormalFloor` | `1.00m` | Đã thêm | 98.1.a | Sàn hệ số để validate `AttendanceRule.WorkRateNormal >= 1.0`. |
+| `WorkRateWeeklyRestFloor` | `2.00m` | Đã thêm | 98.1.b | Sàn hệ số để validate `AttendanceRule.WorkRateWeeklyRest >= 2.0`. |
+| `WorkRateHolidayFloor` | `3.00m` | Đã thêm | 98.1.c | Sàn hệ số để validate `AttendanceRule.WorkRateHoliday >= 3.0`. |
+| `OvertimeMaxHoursPerDay` | `4m` | Đã có | 107.2.b | Giữ nguyên, đang dùng cho OT cap ngày khi chưa có ca. |
+| `OvertimeMaxHoursPerMonth` | `40m` | Thêm mới | 107.2.b | Dùng thay cho hardcode `OvertimeCapChecker.MonthlyOvertimeCapHours`. |
+| `OvertimeMaxHoursPerYear` | `300` | Đã có | 107.2.c | Giữ nguyên. |
+
+Tóm lại cho phần vừa chốt:
+
+- **8h/ngày**: dùng field đã có `StandardWorkingHoursPerDay`.
+- **48h/tuần**: thêm `MaxRegularHoursPerWeek`.
+- **Ca đêm 22:00–06:00**: quản lý qua `NightStartTime` + `NightEndTime`.
+- **Hệ số ca đêm 1.3**: không lưu trực tiếp `1.3`; lưu `NightWorkSurchargePercent = 30`, composer/payroll suy ra `1 + 30%`.
+- **Hệ số OT ngày thường 1.5** (Điều 98.1.a): KHÔNG lưu trực tiếp `1.5`; lưu `OvertimeNormalUpliftPercent = 50` (Option 4 — 2026-06-30 đã land), composer suy ra `1 + 50%`. Cuối tuần/lễ không cần uplift riêng vì `WorkRateWeeklyRestFloor=2.0` và `WorkRateHolidayFloor=3.0` đã = OT rate theo Điều 98.1.b/c. |
 
 ### 10.3. Disambiguation `NightShiftSurchargePercent` hiện có
 
 Field hiện tại default `20%` + comment trong `IComplianceLookupService` nói dùng cho "tính hệ số OT" → khớp **Điều 98.3** (OT-night extra +20%), không phải Điều 98.2 (night uplift +30%).
 
-Đề xuất: thêm field mới `NightWorkSurchargePercent = 30m` (Điều 98.2). Giữ `NightShiftSurchargePercent` cho 98.3 nhưng **rename** thành `OvertimeNightExtraPercent` để rõ semantic. Rename là breaking change cho payroll consumer chưa tồn tại → safe.
+Đề xuất: thêm field mới `NightWorkSurchargePercent = 30m` (Điều 98.2). Giữ giá trị `20%` hiện có nhưng **rename** `NightShiftSurchargePercent` thành `OvertimeNightExtraPercent` để rõ semantic. Rename là breaking change cho payroll consumer chưa tồn tại → safe.
 
 ### 10.4. Wiring change
 
-- **Drop `PayRuleFloor.cs`** sau khi compliance fields ready.
-- **`ShiftTemplateValidator`** inject `IComplianceLookupService` (giống cách inject `IClock` cho `AttendanceTimeRules`); read `WorkRate*FloorPercent` từ snapshot khi validate. Snapshot đã được cache layer trong service → không tăng cost đáng kể.
-- **`OvertimeCapChecker`** đọc tất cả cap từ snapshot, bỏ 2 hardcoded const.
+- ✅ ~~Drop~~ **Rename `PayRuleFloor.cs` → `WorkRateFloorValidator.cs`** (2026-06-30). Class chỉ là validator helper (nhận floor từ caller), không chứa floor → tên cũ gây hiểu nhầm. Floor đã đọc từ snapshot.
+- ✅ **`AttendanceRule` validator/handler** đọc `WorkRate*Floor` từ compliance snapshot khi validate rule. Công ty được trả cao hơn luật, nhưng không được cấu hình thấp hơn sàn.
+- ✅ **`RegularHoursCapChecker` + `ShiftTemplate` validator + handler** (2026-06-30) đọc `StandardWorkingHoursPerDay` và `MaxRegularHoursPerWeek` từ compliance snapshot, đã drop `RegularHoursCap.cs`. Validator dùng `CustomAsync` để inject `IComplianceLookupService` và reject ngay tại 400; handler vẫn enforce defense-in-depth.
+- **`IWorkHourSplitter` wiring** đã đọc `NightStartTime`/`NightEndTime` từ compliance snapshot theo `WorkDate`; không còn dùng hằng số hardcode trong Application.
+- **Payroll/composer Phase C** đọc `NightWorkSurchargePercent` để suy ra hệ số ca đêm thường `1.3`, và đọc `OvertimeNightExtraPercent` để xử lý OT đêm.
+- **`OvertimeCapChecker`** đọc tất cả cap OT từ snapshot, bỏ 2 hardcoded const.
 - **`AttendanceRule.WorkingTimeMode`** (§9) vẫn ở Attendance — mode là policy company chọn, không phải constant pháp lý. Snapshot cung cấp ngưỡng cho mode được chọn.
-- **Night window 22:00–06:00** (§7) cũng nên central hoá: thêm `NightStartTime`/`NightEndTime` (TimeOnly) vào `LaborLawConstantsVersion`. Nếu sau này muốn cho phép per-rule override, AttendanceRule snapshot từ compliance (default đúng Điều 106).
 
 ### 10.5. Migration
 
 Migration mới ở Compliance module (file riêng, KHÔNG động `20260619151157_ComplianceAuthoritativeSource` hay các migration compliance cũ):
 
 - Tên gợi ý: `2026MMDDhhmmss_LaborLawConstantsExtendOtAndRegularCaps`.
-- ADD 8 columns mới + 2 TimeOnly columns (night window).
+- ADD các columns mới trong bảng §10.2: `MaxRegularHoursPerWeek`, `NightStartTime`, `NightEndTime`, `NightWorkSurchargePercent`, `WorkRate*FloorPercent`, `OvertimeMaxHoursPerMonth`.
 - RENAME `NightShiftSurchargePercent` → `OvertimeNightExtraPercent` (EF migration: `RenameColumn`).
-- Backfill seed: cập nhật version `ValidFrom = 2026-01-01` (hiện tại) với defaults bảng §10.2 + night window `22:00–06:00`. Nếu schema versioning yêu cầu archive bản cũ + insert bản mới thì làm theo pattern `LaborLawConstantsRepository.UpsertAsync`.
+- Backfill seed: cập nhật version `ValidFrom = 2026-01-01` (hiện tại) với defaults bảng §10.2. Nếu schema versioning yêu cầu archive bản cũ + insert bản mới thì làm theo pattern `LaborLawConstantsRepository.UpsertAsync`.
 
 ### 10.6. Acceptance test
 
 - [ ] Migration up/down clean trên DB dev.
 - [ ] `IComplianceLookupService.GetActiveLaborLawConstantsAsync` trả snapshot chứa đủ field mới với default đúng.
-- [ ] `ShiftTemplateValidator` reject `WorkRateNormal = 0.5` (< floor 100%); accept `1.5`.
-- [ ] Sửa `WorkRateNormalFloorPercent` trong DB từ `100` → `120` → validator reject `WorkRateNormal = 1.1`.
+- [x] `RegularHoursCapChecker` đọc `StandardWorkingHoursPerDay = 8` và `MaxRegularHoursPerWeek = 48` từ snapshot thay vì hardcode (2026-06-30).
+- [x] `IWorkHourSplitter` wiring đọc `NightStartTime = 22:00`, `NightEndTime = 06:00` từ snapshot.
+- [ ] Composer/payroll suy ra ca đêm thường `1 + NightWorkSurchargePercent/100 = 1.3`.
+- [ ] `AttendanceRule` validator reject `WorkRateNormal = 0.5` (< floor 100%); accept `1.5`.
+- [ ] Sửa `WorkRateNormalFloor` trong DB từ `1.0` → `1.2` → validator reject `WorkRateNormal = 1.1`.
 - [ ] `OvertimeCapChecker` đọc đúng monthly cap từ snapshot (không còn const hardcode).
 - [ ] Tạo version mới với `ValidFrom` tương lai → `GetLaborLawConstantsAtAsync(today)` trả version active hiện tại, `GetAtAsync(future)` trả version mới.
 
@@ -802,7 +844,7 @@ DELETE FROM AttendanceRules WHERE Name = 'Night Shift Premium' AND Id = 2;
 - `OvertimeRequest`, `LeaveRequest`, `AttendanceAdjustment`, `PublicHoliday` — không đụng.
 
 **Note cho §7 (night split sau này):**
-- `WorkRateNight` sẽ add vào `AttendanceRule` (1 nơi duy nhất, không cần snapshot xuống ShiftTemplate).
+- `AttendanceRule` giữ 3 hệ số theo loại ngày. Ca đêm không snapshot xuống ShiftTemplate và không lưu thành rate riêng trên rule.
 - Splitter pure function — không lưu state.
 
 ### 11.5. Acceptance test
@@ -819,4 +861,4 @@ DELETE FROM AttendanceRules WHERE Name = 'Night Shift Premium' AND Id = 2;
 
 ### 11.6. Thứ tự với §7, §9, §10
 
-§11 độc lập với §7/§9/§10 và làm trước. Sau khi §11 land, các plan kia vẫn áp được nhưng đơn giản hơn (không phải maintain snapshot trên ShiftTemplate cho `WorkRateNight`).
+§11 độc lập với §7/§9/§10 và làm trước. Sau khi §11 land, các plan kia vẫn áp được nhưng đơn giản hơn vì ShiftTemplate chỉ tham chiếu AttendanceRule, không giữ snapshot hệ số.

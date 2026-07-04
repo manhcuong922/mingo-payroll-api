@@ -7,7 +7,6 @@ namespace MPS.Application.Features.Attendance.ShiftTemplate.Common;
 
 internal static class ShiftTemplateCodeGenerator
 {
-    private const string Prefix = "CA-";
     private const int MaxCodeLength = 20;
 
     public static async Task<string> GenerateUniqueAsync(
@@ -67,25 +66,16 @@ internal static class ShiftTemplateCodeGenerator
         }
 
         var slug = builder.ToString().Trim('-');
-        if (slug.StartsWith("CA-", StringComparison.Ordinal))
-        {
-            slug = slug[3..];
-        }
-        else if (string.Equals(slug, "CA", StringComparison.Ordinal))
-        {
-            slug = string.Empty;
-        }
-
         return string.IsNullOrWhiteSpace(slug) ? "LAM-VIEC" : slug;
     }
 
     private static string BuildCandidate(string slug, string? suffix)
     {
         var suffixPart = string.IsNullOrEmpty(suffix) ? string.Empty : $"-{suffix}";
-        var maxSlugLength = MaxCodeLength - Prefix.Length - suffixPart.Length;
+        var maxSlugLength = MaxCodeLength - suffixPart.Length;
         var trimmedSlug = slug.Length <= maxSlugLength
             ? slug
             : slug[..maxSlugLength].TrimEnd('-');
-        return $"{Prefix}{trimmedSlug}{suffixPart}";
+        return $"{trimmedSlug}{suffixPart}";
     }
 }

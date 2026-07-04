@@ -23,7 +23,6 @@ public class GetAttendanceRuleByIdQueryHandler : IRequestHandler<GetAttendanceRu
         return new AttendanceRuleDto(
             entity.Id, entity.Name, entity.Description,
             entity.WorkRateNormal, entity.WorkRateWeeklyRest, entity.WorkRateHoliday,
-            entity.WorkRateNight,
             entity.IsActive, entity.CreatedAt, entity.UpdatedAt, usedBy);
     }
 }

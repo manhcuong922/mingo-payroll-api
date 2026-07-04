@@ -5,6 +5,7 @@ using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using ScheduleTemplateEntity = MPS.Domain.Entities.Attendance.ScheduleTemplate;
 using MPS.Domain.Entities.Attendance;
@@ -18,6 +19,7 @@ public class CreateScheduleTemplateCommandHandler
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
+    private readonly IContractRepository _contractRepository;
     private readonly IRegularHoursCapChecker _capChecker;
     private readonly IMediator _mediator;
     private readonly ICurrentUserService _currentUser;
@@ -28,6 +30,7 @@ public class CreateScheduleTemplateCommandHandler
         IShiftTemplateRepository shiftRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
+        IContractRepository contractRepository,
         IRegularHoursCapChecker capChecker,
         IMediator mediator,
         ICurrentUserService currentUser,
@@ -37,6 +40,7 @@ public class CreateScheduleTemplateCommandHandler
         _shiftRepository = shiftRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
+        _contractRepository = contractRepository;
         _capChecker = capChecker;
         _mediator = mediator;
         _currentUser = currentUser;
@@ -77,6 +81,8 @@ public class CreateScheduleTemplateCommandHandler
             throw new DomainValidationException($"Shift template {request.ShiftTemplateId} không active.");
         }
 
+        await EnsureEmployeesHaveActiveContractsAsync(request.EmployeeInformationIds, cancellationToken);
+
         // Build a transient shape for pattern expansion (entity not yet persisted).
         var templateShape = new ScheduleTemplateEntity
         {
@@ -95,14 +101,14 @@ public class CreateScheduleTemplateCommandHandler
             excludeTemplateId: null,
             cancellationToken);
 
-        // §9 Phase 1b — Pre-check cap 48h/tuần TRƯỚC khi AddAsync. Tránh tạo
-        // ScheduleTemplate row rồi mới throw warning từ inner BatchUpdate — gây
-        // orphan row + "tên đã tồn tại" khi user retry.
-        if (!request.AcknowledgeWeeklyOvertimeWarnings)
-        {
-            await EnsureRegularHoursCapAsync(
-                request.EmployeeInformationIds, templateShape, shift.StandardHours, cancellationToken);
-        }
+        // Pre-check cap before AddAsync to avoid creating an orphan ScheduleTemplate row
+        // when shift assignments would be blocked.
+        await EnsureRegularHoursCapAsync(
+            request.EmployeeInformationIds,
+            templateShape,
+            shift.StandardHours,
+            request.AcknowledgeWeeklyOvertimeWarnings,
+            cancellationToken);
 
         var now = _clock.UtcNow;
         var entity = new ScheduleTemplateEntity
@@ -124,16 +130,32 @@ public class CreateScheduleTemplateCommandHandler
         var id = await _repository.AddAsync(entity, request.EmployeeInformationIds, cancellationToken);
         entity.Id = id;
 
-        // Pre-check đã pass (hoặc user ack) → forward ack=true xuống inner
-        // BatchUpdate để khỏi check lại lần nữa (data state không đổi trong cùng scope).
-        return await ApplyAsync(entity, request.EmployeeInformationIds,
-            acknowledgeWeeklyOvertimeWarnings: true, cancellationToken);
+        return await ApplyAsync(entity, request.EmployeeInformationIds, cancellationToken);
+    }
+
+    private async Task EnsureEmployeesHaveActiveContractsAsync(
+        IReadOnlyCollection<int> employeeIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
+        if (ids.Length == 0) return;
+
+        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeSet = activeIds.ToHashSet();
+        var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
+        if (inactiveIds.Length == 0) return;
+
+        var preview = string.Join(", ", inactiveIds.Take(10));
+        var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
+        throw new DomainValidationException(
+            $"Không thể tạo bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
     }
 
     private async Task EnsureRegularHoursCapAsync(
         IReadOnlyList<int> employeeIds,
         ScheduleTemplateEntity templateShape,
         decimal standardHoursPerOp,
+        bool acknowledgeWarnings,
         CancellationToken cancellationToken)
     {
         var dates = _expander.ExpandDates(templateShape);
@@ -146,14 +168,15 @@ public class CreateScheduleTemplateCommandHandler
 
         var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
         var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
-        if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
-            throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
+        if (!acknowledgeWarnings && (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0))
+        {
+            throw new RegularHoursCapExceededException(dailyWarnings, weeklyWarnings);
+        }
     }
 
     private async Task<ScheduleTemplateApplyResultDto> ApplyAsync(
         ScheduleTemplateEntity template,
         IReadOnlyCollection<int> employeeIds,
-        bool acknowledgeWeeklyOvertimeWarnings,
         CancellationToken cancellationToken)
     {
         var dates = _expander.ExpandDates(template);
@@ -181,7 +204,7 @@ public class CreateScheduleTemplateCommandHandler
                 operations,
                 BatchShiftConflictPolicy.ReplaceIfNoAttendance,
                 SourceScheduleTemplateId: template.Id,
-                AcknowledgeWeeklyOvertimeWarnings: acknowledgeWeeklyOvertimeWarnings),
+                AcknowledgeWeeklyOvertimeWarnings: true),
             cancellationToken);
 
         return new ScheduleTemplateApplyResultDto(

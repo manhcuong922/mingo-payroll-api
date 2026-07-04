@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
@@ -14,11 +15,16 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
 {
     private readonly AppDbContext _context;
     private readonly IWorkHourSplitter _splitter;
+    private readonly IComplianceLookupService _complianceLookup;
 
-    public AttendanceAdjustmentRepository(AppDbContext context, IWorkHourSplitter splitter)
+    public AttendanceAdjustmentRepository(
+        AppDbContext context,
+        IWorkHourSplitter splitter,
+        IComplianceLookupService complianceLookup)
     {
         _context = context;
         _splitter = splitter;
+        _complianceLookup = complianceLookup;
     }
 
     public async Task<(IReadOnlyList<AttendanceAdjustment> Items, int Total)> GetPagedAsync(
@@ -78,8 +84,8 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
         tracked.ReviewedByUserId = entity.ReviewedByUserId;
         tracked.ReviewedAt = entity.ReviewedAt;
         tracked.OriginalStatus = entity.OriginalStatus;
-        tracked.OriginalCheckInTime = entity.OriginalCheckInTime;
-        tracked.OriginalCheckOutTime = entity.OriginalCheckOutTime;
+        tracked.OriginalCheckInAt = entity.OriginalCheckInAt;
+        tracked.OriginalCheckOutAt = entity.OriginalCheckOutAt;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
 
@@ -117,15 +123,27 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
 
         // 1. Snapshot pre-change values for audit trail (DC-07)
         adjustment.OriginalStatus = record.Status;
-        adjustment.OriginalCheckInTime = record.CheckInTime;
-        adjustment.OriginalCheckOutTime = record.CheckOutTime;
+        adjustment.OriginalCheckInAt = record.CheckInAt;
+        adjustment.OriginalCheckOutAt = record.CheckOutAt;
 
         // 2. Overwrite the attendance record + recompute breakdown.
+        var checkInAt = adjustment.NewCheckInAt;
+        var checkOutAt = adjustment.NewCheckOutAt;
+        if (!AttendanceTimeRules.HasValidObservedRange(checkInAt, checkOutAt))
+            throw new DomainValidationException("NewCheckOutAt must be later than NewCheckInAt.");
+
         record.Status = adjustment.NewStatus;
-        record.CheckInTime = adjustment.NewCheckInTime;
-        record.CheckOutTime = adjustment.NewCheckOutTime;
+        record.CheckInAt = checkInAt;
+        record.CheckOutAt = checkOutAt;
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(record.WorkDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
-            _splitter, record.Status, record.CheckInTime, record.CheckOutTime, record.ShiftTemplate);
+            _splitter,
+            record.Status,
+            record.CheckInAt,
+            record.CheckOutAt,
+            laborLaw.NightStartTime,
+            laborLaw.NightEndTime,
+            record.ShiftTemplate);
         record.DayHours = dayHours;
         record.NightHours = nightHours;
         record.UpdatedAt = nowUtc;
@@ -158,8 +176,8 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
 
         // Snapshot pre-change values into the adjustment record (audit trail)
         adjustment.OriginalStatus = record.Status;
-        adjustment.OriginalCheckInTime = record.CheckInTime;
-        adjustment.OriginalCheckOutTime = record.CheckOutTime;
+        adjustment.OriginalCheckInAt = record.CheckInAt;
+        adjustment.OriginalCheckOutAt = record.CheckOutAt;
         adjustment.Status = AdjustmentStatus.Approved;
         adjustment.ReviewedByUserId = adjustment.CreatedByUserId;
         adjustment.ReviewedAt = nowUtc;
@@ -167,11 +185,23 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
         await _context.AttendanceAdjustments.AddAsync(adjustment, cancellationToken);
 
         // Overwrite the attendance record + propagate override reason + recompute breakdown.
+        var checkInAt = adjustment.NewCheckInAt;
+        var checkOutAt = adjustment.NewCheckOutAt;
+        if (!AttendanceTimeRules.HasValidObservedRange(checkInAt, checkOutAt))
+            throw new DomainValidationException("NewCheckOutAt must be later than NewCheckInAt.");
+
         record.Status = adjustment.NewStatus;
-        record.CheckInTime = adjustment.NewCheckInTime;
-        record.CheckOutTime = adjustment.NewCheckOutTime;
+        record.CheckInAt = checkInAt;
+        record.CheckOutAt = checkOutAt;
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(record.WorkDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
-            _splitter, record.Status, record.CheckInTime, record.CheckOutTime, record.ShiftTemplate);
+            _splitter,
+            record.Status,
+            record.CheckInAt,
+            record.CheckOutAt,
+            laborLaw.NightStartTime,
+            laborLaw.NightEndTime,
+            record.ShiftTemplate);
         record.DayHours = dayHours;
         record.NightHours = nightHours;
         record.OverrideReason = adjustment.Reason;

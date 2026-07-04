@@ -7,9 +7,8 @@ public sealed record UpdateAttendanceCommand(
     int EmployeeInformationId,
     DateOnly WorkDate,
     int ShiftTemplateId,
-    TimeOnly? CheckInTime,
-    TimeOnly? CheckOutTime,
+    DateTime? CheckInAt,
+    DateTime? CheckOutAt,
     AttendanceStatus Status,
     string? Notes,
-    string? OverrideReason,
-    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<bool>;
+    string? OverrideReason = null) : IRequest<bool>;

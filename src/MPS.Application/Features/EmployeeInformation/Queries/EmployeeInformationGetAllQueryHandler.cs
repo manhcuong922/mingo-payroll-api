@@ -30,7 +30,7 @@ public class EmployeeInformationGetAllQueryHandler
     {
         if (_currentUserService.HasPermission(Permissions.EmployeeInformationReadAll))
         {
-            var all = await _repository.GetAllAsync(cancellationToken);
+            var all = await _repository.GetAllAsync(request.HasActiveContract, cancellationToken);
             return _mapper.Map<IReadOnlyList<EmployeeInformationDto>>(all);
         }
 

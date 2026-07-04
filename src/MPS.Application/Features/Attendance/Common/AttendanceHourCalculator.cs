@@ -18,8 +18,36 @@ public static class AttendanceHourCalculator
     public static (decimal DayHours, decimal NightHours) Compute(
         IWorkHourSplitter splitter,
         AttendanceStatus status,
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
+        TimeOnly nightStart,
+        TimeOnly nightEnd,
+        ShiftTemplateEntity shift)
+    {
+        if (status is AttendanceStatus.OnLeave or AttendanceStatus.Absent)
+            return (0m, 0m);
+
+        if (checkInAt is null || checkOutAt is null)
+            return (0m, 0m);
+
+        var breakdown = splitter.Split(new WorkHourDateTimeSplitInput(
+            CheckInAt: checkInAt.Value,
+            CheckOutAt: checkOutAt.Value,
+            BreakStart: shift.BreakStartTime,
+            BreakEnd: shift.BreakEndTime,
+            NightStart: nightStart,
+            NightEnd: nightEnd));
+
+        return (breakdown.DayHours, breakdown.NightHours);
+    }
+
+    public static (decimal DayHours, decimal NightHours) Compute(
+        IWorkHourSplitter splitter,
+        AttendanceStatus status,
         TimeOnly? checkIn,
         TimeOnly? checkOut,
+        TimeOnly nightStart,
+        TimeOnly nightEnd,
         ShiftTemplateEntity shift)
     {
         if (status is AttendanceStatus.OnLeave or AttendanceStatus.Absent)
@@ -33,8 +61,8 @@ public static class AttendanceHourCalculator
             CheckOut: checkOut.Value,
             BreakStart: shift.BreakStartTime,
             BreakEnd: shift.BreakEndTime,
-            NightStart: AttendanceConstants.NightStart,
-            NightEnd: AttendanceConstants.NightEnd));
+            NightStart: nightStart,
+            NightEnd: nightEnd));
 
         return (breakdown.DayHours, breakdown.NightHours);
     }

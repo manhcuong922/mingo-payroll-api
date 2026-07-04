@@ -144,11 +144,18 @@ public static class Permissions
     public const string AttendanceReadSelf = "Attendance.Read.Self";
     public const string AttendanceCreateAll = "Attendance.Create.All";
     public const string AttendanceUpdateAll = "Attendance.Update.All";
+    public const string AttendanceSettingReadAll = "AttendanceSetting.Read.All";
+    public const string AttendanceSettingUpdateAll = "AttendanceSetting.Update.All";
 
     public const string OvertimeRequestReadAll = "OvertimeRequest.Read.All";
     public const string OvertimeRequestReadSelf = "OvertimeRequest.Read.Self";
     public const string OvertimeRequestCreateSelf = "OvertimeRequest.Create.Self";
     public const string OvertimeRequestApproveAll = "OvertimeRequest.Approve.All";
+
+    public const string OvertimeSlotTemplateReadAll = "OvertimeSlotTemplate.Read.All";
+    public const string OvertimeSlotTemplateCreateAll = "OvertimeSlotTemplate.Create.All";
+    public const string OvertimeSlotTemplateUpdateAll = "OvertimeSlotTemplate.Update.All";
+    public const string OvertimeSlotTemplateDeleteAll = "OvertimeSlotTemplate.Delete.All";
 
     public const string LeaveRequestReadAll = "LeaveRequest.Read.All";
     public const string LeaveRequestReadSelf = "LeaveRequest.Read.Self";
@@ -363,4 +370,14 @@ public static class PermissionIds
     public const int FaceRegistrationSubmitSelf = 134;
     public const int FaceRegistrationReadAll    = 135;
     public const int FaceRegistrationApproveAll = 136;
+
+    // ===== OvertimeSlotTemplate (Attendance ext) — IDs 137–140 =====
+    public const int OvertimeSlotTemplateReadAll = 137;
+    public const int OvertimeSlotTemplateCreateAll = 138;
+    public const int OvertimeSlotTemplateUpdateAll = 139;
+    public const int OvertimeSlotTemplateDeleteAll = 140;
+
+    // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
+    public const int AttendanceSettingReadAll = 141;
+    public const int AttendanceSettingUpdateAll = 142;
 }

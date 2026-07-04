@@ -51,6 +51,41 @@ public sealed class WorkHourSplitter : IWorkHourSplitter
             Math.Round((decimal)nightMin / 60m, 2));
     }
 
+    public WorkHourBreakdown Split(WorkHourDateTimeSplitInput input)
+    {
+        if (input.CheckOutAt <= input.CheckInAt)
+            return WorkHourBreakdown.Zero;
+
+        var baseDate = input.CheckInAt.Date;
+        var shiftStart = ToMinutesFromBase(input.CheckInAt, baseDate);
+        var shiftEnd = ToMinutesFromBase(input.CheckOutAt, baseDate);
+
+        var segments = BuildSegmentsAfterBreak(shiftStart, shiftEnd,
+            input.BreakStart, input.BreakEnd);
+
+        var nightWindows = BuildNightWindows(input.NightStart, input.NightEnd);
+
+        var totalMin = 0;
+        var nightMin = 0;
+        foreach (var (segStart, segEnd) in segments)
+        {
+            totalMin += segEnd - segStart;
+            foreach (var (winStart, winEnd) in nightWindows)
+            {
+                var overlapStart = Math.Max(segStart, winStart);
+                var overlapEnd = Math.Min(segEnd, winEnd);
+                if (overlapEnd > overlapStart)
+                    nightMin += overlapEnd - overlapStart;
+            }
+        }
+
+        var dayMin = totalMin - nightMin;
+
+        return new WorkHourBreakdown(
+            Math.Round((decimal)dayMin / 60m, 2),
+            Math.Round((decimal)nightMin / 60m, 2));
+    }
+
     private static List<(int Start, int End)> BuildSegmentsAfterBreak(
         int shiftStart, int shiftEnd,
         TimeOnly? breakStart, TimeOnly? breakEnd)
@@ -98,4 +133,7 @@ public sealed class WorkHourSplitter : IWorkHourSplitter
     }
 
     private static int ToMinutes(TimeOnly t) => t.Hour * 60 + t.Minute;
+
+    private static int ToMinutesFromBase(DateTime value, DateTime baseDate) =>
+        (int)Math.Floor((value - baseDate).TotalMinutes);
 }

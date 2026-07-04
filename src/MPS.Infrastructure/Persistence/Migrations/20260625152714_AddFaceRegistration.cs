@@ -57,15 +57,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 table: "FaceRegistrations",
                 column: "Status");
 
-            // ===== Seed permissions (IDs 130-132) — FaceRegistration (Track B) =====
+            // ===== Seed permissions (IDs 134-136) — FaceRegistration (Track B) =====
             migrationBuilder.InsertData(
                 table: "Permissions",
                 columns: new[] { "Id", "Action", "Code", "Description", "Resource", "Scope" },
                 values: new object[,]
                 {
-                    { 130, "Submit",  "FaceRegistration.Submit.Self", "Nộp ảnh đăng ký nhận diện khuôn mặt của bản thân.", "FaceRegistration", "Self" },
-                    { 131, "Read",    "FaceRegistration.Read.All",    "Xem tất cả đăng ký nhận diện khuôn mặt.",           "FaceRegistration", "All"  },
-                    { 132, "Approve", "FaceRegistration.Approve.All", "Duyệt / từ chối đăng ký nhận diện khuôn mặt.",     "FaceRegistration", "All"  },
+                    { 134, "Submit",  "FaceRegistration.Submit.Self", "Nộp ảnh đăng ký nhận diện khuôn mặt của bản thân.", "FaceRegistration", "Self" },
+                    { 135, "Read",    "FaceRegistration.Read.All",    "Xem tất cả đăng ký nhận diện khuôn mặt.",           "FaceRegistration", "All"  },
+                    { 136, "Approve", "FaceRegistration.Approve.All", "Duyệt / từ chối đăng ký nhận diện khuôn mặt.",     "FaceRegistration", "All"  },
                 });
 
             migrationBuilder.InsertData(
@@ -74,15 +74,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 values: new object[,]
                 {
                     // SystemAdmin (1)
-                    { 130, 1 }, { 131, 1 }, { 132, 1 },
+                    { 134, 1 }, { 135, 1 }, { 136, 1 },
                     // HR (2)
-                    { 130, 2 }, { 131, 2 }, { 132, 2 },
+                    { 134, 2 }, { 135, 2 }, { 136, 2 },
                     // Director (4): read-only
-                    { 131, 4 },
+                    { 135, 4 },
                     // DepartmentManager (5): read-only
-                    { 131, 5 },
+                    { 135, 5 },
                     // Employee (7): submit self + view own (self-service)
-                    { 130, 7 },
+                    { 134, 7 },
                 });
         }
 
@@ -92,8 +92,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.DropTable(
                 name: "FaceRegistrations");
 
-            migrationBuilder.Sql("DELETE FROM RolePermissions WHERE PermissionId BETWEEN 130 AND 132;");
-            migrationBuilder.Sql("DELETE FROM Permissions WHERE Id BETWEEN 130 AND 132;");
+            migrationBuilder.Sql("DELETE FROM RolePermissions WHERE PermissionId BETWEEN 134 AND 136;");
+            migrationBuilder.Sql("DELETE FROM Permissions WHERE Id BETWEEN 134 AND 136;");
         }
     }
 }

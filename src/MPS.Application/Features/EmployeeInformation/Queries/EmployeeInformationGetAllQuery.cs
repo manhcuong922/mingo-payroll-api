@@ -7,5 +7,6 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace MPS.Application.Features.EmployeeInformation.Queries;
-public record EmployeeInformationGetAllQuery : IRequest<IReadOnlyList<EmployeeInformationDto>>;
+public record EmployeeInformationGetAllQuery(bool? HasActiveContract = null)
+    : IRequest<IReadOnlyList<EmployeeInformationDto>>;
 

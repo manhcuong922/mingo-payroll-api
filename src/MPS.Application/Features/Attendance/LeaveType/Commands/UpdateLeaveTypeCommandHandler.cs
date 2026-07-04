@@ -1,6 +1,8 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.LeaveType.Common;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using LeaveTypeEntity = MPS.Domain.Entities.Attendance.LeaveType;
 
@@ -9,15 +11,21 @@ namespace MPS.Application.Features.Attendance.LeaveType.Commands;
 public class UpdateLeaveTypeCommandHandler : IRequestHandler<UpdateLeaveTypeCommand, bool>
 {
     private readonly ILeaveTypeRepository _repository;
+    private readonly ILeaveBalanceRepository _balanceRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
     public UpdateLeaveTypeCommandHandler(
         ILeaveTypeRepository repository,
+        ILeaveBalanceRepository balanceRepository,
+        IEmployeeInformationRepository employeeRepository,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
+        _balanceRepository = balanceRepository;
+        _employeeRepository = employeeRepository;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -47,13 +55,50 @@ public class UpdateLeaveTypeCommandHandler : IRequestHandler<UpdateLeaveTypeComm
             IsPaid = request.IsPaid,
             PaidRate = request.IsPaid ? request.PaidRate : null,
             MaxDaysPerRequest = request.MaxDaysPerRequest,
+            AllowEmployeeSelection = request.AllowEmployeeSelection,
+            MaxDaysPerYear = request.MaxDaysPerYear,
+            MaxDaysPerMonth = request.MaxDaysPerMonth,
+            MaxDaysPerWeek = request.MaxDaysPerWeek,
+            ApplyScope = request.ApplyScope,
+            TargetDepartmentIds = request.TargetDepartmentIds,
+            TargetEmployeeIds = request.TargetEmployeeIds,
             RequireDocument = request.RequireDocument,
-            DeductsBalance = request.DeductsBalance,
+            DeductsBalance = request.DeductsBalance || request.MaxDaysPerYear.HasValue,
             IsActive = request.IsActive,
             UpdatedAt = _clock.UtcNow,
             UpdatedByUserId = userId
         };
 
-        return await _repository.UpdateAsync(entity, cancellationToken);
+        var updated = await _repository.UpdateAsync(entity, cancellationToken);
+        if (updated)
+            await SyncCurrentYearBalancesAsync(entity, userId, cancellationToken);
+
+        return updated;
+    }
+
+    private async Task SyncCurrentYearBalancesAsync(
+        LeaveTypeEntity entity,
+        int userId,
+        CancellationToken cancellationToken)
+    {
+        if (!entity.IsActive || !LeaveTypeAssignmentPolicy.TracksYearlyBalance(entity))
+            return;
+
+        var totalDays = LeaveTypeAssignmentPolicy.ResolveYearlyQuota(entity);
+        if (totalDays <= 0m) return;
+
+        var employees = await _employeeRepository.GetAllAsync(cancellationToken: cancellationToken);
+        var targetIds = LeaveTypeAssignmentPolicy.ResolveTargetEmployeeIds(
+            entity,
+            employees.Select(employee => employee.Id).ToArray());
+
+        await _balanceRepository.UpsertForLeaveTypeAsync(
+            entity.Id,
+            _clock.UtcNow.Year,
+            targetIds,
+            totalDays,
+            userId,
+            _clock.UtcNow,
+            cancellationToken);
     }
 }

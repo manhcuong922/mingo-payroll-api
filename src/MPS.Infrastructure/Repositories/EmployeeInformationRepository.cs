@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
+using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.Persistence;
@@ -29,17 +30,26 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .Include(e => e.User)
             .FirstOrDefaultAsync(e => e.UserId == userId, cancellationToken);
 
-    public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        await _context.EmployeeInformations
+    public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
+        bool? hasActiveContract = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.EmployeeInformations
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
-            .ToListAsync(cancellationToken);
+            .AsQueryable();
+
+        query = ApplyActiveContractFilter(query, hasActiveContract);
+
+        return await query.ToListAsync(cancellationToken);
+    }
 
     public async Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
         string? keyword,
         int? positionId,
         bool? hasAccount,
+        bool? hasActiveContract,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default)
@@ -67,6 +77,8 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
                 ? query.Where(e => e.UserId != null)
                 : query.Where(e => e.UserId == null);
 
+        query = ApplyActiveContractFilter(query, hasActiveContract);
+
         var total = await query.CountAsync(cancellationToken);
 
         var items = await query
@@ -76,6 +88,19 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .ToListAsync(cancellationToken);
 
         return (items, total);
+    }
+
+    private IQueryable<EmployeeInformation> ApplyActiveContractFilter(
+        IQueryable<EmployeeInformation> query,
+        bool? hasActiveContract)
+    {
+        if (!hasActiveContract.HasValue) return query;
+
+        return hasActiveContract.Value
+            ? query.Where(e => _context.Contracts
+                .Any(c => c.EmployeeInformationId == e.Id && c.Status == ContractStatus.Active))
+            : query.Where(e => !_context.Contracts
+                .Any(c => c.EmployeeInformationId == e.Id && c.Status == ContractStatus.Active));
     }
 
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default) =>

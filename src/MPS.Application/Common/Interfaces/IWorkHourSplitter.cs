@@ -11,6 +11,7 @@ namespace MPS.Application.Common.Interfaces;
 public interface IWorkHourSplitter
 {
     WorkHourBreakdown Split(WorkHourSplitInput input);
+    WorkHourBreakdown Split(WorkHourDateTimeSplitInput input);
 }
 
 /// <summary>
@@ -19,6 +20,14 @@ public interface IWorkHourSplitter
 public sealed record WorkHourSplitInput(
     TimeOnly CheckIn,
     TimeOnly CheckOut,
+    TimeOnly? BreakStart,
+    TimeOnly? BreakEnd,
+    TimeOnly NightStart,
+    TimeOnly NightEnd);
+
+public sealed record WorkHourDateTimeSplitInput(
+    DateTime CheckInAt,
+    DateTime CheckOutAt,
     TimeOnly? BreakStart,
     TimeOnly? BreakEnd,
     TimeOnly NightStart,

@@ -1,8 +1,10 @@
 using MediatR;
 using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.ShiftTemplate.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
 
@@ -15,8 +17,7 @@ namespace MPS.Application.Features.Attendance.EmployeeShift.Commands;
 ///   - Lock theo (emp, date, shift): NV có 2 ca / ngày chỉ ca đã chấm bị khoá.
 ///
 /// Overlap semantics: so sánh segment [Start, End) cho từng ca trên cùng WorkDate.
-/// Ca đêm (Start > End) tách thành 2 segment [Start, 24:00) + [0:00, End).
-/// LIMITATION: chưa check cross-date overlap (vd Tue 05:00 ca vs Mon 22:00–06:00 ca đêm).
+/// Ca đêm (Start > End) được hiểu là kết thúc vào ngày hôm sau và được check overlap cross-date.
 /// </summary>
 public class BatchUpdateShiftAssignmentsCommandHandler
     : IRequestHandler<BatchUpdateShiftAssignmentsCommand, BatchUpdateShiftAssignmentsResult>
@@ -25,6 +26,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
 
     private readonly IEmployeeShiftAssignmentRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IContractRepository _contractRepository;
     private readonly IRegularHoursCapChecker _capChecker;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
@@ -32,12 +34,14 @@ public class BatchUpdateShiftAssignmentsCommandHandler
     public BatchUpdateShiftAssignmentsCommandHandler(
         IEmployeeShiftAssignmentRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IContractRepository contractRepository,
         IRegularHoursCapChecker capChecker,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _contractRepository = contractRepository;
         _capChecker = capChecker;
         _currentUser = currentUser;
         _clock = clock;
@@ -61,16 +65,23 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         }
 
         ValidateShape(operations);
+        await EnsureAssignableEmployeesHaveActiveContractsAsync(operations, cancellationToken);
 
         var employeeIds = operations.Select(o => o.EmployeeInformationId).Distinct().ToList();
         var fromDate = operations.Min(o => o.WorkDate);
         var toDate = operations.Max(o => o.WorkDate);
 
-        // Existing assignments — group by (emp, date) vì multi-shift cho nhiều / ngày.
+        // Existing assignments — lấy rộng ±1 ngày để check overlap cross-date cho ca qua đêm.
         var existingAssignments = await _repository.GetByEmployeesAndDateRangeAsync(
-            employeeIds, fromDate, toDate, cancellationToken);
-        var existingByKey = existingAssignments
+            employeeIds, fromDate.AddDays(-1), toDate.AddDays(1), cancellationToken);
+        var existingInRequestedRange = existingAssignments
+            .Where(a => a.WorkDate >= fromDate && a.WorkDate <= toDate)
+            .ToList();
+        var existingByKey = existingInRequestedRange
             .GroupBy(a => (a.EmployeeInformationId, a.WorkDate))
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var existingByEmployeeForOverlap = existingAssignments
+            .GroupBy(a => a.EmployeeInformationId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         // Khoá theo từng ca, không phải cả ngày.
@@ -107,16 +118,18 @@ public class BatchUpdateShiftAssignmentsCommandHandler
             var key = (op.EmployeeInformationId, op.WorkDate);
             existingByKey.TryGetValue(key, out var existingList);
             existingList ??= new List<EmployeeShiftAssignment>();
+            existingByEmployeeForOverlap.TryGetValue(op.EmployeeInformationId, out var overlapList);
+            overlapList ??= new List<EmployeeShiftAssignment>();
 
             BatchShiftItemResult item;
             switch (op.Kind)
             {
                 case BatchShiftOperationKind.Add:
-                    item = HandleAdd(op, existingList, lockedShifts, shiftTemplates, userId, now, sourceTemplateId,
+                    item = HandleAdd(op, existingList, overlapList, lockedShifts, shiftTemplates, userId, now, sourceTemplateId,
                         toAdd, toRemoveIds, request.ConflictPolicy);
                     break;
                 case BatchShiftOperationKind.Change:
-                    item = HandleChange(op, existingList, lockedShifts, shiftTemplates, toUpdate);
+                    item = HandleChange(op, existingList, overlapList, lockedShifts, shiftTemplates, toUpdate);
                     break;
                 case BatchShiftOperationKind.Remove:
                     item = HandleRemove(op, existingList, lockedShifts, toRemoveIds);
@@ -141,7 +154,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         // §9 Phase 1b — Cap 48h/tuần warn-then-confirm (Điều 105 BLLĐ).
         // Build delta từ toAdd/toUpdate/toRemoveIds (state thực sẽ ghi),
         // KHÔNG dùng raw ops vì Replace overlap có thể remove ngầm.
-        var existingById = existingAssignments.ToDictionary(a => a.Id);
+        var existingById = existingInRequestedRange.ToDictionary(a => a.Id);
         var deltas = new List<WeeklyCapDelta>();
         foreach (var add in toAdd)
         {
@@ -162,12 +175,15 @@ public class BatchUpdateShiftAssignmentsCommandHandler
             deltas.Add(new WeeklyCapDelta(existing.EmployeeInformationId, existing.WorkDate, -oldHours));
         }
 
-        if (deltas.Count > 0 && !request.AcknowledgeWeeklyOvertimeWarnings)
+        if (deltas.Count > 0)
         {
             var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
             var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
-            if (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0)
-                throw new RegularHoursCapWarningException(dailyWarnings, weeklyWarnings);
+            if (!request.AcknowledgeWeeklyOvertimeWarnings
+                && (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0))
+            {
+                throw new RegularHoursCapExceededException(dailyWarnings, weeklyWarnings);
+            }
         }
 
         await _repository.ApplyBatchAsync(toAdd, toUpdate, toRemoveIds, cancellationToken);
@@ -177,6 +193,31 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         var conflicts = items.Count - applied - skipped;
 
         return new BatchUpdateShiftAssignmentsResult(applied, skipped, conflicts, items);
+    }
+
+    private async Task EnsureAssignableEmployeesHaveActiveContractsAsync(
+        IReadOnlyList<BatchShiftOperation> operations,
+        CancellationToken cancellationToken)
+    {
+        var employeeIds = operations
+            .Where(o => o.Kind is BatchShiftOperationKind.Add or BatchShiftOperationKind.Change)
+            .Select(o => o.EmployeeInformationId)
+            .Distinct()
+            .OrderBy(id => id)
+            .ToArray();
+        if (employeeIds.Length == 0) return;
+
+        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(
+            employeeIds,
+            cancellationToken);
+        var activeSet = activeIds.ToHashSet();
+        var inactiveIds = employeeIds.Where(id => !activeSet.Contains(id)).ToArray();
+        if (inactiveIds.Length == 0) return;
+
+        var preview = string.Join(", ", inactiveIds.Take(10));
+        var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
+        throw new DomainValidationException(
+            $"Không thể phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
     }
 
     private static void ValidateShape(IReadOnlyList<BatchShiftOperation> operations)
@@ -199,6 +240,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
     private static BatchShiftItemResult HandleAdd(
         BatchShiftOperation op,
         List<EmployeeShiftAssignment> existingList,
+        List<EmployeeShiftAssignment> overlapList,
         HashSet<(int, DateOnly, int)> lockedShifts,
         IReadOnlyDictionary<int, ShiftTemplateEntity> shifts,
         int userId,
@@ -225,10 +267,44 @@ public class BatchUpdateShiftAssignmentsCommandHandler
                 "Assignment đã tồn tại với cùng ca trên ngày này.");
         }
 
+        var crossDateOverlap = overlapList
+            .Where(a => a.WorkDate != op.WorkDate
+                     && shifts.TryGetValue(a.ShiftTemplateId, out var existShift)
+                     && ShiftTimeCalculator.Overlaps(
+                         op.WorkDate, shift.StartTime, shift.EndTime,
+                         a.WorkDate, existShift.StartTime, existShift.EndTime))
+            .ToList();
+
+        if (crossDateOverlap.Count > 0)
+        {
+            var other = crossDateOverlap[0];
+            return new BatchShiftItemResult(op.Kind, op.EmployeeInformationId, op.WorkDate, shiftId,
+                BatchShiftItemStatus.OverlapsExistingShift, other.ShiftTemplateId,
+                $"Ca mới [{shift.StartTime:HH\\:mm}-{shift.EndTime:HH\\:mm}] giao thoa với ca ngày {other.WorkDate:yyyy-MM-dd}.");
+        }
+
+        var plannedOverlap = toAdd
+            .Where(a => a.EmployeeInformationId == op.EmployeeInformationId
+                     && shifts.TryGetValue(a.ShiftTemplateId, out var plannedShift)
+                     && ShiftTimeCalculator.Overlaps(
+                         op.WorkDate, shift.StartTime, shift.EndTime,
+                         a.WorkDate, plannedShift.StartTime, plannedShift.EndTime))
+            .ToList();
+
+        if (plannedOverlap.Count > 0)
+        {
+            var other = plannedOverlap[0];
+            return new BatchShiftItemResult(op.Kind, op.EmployeeInformationId, op.WorkDate, shiftId,
+                BatchShiftItemStatus.OverlapsExistingShift, other.ShiftTemplateId,
+                $"Ca mới [{shift.StartTime:HH\\:mm}-{shift.EndTime:HH\\:mm}] giao thoa với ca đang thêm trong batch ngày {other.WorkDate:yyyy-MM-dd}.");
+        }
+
         // Overlap check: ca mới giao thoa với ca đã có nào trên cùng ngày?
         var overlapping = existingList
             .Where(a => shifts.TryGetValue(a.ShiftTemplateId, out var existShift)
-                     && Overlaps(shift.StartTime, shift.EndTime, existShift.StartTime, existShift.EndTime))
+                     && ShiftTimeCalculator.Overlaps(
+                         op.WorkDate, shift.StartTime, shift.EndTime,
+                         a.WorkDate, existShift.StartTime, existShift.EndTime))
             .ToList();
 
         if (overlapping.Count > 0)
@@ -285,6 +361,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
     private static BatchShiftItemResult HandleChange(
         BatchShiftOperation op,
         List<EmployeeShiftAssignment> existingList,
+        List<EmployeeShiftAssignment> overlapList,
         HashSet<(int, DateOnly, int)> lockedShifts,
         IReadOnlyDictionary<int, ShiftTemplateEntity> shifts,
         List<(int Id, int NewShiftTemplateId, int? NewScheduleTemplateId)> toUpdate)
@@ -312,6 +389,22 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         }
 
         var existing = existingList[0];
+        var overlapping = overlapList
+            .Where(a => a.Id != existing.Id
+                     && shifts.TryGetValue(a.ShiftTemplateId, out var existShift)
+                     && ShiftTimeCalculator.Overlaps(
+                         op.WorkDate, shift.StartTime, shift.EndTime,
+                         a.WorkDate, existShift.StartTime, existShift.EndTime))
+            .ToList();
+
+        if (overlapping.Count > 0)
+        {
+            var other = overlapping[0];
+            return new BatchShiftItemResult(op.Kind, op.EmployeeInformationId, op.WorkDate, shiftId,
+                BatchShiftItemStatus.OverlapsExistingShift, other.ShiftTemplateId,
+                $"Ca mới [{shift.StartTime:HH\\:mm}-{shift.EndTime:HH\\:mm}] giao thoa với ca ngày {other.WorkDate:yyyy-MM-dd}.");
+        }
+
         if (lockedShifts.Contains((existing.EmployeeInformationId, existing.WorkDate, existing.ShiftTemplateId)))
         {
             return new BatchShiftItemResult(op.Kind, op.EmployeeInformationId, op.WorkDate, shiftId,
@@ -373,35 +466,4 @@ public class BatchUpdateShiftAssignmentsCommandHandler
             or BatchShiftItemStatus.InvalidEmployee;
     }
 
-    /// <summary>
-    /// Time-of-day overlap, hỗ trợ wrap-around (ca đêm Start &gt; End).
-    /// Half-open interval [Start, End): hai ca touch tại thời điểm (vd 12:00 end &amp; 12:00 start) KHÔNG overlap.
-    /// </summary>
-    private static bool Overlaps(TimeOnly aStart, TimeOnly aEnd, TimeOnly bStart, TimeOnly bEnd)
-    {
-        foreach (var sa in SegmentsOf(aStart, aEnd))
-        {
-            foreach (var sb in SegmentsOf(bStart, bEnd))
-            {
-                if (sa.Start < sb.End && sb.Start < sa.End) return true;
-            }
-        }
-        return false;
-    }
-
-    private static IEnumerable<(int Start, int End)> SegmentsOf(TimeOnly start, TimeOnly end)
-    {
-        var s = start.Hour * 60 + start.Minute;
-        var e = end.Hour * 60 + end.Minute;
-        if (e <= s)
-        {
-            // wrap-around (night shift): [s, 24:00) + [0:00, e)
-            yield return (s, 24 * 60);
-            if (e > 0) yield return (0, e);
-        }
-        else
-        {
-            yield return (s, e);
-        }
-    }
 }

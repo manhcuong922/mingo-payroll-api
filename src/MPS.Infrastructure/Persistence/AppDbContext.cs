@@ -66,7 +66,9 @@ public class AppDbContext : DbContext
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<AttendanceSetting> AttendanceSettings => Set<AttendanceSetting>();
     public DbSet<OvertimeRequest> OvertimeRequests => Set<OvertimeRequest>();
+    public DbSet<OvertimeSlotTemplate> OvertimeSlotTemplates => Set<OvertimeSlotTemplate>();
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();

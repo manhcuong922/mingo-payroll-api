@@ -12,15 +12,18 @@ public class CreateAttendanceRuleCommandHandler : IRequestHandler<CreateAttendan
     private readonly IAttendanceRuleRepository _repository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IComplianceLookupService _complianceLookup;
 
     public CreateAttendanceRuleCommandHandler(
         IAttendanceRuleRepository repository,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IComplianceLookupService complianceLookup)
     {
         _repository = repository;
         _currentUser = currentUser;
         _clock = clock;
+        _complianceLookup = complianceLookup;
     }
 
     public async Task<int> Handle(CreateAttendanceRuleCommand request, CancellationToken cancellationToken)
@@ -32,11 +35,15 @@ public class CreateAttendanceRuleCommandHandler : IRequestHandler<CreateAttendan
         if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
             throw new ConflictException($"Attendance rule with name '{name}' already exists.");
 
-        PayRuleFloor.EnsureValid(
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
+
+        WorkRateFloorValidator.EnsureValid(
             request.WorkRateNormal,
             request.WorkRateWeeklyRest,
             request.WorkRateHoliday,
-            request.WorkRateNight);
+            laborLaw.WorkRateNormalFloor,
+            laborLaw.WorkRateWeeklyRestFloor,
+            laborLaw.WorkRateHolidayFloor);
 
         var now = _clock.UtcNow;
         var entity = new AttendanceRuleEntity
@@ -46,7 +53,6 @@ public class CreateAttendanceRuleCommandHandler : IRequestHandler<CreateAttendan
             WorkRateNormal = request.WorkRateNormal,
             WorkRateWeeklyRest = request.WorkRateWeeklyRest,
             WorkRateHoliday = request.WorkRateHoliday,
-            WorkRateNight = request.WorkRateNight,
             IsActive = true,
             CreatedAt = now,
             CreatedByUserId = userId

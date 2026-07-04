@@ -17,6 +17,6 @@ public class GetPublicHolidaysQueryHandler : IRequestHandler<GetPublicHolidaysQu
     {
         var items = await _repository.GetByYearAsync(request.Year, request.IncludeInactive, cancellationToken);
         return items.Select(h => new PublicHolidayDto(
-            h.Id, h.Name, h.HolidayDate, h.Category, h.PayRateOverride, h.Description, h.IsActive, h.CreatedAt, h.UpdatedAt)).ToList();
+            h.Id, h.Name, h.HolidayDate, h.HolidayEndDate, h.Description, h.IsActive, h.CreatedAt, h.UpdatedAt)).ToList();
     }
 }

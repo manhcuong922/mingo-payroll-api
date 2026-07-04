@@ -15,16 +15,16 @@ public class AttendanceAdjustmentEntityConfiguration : IEntityTypeConfiguration<
         builder.Property(e => e.AttendanceRecordId).IsRequired();
         builder.Property(e => e.EmployeeInformationId).IsRequired();
         builder.Property(e => e.NewStatus).HasConversion<byte>().IsRequired();
-        builder.Property(e => e.NewCheckInTime);
-        builder.Property(e => e.NewCheckOutTime);
+        builder.Property(e => e.NewCheckInAt).HasColumnType("datetime2");
+        builder.Property(e => e.NewCheckOutAt).HasColumnType("datetime2");
         builder.Property(e => e.Reason).HasMaxLength(1000).IsRequired();
         builder.Property(e => e.Status).HasConversion<byte>().IsRequired();
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.Property(e => e.ReviewedAt);
 
         builder.Property(e => e.OriginalStatus).HasConversion<byte?>();
-        builder.Property(e => e.OriginalCheckInTime);
-        builder.Property(e => e.OriginalCheckOutTime);
+        builder.Property(e => e.OriginalCheckInAt).HasColumnType("datetime2");
+        builder.Property(e => e.OriginalCheckOutAt).HasColumnType("datetime2");
 
         builder.HasIndex(e => e.AttendanceRecordId);
         builder.HasIndex(e => new { e.EmployeeInformationId, e.Status });

@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.LeaveType.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -51,9 +52,9 @@ public class InitLeaveBalanceCommandHandler : IRequestHandler<InitLeaveBalanceCo
 
         var leaveType = await _leaveTypeRepository.GetByIdAsync(request.LeaveTypeId, cancellationToken)
             ?? throw new NotFoundException($"Leave type {request.LeaveTypeId} not found.");
-        if (!leaveType.DeductsBalance)
+        if (!LeaveTypeAssignmentPolicy.TracksYearlyBalance(leaveType))
             throw new DomainValidationException(
-                $"Leave type '{leaveType.Code}' does not deduct balance — initializing a balance is not applicable.");
+                $"Leave type '{leaveType.Code}' does not track yearly balance.");
 
         var isAnnual = string.Equals(leaveType.Code, AnnualCode, StringComparison.OrdinalIgnoreCase);
 
@@ -72,7 +73,7 @@ public class InitLeaveBalanceCommandHandler : IRequestHandler<InitLeaveBalanceCo
         }
         else
         {
-            baseDays = 0m;
+            baseDays = LeaveTypeAssignmentPolicy.ResolveYearlyQuota(leaveType);
             bonusDays = 0m;
         }
 

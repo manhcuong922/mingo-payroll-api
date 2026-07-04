@@ -30,6 +30,18 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AllowEmployeeSelection")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("ApplyScope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("AllEmployees");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -96,20 +108,20 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("EmployeeInformationId")
                         .HasColumnType("int");
 
-                    b.Property<TimeOnly?>("NewCheckInTime")
-                        .HasColumnType("time");
+                    b.Property<DateTime?>("NewCheckInAt")
+                        .HasColumnType("datetime2");
 
-                    b.Property<TimeOnly?>("NewCheckOutTime")
-                        .HasColumnType("time");
+                    b.Property<DateTime?>("NewCheckOutAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<byte>("NewStatus")
                         .HasColumnType("tinyint");
 
-                    b.Property<TimeOnly?>("OriginalCheckInTime")
-                        .HasColumnType("time");
+                    b.Property<DateTime?>("OriginalCheckInAt")
+                        .HasColumnType("datetime2");
 
-                    b.Property<TimeOnly?>("OriginalCheckOutTime")
-                        .HasColumnType("time");
+                    b.Property<DateTime?>("OriginalCheckOutAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<byte?>("OriginalStatus")
                         .HasColumnType("tinyint");
@@ -161,11 +173,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<TimeOnly?>("CheckInTime")
-                        .HasColumnType("time");
+                    b.Property<DateTime?>("CheckInAt")
+                        .HasColumnType("datetime2");
 
-                    b.Property<TimeOnly?>("CheckOutTime")
-                        .HasColumnType("time");
+                    b.Property<DateTime?>("CheckOutAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -173,8 +185,18 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("CreatedByUserId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("DayHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<int>("EmployeeInformationId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("NightHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
@@ -213,6 +235,67 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("AttendanceRecords", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AllowAdminOverride")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("DailyEditCutoffTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsEditLockEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("LockAfterDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("RequireOverrideReason")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("TimezoneId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("AttendanceSettings", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
@@ -539,6 +622,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("MaxDaysPerRequest")
                         .HasColumnType("decimal(5,1)");
 
+                    b.Property<decimal?>("MaxDaysPerMonth")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<decimal?>("MaxDaysPerWeek")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<decimal?>("MaxDaysPerYear")
+                        .HasColumnType("decimal(5,1)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -551,6 +643,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("TargetDepartmentIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("TargetEmployeeIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -590,14 +690,27 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("EmployeeInformationId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("OtDayHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<TimeOnly>("OtEndTime")
                         .HasColumnType("time");
 
                     b.Property<decimal>("OtHours")
                         .HasColumnType("decimal(4,2)");
 
+                    b.Property<decimal>("OtNightHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<TimeOnly>("OtStartTime")
                         .HasColumnType("time");
+
+                    b.Property<int?>("OvertimeSlotTemplateId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
@@ -629,6 +742,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedByUserId");
 
+                    b.HasIndex("OvertimeSlotTemplateId");
+
                     b.HasIndex("ReviewedByUserId");
 
                     b.HasIndex("UpdatedByUserId");
@@ -638,7 +753,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("OvertimeRequests", (string)null);
                 });
 
-            modelBuilder.Entity("MPS.Domain.Entities.Attendance.PublicHoliday", b =>
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -646,8 +761,81 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<byte>("Category")
-                        .HasColumnType("tinyint");
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsNightSlot")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("MultiplierHolidayDay")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("MultiplierHolidayNight")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("MultiplierNormalDay")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("MultiplierNormalNightNoPrevOt")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("MultiplierNormalNightWithPrevOt")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("MultiplierWeeklyRestDay")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal?>("MultiplierWeeklyRestNight")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("OvertimeSlotTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.PublicHoliday", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -662,6 +850,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("HolidayDate")
                         .HasColumnType("date");
 
+                    b.Property<DateOnly>("HolidayEndDate")
+                        .HasColumnType("date");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -671,9 +862,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
-
-                    b.Property<decimal?>("PayRateOverride")
-                        .HasColumnType("decimal(4,2)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -685,9 +873,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedByUserId");
 
-                    b.HasIndex("HolidayDate")
-                        .IsUnique()
-                        .HasFilter("[IsActive] = 1");
+                    b.HasIndex("HolidayDate", "HolidayEndDate");
 
                     b.HasIndex("UpdatedByUserId");
 
@@ -1433,7 +1619,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<decimal>("NightShiftSurchargePercent")
+                    b.Property<decimal>("MaxRegularHoursPerWeek")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<TimeOnly>("NightEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly>("NightStartTime")
+                        .HasColumnType("time");
+
+                    b.Property<decimal>("NightWorkSurchargePercent")
                         .HasColumnType("decimal(5,2)");
 
                     b.Property<string>("Note")
@@ -1443,8 +1638,17 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("OvertimeMaxHoursPerDay")
                         .HasColumnType("decimal(4,2)");
 
+                    b.Property<decimal>("OvertimeMaxHoursPerMonth")
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<int>("OvertimeMaxHoursPerYear")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("OvertimeNightExtraPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("OvertimeNormalUpliftPercent")
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<decimal>("ProbationSalaryMinPercent")
                         .HasColumnType("decimal(5,2)");
@@ -1463,6 +1667,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("ValidFrom")
                         .HasColumnType("date");
+
+                    b.Property<decimal>("WorkRateHolidayFloor")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<decimal>("WorkRateNormalFloor")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<decimal>("WorkRateWeeklyRestFloor")
+                        .HasColumnType("decimal(4,2)");
 
                     b.HasKey("Id");
 
@@ -4665,6 +4878,23 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("UpdatedByUser");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceSetting", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
@@ -4842,6 +5072,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", "OvertimeSlotTemplate")
+                        .WithMany("OvertimeRequests")
+                        .HasForeignKey("OvertimeSlotTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
                         .WithMany()
                         .HasForeignKey("ReviewedByUserId")
@@ -4856,7 +5091,27 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Navigation("EmployeeInformation");
 
+                    b.Navigation("OvertimeSlotTemplate");
+
                     b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("UpdatedByUser");
                 });

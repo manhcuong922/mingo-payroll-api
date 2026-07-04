@@ -53,6 +53,15 @@ public class LeaveTypeRepository : ILeaveTypeRepository
             .FirstOrDefaultAsync(t => t.Code == normalized, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<LeaveType>> GetActiveAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.LeaveTypes
+            .AsNoTracking()
+            .Where(t => t.IsActive)
+            .OrderBy(t => t.Code)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<bool> ExistsByCodeAsync(string code, int? excludeId, CancellationToken cancellationToken = default)
     {
         var normalized = code.Trim().ToUpperInvariant();
@@ -89,6 +98,13 @@ public class LeaveTypeRepository : ILeaveTypeRepository
         tracked.IsPaid = entity.IsPaid;
         tracked.PaidRate = entity.PaidRate;
         tracked.MaxDaysPerRequest = entity.MaxDaysPerRequest;
+        tracked.AllowEmployeeSelection = entity.AllowEmployeeSelection;
+        tracked.MaxDaysPerYear = entity.MaxDaysPerYear;
+        tracked.MaxDaysPerMonth = entity.MaxDaysPerMonth;
+        tracked.MaxDaysPerWeek = entity.MaxDaysPerWeek;
+        tracked.ApplyScope = entity.ApplyScope;
+        tracked.TargetDepartmentIds = entity.TargetDepartmentIds;
+        tracked.TargetEmployeeIds = entity.TargetEmployeeIds;
         tracked.RequireDocument = entity.RequireDocument;
         tracked.DeductsBalance = entity.DeductsBalance;
         tracked.IsActive = entity.IsActive;

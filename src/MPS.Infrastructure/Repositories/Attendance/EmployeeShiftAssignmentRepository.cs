@@ -164,6 +164,8 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
         var pairSet = pairs.ToHashSet();
         var minDate = dates.Min();
         var maxDate = dates.Max();
+        var queryFromDate = minDate.AddDays(-1);
+        var queryToDate = maxDate.AddDays(1);
 
         // (1) Assignments được sở hữu bởi template khác — include ShiftTemplate để compare giờ.
         var ownedRows = await _context.EmployeeShiftAssignments
@@ -171,8 +173,8 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
             .Where(a => a.ScheduleTemplateId != null
                 && (excludeScheduleTemplateId == null || a.ScheduleTemplateId != excludeScheduleTemplateId)
                 && employeeIds.Contains(a.EmployeeInformationId)
-                && a.WorkDate >= minDate
-                && a.WorkDate <= maxDate)
+                && a.WorkDate >= queryFromDate
+                && a.WorkDate <= queryToDate)
             .Select(a => new
             {
                 a.EmployeeInformationId,
@@ -190,8 +192,8 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
             .AsNoTracking()
             .Where(a => a.ScheduleTemplateId == null
                 && employeeIds.Contains(a.EmployeeInformationId)
-                && a.WorkDate >= minDate
-                && a.WorkDate <= maxDate)
+                && a.WorkDate >= queryFromDate
+                && a.WorkDate <= queryToDate)
             .Select(a => new
             {
                 a.EmployeeInformationId,
@@ -209,44 +211,48 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
 
         result.AddRange(
             ownedRows
-                .Where(r => pairSet.Contains((r.EmployeeInformationId, r.WorkDate))
-                         && TimeRangesOverlap(newShiftStart, newShiftEnd, r.ShiftStart, r.ShiftEnd))
+                .Where(r => pairs.Any(p => p.EmployeeInformationId == r.EmployeeInformationId
+                         && Math.Abs(p.WorkDate.DayNumber - r.WorkDate.DayNumber) <= 1
+                         && pairSet.Contains((p.EmployeeInformationId, p.WorkDate))
+                         && TimeRangesOverlap(p.WorkDate, newShiftStart, newShiftEnd, r.WorkDate, r.ShiftStart, r.ShiftEnd)))
                 .Select(r => (r.EmployeeInformationId, r.WorkDate, r.OwnerId, r.OwnerName, r.EmployeeFullName)));
 
         result.AddRange(
             orphanRows
-                .Where(r => pairSet.Contains((r.EmployeeInformationId, r.WorkDate))
-                         && TimeRangesOverlap(newShiftStart, newShiftEnd, r.ShiftStart, r.ShiftEnd))
+                .Where(r => pairs.Any(p => p.EmployeeInformationId == r.EmployeeInformationId
+                         && Math.Abs(p.WorkDate.DayNumber - r.WorkDate.DayNumber) <= 1
+                         && pairSet.Contains((p.EmployeeInformationId, p.WorkDate))
+                         && TimeRangesOverlap(p.WorkDate, newShiftStart, newShiftEnd, r.WorkDate, r.ShiftStart, r.ShiftEnd)))
                 .Select(r => (r.EmployeeInformationId, r.WorkDate, orphanSentinelId, orphanSentinelName, r.EmployeeFullName)));
 
         return result;
     }
 
     /// <summary>
-    /// Time-of-day overlap với hỗ trợ wrap-around (ca đêm Start &gt; End).
+    /// Absolute overlap theo WorkDate; End &lt; Start được hiểu là kết thúc vào ngày hôm sau.
     /// Half-open interval [Start, End): hai ca touch tại cùng thời điểm KHÔNG overlap.
     /// </summary>
-    private static bool TimeRangesOverlap(TimeOnly aStart, TimeOnly aEnd, TimeOnly bStart, TimeOnly bEnd)
+    private static bool TimeRangesOverlap(
+        DateOnly aDate,
+        TimeOnly aStart,
+        TimeOnly aEnd,
+        DateOnly bDate,
+        TimeOnly bStart,
+        TimeOnly bEnd)
     {
-        static IEnumerable<(int Start, int End)> Segments(TimeOnly start, TimeOnly end)
-        {
-            var s = start.Hour * 60 + start.Minute;
-            var e = end.Hour * 60 + end.Minute;
-            if (e <= s)
-            {
-                yield return (s, 24 * 60);
-                if (e > 0) yield return (0, e);
-            }
-            else
-            {
-                yield return (s, e);
-            }
-        }
+        var (aAbsoluteStart, aAbsoluteEnd) = ToAbsoluteRange(aDate, aStart, aEnd);
+        var (bAbsoluteStart, bAbsoluteEnd) = ToAbsoluteRange(bDate, bStart, bEnd);
+        return aAbsoluteStart < bAbsoluteEnd && bAbsoluteStart < aAbsoluteEnd;
+    }
 
-        foreach (var sa in Segments(aStart, aEnd))
-        foreach (var sb in Segments(bStart, bEnd))
-            if (sa.Start < sb.End && sb.Start < sa.End) return true;
-        return false;
+    private static (long Start, long End) ToAbsoluteRange(DateOnly date, TimeOnly start, TimeOnly end)
+    {
+        const int minutesPerDay = 24 * 60;
+        var baseMinute = (long)date.DayNumber * minutesPerDay;
+        var s = baseMinute + start.Hour * 60 + start.Minute;
+        var e = baseMinute + end.Hour * 60 + end.Minute;
+        if (e <= s) e += minutesPerDay;
+        return (s, e);
     }
 
     public async Task<int> DeleteStaleByScheduleTemplateAsync(

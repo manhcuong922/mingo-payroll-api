@@ -53,8 +53,7 @@ public class AttendanceRuleController : ControllerBase
             request.Description,
             request.WorkRateNormal,
             request.WorkRateWeeklyRest,
-            request.WorkRateHoliday,
-            request.WorkRateNight), cancellationToken);
+            request.WorkRateHoliday), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -72,7 +71,6 @@ public class AttendanceRuleController : ControllerBase
             request.WorkRateNormal,
             request.WorkRateWeeklyRest,
             request.WorkRateHoliday,
-            request.WorkRateNight,
             request.IsActive), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();

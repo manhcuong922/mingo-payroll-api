@@ -33,8 +33,7 @@ public sealed record CreateAttendanceRuleRequest(
     string? Description,
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
-    decimal WorkRateHoliday,
-    decimal WorkRateNight);
+    decimal WorkRateHoliday);
 
 public sealed record UpdateAttendanceRuleRequest(
     string Name,
@@ -42,7 +41,6 @@ public sealed record UpdateAttendanceRuleRequest(
     decimal WorkRateNormal,
     decimal WorkRateWeeklyRest,
     decimal WorkRateHoliday,
-    decimal WorkRateNight,
     bool IsActive);
 
 public sealed record BatchShiftOperationRequest(
