@@ -1,7 +1,13 @@
 # Task / Production Module — API + Nghiệp vụ cho Frontend (v5)
 
-> **Cập nhật: 2026-07-04 (v5)** — bản khớp code, viết theo hướng **nghiệp vụ trước, kỹ thuật sau** để FE lên kế hoạch thiết kế UI.
+> **Cập nhật: 2026-07-04 (v5.1)** — bản khớp code, viết theo hướng **nghiệp vụ trước, kỹ thuật sau** để FE lên kế hoạch thiết kế UI.
 > Base URL (dev): `http://localhost:5000`
+>
+> **PATCH v5.1** — 4 thay đổi cần FE biết:
+> 1. **Giám đốc / Phó GĐ giờ sửa được task ở MỌI xưởng** (trước đây chỉ xem). Áp dụng cho tạo/sửa/cập nhật sản lượng/hoàn thành/xóa task — xem lại NHÓM 3.
+> 2. **Tạo công đoạn (tầng 2) thủ công** — `POST /api/Task` thêm field `isBatchParent`, không bắt buộc phải áp quy trình mẫu mới có công đoạn. Xem mục 3.2.
+> 3. **Validate mới khi tạo/sửa task** — deadline task con không được vượt deadline công đoạn cha / đơn; tổng sản lượng các task con không được vượt sản lượng công đoạn cha. Vi phạm → `400`.
+> 4. Body request `POST /api/Task` **đã bỏ** `estimatedHoursPerUnit`/`estimatedHours` (không tồn tại trong code) — sửa lại ở mục 3.2, trước đây tài liệu ghi sai.
 
 ---
 
@@ -13,7 +19,7 @@ Công ty **gia công** (vd: khung tranh). Giám đốc kí nhận đơn → **qu
 ### 3 nhân vật (role) — quyết định UI hiển thị gì cho ai
 | Role | Nhãn UI | Thấy gì / làm gì |
 |------|---------|------------------|
-| `Director` / `DeputyDirector` | **Giám đốc / Phó GĐ** | Nhìn **toàn công ty**: mọi đơn, mọi xưởng. Định nghĩa quy trình mẫu dùng chung. Không thao tác chi tiết trong 1 xưởng. |
+| `Director` / `DeputyDirector` | **Giám đốc / Phó GĐ** | Nhìn **toàn công ty**: mọi đơn, mọi xưởng. Định nghĩa quy trình mẫu dùng chung. **(v5.1)** Có quyền ghi cao nhất trên Task: tạo/sửa/cập nhật sản lượng/hoàn thành/xóa task ở **bất kỳ xưởng nào**, kể cả xưởng mình không trực thuộc — dùng khi cần can thiệp trực tiếp thay vì chỉ xem. |
 | `ProjectManager` | **Quản lý xưởng** | Trung tâm của module. Lập kế hoạch + điều phối **trong xưởng mình**: tạo đơn, áp quy trình, chia việc, cập nhật tiến độ, hoàn thành, đóng đơn. |
 | `Employee` | **Công nhân** | Màn tối giản: chỉ xem **task được giao cho mình** + tài liệu liên quan. Không sửa gì. |
 
@@ -226,14 +232,16 @@ quyền `Project.Read.All` (GĐ: mọi đơn) **hoặc** `Project.Read.Departmen
 
 > **Mục đích nghiệp vụ**: nơi **giao việc thật cho người** và **theo dõi tiến độ**. Task nằm dưới công đoạn (task cha). Quản lý xưởng tạo & cập nhật; công nhân chỉ xem việc của mình.
 >
+> **v5.1 — phân quyền ghi**: mọi API ghi (tạo/sửa/cập nhật tiến độ/hoàn thành/xóa) dùng chung 1 luật: **quản lý xưởng của task đó** HOẶC **GĐ/Phó GĐ** (quyền cao nhất, bỏ qua giới hạn xưởng). PM xưởng khác gọi vào task không phải xưởng mình → **401**.
+>
 > **Màn UI**:
 > - **Cây task của đơn** (drill-down từ chi tiết đơn) → `GET /api/Task/project/{id}`.
-> - **Form "Chia việc"** (chọn công đoạn → chọn người/nhóm + số lượng) → `POST /api/Task`.
+> - **Form "Chia việc"** (chọn công đoạn → chọn người/nhóm + số lượng, **hoặc** tạo công đoạn mới thủ công) → `POST /api/Task`.
 > - **Ô cập nhật sản lượng** trên từng task → `PATCH .../progress`.
 > - **Nút "Hoàn thành"** → `PATCH .../complete`.
 > - **Màn công nhân "Việc của tôi"** → `GET /api/Task/my`.
 >
-> **Liên hệ**: `parentTaskId` = công đoạn sinh từ NHÓM 2.4. Người giao lấy từ `GET /api/Department/{id}/employees` (module Department). `rowVersion` dùng cho progress/complete.
+> **Liên hệ**: `parentTaskId` = công đoạn (sinh từ NHÓM 2.4 **hoặc** tạo tay ở mục 3.2 với `isBatchParent=true`). Người giao lấy từ `GET /api/Department/{id}/employees` (module Department). `rowVersion` dùng cho progress/complete.
 
 #### 3.1 Xem cây task của đơn (drill-down trong chi tiết đơn)
 `GET /api/Task/project/{id}` — quyền `Task.Read.All | Read.Department`
@@ -256,22 +264,39 @@ quyền `Project.Read.All` (GĐ: mọi đơn) **hoặc** `Project.Read.Departmen
 > FE dựng cây: nhóm con theo `parentTaskId`. Công đoạn (`isBatchParent`) hiển thị như header nhóm, không có nút "cập nhật/hoàn thành". Task nhóm = `assignees` nhiều phần tử.
 
 #### 3.2 ⭐ Chia việc — tạo task 1 người hoặc nhóm (form "Chia việc")
-`POST /api/Task` — quyền `Task.Create.Department`
-**Request** — task 1 người:
+`POST /api/Task` — quyền `Task.Create.Department` (v5.1: GĐ/Phó GĐ cũng gọi được, kể cả xưởng khác)
+**Request** — task 1 người (con của công đoạn `id=12`):
 ```json
 {
   "projectId": 1, "departmentId": 1, "parentTaskId": 12,
   "title": "Cắt khung - An", "description": null,
-  "progressType": "Quantity", "plannedQuantity": 200, "estimatedHoursPerUnit": 1, "estimatedHours": 0,
+  "progressType": "Quantity", "plannedQuantity": 200, "weight": 0,
   "requiresHandover": false, "deadline": "2026-07-10T00:00:00Z", "priority": 2, "stepOrder": 1,
-  "assigneeUserIds": [11]
+  "assigneeUserIds": [11],
+  "isBatchParent": false
 }
 ```
 **Request** — task **nhóm** (5 người cùng 40 kiện, chung 1 task): giống trên, `assigneeUserIds: [11,12,13,14,15]`.
-- `parentTaskId`: công đoạn cha (từ generate). Null = task rời.
-- `progressType`: `"Quantity"` → điền `plannedQuantity`+`estimatedHoursPerUnit`. `"Milestone"` → điền `estimatedHours`.
+
+**Request** — ⭐ v5.1: **tạo công đoạn (tầng 2) thủ công**, không qua "Áp quy trình" (NHÓM 2.4):
+```json
+{
+  "projectId": 1, "departmentId": 1, "parentTaskId": null,
+  "title": "Đóng gói", "description": null,
+  "progressType": "Quantity", "plannedQuantity": 500, "weight": 0,
+  "requiresHandover": false, "deadline": "2026-07-18T00:00:00Z", "priority": 2, "stepOrder": 3,
+  "assigneeUserIds": [],
+  "isBatchParent": true
+}
+```
+- `isBatchParent: true` → tạo **công đoạn**: bắt buộc `assigneeUserIds: []` và `parentTaskId: null` (công đoạn không giao người, cây chỉ 3 tầng) — sai thì **400**.
+- `parentTaskId`: công đoạn cha. Phải trỏ tới 1 task có `isBatchParent=true` cùng `departmentId` — trỏ sai/khác xưởng → **400**. Null = công đoạn mới hoặc task rời không có cha.
+- `progressType`: `"Quantity"` → điền `plannedQuantity`. `"Milestone"` → điền `weight` (trọng số, không tính EV/PV).
 - `requiresHandover: true` → task bàn giao (phải đính kèm bằng chứng khi hoàn thành).
 - Mọi `assigneeUserIds` phải thuộc xưởng `departmentId` (lấy từ `GET /api/Department/{id}/employees`), sai → **400**.
+- **v5.1 — validate phạm vi cha/con** (áp khi có `parentTaskId`):
+  - `deadline` task con **không được** vượt `deadline` của công đoạn cha, và không vượt `deadline` của đơn (`projectId`) — sai → **400**.
+  - Tổng `plannedQuantity` của **mọi task con hiện có** cộng task đang tạo **không được** vượt `plannedQuantity` của công đoạn cha — sai → **400** kèm số liệu cụ thể trong message. VD: công đoạn cha 50 khung, đã có 1 task con 20 → task con mới tối đa còn 30.
 **Response** `201` — `{ "id": 42 }`.
 
 #### 3.3 ⭐ Cập nhật sản lượng (ô nhập số trên task — dùng khi PM đi kiểm)
@@ -292,7 +317,7 @@ quyền `Project.Read.All` (GĐ: mọi đơn) **hoặc** `Project.Read.Departmen
 **Response** `204`.
 
 #### 3.5 Sửa / xóa task
-- `PUT /api/Task/{id}` — `{ "title","description?","deadline?","priority?","plannedQuantity","estimatedHours","assigneeUserIds?" }`. `assigneeUserIds` null = giữ người cũ; gửi mảng = thay toàn bộ. `204`.
+- `PUT /api/Task/{id}` — quyền `Task.Update.Department` (v5.1: GĐ/Phó GĐ sửa được task mọi xưởng) — `{ "title","description?","deadline?","priority?","plannedQuantity","weight","assigneeUserIds?" }`. `assigneeUserIds` null = giữ người cũ; gửi mảng = thay toàn bộ. Áp lại cùng validate v5.1: `deadline` mới không vượt cha/đơn; nếu task là con của công đoạn Quantity, tổng `plannedQuantity` các con (kể cả sau khi sửa) không vượt cha. Vi phạm → `400`. `204`.
 - `DELETE /api/Task/{id}` — không xóa được nếu còn task con → 400. `204`/`404`.
 
 #### 3.6 Màn công nhân "Việc của tôi"
@@ -355,7 +380,8 @@ quyền `Project.Read.All` (GĐ: mọi đơn) **hoặc** `Project.Read.Departmen
 `id, title, description?, status(Active|Completed|Archived), startDate(yyyy-MM-dd), deadline?, quantity, departmentId?, departmentName?, createdByUserId, createdByName?, completedByName?, completedAt?, completionNote?, completionPercent, timeElapsedPercent, scheduleStatus(OnTrack|AtRisk|Late), plannedValue, earnedValue, schedulePerformanceIndex, totalStages, completedStages`
 
 ### `ProjectTaskDto`
-`id, title, description?, status(Todo|InProgress|Done), type(ProcessTask|AdHoc|InternalConfidential), progressType(Quantity|Milestone), requiresHandover, isConfidential, priority?, stepOrder, deadline?, plannedQuantity, completedQuantity, estimatedHoursPerUnit, estimatedHours, projectId?, projectTitle?, departmentId?, departmentName?, parentTaskId?, parentTaskTitle?, assignees[{userId,userName}], createdByUserId, createdByName?, isBatchParent, taskCompletionPercent, wasLate, completedByName?, completedAt?, rowVersion(base64), attachments[](luôn rỗng — dùng endpoint /attachments), children[]`
+`id, title, description?, status(Todo|InProgress|Done), type(ProcessTask|AdHoc|InternalConfidential), progressType(Quantity|Milestone), requiresHandover, isConfidential, priority?, stepOrder, deadline?, plannedQuantity, completedQuantity, weight, projectId?, projectTitle?, departmentId?, departmentName?, parentTaskId?, parentTaskTitle?, assignees[{userId,userName}], createdByUserId, createdByName?, isBatchParent, taskCompletionPercent, wasLate, completedByName?, completedAt?, rowVersion(base64), attachments[](luôn rỗng — dùng endpoint /attachments), children[]`
+> Lưu ý: **không có** `estimatedHoursPerUnit`/`estimatedHours` trong DTO thật (tài liệu bản trước ghi nhầm theo plan cũ). `weight` chỉ có ý nghĩa khi `progressType = "Milestone"` (trọng số nhập tay, không tính EV/PV).
 
 ### `ProcessTemplateDto`
 `id, code, name, description?, isActive, defaultDepartmentId?, defaultDepartmentName?, steps[{id,name,description?,stepOrder,estimatedHoursPerUnit,priority?}]`

@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -24,14 +25,10 @@ public class TaskDeleteCommandHandler : IRequestHandler<TaskDeleteCommand, bool>
 
     public async Task<bool> Handle(TaskDeleteCommand request, CancellationToken ct)
     {
-        var userId = _currentUser.UserId
-            ?? throw new ForbiddenAccessException("Không xác định được người dùng hiện tại.");
-
         var task = await _tasks.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        if (task.DepartmentId is null || !await _authorizer.IsManagerOfAsync(userId, task.DepartmentId.Value, ct))
-            throw new ForbiddenAccessException("Bạn không phải quản lý của xưởng chứa task này.");
+        await ProjectScopeGuard.EnsureCanWriteTaskAsync(task.DepartmentId, _currentUser, _authorizer, ct);
 
         if (await _tasks.HasChildrenAsync(task.Id, ct))
             throw new DomainValidationException("Không thể xóa công đoạn còn task con — xóa các con trước.");

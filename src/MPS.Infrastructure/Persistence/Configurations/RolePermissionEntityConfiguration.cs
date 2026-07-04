@@ -98,7 +98,14 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.ProcessTemplateUpdateAll, PermissionIds.ProcessTemplateDeleteAll,
                 PermissionIds.ProjectReadAll, PermissionIds.ProjectCreateAll, PermissionIds.ProjectUpdateAll,
                 PermissionIds.ProjectDeleteAll, PermissionIds.ProjectGenerateTasks,
+                PermissionIds.ProjectCompleteDepartment,
                 PermissionIds.TaskReadAll, PermissionIds.TaskReadConfidential, PermissionIds.TaskCreateConfidential,
+                // GĐ có quyền ghi cao nhất: chỉnh sửa task mọi xưởng, kể cả xưởng mình không trực thuộc
+                // (ProjectScopeGuard.EnsureCanWriteTaskAsync bỏ qua scope khi có ProjectReadAll).
+                PermissionIds.TaskCreateDepartment, PermissionIds.TaskUpdateDepartment,
+                PermissionIds.TaskUpdateProgressDepartment, PermissionIds.TaskCompleteDepartment,
+                PermissionIds.TaskDeleteDepartment,
+                PermissionIds.ProductionAttachmentReadAll, PermissionIds.ProductionAttachmentWriteDepartment,
                 PermissionIds.TaskAuditReadAll,
             }),
 
@@ -112,7 +119,12 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.DepartmentReadAll,
                 PermissionIds.ProcessTemplateReadAll,
                 PermissionIds.ProjectReadAll, PermissionIds.ProjectCreateAll, PermissionIds.ProjectGenerateTasks,
+                PermissionIds.ProjectCompleteDepartment,
                 PermissionIds.TaskReadAll, PermissionIds.TaskReadConfidential, PermissionIds.TaskCreateConfidential,
+                PermissionIds.TaskCreateDepartment, PermissionIds.TaskUpdateDepartment,
+                PermissionIds.TaskUpdateProgressDepartment, PermissionIds.TaskCompleteDepartment,
+                PermissionIds.TaskDeleteDepartment,
+                PermissionIds.ProductionAttachmentReadAll, PermissionIds.ProductionAttachmentWriteDepartment,
                 PermissionIds.TaskAuditReadAll,
             }),
 

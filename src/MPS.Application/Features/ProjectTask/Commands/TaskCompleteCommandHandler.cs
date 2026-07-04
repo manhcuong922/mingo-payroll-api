@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
@@ -34,8 +35,7 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         var task = await _tasks.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        if (task.DepartmentId is null || !await _authorizer.IsManagerOfAsync(userId, task.DepartmentId.Value, ct))
-            throw new ForbiddenAccessException("Bạn không phải quản lý của xưởng chứa task này.");
+        await ProjectScopeGuard.EnsureCanWriteTaskAsync(task.DepartmentId, _currentUser, _authorizer, ct);
 
         if (task.IsBatchParent)
             throw new DomainValidationException("Không hoàn thành trực tiếp công đoạn (task cha) — cha tự Done khi mọi con Done.");

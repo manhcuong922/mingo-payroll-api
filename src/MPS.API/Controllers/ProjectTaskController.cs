@@ -59,7 +59,8 @@ public class ProjectTaskController : ControllerBase
         var id = await _mediator.Send(new TaskCreateCommand(
             request.ProjectId, request.DepartmentId, request.ParentTaskId, request.Title, request.Description,
             request.ProgressType, request.PlannedQuantity, request.Weight,
-            request.RequiresHandover, request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds), ct);
+            request.RequiresHandover, request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds,
+            request.IsBatchParent), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 

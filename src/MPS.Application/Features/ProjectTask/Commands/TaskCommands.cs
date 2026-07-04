@@ -4,6 +4,7 @@ using MPS.Domain.Enums;
 namespace MPS.Application.Features.ProjectTask.Commands;
 
 // ⭐ Tạo 1 task (1 người / nhóm). AssigneeUserIds nhiều phần tử = task nhóm (chung 1 Done).
+// IsBatchParent=true → tạo công đoạn (tầng 2) thủ công, không qua ProcessTemplate: AssigneeUserIds phải rỗng.
 public record TaskCreateCommand(
     int? ProjectId,
     int DepartmentId,
@@ -17,7 +18,8 @@ public record TaskCreateCommand(
     DateTime? Deadline,
     int? Priority,
     int StepOrder,
-    IReadOnlyList<int> AssigneeUserIds) : IRequest<int>;
+    IReadOnlyList<int> AssigneeUserIds,
+    bool IsBatchParent = false) : IRequest<int>;
 
 public record TaskCreateConfidentialCommand(
     string Title,

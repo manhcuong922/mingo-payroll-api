@@ -15,7 +15,8 @@ public record CreateTaskRequest(
     DateTime? Deadline,
     int? Priority,
     int StepOrder,
-    IReadOnlyList<int> AssigneeUserIds);
+    IReadOnlyList<int> AssigneeUserIds,
+    bool IsBatchParent = false);
 
 public record CreateConfidentialTaskRequest(
     string Title,

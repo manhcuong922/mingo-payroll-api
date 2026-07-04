@@ -70,6 +70,11 @@ public class ProjectTaskRepository : IProjectTaskRepository
                 && t.Status != TaskItemStatus.Done
                 && t.Assignees.Any(a => a.UserId == userId), ct);
 
+    public Task<int> SumChildrenPlannedQuantityAsync(int parentTaskId, int? excludeTaskId, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(c => c.ParentTaskId == parentTaskId && c.Id != (excludeTaskId ?? 0))
+            .SumAsync(c => c.PlannedQuantity, ct);
+
     public async Task<int> AddAsync(ProjectTask entity, CancellationToken ct)
     {
         _context.ProjectTasks.Add(entity);

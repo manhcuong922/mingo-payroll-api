@@ -14,6 +14,9 @@ public interface IProjectTaskRepository
     Task<bool> AllChildrenDoneAsync(int parentTaskId, CancellationToken ct);      // cho persist cha Done
     Task<int> CountActiveByUserAsync(int userId, CancellationToken ct);           // gợi ý tải khi chia việc
 
+    // ⭐ Tổng PlannedQuantity các con hiện có của 1 công đoạn (không tính task đang sửa, nếu có).
+    Task<int> SumChildrenPlannedQuantityAsync(int parentTaskId, int? excludeTaskId, CancellationToken ct);
+
     Task<int> AddAsync(ProjectTask entity, CancellationToken ct);
     Task AddRangeAsync(IEnumerable<ProjectTask> entities, CancellationToken ct);  // sinh loạt công đoạn từ template
     Task<bool> UpdateAsync(ProjectTask entity, CancellationToken ct);

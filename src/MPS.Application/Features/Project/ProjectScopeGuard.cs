@@ -6,11 +6,11 @@ using MPS.Domain.Exceptions;
 namespace MPS.Application.Features.Project;
 
 /// <summary>
-/// Kiểm scope xưởng cho thao tác ghi đơn (v5): GĐ (ProjectReadAll) làm mọi xưởng;
-/// quản lý xưởng chỉ được thao tác đơn thuộc xưởng mình trực thuộc (GetDepartmentIdOfUserAsync).
-/// Gom vào 1 chỗ để ProjectCreate/Update/Generate không lặp logic.
+/// Kiểm scope xưởng cho thao tác ghi đơn/task (v5): GĐ (ProjectReadAll) làm mọi xưởng;
+/// quản lý xưởng chỉ được thao tác đơn/task thuộc xưởng mình trực thuộc (GetDepartmentIdOfUserAsync).
+/// Gom vào 1 chỗ để Project*/Task* không lặp logic.
 /// </summary>
-internal static class ProjectScopeGuard
+public static class ProjectScopeGuard
 {
     public static async Task EnsureCanWriteAsync(
         int? projectDepartmentId,
@@ -27,4 +27,12 @@ internal static class ProjectScopeGuard
         if (projectDepartmentId is null || !await authorizer.IsManagerOfAsync(userId, projectDepartmentId.Value, ct))
             throw new ForbiddenAccessException("Bạn chỉ được thao tác đơn thuộc xưởng mình.");
     }
+
+    // Task dùng chung guard này: GĐ (ProjectReadAll) sửa được task NGOÀI xưởng mình.
+    public static Task EnsureCanWriteTaskAsync(
+        int? taskDepartmentId,
+        ICurrentUserService currentUser,
+        IDepartmentManagerAuthorizer authorizer,
+        CancellationToken ct) =>
+        EnsureCanWriteAsync(taskDepartmentId, currentUser, authorizer, ct);
 }

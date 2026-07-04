@@ -4331,6 +4331,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 4,
+                            PermissionId = 110
+                        },
+                        new
+                        {
+                            RoleId = 4,
                             PermissionId = 111
                         },
                         new
@@ -4342,6 +4347,41 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 4,
                             PermissionId = 116
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 115
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 117
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 118
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 119
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 120
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 123
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 122
                         },
                         new
                         {
@@ -4406,6 +4446,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 9,
+                            PermissionId = 110
+                        },
+                        new
+                        {
+                            RoleId = 9,
                             PermissionId = 111
                         },
                         new
@@ -4417,6 +4462,41 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 9,
                             PermissionId = 116
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 115
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 117
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 118
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 119
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 120
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 123
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 122
                         },
                         new
                         {

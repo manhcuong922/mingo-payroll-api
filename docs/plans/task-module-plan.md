@@ -11,6 +11,12 @@
 > - **KHÔNG quản lý kho** — hệ thống chỉ phục vụ đơn sản xuất; bỏ nhánh "hàng có sẵn".
 > Nhánh hiện tại: `feature/department-manager`
 > Phụ thuộc: Department Module (v5) + MinIO storage (`IFileStorageService`) — đều đã có.
+>
+> **PATCH v5.1 (2026-07-04)** — vá 4 lỗ hổng phát hiện khi rà soát cây 3 tầng:
+> 1. **GĐ/Phó GĐ có quyền ghi cao nhất trên Task**: `ProjectScopeGuard.EnsureCanWriteTaskAsync` (dùng chung với Project) nay áp cho `TaskCreate/Update/UpdateProgress/Complete/Delete` — user có `Project.Read.All` bỏ qua check `IsManagerOfAsync`, sửa được task **ngoài** xưởng mình. Seed thêm `Task.*.Department` + `ProductionAttachment.*` cho `Director`/`DeputyDirector` (migration `TaskModuleDirectorFullAccess`) — thiếu seed thì vẫn 403 ở `[HasPermission]` dù đã sửa handler.
+> 2. **Tạo công đoạn (tầng 2) thủ công**: `TaskCreateCommand`/`CreateTaskRequest` thêm `IsBatchParent` (mặc định `false`). PM giờ tạo được công đoạn không qua `ProcessTemplate/GenerateTasks` — công đoạn không được có `AssigneeUserIds` hay `ParentTaskId` (cây chỉ 3 tầng).
+> 3. **Validate `ParentTaskId` phải trỏ tới công đoạn hợp lệ**: `TaskCreateCommandHandler` chặn nếu cha không `IsBatchParent=true` hoặc khác xưởng — trước đây bất kỳ task nào cũng nhận được "con" trỏ vào, làm `RecomputeParentCompletedAsync`/`TrySetParentDoneAsync` cộng dồn sai ngữ nghĩa.
+> 4. **Validate phạm vi tầng dưới ⊆ tầng trên**: `TaskCreate`/`TaskUpdate` chặn deadline con > deadline cha (công đoạn) hoặc > deadline đơn; chặn tổng `PlannedQuantity` các con vượt `PlannedQuantity` công đoạn cha (`IProjectTaskRepository.SumChildrenPlannedQuantityAsync`).
 
 ---
 
@@ -414,7 +420,7 @@ Task<bool> DeleteAsync(int id, CancellationToken ct);
 
 | Role | Permissions |
 |------|-------------|
-| Director / DeputyDirector | ProcessTemplate.* , Project.* (+GenerateTasks +Complete), Task.Read.All, Task.Read.Confidential, Task.Create.Confidential, ProductionAttachment.Read.All, Task.Audit.Read.All |
+| Director / DeputyDirector | ProcessTemplate.* , Project.* (+GenerateTasks +Complete), Task.Read.All, Task.Read.Confidential, Task.Create.Confidential, **Task.Create/Update/UpdateProgress/Complete/Delete.Department** (v5.1 — quyền ghi cao nhất, sửa được task mọi xưởng qua `ProjectScopeGuard`), ProductionAttachment.Read.All, **ProductionAttachment.Write.Department**, Task.Audit.Read.All |
 | **ProjectManager** | ProcessTemplate.Read.All, Project.Read.Department, Project.Create.All, Project.Update.All, Project.GenerateTasks, **Project.Complete.Department**, Task.Read.Department, **Task.Create.Department**, Task.Update.Department, **Task.UpdateProgress.Department**, **Task.Complete.Department**, Task.Delete.Department, ProductionAttachment.Read.Department, **ProductionAttachment.Write.Department**, Task.Audit.Read.Department |
 | Employee | Task.Read.Assigned, ProductionAttachment.Read.Department |
 | HR | Project.Read.All, Task.Read.All, Task.Create.Confidential |
@@ -451,18 +457,18 @@ Task<bool> DeleteAsync(int id, CancellationToken ct);
 - Queries: `GetAll` (ReadAll: mọi đơn; ReadDepartment: xưởng mình), `GetById` (cây task + tiến độ), `GetPaged`, `ProjectAuditHistory` (scoped).
 
 ### 3.4 ProjectTask — commands/queries
-- **`TaskCreateCommand`** ⭐ — tạo 1 task (1 người / nhóm):
+- **`TaskCreateCommand`** ⭐ (v5.1: + `IsBatchParent`) — tạo 1 task (1 người / nhóm) **hoặc** 1 công đoạn (tầng 2) thủ công:
   ```csharp
   record TaskCreateCommand(
     int? ProjectId, int DepartmentId, int? ParentTaskId,
     string Title, string? Description,
     ProgressType ProgressType,
-    int PlannedQuantity, int EstimatedHoursPerUnit, int EstimatedHours,   // theo ProgressType
-    bool RequiresHandover, DateTime? Deadline, int? Priority,
+    int PlannedQuantity, int Weight,
+    bool RequiresHandover, DateTime? Deadline, int? Priority, int StepOrder,
     IReadOnlyList<int> AssigneeUserIds,             // 1 phần tử = task 1 người; nhiều = task nhóm
-    IReadOnlyList<int>? PredecessorTaskIds);        // step-gating (nếu là công đoạn)
+    bool IsBatchParent = false);                    // true = tạo công đoạn tầng 2 thủ công (không qua ProcessTemplate)
   ```
-  Logic: check quyền + scope xưởng; validate mọi `AssigneeUserId` thuộc đúng xưởng (`GetMemberUserIdsAsync`); tạo `ProjectTask` + N dòng `TaskAssignee`; Status `Blocked` nếu có predecessor chưa Done, ngược lại `Todo`.
+  Logic (v5.1): check quyền + scope xưởng qua `ProjectScopeGuard.EnsureCanWriteTaskAsync` (GĐ/Phó GĐ có `Project.Read.All` bỏ qua scope, sửa được task ngoài xưởng). Nếu `IsBatchParent=true` → cấm `AssigneeUserIds`/`ParentTaskId`. Nếu có `ParentTaskId` → cha phải `IsBatchParent=true` và cùng `DepartmentId`. Validate `Deadline` con ≤ deadline cha ≤ deadline đơn. Validate tổng `PlannedQuantity` các con (kể cả task đang tạo) ≤ `PlannedQuantity` công đoạn cha. Validate mọi `AssigneeUserId` thuộc đúng xưởng (`GetMemberUserIdsAsync`). Tạo `ProjectTask` + N dòng `TaskAssignee`.
 - **`TaskUpdateProgressCommand(TaskId, CompletedQuantity, RowVersion)`** ⭐ — chỉ task `Quantity`: set `CompletedQuantity` (clamp ≤ PlannedQuantity), `ProgressUpdatedAt=now`; nếu >0 và đang Todo → InProgress. KHÔNG tự Done.
 - **`TaskCompleteCommand(TaskId, RowVersion)`** ⭐ — bấm hoàn thành:
   - Check quyền + scope; validate: nếu `RequiresHandover` → `CountByOwnerAsync(TaskCompletion, taskId) >= 1` (bắt buộc đính kèm), else 400.

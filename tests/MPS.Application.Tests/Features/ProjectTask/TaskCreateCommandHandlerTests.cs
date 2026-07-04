@@ -13,6 +13,7 @@ namespace MPS.Application.Tests.Features.ProjectTask;
 public sealed class TaskCreateCommandHandlerTests
 {
     private readonly Mock<IProjectTaskRepository> _tasks = new();
+    private readonly Mock<IProjectRepository> _projects = new();
     private readonly Mock<IDepartmentRepository> _departments = new();
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
@@ -21,7 +22,7 @@ public sealed class TaskCreateCommandHandlerTests
     private const int DeptId = 3;
 
     private TaskCreateCommandHandler CreateSut() =>
-        new(_tasks.Object, _departments.Object, _authorizer.Object, _currentUser.Object);
+        new(_tasks.Object, _projects.Object, _departments.Object, _authorizer.Object, _currentUser.Object);
 
     private void SetupManagerWithMembers(params int[] memberUserIds)
     {
