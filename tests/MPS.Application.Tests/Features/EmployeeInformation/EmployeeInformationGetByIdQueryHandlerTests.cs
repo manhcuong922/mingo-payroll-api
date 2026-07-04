@@ -59,8 +59,8 @@ public sealed class EmployeeInformationGetByIdQueryHandlerTests
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadDepartment)).Returns(true);
         _currentUser.SetupGet(c => c.UserId).Returns(99);
-        _departmentRepo.Setup(r => r.GetByManagerUserIdAsync(99, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MPS.Domain.Entities.Department { Id = 3 });
+        _departmentRepo.Setup(r => r.GetDepartmentIdOfUserAsync(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3);
         _mapper.Setup(m => m.Map<EmployeeInformationDto>(entity)).Returns(MakeDto(7, 42));
 
         var result = await CreateSut().Handle(new EmployeeInformationGetByIdQuery(7), CancellationToken.None);
@@ -76,8 +76,8 @@ public sealed class EmployeeInformationGetByIdQueryHandlerTests
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadDepartment)).Returns(true);
         _currentUser.SetupGet(c => c.UserId).Returns(99);
-        _departmentRepo.Setup(r => r.GetByManagerUserIdAsync(99, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MPS.Domain.Entities.Department { Id = 3 });
+        _departmentRepo.Setup(r => r.GetDepartmentIdOfUserAsync(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3);
 
         var act = () => CreateSut().Handle(new EmployeeInformationGetByIdQuery(7), CancellationToken.None);
 

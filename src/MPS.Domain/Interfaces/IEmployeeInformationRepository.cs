@@ -20,6 +20,10 @@ public interface IEmployeeInformationRepository
         CancellationToken cancellationToken = default);
 
     Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default);
+
+    // RoleId của một User (null nếu user không tồn tại). Dùng để chặn gán role quản trị cấp công ty vào xưởng.
+    Task<int?> GetUserRoleIdAsync(int userId, CancellationToken cancellationToken = default);
+
     Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken = default);
     Task<bool> EmailExistsAsync(string email, int? excludeId = null, CancellationToken cancellationToken = default);
     Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default);

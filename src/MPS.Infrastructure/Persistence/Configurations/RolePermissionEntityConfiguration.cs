@@ -60,6 +60,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.AllowanceTypeUpdateAll, PermissionIds.AllowanceTypeDeleteAll,
                 PermissionIds.ContractTemplateReadAll, PermissionIds.ContractTemplateCreateAll,
                 PermissionIds.ContractTemplateUpdateAll, PermissionIds.ContractTemplateDeleteAll,
+                // Task/Production — HR: nghiệp vụ nhân sự (đọc đơn/task + tạo confidential)
+                PermissionIds.ProjectReadAll, PermissionIds.TaskReadAll, PermissionIds.TaskCreateConfidential,
             }),
 
             (SystemRoles.AccountantId, new[]
@@ -74,6 +76,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.ContractAppendixReadAll,
                 PermissionIds.ContractTerminationReadAll,
                 PermissionIds.ContractFileReadAll,
+                // Task/Production — Accountant theo dõi tiến độ (chỉ đọc)
+                PermissionIds.ProjectReadAll, PermissionIds.TaskReadAll,
             }),
 
             (SystemRoles.DirectorId, new[]
@@ -89,19 +93,41 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.PerformanceMetricApproveAll,
                 PermissionIds.TypePerformanceMetricReadAll, PermissionIds.TypePerformanceMetricCreateAll,
                 PermissionIds.TypePerformanceMetricUpdateAll, PermissionIds.TypePerformanceMetricDeleteAll,
+                // Task/Production — GĐ xem/duyệt toàn bộ
+                PermissionIds.ProcessTemplateReadAll, PermissionIds.ProcessTemplateCreateAll,
+                PermissionIds.ProcessTemplateUpdateAll, PermissionIds.ProcessTemplateDeleteAll,
+                PermissionIds.ProjectReadAll, PermissionIds.ProjectCreateAll, PermissionIds.ProjectUpdateAll,
+                PermissionIds.ProjectDeleteAll, PermissionIds.ProjectGenerateTasks,
+                PermissionIds.TaskReadAll, PermissionIds.TaskReadConfidential, PermissionIds.TaskCreateConfidential,
+                PermissionIds.TaskAuditReadAll,
             }),
 
-            // DepartmentManager = Ban kế hoạch cấp công ty → xem nhân sự đa xưởng (Read.All).
-            (SystemRoles.DepartmentManagerId, new[]
+            // DeputyDirector = Ban kế hoạch cấp cao.
+            (SystemRoles.DeputyDirectorId, new[]
             {
                 PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
                 PermissionIds.EmployeeInformationReadAll, PermissionIds.EmployeeInformationReadSelf,
                 PermissionIds.EmployeeInformationUpdateSelf,
                 PermissionIds.PositionReadAll,
                 PermissionIds.DepartmentReadAll,
-                PermissionIds.PerformanceMetricReadAll, PermissionIds.PerformanceMetricReadSelf,
-                PermissionIds.PerformanceMetricCreateAll, PermissionIds.PerformanceMetricUpdateAll,
-                PermissionIds.PerformanceMetricDeleteAll, PermissionIds.PerformanceMetricApproveAll,
+                PermissionIds.ProcessTemplateReadAll,
+                PermissionIds.ProjectReadAll, PermissionIds.ProjectCreateAll, PermissionIds.ProjectGenerateTasks,
+                PermissionIds.TaskReadAll, PermissionIds.TaskReadConfidential, PermissionIds.TaskCreateConfidential,
+                PermissionIds.TaskAuditReadAll,
+            }),
+
+            // DepartmentManager (v4 — GỘP VAI): KHÔNG còn tham gia luồng sản xuất.
+            // Không cấp quyền ProcessTemplate/Project/Task, cũng không EmployeeInformationReadAll
+            // (việc xuyên xưởng + xem nhân sự đa xưởng chuyển hẳn về Director/DeputyDirector).
+            // Giữ role trong seed để không phá dữ liệu cũ; chỉ còn quyền cơ bản.
+            (SystemRoles.DepartmentManagerId, new[]
+            {
+                PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
+                PermissionIds.EmployeeInformationReadSelf,
+                PermissionIds.EmployeeInformationUpdateSelf,
+                PermissionIds.PositionReadAll,
+                PermissionIds.DepartmentReadAll,
+                PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.TypePerformanceMetricReadAll,
             }),
 
@@ -117,6 +143,16 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.PerformanceMetricCreateAll, PermissionIds.PerformanceMetricUpdateAll,
                 PermissionIds.PerformanceMetricDeleteAll,
                 PermissionIds.TypePerformanceMetricReadAll,
+                // Task/Production (v5) — quản lý xưởng: ra kế hoạch + điều phối, scoped theo xưởng trực thuộc.
+                PermissionIds.ProcessTemplateReadAll,
+                PermissionIds.ProjectReadDepartment, PermissionIds.ProjectCreateAll,
+                PermissionIds.ProjectUpdateAll, PermissionIds.ProjectGenerateTasks,
+                PermissionIds.ProjectCompleteDepartment,
+                PermissionIds.TaskReadDepartment, PermissionIds.TaskCreateDepartment,
+                PermissionIds.TaskUpdateDepartment, PermissionIds.TaskUpdateProgressDepartment,
+                PermissionIds.TaskCompleteDepartment, PermissionIds.TaskDeleteDepartment,
+                PermissionIds.ProductionAttachmentReadDepartment, PermissionIds.ProductionAttachmentWriteDepartment,
+                PermissionIds.TaskAuditReadDepartment,
             }),
 
             (SystemRoles.EmployeeId, new[]
@@ -132,6 +168,9 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.ContractAppendixReadSelf,
                 PermissionIds.ContractTerminationReadSelf,
                 PermissionIds.ContractFileReadSelf,
+                // Task/Production — công nhân chỉ XEM task của mình + tài liệu xưởng.
+                PermissionIds.TaskReadAssigned,
+                PermissionIds.ProductionAttachmentReadDepartment,
             }),
         };
 
@@ -177,5 +216,19 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
         PermissionIds.DepartmentReadAll, PermissionIds.DepartmentCreateAll,
         PermissionIds.DepartmentUpdateAll, PermissionIds.DepartmentDeleteAll,
         PermissionIds.EmployeeInformationReadDepartment,
+        // Task/Production module
+        PermissionIds.ProcessTemplateReadAll, PermissionIds.ProcessTemplateCreateAll,
+        PermissionIds.ProcessTemplateUpdateAll, PermissionIds.ProcessTemplateDeleteAll,
+        PermissionIds.ProjectReadAll, PermissionIds.ProjectReadDepartment, PermissionIds.ProjectCreateAll,
+        PermissionIds.ProjectUpdateAll, PermissionIds.ProjectDeleteAll, PermissionIds.ProjectGenerateTasks,
+        PermissionIds.ProjectCompleteDepartment,
+        PermissionIds.TaskReadAll, PermissionIds.TaskReadDepartment, PermissionIds.TaskReadAssigned,
+        PermissionIds.TaskReadConfidential,
+        PermissionIds.TaskCreateDepartment, PermissionIds.TaskCreateConfidential,
+        PermissionIds.TaskUpdateDepartment, PermissionIds.TaskUpdateProgressDepartment,
+        PermissionIds.TaskCompleteDepartment, PermissionIds.TaskDeleteDepartment,
+        PermissionIds.ProductionAttachmentReadDepartment, PermissionIds.ProductionAttachmentWriteDepartment,
+        PermissionIds.ProductionAttachmentReadAll,
+        PermissionIds.TaskAuditReadAll, PermissionIds.TaskAuditReadDepartment,
     };
 }

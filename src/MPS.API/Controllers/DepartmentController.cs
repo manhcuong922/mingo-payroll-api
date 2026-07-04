@@ -43,11 +43,35 @@ public class DepartmentController : ControllerBase
         return Ok(result);
     }
 
+    // Dropdown chọn tổ trưởng xưởng: chỉ nhân viên có tài khoản + role được phép làm tổ trưởng
+    // (đã loại SystemAdmin/HR/Accountant/Director/Ban KH). keyword lọc theo tên.
+    [HttpGet("eligible-managers")]
+    [HasPermission(Permissions.DepartmentReadAll)]
+    public async Task<IActionResult> GetEligibleManagers(
+        [FromQuery] string? keyword,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(new DepartmentEligibleManagersQuery(keyword), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [HasPermission(Permissions.DepartmentReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new DepartmentGetByIdQuery(id), cancellationToken);
+        if (result is null) return NotFound();
+        return Ok(result);
+    }
+
+    // Danh sách nhân viên thuộc 1 xưởng. Tổ trưởng xưởng chỉ xem được xưởng mình quản lý (scoped trong handler).
+    [HttpGet("{id:int}/employees")]
+    [HasAnyPermission(
+        Permissions.EmployeeInformationReadAll,
+        Permissions.EmployeeInformationReadDepartment)]
+    public async Task<IActionResult> GetEmployees(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DepartmentEmployeesQuery(id), cancellationToken);
         if (result is null) return NotFound();
         return Ok(result);
     }

@@ -1,151 +1,87 @@
 # Kế hoạch: Module Quản Lý Task (Task Management) — Mô hình Sản Xuất Xưởng
 
 > Ngày tạo: 2026-06-24
-> Cập nhật lớn: 2026-07-02 — chuyển từ mô hình "PM chọn/giao task thủ công" sang **mô hình ban kế hoạch phát task theo quy trình mẫu (tùy chọn) cho xưởng sản xuất**
-> Cập nhật vai trò: 2026-07-02 (v2) — tách rõ **DepartmentManager = Ban kế hoạch**, **ProjectManager = Tổ trưởng xưởng**; **Done do tổ trưởng duyệt**; quy trình mẫu **tùy chọn** và **chỉnh được per-đơn**
+> **VIẾT LẠI TOÀN BỘ: 2026-07-04 (v5)** — theo mô hình chốt cuối với chủ dự án:
+> - **Nhiều PM/xưởng, scope theo `EmployeeInformation.DepartmentId`** (không theo `Department.ManagerId`) — đồng bộ `department-module-plan.md` v5.
+> - **Task nhóm (multi-assignee)**: 1 task giao cho nhiều người, chung 1 Done — qua bảng nối `TaskAssignee`. Vẫn hỗ trợ task 1 người.
+> - **Đo tiến độ LAI**: task **có sản lượng** → EV/PV theo `PlannedQuantity`; task **không sản lượng** → chỉ Done + đúng/chậm deadline. Đơn đo theo **trọng số công việc + thời gian**.
+> - **BỎ `TaskDailyLog`** (không ép chốt sản lượng mỗi ngày). Task Quantity cập nhật thẳng `CompletedQuantity` khi tổ trưởng đi kiểm (bất kỳ lúc nào).
+> - **BỎ `Approve/PendingReview/ApprovedBy`**. Hoàn thành = quản lý xưởng bấm **"Complete"**; quá deadline vẫn Done nhưng gắn cờ **`WasLate`**.
+> - **THÊM đính kèm tài liệu/ảnh** (MinIO có sẵn `IFileStorageService`): gắn vào **Đơn / Task / Quy trình mẫu / lúc bấm Complete** (bằng chứng nghiệm thu). Upload KHÔNG phụ thuộc trạng thái (Done hay chưa đều đăng được); riêng task "bàn giao" **bắt buộc** đính kèm *trước khi* complete. Nhân viên **xem** được tài liệu task mình + tài liệu đơn (theo tầng), không upload.
+> - **KHÔNG quản lý kho** — hệ thống chỉ phục vụ đơn sản xuất; bỏ nhánh "hàng có sẵn".
 > Nhánh hiện tại: `feature/department-manager`
-> Phụ thuộc: Department Module phải hoàn thành trước (Department = **xưởng sản xuất**)
+> Phụ thuộc: Department Module (v5) + MinIO storage (`IFileStorageService`) — đều đã có.
 
 ---
 
-## Tổng quan nghiệp vụ (mô hình sản xuất)
+## Tổng quan nghiệp vụ (mô hình sản xuất — v5)
 
-Doanh nghiệp là công ty **gia công** (ví dụ: gia công khung tranh/ảnh). Mỗi mặt hàng thường được sản xuất qua một **quy trình gồm nhiều công đoạn**, nhưng không phải đơn nào cũng giống nhau. Hệ thống cho phép:
+Công ty **gia công** (vd: khung tranh). Giám đốc kí nhận đơn → **quản lý xưởng** (`ProjectManager` trực thuộc xưởng) ra kế hoạch trực tiếp cho xưởng mình: tạo đơn, (tùy chọn) áp quy trình mẫu để sinh nhanh các công đoạn, chia việc cho công nhân (1 người hoặc 1 nhóm), theo dõi tiến độ, bấm hoàn thành.
 
-1. **Ban kế hoạch (`DepartmentManager` = Manager)** định nghĩa sẵn **Quy trình mẫu (ProcessTemplate)** — danh sách bước/công đoạn chuẩn cho một loại sản phẩm. Đây là **thư viện tham khảo**, không bắt buộc phải dùng.
-2. Khi nhận **đơn hàng (Project = Order)**, ban kế hoạch **tùy chọn**:
-   - Không áp quy trình nào → tạo task hoàn toàn thủ công, hoặc
-   - Áp một `ProcessTemplate` → hệ thống **sinh nhanh một loạt task khởi điểm** theo template, gắn vào đơn + xưởng. Đây chỉ là **áp nhanh để đỡ gõ tay**, không phải ràng buộc cứng — số lượng SP mỗi task, giờ công, người tham gia đều **chỉnh được ngay khi áp** và **vẫn tạo thêm task khác** (theo quy trình hay ad-hoc) sau đó bất cứ lúc nào.
-3. Hệ thống **gán sơ bộ (round-robin theo tải)** các task vừa sinh cho nhân viên xưởng. **Tổ trưởng xưởng (`ProjectManager`, = `Department.ManagerId`)** toàn quyền điều chỉnh: đổi người, **tạo hàng loạt task giống nhau chia số lượng cho nhiều người** (BulkCreate) khi cần nhiều người cùng làm một công đoạn, thêm task ad-hoc.
-4. **Giám đốc / Ban KH nhìn "từ trên xuống" (drill-down)** toàn cây 3 tầng: **Đơn → công đoạn (task cha) → task từng nhân viên (task con)**. Tổ trưởng thấy toàn cây của xưởng mình. Nhân viên chỉ thấy task của mình.
-5. **Chỉ tổ trưởng kiểm kê & nhập sản lượng** cuối ngày (qua `TaskDailyLog`); **nhân viên chỉ xem**, không nhập gì. **Chuyển `Done` là quyết định của tổ trưởng** — không tự động, không phải nhân viên tự chốt.
-6. **Ràng buộc công đoạn — mặc định KHÔNG chặn**: các công đoạn đều **mở ngay** để làm song song / gối đầu (vd cắt được lô nào chuyển sơn lô đó luôn). `StepOrder` chỉ để **gợi ý thứ tự hiển thị**. Chỉ khi khai `DependsOn` tường minh cho 1 cặp công đoạn thì mới **chặn cứng** (bước sau `Blocked` tới khi bước trước `Done`).
-7. **Tiến độ tính theo Earned Value (EV/PV)** dựa trên **số lượng sản phẩm hoàn thành**, PV theo lịch làm việc mặc định **8h/ngày**, **chốt tiến độ cuối mỗi ngày làm việc**.
-
-### Vai trò (role) trong mô hình sản xuất
+### Vai trò (role)
 
 | Role | Vai trò nghiệp vụ | Việc chính |
 |------|-------------------|------------|
-| `DepartmentManager` | **Ban kế hoạch / Manager** | Tạo đơn, định nghĩa quy trình mẫu, (tùy chọn) áp quy trình vào đơn, xem toàn công ty |
-| `ProjectManager` | **Tổ trưởng xưởng** (gắn `Department.ManagerId`) | Điều phối task trong xưởng mình: gán/chuyển assign, tạo hàng loạt (BulkCreate), thêm ad-hoc, **chốt sản lượng hằng ngày**, **duyệt Done** |
-| `Employee` | Công nhân xưởng | **Chỉ xem** task được giao — không nhập sản lượng, không đổi trạng thái |
+| `Director` / `DeputyDirector` | Giám đốc / Phó GĐ (cấp công ty) | Giao đơn cấp cao, định nghĩa quy trình mẫu **dùng chung**, xem **mọi** đơn/task, task nhạy cảm |
+| `ProjectManager` | **Quản lý xưởng** (nhân viên role PM **trực thuộc** xưởng qua `EmployeeInformation.DepartmentId`) | Tạo/sửa đơn cho xưởng mình, áp quy trình, chia việc (1 người / nhóm), cập nhật tiến độ, **bấm hoàn thành** task/đơn |
+| `Employee` | Công nhân xưởng | **Chỉ xem** task được giao |
 
-> Đổi so với plan Department gốc: `Department.ManagerId` giờ trỏ tới nhân viên giữ role `ProjectManager` (tổ trưởng), **không phải** `DepartmentManager`. `DepartmentManager` là vai quản lý cấp công ty (ban kế hoạch), đứng trên nhiều xưởng — không gắn 1-1 với 1 Department cụ thể.
+> **⭐ v5 — nhiều PM/xưởng**: "quản lý xưởng" = **bất kỳ** nhân viên `ProjectManager` có `EmployeeInformation.DepartmentId = X`. Một xưởng có nhiều PM. Scope kiểm qua `IDepartmentRepository.GetDepartmentIdOfUserAsync(userId)` (đã có trong code) — **KHÔNG** dùng `Department.ManagerId`. `ManagerId` chỉ còn là trưởng phòng danh nghĩa để hiển thị.
 
-### Cây drill-down 3 tầng (giám đốc nhìn từ trên xuống)
+### Cây drill-down 3 tầng (GIỮ)
 
 ```
 TẦNG 1 — ĐƠN (Project)
-  "Đơn 500 khung tranh A4"                    ← Giám đốc / Ban KH nhìn tổng
+  "Đơn 500 khung tranh A4"                          ← Giám đốc nhìn tổng; PM xưởng nhìn xưởng mình
      │  (Project 1───* ProjectTask qua ProjectId)
      ▼
-TẦNG 2 — CÔNG ĐOẠN (task cha, IsBatchParent = LUÔN CÓ)
-     ├─ 📦 Cắt khung — 500  (không ai làm trực tiếp, số liệu = tổng con)
-     │      │  (ParentTaskId)
-     │      ├─ Cắt khung - An    200           ← TẦNG 3: task từng nhân viên (task con)
-     │      ├─ Cắt khung - Bình  200
-     │      └─ Cắt khung - Chi   100
-     │
-     ├─ 📦 Ghép góc — 500   (mở song song / gối đầu với Cắt — mặc định không chặn)
-     │      └─ Ghép góc - Dũng   500
-     │
-     └─ 📦 Đóng gói — 500   (Blocked — nếu có khai DependsOn "phụ thuộc Sơn")
-            └─ ...
+TẦNG 2 — CÔNG ĐOẠN (task cha, IsBatchParent)
+     ├─ 📦 Cắt khung — 500   (task Quantity: EV/PV theo sản lượng)
+     │      ├─ Cắt khung - An     (task con, 1 người, 200)
+     │      └─ Cắt khung - Bình   (task con, 1 người, 300)
+     ├─ 📦 Đóng gói — 40 kiện   (task nhóm multi-assignee)
+     │      └─ Đóng gói (An, Bình, Chi, Dũng, Én cùng làm — 1 task, chung Done)
+     └─ 📦 Giao hàng            (task Milestone: chỉ Done + đúng/chậm deadline, bắt buộc đính kèm biên bản)
 ```
 
-> Đây là **cây phân rã công việc để XEM/theo dõi (drill-down)**, KHÔNG phải cây ủy quyền cấp bậc con người kiểu cũ. Sâu **đúng 3 tầng cố định**. Giám đốc/Ban KH (`TaskReadAll`) thấy toàn bộ; tổ trưởng thấy cây của xưởng mình; chỉ **công nhân** bị giới hạn chỉ thấy task con của mình.
-
-### Ánh xạ khái niệm cũ → mới
-
-| Khái niệm cũ (cascade delegation) | Khái niệm mới (sản xuất) |
-|-----------------------------------|--------------------------|
-| Giám đốc tạo Project | Ban kế hoạch (`DepartmentManager`) tạo **Đơn (Project/Order)** |
-| GĐ giao Task gốc thủ công | (Tùy chọn) chọn **ProcessTemplate** → auto sinh nhanh task khởi điểm |
-| Người nhận tự tạo Task con | **Tổ trưởng xưởng** (`ProjectManager`) BulkCreate / thêm ad-hoc khi cần |
-| Cây ủy quyền theo cấp bậc người (che cấp trên) | **Cây drill-down 3 tầng để xem** (Đơn → công đoạn → nhân viên) — giám đốc thấy hết |
-| "Chặn theo cấp/thứ tự" luôn có | Ràng buộc công đoạn **tùy chọn** (`DependsOn`), mặc định mở để gối đầu |
-| Nhân viên tự chuyển Done, task cha % = con Done/Total | **Tổ trưởng chốt sản lượng + duyệt Done**; tiến độ đơn = **EV/PV theo SL hoàn thành** |
-
-### Các loại Task
-
-| Loại | Mô tả | Nguồn tạo | Ai thấy |
-|------|-------|-----------|---------|
-| Process Task | Task sinh nhanh từ quy trình mẫu (nếu đơn áp quy trình), gắn đơn + xưởng | Auto từ ProcessTemplate, tổ trưởng sửa/BulkCreate sau | Ban KH + tổ trưởng xưởng + nhân viên được assign |
-| Ad-hoc Task | Task tạo thủ công — vì đơn không áp quy trình, phát sinh ngoài quy trình, hoặc là task con từ BulkCreate | Ban kế hoạch hoặc Tổ trưởng xưởng | Tổ trưởng xưởng + nhân viên được assign + Ban KH |
-| Internal Confidential | Task nhạy cảm (lương, kỷ luật...) không gắn đơn/xưởng | Director, DeputyDirector, HR | Chỉ người tạo + người được assign |
+- Tầng 2 = **công đoạn** (task cha, `IsBatchParent=true`) — không ai làm trực tiếp, số liệu = tổng con.
+- Tầng 3 = **task thực thi** (task con). Mỗi task con: 1 người **hoặc** 1 nhóm (multi-assignee).
+- Giám đốc thấy toàn cây; PM thấy cây xưởng mình; công nhân chỉ thấy task mình được gán.
 
 ---
 
-## Sơ đồ quan hệ
+## Quy tắc nghiệp vụ (v5)
 
-```
-ProcessTemplate (1) ──── (*) ProcessStep      [bước chuẩn trong quy trình mẫu — tham khảo]
-ProcessStep (*) ──────── (*) ProcessStep      [DependsOn — predecessor TÙY CHỌN giữa các bước mẫu]
-
-Project/Order (1) ────── (*) ProjectTask       [task của đơn — có thể toàn bộ ad-hoc, toàn bộ từ template, hoặc trộn]
-Project/Order (*) ────── (0..1) ProcessTemplate [đơn CÓ THỂ dùng quy trình mẫu để sinh nhanh task — nullable]
-Project/Order (*) ────── (1) Department         [xưởng thực hiện đơn]
-
-ProjectTask (*) ──────── (*) ProjectTask        [DependsOn — ràng buộc công đoạn TÙY CHỌN; không khai = làm song song/gối đầu]
-ProjectTask (0..1) ───── (*) ProjectTask        [ParentTaskId — TẦNG công đoạn (cha, IsBatchParent) bọc task nhân viên (con); luôn 1 tầng]
-ProjectTask (*) ──────── (0..1) User            [AssignedToUserId — nhân viên thực thi, nullable]
-ProjectTask (*) ──────── (1) User               [CreatedByUserId]
-ProjectTask (*) ──────── (0..1) Department       [xưởng phụ trách task]
-ProjectTask (0..1) ───── (1) ProcessStep         [SourceStepId — sinh từ bước mẫu nào, null nếu ad-hoc]
-ProjectTask (1) ──────── (*) TaskDailyLog        [nhật ký chốt sản lượng theo ngày — chỉ tổ trưởng nhập]
-```
-
----
-
-## Quy tắc nghiệp vụ
-
-1. **Ban kế hoạch (`DepartmentManager`) tạo Đơn**; `ProcessTemplateId` là **tùy chọn** — có thể để trống và tự tạo task thủ công hoàn toàn.
-2. **Áp quy trình = sinh nhanh, không phải ràng buộc cứng**: khi gọi `GenerateTasks`, ban kế hoạch có thể **override** số lượng SP / giờ công của từng bước trước khi sinh (không bắt buộc dùng đúng số liệu mẫu). Sau khi sinh, xưởng vẫn tự do **thêm task khác** (theo quy trình khác hoặc ad-hoc). Gọi được **nhiều lần** trên cùng đơn.
-3. **Auto-assign round-robin theo tải**: mỗi task Process sinh ra được gán sơ bộ cho nhân viên xưởng có ít task active nhất. Chưa xác định được người phù hợp → để `AssignedToUserId = null` (chờ tổ trưởng gán).
-4. **Cây 3 tầng, luôn có tầng công đoạn (task cha)**: mỗi công đoạn là 1 task cha `IsBatchParent=true` bọc các task con (từng nhân viên) — **kể cả công đoạn chỉ 1 người làm** cũng có 1 cha bọc 1 con, để cây luôn đều 3 tầng và giám đốc drill-down nhất quán. Task cha không giao ai, số liệu = tổng con.
-5. **Tổ trưởng xưởng (`ProjectManager`, = `Department.ManagerId`)** có toàn quyền trong xưởng mình:
-   - Thêm task ad-hoc, chỉnh deadline/priority/số lượng.
-   - **Chuyển assign** giữa nhân viên.
-   - **BulkCreate**: tạo hàng loạt task giống nhau chia số lượng cho N người (vd "Cắt phôi" 500 → chia đều 5 người mỗi người 100, chỉnh tay được), sinh 1 lần dưới 1 task cha. Mỗi task con vẫn 1 người/1 số lượng riêng — không cần multi-assignee.
-   - **Chốt sản lượng cuối ngày** (`TaskDailyLog`) và **duyệt `Done`** cho task trong xưởng mình.
-6. **Nhân viên chỉ xem** task của mình — **không nhập sản lượng, không đổi trạng thái**. Sản lượng do tổ trưởng kiểm kê nhập. Task tự lên `PendingReview` khi tổng chốt đạt đủ; tổ trưởng duyệt mới thành `Done`.
+1. **PM xưởng tạo Đơn** cho xưởng mình (GĐ giao đơn cấp cao); áp quy trình mẫu **tùy chọn**. Đơn **KHÔNG lưu ID quy trình** (template chỉ là công cụ sinh nhanh, sinh xong tách rời).
+2. **Áp quy trình = sinh nhanh khung công đoạn (task cha)**: `GenerateTasks` tạo 1 task cha/bước, cho **override** `PlannedQuantity` / `EstimatedHours` / **`Deadline`** từng công đoạn. KHÔNG auto-chia con, KHÔNG auto-assign. Gọi được nhiều lần trên cùng đơn.
+3. **PM chia việc bằng `CreateTask`** (1 hoặc nhiều người):
+   - **Task 1 người**: `Assignees = [An]`.
+   - **Task nhóm**: `Assignees = [An, Bình, Chi...]` — cả nhóm chung 1 task, chung 1 Done. Không tách sản lượng đầu người.
+4. **2 kiểu đo tiến độ task** (`ProgressType`):
+   - **`Quantity`** (có sản lượng): khai `PlannedQuantity` (+ `EstimatedHoursPerUnit`). PM cập nhật `CompletedQuantity` khi đi kiểm (bất kỳ lúc nào, không ép hàng ngày). Tiến độ task = `CompletedQuantity / PlannedQuantity`. Tham gia **EV/PV**.
+   - **`Milestone`** (không sản lượng): chỉ có Done/chưa. Tiến độ = 0% hoặc 100%. Đo bằng **deadline** (đúng/chậm hạn). Trọng số EV = `EstimatedHours` (PM ước lượng khi tạo).
+5. **Hoàn thành task = PM bấm `Complete`** (`PATCH /api/Task/{id}/complete`):
+   - Set `Status = Done`, `CompletedByUserId`, `CompletedAt`.
+   - Nếu `CompletedAt > Deadline` (task có deadline) → `WasLate = true` (**Done nhưng chậm tiến độ**).
+   - Task **`RequiresHandover = true`** (bàn giao/nghiệm thu) → **bắt buộc** ≥1 attachment (ảnh/biên bản) mới cho complete.
+   - **BỎ** Approve/PendingReview — không có bước duyệt trung gian.
+6. **Nhân viên chỉ xem** task mình được gán. Không nhập gì, không đổi trạng thái.
 7. **Ràng buộc công đoạn (step-gating) — TÙY CHỌN, mặc định KHÔNG chặn**:
-   - Không khai `DependsOn` → công đoạn `Todo` (mở) ngay, làm song song / gối đầu thoải mái.
-   - Khai `DependsOn` cho cặp cần thiết → công đoạn sau `Blocked` tới khi predecessor được tổ trưởng duyệt `Done`.
-   - Nếu predecessor là công đoạn có nhiều người (task cha), coi là `Done` **khi tất cả task con đã Done** (xem 3.6).
-8. **Ban KH + tổ trưởng thấy toàn bộ cây task của xưởng/đơn**; nhân viên chỉ thấy task con của mình.
-9. **Task Confidential** — ẩn với mọi người trừ người tạo, người được assign, GĐ.
-10. **Xóa Task** — chỉ xóa được task lá: không có task con, không là predecessor của task đang mở, **và chưa có `TaskDailyLog`** (đã ghi sản lượng thì cấm xóa để bảo toàn dữ liệu lương/lịch sử — dùng hủy/archive nếu cần).
-11. **Chốt tiến độ**: cuối mỗi ngày làm việc, snapshot EV/PV cho đơn (xem Phase mở rộng EV/PV).
-
-### Hierarchy role (giữ để kiểm tra thao tác quản lý)
-
-```
-Director (level 1)
-  └─ DeputyDirector (level 2)   ← thêm mới, chưa có trong SystemRoles
-       └─ DepartmentManager (level 3) = Ban kế hoạch (cấp công ty, không gắn 1 xưởng cụ thể)
-            └─ ProjectManager (level 3) = Tổ trưởng xưởng (gắn Department.ManagerId)
-                 └─ Employee (level 4)  = công nhân xưởng
-```
-
-> `DepartmentManager` và `ProjectManager` cùng level 3 nhưng **phạm vi khác nhau**: `DepartmentManager` có quyền **All** (đa xưởng, ban kế hoạch), `ProjectManager` có quyền **Department-scoped** (chỉ xưởng mình làm tổ trưởng). Xem bảng permission ở Phase 2.5.
+   - Không khai `DependsOn` → công đoạn mở (`Todo`) ngay, làm song song / gối đầu.
+   - Khai `DependsOn` → công đoạn sau `Blocked` tới khi predecessor `Done`. Ràng buộc gắn ở **task cha (công đoạn)**.
+8. **Task cha (công đoạn) `Done`** khi **mọi con `Done`** (persist bằng UPDATE nguyên tử — chống race). → mở khóa công đoạn phụ thuộc.
+9. **Đính kèm tài liệu/ảnh**: gắn vào Đơn, Task, hoặc lúc Complete (bằng chứng nghiệm thu). Dùng MinIO `IFileStorageService`.
+10. **Đóng đơn thủ công**: PM bấm `Complete` cho đơn (`PATCH /api/Project/{id}/complete`) → `Status = Completed`, ghi `CompletionNote` (rút kinh nghiệm/sự cố), có thể đính kèm.
+11. **Xóa Task** — chỉ xóa task lá: không có con, không là predecessor của task đang mở. (Không còn ràng buộc daily-log vì đã bỏ.)
+12. **Scope xưởng (v5)**: mọi thao tác ghi task/đơn kiểm `GetDepartmentIdOfUserAsync(currentUser) == task.DepartmentId`. GĐ (`*ReadAll`) bỏ qua scope.
 
 ---
 
 ## Phase 1 — Domain Layer
 
-### 1.1 Thêm role DeputyDirector vào SystemRoles
+### 1.1 Role DeputyDirector — đã có (`SystemRoles.DeputyDirectorId = 9`)
 
-**File:** `src/MPS.Domain/Constants/SystemRoles.cs`
-
-```csharp
-public const int DeputyDirectorId = 8;
-public const string DeputyDirector = "DeputyDirector";
-```
-
-> Đây là role còn thiếu trong Department plan. Cần thêm trước khi seed permission.
-
-### 1.2 Tạo entity `ProcessTemplate` + `ProcessStep` (quy trình mẫu)
+### 1.2 Entity `ProcessTemplate` + `ProcessStep` + `ProcessStepDependency` (quy trình mẫu)
 
 **File:** `src/MPS.Domain/Entities/ProcessTemplate.cs`
 
@@ -154,15 +90,12 @@ public const string DeputyDirector = "DeputyDirector";
 public class ProcessTemplate
 {
     public int Id { get; set; }
-    public string Code { get; set; } = string.Empty;           // Unique, max 20 (vd: "KHUNG-A4")
-    public string Name { get; set; } = string.Empty;           // max 150 (vd: "Gia công khung tranh A4")
+    public string Code { get; set; } = string.Empty;      // Unique, max 20
+    public string Name { get; set; } = string.Empty;      // max 150
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
-
-    // Xưởng mặc định áp dụng quy trình này (nullable — có thể chọn lúc phát đơn)
     public int? DefaultDepartmentId { get; set; }
     public Department? DefaultDepartment { get; set; }
-
     public List<ProcessStep> Steps { get; set; } = new();
 }
 ```
@@ -176,75 +109,69 @@ public class ProcessStep
     public int Id { get; set; }
     public int ProcessTemplateId { get; set; }
     public ProcessTemplate? ProcessTemplate { get; set; }
-
-    public string Name { get; set; } = string.Empty;           // max 150 (vd: "Cắt phôi", "Ghép góc", "Sơn")
+    public string Name { get; set; } = string.Empty;       // vd "Cắt phôi", "Sơn"
     public string? Description { get; set; }
-    public int StepOrder { get; set; }                         // thứ tự công đoạn (1,2,3...)
-    public int EstimatedHoursPerUnit { get; set; }             // giờ công/1 sản phẩm — dùng cho PV
-    public int? Priority { get; set; }                         // 1=Low, 2=Medium, 3=High
-
-    // Predecessor giữa các bước MẪU (many-to-many self qua bảng nối ProcessStepDependency)
-    public List<ProcessStepDependency> DependsOn { get; set; } = new();   // bước này phụ thuộc bước nào
-    public List<ProcessStepDependency> Dependents { get; set; } = new();  // bước nào phụ thuộc bước này
+    public int StepOrder { get; set; }                     // gợi ý thứ tự hiển thị (KHÔNG tự chặn)
+    public ProgressType DefaultProgressType { get; set; }  // Quantity | Milestone — mặc định cho task sinh ra
+    public int EstimatedHoursPerUnit { get; set; }         // giờ công/1 SP (task Quantity) — cho EV/PV
+    public int? Priority { get; set; }
+    public List<ProcessStepDependency> DependsOn { get; set; } = new();
+    public List<ProcessStepDependency> Dependents { get; set; } = new();
 }
 ```
 
-**File:** `src/MPS.Domain/Entities/ProcessStepDependency.cs` (bảng nối)
+**File:** `src/MPS.Domain/Entities/ProcessStepDependency.cs` (bảng nối, many-to-many self)
 
 ```csharp
 public class ProcessStepDependency
 {
-    public int StepId { get; set; }              // bước phụ thuộc
+    public int StepId { get; set; }
     public ProcessStep? Step { get; set; }
-    public int PredecessorStepId { get; set; }   // bước tiền nhiệm
+    public int PredecessorStepId { get; set; }
     public ProcessStep? PredecessorStep { get; set; }
 }
 ```
 
-> **DependsOn — TÙY CHỌN, mặc định KHÔNG chặn** (⚠ đổi so với bản trước): `StepOrder` **chỉ để gợi ý thứ tự hiển thị** (cắt → ghép → sơn), **không** tạo ràng buộc. Nếu **không khai** `DependsOn` giữa hai bước → cả hai đều **mở ngay**, làm song song / gối đầu được (vd cắt được lô nào chuyển sơn lô đó luôn, không chờ cắt hết). Chỉ khi **khai tường minh** `DependsOn` cho một cặp bước thì mới **chặn cứng** (bước sau `Blocked` tới khi bước trước `Done`) — dùng cho ràng buộc thật sự bắt buộc (vd không thể đóng gói khi chưa sơn).
->
-> Cho phép đồ thị bất kỳ: chuỗi tuần tự (nếu khai đủ), nhánh song song, hoặc hoàn toàn độc lập. Validate **không có chu trình** khi lưu template.
+> `DependsOn` TÙY CHỌN — không khai = mở song song. Khai = chặn cứng. Validate không có chu trình khi lưu.
 
-### 1.3 Tạo/mở rộng entity `Project` (Đơn hàng)
+### 1.3 Entity `Project` (Đơn hàng)
 
 **File:** `src/MPS.Domain/Entities/Project.cs`
 
 ```csharp
 [Auditable]
-public class Project   // = Đơn hàng sản xuất (Order)
+public class Project
 {
     public int Id { get; set; }
-    public string Title { get; set; } = string.Empty;          // max 200 (vd: "Đơn 500 khung A4 - Cty X")
+    public string Title { get; set; } = string.Empty;     // max 200
     public string? Description { get; set; }
     public ProjectStatus Status { get; set; } = ProjectStatus.Active;
-    public DateOnly StartDate { get; set; }                    // ⭐ NGÀY BẮT ĐẦU SẢN XUẤT — mốc "start" cho PV/SPI
-                                                                // (KHÔNG dùng CreatedAt của [Auditable] vì đó là ngày tạo bản ghi).
-                                                                // Mặc định = ngày tạo đơn, ban KH chỉnh được.
+    public DateOnly StartDate { get; set; }               // ⭐ mốc bắt đầu — cho đo tiến độ theo thời gian
     public DateTime? Deadline { get; set; }
-    public int Quantity { get; set; } = 1;                     // số lượng sản phẩm của đơn
+    public int Quantity { get; set; } = 1;                // SL sản phẩm của đơn (mặc định cho task Quantity)
 
-    // Xưởng thực hiện đơn
-    public int? DepartmentId { get; set; }
+    public int? DepartmentId { get; set; }                // xưởng thực hiện (v5 điểm neo scope)
     public Department? Department { get; set; }
 
-    // Quy trình mẫu ĐÃ ÁP để sinh nhanh 1 loạt task khởi điểm (tùy chọn).
-    // null = đơn tạo task hoàn toàn thủ công. Có giá trị = đã sinh task từ template lúc tạo/generate,
-    // nhưng KHÔNG ràng buộc: xưởng vẫn thêm task khác thoải mái sau đó (theo template khác hoặc ad-hoc).
-    public int? ProcessTemplateId { get; set; }
-    public ProcessTemplate? ProcessTemplate { get; set; }
+    // Đóng đơn thủ công (v5) — PM bấm Complete
+    public int? CompletedByUserId { get; set; }
+    public User? CompletedBy { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? CompletionNote { get; set; }           // rút kinh nghiệm / sự cố khi đóng đơn
 
     public int CreatedByUserId { get; set; }
     public User? CreatedBy { get; set; }
 
     public List<ProjectTask> Tasks { get; set; } = new();
+    // Tài liệu/ảnh: KHÔNG navigation — ProductionAttachment polymorphic (OwnerType+OwnerId), query qua repo.
 }
 
 public enum ProjectStatus { Active, Completed, Archived }
 ```
 
-> `DepartmentId` được thêm trực tiếp vào `Project` (phương án (b) trong TODO cũ) — giải quyết dứt điểm việc "chặn giải tán xưởng khi còn đơn active" (xem [Lưu ý #7]).
+> ⚠ KHÔNG lưu `ProcessTemplateId` — template chỉ sinh nhanh rồi tách rời.
 
-### 1.4 Tạo/mở rộng entity `ProjectTask`
+### 1.4 Entity `ProjectTask` (v5 — multi-assignee + đo lai + complete)
 
 **File:** `src/MPS.Domain/Entities/ProjectTask.cs`
 
@@ -253,511 +180,254 @@ public enum ProjectStatus { Active, Completed, Archived }
 public class ProjectTask
 {
     public int Id { get; set; }
-    public string Title { get; set; } = string.Empty;          // max 200
+    public string Title { get; set; } = string.Empty;     // max 200
     public string? Description { get; set; }
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
     public TaskItemType Type { get; set; } = TaskItemType.ProcessTask;
+    public ProgressType ProgressType { get; set; } = ProgressType.Quantity;  // ⭐ Quantity | Milestone
+    public bool RequiresHandover { get; set; } = false;   // ⭐ true = task bàn giao: bắt buộc attachment khi Complete
     public bool IsConfidential { get; set; } = false;
     public DateTime? Deadline { get; set; }
-    public int? Priority { get; set; }                         // 1=Low, 2=Medium, 3=High
-    public int StepOrder { get; set; }                         // thứ tự công đoạn (copy từ ProcessStep)
+    public int? Priority { get; set; }
+    public int StepOrder { get; set; }
 
-    // --- Earned Value theo sản phẩm ---
-    public int PlannedQuantity { get; set; }                   // TỔNG số SP mục tiêu của task này (vd 500 khung, không chia theo ngày)
-    public int CompletedQuantity { get; set; }                 // TỔNG SP đã chốt — CỘNG DỒN từ TaskDailyLog (denormalized, không nhập trực tiếp)
-    public int EstimatedHoursPerUnit { get; set; }             // giờ công/SP (copy từ ProcessStep) — cho PV/EV
+    // --- Đo tiến độ ---
+    public int PlannedQuantity { get; set; }              // task Quantity: tổng SP mục tiêu (Milestone: 0)
+    public int CompletedQuantity { get; set; }            // task Quantity: SP đã làm — PM cập nhật khi đi kiểm
+    public int EstimatedHoursPerUnit { get; set; }        // giờ công/SP (Quantity) — cho EV/PV
+    public int EstimatedHours { get; set; }               // ⭐ Milestone: khối lượng ước lượng (trọng số EV)
+    public DateTime? ProgressUpdatedAt { get; set; }      // lần cuối PM cập nhật CompletedQuantity
 
-    // --- Duyệt hoàn thành (Done do TỔ TRƯỞNG quyết định) ---
-    public int? ApprovedByUserId { get; set; }                 // tổ trưởng đã duyệt Done
-    public User? ApprovedBy { get; set; }
-    public DateTime? ApprovedAt { get; set; }
-
-    // --- Nhật ký chốt sản lượng theo ngày (chỉ tổ trưởng nhập) ---
-    public List<TaskDailyLog> DailyLogs { get; set; } = new(); // xem 1.4b
+    // --- Hoàn thành (bấm tay, không duyệt) ---
+    public int? CompletedByUserId { get; set; }
+    public User? CompletedBy { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public bool WasLate { get; set; }                     // ⭐ Done sau Deadline → true (chậm tiến độ)
 
     // Quan hệ đơn (null = Internal Task)
     public int? ProjectId { get; set; }
     public Project? Project { get; set; }
 
-    // Xưởng phụ trách task
+    // Xưởng phụ trách (v5 điểm neo scope)
     public int? DepartmentId { get; set; }
     public Department? Department { get; set; }
 
-    // Bước mẫu nguồn (null = task ad-hoc, không sinh từ template)
-    public int? SourceStepId { get; set; }
-    public ProcessStep? SourceStep { get; set; }
-
-    // Self-referencing: cây drill-down 3 tầng. Task cha = 1 CÔNG ĐOẠN (tầng 2) bọc các task con
-    // = task từng nhân viên (tầng 3). Vd cha "Cắt 500 khung" → con "Cắt khung - An/Bình/Chi".
-    // LUÔN có task cha cho mỗi công đoạn (kể cả khi chỉ 1 người) để cây đều 3 tầng.
+    // Cây 3 tầng: cha = công đoạn (IsBatchParent), con = task thực thi
     public int? ParentTaskId { get; set; }
     public ProjectTask? ParentTask { get; set; }
     public List<ProjectTask> Children { get; set; } = new();
-    public bool IsBatchParent { get; set; } = false;           // true = task CÔNG ĐOẠN (tầng 2), không ai làm trực tiếp,
-                                                                // AssignedToUserId=null; tiến độ = tổng Children;
-                                                                // loại khỏi danh sách "task của tôi" của nhân viên.
-                                                                // DependsOn (ràng buộc công đoạn) gắn ở đây, không ở con.
+    public bool IsBatchParent { get; set; } = false;      // true = công đoạn (tầng 2), số liệu = tổng con
 
-    // Step-gating: predecessor tasks (many-to-many self qua TaskDependency)
-    public List<TaskDependency> DependsOn { get; set; } = new();    // task này phụ thuộc task nào
-    public List<TaskDependency> Dependents { get; set; } = new();   // task nào phụ thuộc task này
+    // ⭐ Multi-assignee: 1 task giao 1 HOẶC nhiều người (bảng nối TaskAssignee)
+    public List<TaskAssignee> Assignees { get; set; } = new();
 
-    // Nhân viên thực thi (nullable — chờ tổ trưởng gán khi auto-assign không xác định được)
-    public int? AssignedToUserId { get; set; }
-    public User? AssignedTo { get; set; }
+    // Step-gating (gắn ở task cha)
+    public List<TaskDependency> DependsOn { get; set; } = new();
+    public List<TaskDependency> Dependents { get; set; } = new();
 
     public int CreatedByUserId { get; set; }
     public User? CreatedBy { get; set; }
 
-    // Optimistic concurrency — chống đua khi 2 lần LogDaily/Approve đồng thời làm CompletedQuantity/Status trôi.
-    [Timestamp] public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+    // Tài liệu/ảnh: KHÔNG navigation — ProductionAttachment polymorphic (OwnerType+OwnerId), query qua repo.
 
-    // Computed (không lưu DB):
-    // TaskCompletionPercent = PlannedQuantity > 0
-    //   ? CompletedQuantity * 100 / PlannedQuantity   (CompletedQuantity = SUM(DailyLogs.QuantityDone))
-    //   : (Status == Done ? 100 : 0)
+    [Timestamp] public byte[] RowVersion { get; set; } = Array.Empty<byte>();  // concurrency
+
+    // Computed (không lưu):
+    // TaskCompletionPercent:
+    //   Milestone → Status == Done ? 100 : 0
+    //   Quantity  → PlannedQuantity > 0 ? CompletedQuantity*100/PlannedQuantity : (Done?100:0)
 }
 
-// Blocked → Todo (mở khi predecessor Done) → InProgress (task CON: đã có DailyLog đầu tiên)
-//   → PendingReview (tổng chốt >= PlannedQuantity) → Done (CHỈ tổ trưởng duyệt, không tự động)
-// Task CHA (IsBatchParent): Status được PERSIST hẳn — Approve con cuối cùng ghi parent.Status = Done
-//   (không để "coi như Done" ngầm, vì gating & query so parent.Status == Done).
-public enum TaskItemStatus { Blocked, Todo, InProgress, PendingReview, Done }
-public enum TaskItemType  { ProcessTask, AdHoc, InternalConfidential }
+// Blocked → Todo (mở khi predecessor Done) → InProgress → Done
+//   Task CON: InProgress khi CompletedQuantity > 0 (Quantity) hoặc khi bắt đầu (Milestone tùy chọn).
+//   Done CHỈ khi PM bấm Complete. Task CHA (IsBatchParent): Done khi mọi con Done (UPDATE nguyên tử).
+public enum TaskItemStatus { Blocked, Todo, InProgress, Done }
+public enum TaskItemType   { ProcessTask, AdHoc, InternalConfidential }
+public enum ProgressType   { Quantity, Milestone }   // ⭐ đo lai
 ```
 
-> **Sản lượng KHÔNG nhập trực tiếp vào task.** Mỗi cuối ngày, **chỉ tổ trưởng** thêm một dòng `TaskDailyLog` (task, ngày, số SP chốt được, mục tiêu-ngày). `CompletedQuantity` là tổng cộng dồn từ các dòng đó (denormalized để query nhanh). Khi tổng đạt `PlannedQuantity` → task tự chuyển `PendingReview`; tổ trưởng gọi `ApproveTask` mới sang `Done` (ghi `ApprovedByUserId`/`ApprovedAt`) — mới kích hoạt `StepGatingService.UnblockDependentsAsync`.
+**File:** `src/MPS.Domain/Entities/TaskAssignee.cs` (⭐ bảng nối multi-assignee)
+
+```csharp
+public class TaskAssignee
+{
+    public int TaskId { get; set; }
+    public ProjectTask? Task { get; set; }
+    public int UserId { get; set; }          // người được giao (task nhóm = nhiều dòng)
+    public User? User { get; set; }
+    public DateTime AssignedAt { get; set; }
+}
+```
 
 **File:** `src/MPS.Domain/Entities/TaskDependency.cs` (bảng nối step-gating)
 
 ```csharp
 public class TaskDependency
 {
-    public int TaskId { get; set; }              // task phụ thuộc
+    public int TaskId { get; set; }
     public ProjectTask? Task { get; set; }
-    public int PredecessorTaskId { get; set; }   // task tiền nhiệm phải Done trước
+    public int PredecessorTaskId { get; set; }
     public ProjectTask? PredecessorTask { get; set; }
 }
 ```
 
-> Đặt tên `ProjectTask` thay vì `Task` để tránh xung đột với `System.Threading.Tasks.Task` của C#.
->
-> **`AssignedToUserId` giờ là `int?`** (nullable) — khác plan cũ — để hỗ trợ task chưa gán khi auto-assign round-robin không tìm được nhân viên phù hợp.
+> **Bỏ `TaskDailyLog`** (v5). Task Quantity cập nhật thẳng `CompletedQuantity` qua `UpdateTaskProgress` khi PM đi kiểm — không bảng log riêng, không ép hàng ngày. Nếu sau này cần lịch sử cập nhật thì đã có **AuditLog** (`ProjectTask` gắn `[Auditable]`) ghi diff mỗi lần đổi `CompletedQuantity`.
 
-### 1.4b Tạo entity `TaskDailyLog` (nhật ký chốt sản lượng theo ngày) — ⭐ giải quyết bài toán "task lặp mỗi ngày"
+### 1.5 Entity `ProductionAttachment` (⭐ tài liệu/ảnh — gắn Đơn / Task / Quy trình / nghiệm thu)
 
-**File:** `src/MPS.Domain/Entities/TaskDailyLog.cs`
+**File:** `src/MPS.Domain/Entities/ProductionAttachment.cs`
 
 ```csharp
 [Auditable]
-public class TaskDailyLog
+public class ProductionAttachment
 {
     public int Id { get; set; }
-
-    public int TaskId { get; set; }                  // thuộc task nào (task dài ngày, KHÔNG tạo lại mỗi ngày)
-    public ProjectTask? Task { get; set; }
-
-    // ⭐ SNAPSHOT công nhân làm việc trong ngày đó — chốt tại thời điểm ghi log, KHÔNG suy từ task.AssignedToUserId.
-    // Lý do: nếu sau này Reassign task cho người khác, lịch sử hiệu suất ngày cũ vẫn thuộc đúng người đã làm.
-    public int WorkerUserId { get; set; }
-    public User? Worker { get; set; }
-
-    public DateOnly WorkDate { get; set; }           // ngày làm việc được chốt (vd 2026-07-15)
-    public int TargetQuantity { get; set; }          // mục tiêu SP trong ngày (tổ trưởng ĐẶT TAY — vd 100)
-    public int QuantityDone { get; set; }            // SP thực tế chốt được (tổ trưởng kiểm kê — vd 50 hoặc 120)
-    public string? Note { get; set; }                // ghi chú (máy hỏng, hàng khó...)
-
-    // Ai chốt (tổ trưởng — có thể khác WorkerUserId) và lúc nào
-    public int LoggedByUserId { get; set; }
-    public User? LoggedBy { get; set; }
-    public DateTime LoggedAt { get; set; }
-
-    // Hiệu suất ngày (computed): QuantityDone / TargetQuantity
-    //   < 100% = chậm (50/100), > 100% = vượt (120/100)
+    public AttachmentOwnerType OwnerType { get; set; }    // Project | Task | TaskCompletion | ProcessTemplate
+    public int OwnerId { get; set; }                      // ProjectId / TaskId / ProcessTemplateId
+    public string ObjectKey { get; set; } = string.Empty; // key trên MinIO
+    public string Bucket { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;  // tên gốc hiển thị (max 260)
+    public string ContentType { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public string? Sha256Hex { get; set; }
+    public string? Note { get; set; }                     // vd "Ảnh nghiệm thu", "Bản vẽ kỹ thuật"
+    public int UploadedByUserId { get; set; }
+    public User? UploadedBy { get; set; }
+    public DateTime UploadedAt { get; set; }
 }
+
+public enum AttachmentOwnerType { Project, Task, TaskCompletion, ProcessTemplate }
 ```
 
-> **`WorkerUserId` (snapshot) vs `LoggedByUserId` (tổ trưởng)**: `EmployeePerformanceQuery` group theo `WorkerUserId` của **log**, KHÔNG theo `task.AssignedToUserId`. Nhờ đó Reassign không làm dịch chuyển lịch sử hiệu suất cũ. Mặc định `WorkerUserId = task.AssignedToUserId` tại thời điểm log, nhưng tổ trưởng có thể chỉnh nếu người thực làm khác người được gán.
-
-> **Đây là trái tim của giải pháp giảm thao tác thủ công.** Thay vì mỗi ngày tạo task mới, task chỉ tạo **1 lần** (SL mục tiêu tổng, vd 500). Mỗi cuối ngày tổ trưởng chỉ thêm **1 dòng log/người** (nhập 2 số: mục tiêu ngày + thực đạt). Tiến độ task = `SUM(QuantityDone)`; hiệu suất từng người từng ngày = query `TaskDailyLog`. Không có "task theo ngày" nào phải tạo lại.
+> **Polymorphic thuần** (OwnerType + OwnerId) — **KHÔNG** navigation collection trên Project/ProjectTask/ProcessTemplate và KHÔNG FK cứng (nếu để navigation, EF sinh FK shadow → sai). Truy vấn qua `IProductionAttachmentRepository`. Xóa owner phải dọn attachment + object MinIO ở handler.
 >
-> **Unique constraint** `(TaskId, WorkDate)`: mỗi task chỉ 1 log/ngày (chốt lại thì update dòng cũ).
+> - `TaskCompletion` = bằng chứng nghiệm thu gắn khi Complete task bàn giao (`RequiresHandover`).
+> - `ProcessTemplate` = bản vẽ / hướng dẫn chuẩn gắn vào quy trình mẫu (dùng chung, không thuộc xưởng).
+> - Enum lưu **string** (`HasConversion<string>()`, max 20) → thêm giá trị mới KHÔNG cần migration.
+>
+> Tái dùng **MinIO `IFileStorageService`** (`UploadAsync`, `GeneratePresignedDownloadUrlAsync`, `DeleteAsync`). `FileUploadRequest(Content, ObjectKey, ContentType, …)` → `StoredFileMetadata(Bucket, ObjectKey, SizeBytes, Sha256Hex, ContentType, UploadedAtUtc, ETag)` → copy vào `ProductionAttachment`.
 
-### 1.5 Thêm Permissions
+### 1.6 Permissions
 
-**File:** `src/MPS.Domain/Constants/Permissions.cs`
-
-```csharp
-// ===== Task/Production module — IDs 100–124 =====
-
-// ProcessTemplate (quy trình mẫu) — Ban kế hoạch quản lý
-public const string ProcessTemplateReadAll   = "ProcessTemplate.Read.All";
-public const string ProcessTemplateCreateAll = "ProcessTemplate.Create.All";
-public const string ProcessTemplateUpdateAll = "ProcessTemplate.Update.All";
-public const string ProcessTemplateDeleteAll = "ProcessTemplate.Delete.All";
-
-// Project/Order (đơn hàng)
-public const string ProjectReadAll        = "Project.Read.All";        // Ban KH + GĐ: thấy mọi đơn
-public const string ProjectReadDepartment = "Project.Read.Department";  // tổ trưởng: đơn của xưởng mình
-public const string ProjectCreateAll      = "Project.Create.All";      // Ban KH phát đơn
-public const string ProjectUpdateAll      = "Project.Update.All";
-public const string ProjectDeleteAll      = "Project.Delete.All";
-public const string ProjectGenerateTasks  = "Project.GenerateTasks";   // sinh task từ ProcessTemplate
-
-// Task — xem theo scope
-public const string TaskReadAll          = "Task.Read.All";           // Ban KH + GĐ: mọi task
-public const string TaskReadDepartment   = "Task.Read.Department";    // tổ trưởng: task của xưởng mình
-public const string TaskReadAssigned     = "Task.Read.Assigned";      // nhân viên: chỉ task của mình
-public const string TaskReadConfidential = "Task.Read.Confidential";  // GĐ + DeputyGĐ: task nhạy cảm
-
-// Task — thao tác (tất cả thuộc về tổ trưởng xưởng — nhân viên KHÔNG có quyền ghi task nào)
-public const string TaskCreateAdHoc          = "Task.Create.AdHoc";        // BanKH/tổ trưởng: thêm task thủ công (không áp quy trình / bổ sung)
-public const string TaskBulkCreateDepartment = "Task.BulkCreate.Department"; // ⭐ tổ trưởng: tạo hàng loạt task giống nhau, chia SL cho N người (1 thao tác)
-public const string TaskCreateConfidential   = "Task.Create.Confidential"; // tạo Confidential Task
-public const string TaskUpdateDepartment     = "Task.Update.Department";    // tổ trưởng sửa task xưởng mình
-public const string TaskReassignDepartment   = "Task.Reassign.Department";  // tổ trưởng chuyển assign nhân viên
-public const string TaskLogDailyDepartment   = "Task.LogDaily.Department";  // ⭐ tổ trưởng: chốt sản lượng cuối ngày (TaskDailyLog)
-public const string TaskApproveDepartment    = "Task.Approve.Department";   // ⭐ CHỈ tổ trưởng: duyệt chuyển Done
-public const string TaskDeleteDepartment     = "Task.Delete.Department";    // tổ trưởng xóa task lá xưởng mình
-```
-
-> Bỏ `TaskReportProgressAssigned` (nhân viên tự báo) — theo chốt nghiệp vụ, **chỉ tổ trưởng kiểm kê & nhập sản lượng** (`TaskLogDailyDepartment`). Nhân viên chỉ có quyền **xem** (`TaskReadAssigned`), không ghi gì. `TaskSplitDepartment` cũ được thay bằng `TaskBulkCreateDepartment` (bao trùm cả chia lô).
-
-**File:** `src/MPS.Domain/Constants/Permissions.cs` — phần PermissionIds
+**File:** `src/MPS.Domain/Constants/Permissions.cs` — dải 100–129
 
 ```csharp
-// ===== Department module — IDs 95–99 (theo department-module-plan) =====
-// (đã định nghĩa trong department plan)
+// ProcessTemplate — GĐ định nghĩa dùng chung; PM đọc để áp
+ProcessTemplate.Read.All / Create.All / Update.All / Delete.All   // 100–103
 
-// ===== Task/Production module — IDs 100–124 =====
-public const int ProcessTemplateReadAll     = 100;
-public const int ProcessTemplateCreateAll   = 101;
-public const int ProcessTemplateUpdateAll   = 102;
-public const int ProcessTemplateDeleteAll   = 103;
+// Project/Order
+Project.Read.All          // 104 — GĐ: mọi đơn
+Project.Read.Department   // 105 — PM: đơn xưởng mình
+Project.Create.All        // 106 — tạo đơn (PM + GĐ; PM kèm check scope xưởng)
+Project.Update.All        // 107
+Project.Delete.All        // 108
+Project.GenerateTasks     // 109 — áp quy trình
+Project.Complete.Department// 110 — ⭐ PM đóng đơn (bấm Complete)
 
-public const int ProjectReadAll             = 104;
-public const int ProjectReadDepartment      = 105;
-public const int ProjectCreateAll           = 106;
-public const int ProjectUpdateAll           = 107;
-public const int ProjectDeleteAll           = 108;
-public const int ProjectGenerateTasks       = 109;
+// Task — xem
+Task.Read.All             // 111 — GĐ
+Task.Read.Department      // 112 — PM: task xưởng mình
+Task.Read.Assigned        // 113 — nhân viên: task mình được gán
+Task.Read.Confidential    // 114 — GĐ/PhóGĐ
 
-public const int TaskReadAll                = 110;
-public const int TaskReadDepartment         = 111;
-public const int TaskReadAssigned           = 112;
-public const int TaskReadConfidential       = 113;
+// Task — thao tác (PM xưởng; nhân viên KHÔNG có quyền ghi)
+Task.Create.Department       // 115 — ⭐ tạo task (1 người / nhóm) trong xưởng
+Task.Create.Confidential     // 116
+Task.Update.Department       // 117 — sửa task (deadline/priority/assignees...)
+Task.UpdateProgress.Department// 118 — ⭐ cập nhật CompletedQuantity (task Quantity)
+Task.Complete.Department     // 119 — ⭐ bấm hoàn thành task (+ cờ WasLate)
+Task.Delete.Department       // 120
 
-public const int TaskCreateAdHoc            = 114;
-public const int TaskBulkCreateDepartment   = 115;
-public const int TaskCreateConfidential     = 116;
-public const int TaskUpdateDepartment       = 117;
-public const int TaskReassignDepartment     = 118;
-public const int TaskLogDailyDepartment     = 119;
-public const int TaskApproveDepartment      = 120;
-public const int TaskDeleteDepartment       = 121;
+// Attachment — tài liệu/ảnh (Project/Task/TaskCompletion). Owner=ProcessTemplate KHÔNG dùng dải này
+// mà tái dùng ProcessTemplate.Read.All (đọc) / ProcessTemplate.Create.All (ghi) — template dùng chung.
+ProductionAttachment.Read.Department   // 121 — xem/tải (presigned)
+ProductionAttachment.Write.Department  // 122 — upload/xóa (scoped xưởng)
+ProductionAttachment.Read.All          // 123 — GĐ
+
+// Audit — xem lịch sử chỉnh sửa task/đơn (scoped xưởng)
+Task.Audit.Read.All        // 124
+Task.Audit.Read.Department // 125
 ```
 
-> Dải 100–121 dùng cho Task/Production module. Dải 122–129 dành cho EV/PV snapshot (nếu tách quyền riêng). Dải 130+ cho module sau.
+> **Bỏ** `TaskBulkCreate`, `TaskReassign`, `TaskLogDaily`, `TaskApprove` (không còn nghiệp vụ tương ứng). `CreateTask` gộp cả tạo 1 người lẫn nhóm. Cập nhật tiến độ tách riêng (`UpdateProgress`) khỏi Complete.
 
-### 1.6 Thêm Interfaces
+### 1.7 Interfaces (repository)
 
-**File:** `src/MPS.Domain/Interfaces/IProcessTemplateRepository.cs`
+**File:** `IProcessTemplateRepository.cs` — CRUD template + steps + dependency (như cũ).
 
+**File:** `IProjectRepository.cs`
 ```csharp
-public interface IProcessTemplateRepository
-{
-    Task<IReadOnlyList<ProcessTemplate>> GetAllAsync(CancellationToken ct);
-    Task<ProcessTemplate?> GetByIdWithStepsAsync(int id, CancellationToken ct);   // include Steps + DependsOn
-    Task<IReadOnlyList<ProcessTemplate>> GetPagedAsync(string? keyword, int page, int pageSize, CancellationToken ct);
-    Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken ct);
-    Task<int> AddAsync(ProcessTemplate entity, CancellationToken ct);
-    Task<bool> UpdateAsync(ProcessTemplate entity, CancellationToken ct);
-    Task<bool> DeleteAsync(int id, CancellationToken ct);
-}
+Task<Project?> GetByIdAsync(int id, CancellationToken ct);
+Task<IReadOnlyList<Project>> GetByDepartmentAsync(int departmentId, CancellationToken ct);
+Task<IReadOnlyList<Project>> GetPagedAsync(string? keyword, int? departmentId, int page, int pageSize, CancellationToken ct);
+Task<bool> HasActiveByDepartmentAsync(int departmentId, CancellationToken ct);   // cho giải tán xưởng
+Task<int> AddAsync(Project e, CancellationToken ct);
+Task<bool> UpdateAsync(Project e, CancellationToken ct);
+Task<bool> DeleteAsync(int id, CancellationToken ct);
 ```
 
-**File:** `src/MPS.Domain/Interfaces/IProjectRepository.cs`
-
+**File:** `IProjectTaskRepository.cs`
 ```csharp
-public interface IProjectRepository
-{
-    Task<IReadOnlyList<Project>> GetAllAsync(CancellationToken ct);
-    Task<Project?> GetByIdAsync(int id, CancellationToken ct);
-    Task<IReadOnlyList<Project>> GetByDepartmentAsync(int departmentId, CancellationToken ct);
-    Task<IReadOnlyList<Project>> GetPagedAsync(string? keyword, int? departmentId, int page, int pageSize, CancellationToken ct);
-    Task<bool> HasActiveByDepartmentAsync(int departmentId, CancellationToken ct);   // cho check giải tán xưởng
-    Task<int> AddAsync(Project entity, CancellationToken ct);
-    Task<bool> UpdateAsync(Project entity, CancellationToken ct);
-    Task<bool> DeleteAsync(int id, CancellationToken ct);
-}
+Task<ProjectTask?> GetByIdWithGraphAsync(int id, CancellationToken ct);     // Assignees + Children + DependsOn
+Task<IReadOnlyList<ProjectTask>> GetByProjectIdAsync(int projectId, CancellationToken ct);
+Task<IReadOnlyList<ProjectTask>> GetByDepartmentAsync(int departmentId, CancellationToken ct);
+Task<IReadOnlyList<ProjectTask>> GetAssignedToUserAsync(int userId, CancellationToken ct);  // qua TaskAssignee
+Task<bool> AllChildrenDoneAsync(int parentTaskId, CancellationToken ct);
+Task<bool> HasChildrenAsync(int taskId, CancellationToken ct);
+Task<bool> IsPredecessorOfOpenTaskAsync(int taskId, CancellationToken ct);
+Task<int> AddAsync(ProjectTask e, CancellationToken ct);
+Task<int> AddRangeAsync(IEnumerable<ProjectTask> e, CancellationToken ct);   // sinh loạt công đoạn từ template
+Task<bool> UpdateAsync(ProjectTask e, CancellationToken ct);
+Task<bool> DeleteAsync(int id, CancellationToken ct);
 ```
 
-**File:** `src/MPS.Domain/Interfaces/IProjectTaskRepository.cs`
-
+**File:** `IProductionAttachmentRepository.cs`
 ```csharp
-public interface IProjectTaskRepository
-{
-    Task<ProjectTask?> GetByIdWithGraphAsync(int id, CancellationToken ct);       // include DependsOn + Children
-    Task<IReadOnlyList<ProjectTask>> GetByProjectIdAsync(int projectId, CancellationToken ct);
-    Task<IReadOnlyList<ProjectTask>> GetByDepartmentAsync(int departmentId, CancellationToken ct);
-    Task<IReadOnlyList<ProjectTask>> GetAssignedToUserAsync(int userId, CancellationToken ct);
-    Task<IReadOnlyList<ProjectTask>> GetPredecessorsAsync(int taskId, CancellationToken ct);   // step-gating
-    Task<int> CountActiveByUserAsync(int userId, CancellationToken ct);           // cho BulkCreate "chia đều" gợi ý tải
-    Task<bool> HasChildrenAsync(int taskId, CancellationToken ct);
-    Task<bool> IsPredecessorOfOpenTaskAsync(int taskId, CancellationToken ct);    // chặn xóa nếu là predecessor
-    Task<bool> HasDailyLogAsync(int taskId, CancellationToken ct);                // ⭐ chặn xóa nếu đã ghi sản lượng
-    Task<bool> AllChildrenDoneAsync(int parentTaskId, CancellationToken ct);      // cho Approve persist cha Done
-    Task<int> AddAsync(ProjectTask entity, CancellationToken ct);
-    Task<int> AddRangeAsync(IEnumerable<ProjectTask> entities, CancellationToken ct);  // sinh loạt từ template / bulk-create
-    Task<bool> UpdateAsync(ProjectTask entity, CancellationToken ct);
-    Task<bool> DeleteAsync(int id, CancellationToken ct);
-
-    // --- Nhật ký chốt sản lượng theo ngày ---
-    Task<TaskDailyLog?> GetDailyLogAsync(int taskId, DateOnly workDate, CancellationToken ct);  // cho upsert theo (TaskId, WorkDate)
-    Task UpsertDailyLogAsync(TaskDailyLog log, CancellationToken ct);
-    Task<int> SumDailyDoneAsync(int taskId, CancellationToken ct);                    // = CompletedQuantity denormalized
-    Task<IReadOnlyList<TaskDailyLog>> GetDailyLogsForPerformanceAsync(               // cho EmployeePerformanceQuery
-        int departmentId, DateOnly fromDate, DateOnly toDate, int? userId, CancellationToken ct);
-}
+Task<IReadOnlyList<ProductionAttachment>> GetByOwnerAsync(AttachmentOwnerType type, int ownerId, CancellationToken ct);
+Task<ProductionAttachment?> GetByIdAsync(int id, CancellationToken ct);
+Task<int> CountByOwnerAsync(AttachmentOwnerType type, int ownerId, CancellationToken ct);  // cho check "bàn giao phải có ≥1"
+Task<int> AddAsync(ProductionAttachment e, CancellationToken ct);
+Task<bool> DeleteAsync(int id, CancellationToken ct);
 ```
+
+> **Scope v5**: dùng `IDepartmentRepository.GetDepartmentIdOfUserAsync(userId)` (đã có) + `GetMemberUserIdsAsync(departmentId)` (đã có, cho FE gợi ý danh sách công nhan khi gán). **Không** dùng `GetByManagerUserIdAsync` (đã bỏ ở v5).
 
 ---
 
 ## Phase 2 — Infrastructure Layer
 
-### 2.1 EF Configuration — ProcessTemplate + ProcessStep + ProcessStepDependency
+### 2.1–2.3 EF Configurations
 
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/ProcessTemplateEntityConfiguration.cs`
+- `ProcessTemplate/Step/StepDependency`: như cũ (cascade Step theo Template; Dependency `Restrict` chiều predecessor tránh multi-cascade).
+- `Project`: FK `Department` **Restrict** (giữ lịch sử — không hard-delete xưởng); `CompletedBy` Restrict; index `DepartmentId`; `StartDate` required.
+- `ProjectTask`:
+  - `ParentTask` self-ref **Restrict**; `Project` **Cascade** (xóa đơn → xóa task); `Department` **Restrict**; `CompletedBy` **Restrict**.
+  - `Status`/`Type`/`ProgressType` `HasConversion<string>()`.
+  - Index: `ProjectId`, `DepartmentId`, `ParentTaskId`, `(Status)`.
+- `TaskAssignee`: key `(TaskId, UserId)`; FK `Task` **Cascade**, `User` **Restrict**; index `UserId` (cho `GetAssignedToUserAsync`).
+- `TaskDependency`: key `(TaskId, PredecessorTaskId)`; `Task` Cascade, `PredecessorTask` **Restrict**.
+- `ProductionAttachment`: index `(OwnerType, OwnerId)`; `UploadedBy` **Restrict**. **Không** FK cứng tới Project/Task (polymorphic qua OwnerType/OwnerId) → xóa Project/Task **phải xóa attachment + xóa object MinIO ở handler** (không cascade DB).
 
-```csharp
-builder.ToTable("ProcessTemplates");
-builder.HasKey(e => e.Id);
-builder.Property(e => e.Code).HasMaxLength(20).IsRequired();
-builder.HasIndex(e => e.Code).IsUnique();
-builder.Property(e => e.Name).HasMaxLength(150).IsRequired();
-builder.Property(e => e.Description).HasColumnType("nvarchar(max)");
+### 2.4 Repositories — implement 3 repo trên (pattern giống `PositionRepository`/`DepartmentRepository`).
 
-builder.HasOne(t => t.DefaultDepartment)
-    .WithMany()
-    .HasForeignKey(t => t.DefaultDepartmentId)
-    .OnDelete(DeleteBehavior.SetNull);
-```
+### 2.5 RolePermission seed (migration mới)
 
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/ProcessStepEntityConfiguration.cs`
+| Role | Permissions |
+|------|-------------|
+| Director / DeputyDirector | ProcessTemplate.* , Project.* (+GenerateTasks +Complete), Task.Read.All, Task.Read.Confidential, Task.Create.Confidential, ProductionAttachment.Read.All, Task.Audit.Read.All |
+| **ProjectManager** | ProcessTemplate.Read.All, Project.Read.Department, Project.Create.All, Project.Update.All, Project.GenerateTasks, **Project.Complete.Department**, Task.Read.Department, **Task.Create.Department**, Task.Update.Department, **Task.UpdateProgress.Department**, **Task.Complete.Department**, Task.Delete.Department, ProductionAttachment.Read.Department, **ProductionAttachment.Write.Department**, Task.Audit.Read.Department |
+| Employee | Task.Read.Assigned, ProductionAttachment.Read.Department |
+| HR | Project.Read.All, Task.Read.All, Task.Create.Confidential |
+| Accountant | Project.Read.All, Task.Read.All |
+| SystemAdmin | (tất cả) |
+| DepartmentManager | *(không cấp — không tham gia luồng sản xuất, v4)* |
 
-```csharp
-builder.ToTable("ProcessSteps");
-builder.HasKey(e => e.Id);
-builder.Property(e => e.Name).HasMaxLength(150).IsRequired();
+> Mọi quyền `*.Department` + tạo/sửa đơn của PM **kèm check scope**: `GetDepartmentIdOfUserAsync(currentUser) == entity.DepartmentId`.
+>
+> **Employee** giữ `ProductionAttachment.Read.Department` **chỉ để qua được attribute** `[HasPermission]`; scope thật do service quyết theo tầng (3.8): xem tài liệu **task mình được giao** + **tài liệu chung của đơn xưởng mình**, KHÔNG xem tài liệu task người khác. Employee KHÔNG có `Write` (chỉ xem).
 
-builder.HasOne(s => s.ProcessTemplate)
-    .WithMany(t => t.Steps)
-    .HasForeignKey(s => s.ProcessTemplateId)
-    .OnDelete(DeleteBehavior.Cascade);          // xóa template → xóa các bước mẫu
-
-builder.HasIndex(s => new { s.ProcessTemplateId, s.StepOrder });
-```
-
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/ProcessStepDependencyEntityConfiguration.cs`
-
-```csharp
-builder.ToTable("ProcessStepDependencies");
-builder.HasKey(e => new { e.StepId, e.PredecessorStepId });
-
-builder.HasOne(d => d.Step)
-    .WithMany(s => s.DependsOn)
-    .HasForeignKey(d => d.StepId)
-    .OnDelete(DeleteBehavior.Cascade);
-
-builder.HasOne(d => d.PredecessorStep)
-    .WithMany(s => s.Dependents)
-    .HasForeignKey(d => d.PredecessorStepId)
-    .OnDelete(DeleteBehavior.Restrict);          // tránh multiple cascade path
-```
-
-### 2.2 EF Configuration — Project
-
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/ProjectEntityConfiguration.cs`
-
-```csharp
-builder.ToTable("Projects");
-builder.HasKey(e => e.Id);
-builder.Property(e => e.Title).HasMaxLength(200).IsRequired();
-builder.Property(e => e.Description).HasColumnType("nvarchar(max)");
-builder.Property(e => e.Status).HasConversion<string>();
-
-builder.HasOne(p => p.Department)
-    .WithMany()
-    .HasForeignKey(p => p.DepartmentId)
-    .OnDelete(DeleteBehavior.Restrict);          // giữ lịch sử đơn — KHÔNG hard-delete xưởng (xem Lưu ý #2 & #10)
-
-builder.HasOne(p => p.ProcessTemplate)
-    .WithMany()
-    .HasForeignKey(p => p.ProcessTemplateId)
-    .OnDelete(DeleteBehavior.SetNull);
-
-builder.HasOne(p => p.CreatedBy)
-    .WithMany()
-    .HasForeignKey(p => p.CreatedByUserId)
-    .OnDelete(DeleteBehavior.Restrict);
-
-builder.HasIndex(p => p.DepartmentId);
-builder.Property(p => p.StartDate).IsRequired();
-```
-
-> ⚠️ **Không hard-delete Department** (xem `department-module-plan.md` Lưu ý #10): `Restrict` ở đây chỉ để bảo toàn lịch sử đơn (đơn Completed/Archived vẫn tham chiếu xưởng). "Giải tán xưởng" thực chất là **soft-delete** (`Department.IsActive = false`), chặn khi còn đơn `Active`. FK `Restrict` chỉ là lớp an toàn cuối chống xóa cứng nhầm.
-
-### 2.3 EF Configuration — ProjectTask + TaskDependency
-
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/ProjectTaskEntityConfiguration.cs`
-
-```csharp
-builder.ToTable("ProjectTasks");
-builder.HasKey(e => e.Id);
-builder.Property(e => e.Title).HasMaxLength(200).IsRequired();
-builder.Property(e => e.Status).HasConversion<string>();
-builder.Property(e => e.Type).HasConversion<string>();
-
-// Self-referencing (nhóm/cây task)
-builder.HasOne(t => t.ParentTask)
-    .WithMany(t => t.Children)
-    .HasForeignKey(t => t.ParentTaskId)
-    .OnDelete(DeleteBehavior.Restrict);
-
-// Project (nullable)
-builder.HasOne(t => t.Project)
-    .WithMany(p => p.Tasks)
-    .HasForeignKey(t => t.ProjectId)
-    .OnDelete(DeleteBehavior.Cascade);           // xóa đơn → xóa task của đơn
-
-// Department (xưởng phụ trách)
-builder.HasOne(t => t.Department)
-    .WithMany()
-    .HasForeignKey(t => t.DepartmentId)
-    .OnDelete(DeleteBehavior.Restrict);
-
-// SourceStep (bước mẫu nguồn)
-builder.HasOne(t => t.SourceStep)
-    .WithMany()
-    .HasForeignKey(t => t.SourceStepId)
-    .OnDelete(DeleteBehavior.SetNull);
-
-// AssignedTo (nullable — task chưa gán)
-builder.HasOne(t => t.AssignedTo)
-    .WithMany()
-    .HasForeignKey(t => t.AssignedToUserId)
-    .OnDelete(DeleteBehavior.Restrict);
-
-// CreatedBy
-builder.HasOne(t => t.CreatedBy)
-    .WithMany()
-    .HasForeignKey(t => t.CreatedByUserId)
-    .OnDelete(DeleteBehavior.Restrict);
-
-builder.HasIndex(t => t.AssignedToUserId);
-builder.HasIndex(t => t.ProjectId);
-builder.HasIndex(t => t.DepartmentId);
-builder.HasIndex(t => t.ParentTaskId);
-builder.HasIndex(t => new { t.AssignedToUserId, t.Status });  // cho CountActiveByUser (round-robin)
-```
-
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/TaskDependencyEntityConfiguration.cs`
-
-```csharp
-builder.ToTable("TaskDependencies");
-builder.HasKey(e => new { e.TaskId, e.PredecessorTaskId });
-
-builder.HasOne(d => d.Task)
-    .WithMany(t => t.DependsOn)
-    .HasForeignKey(d => d.TaskId)
-    .OnDelete(DeleteBehavior.Cascade);
-
-builder.HasOne(d => d.PredecessorTask)
-    .WithMany(t => t.Dependents)
-    .HasForeignKey(d => d.PredecessorTaskId)
-    .OnDelete(DeleteBehavior.Restrict);          // tránh multiple cascade path
-```
-
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/TaskDailyLogEntityConfiguration.cs`
-
-```csharp
-builder.ToTable("TaskDailyLogs");
-builder.HasKey(e => e.Id);
-builder.Property(e => e.Note).HasColumnType("nvarchar(max)");
-
-builder.HasOne(l => l.Task)
-    .WithMany(t => t.DailyLogs)
-    .HasForeignKey(l => l.TaskId)
-    .OnDelete(DeleteBehavior.Restrict);          // ⚠ KHÔNG cascade — bảo toàn lịch sử sản lượng (cho lương).
-                                                  // Xóa task đã có log bị CHẶN ở handler (xem 3.4 TaskDelete).
-
-builder.HasOne(l => l.Worker)
-    .WithMany()
-    .HasForeignKey(l => l.WorkerUserId)
-    .OnDelete(DeleteBehavior.Restrict);
-
-builder.HasOne(l => l.LoggedBy)
-    .WithMany()
-    .HasForeignKey(l => l.LoggedByUserId)
-    .OnDelete(DeleteBehavior.Restrict);
-
-builder.HasIndex(l => new { l.TaskId, l.WorkDate }).IsUnique();  // 1 log/task/ngày (upsert)
-builder.HasIndex(l => new { l.WorkerUserId, l.WorkDate });       // cho EmployeePerformanceQuery
-```
-
-> FK self-referencing/nối dùng `Restrict` để tránh multiple cascade path trong SQL Server. Cascade chỉ từ `Project → ProjectTask` và `Template → Step`. **`ProjectTask → TaskDailyLog` dùng `Restrict`** (không cascade) để không mất lịch sử sản lượng khi lỡ xóa task — việc xóa task có log bị chặn ở tầng handler.
-
-### 2.4 Implement Repositories
-
-**File:** `src/MPS.Infrastructure/Repositories/ProcessTemplateRepository.cs`
-**File:** `src/MPS.Infrastructure/Repositories/ProjectRepository.cs`
-**File:** `src/MPS.Infrastructure/Repositories/ProjectTaskRepository.cs`
-
-Pattern giống `PositionRepository`. Lưu ý:
-- `GetByIdWithStepsAsync`: include `Steps` (theo `StepOrder`) + `Steps.DependsOn`
-- `GetByProjectIdAsync` / `GetByDepartmentAsync`: include `DependsOn` để dựng đồ thị step-gating ở tầng app
-- `CountActiveByUserAsync`: `CountAsync(t => t.AssignedToUserId == userId && t.Status != Done)` — dùng cho round-robin
-- `IsPredecessorOfOpenTaskAsync`: `AnyAsync` trên `TaskDependencies` với `PredecessorTaskId == taskId`
-- `AddRangeAsync`: sinh loạt task từ template trong 1 transaction
-- `HasActiveByDepartmentAsync`: đơn `Status == Active` thuộc `departmentId`
-
-### 2.5 Cập nhật RolePermissionEntityConfiguration
-
-**File:** `src/MPS.Infrastructure/Persistence/Configurations/RolePermissionEntityConfiguration.cs`
-
-| Role | Permissions được cấp | Vai trò |
-|------|---------------------|---------|
-| Director | ProcessTemplate.* (all), Project.* (all + GenerateTasks), TaskReadAll, TaskReadConfidential, TaskCreateConfidential | Xem/duyệt toàn bộ |
-| DeputyDirector | ProcessTemplateReadAll, ProjectReadAll, ProjectCreateAll, ProjectGenerateTasks, TaskReadAll, TaskReadConfidential, TaskCreateConfidential | Ban kế hoạch cấp cao |
-| **DepartmentManager** | ProcessTemplate.\* (all), Project.\* (all + GenerateTasks), TaskReadAll, TaskCreateAdHoc, TaskCreateConfidential | **Ban kế hoạch (Manager)** — đa xưởng, KHÔNG có quyền `*Department` (không tự duyệt Done, không reassign trong 1 xưởng cụ thể — đó là việc tổ trưởng) |
-| **ProjectManager** | ProjectReadDepartment, TaskReadDepartment, TaskCreateAdHoc, **TaskBulkCreateDepartment**, TaskUpdateDepartment, TaskReassignDepartment, **TaskLogDailyDepartment**, **TaskApproveDepartment**, TaskDeleteDepartment | **Tổ trưởng xưởng** — scoped theo `Department.ManagerId`; tạo hàng loạt task, chốt sản lượng cuối ngày, **duy nhất duyệt Done** trong xưởng mình |
-| Employee | TaskReadAssigned | Công nhân — **chỉ xem** task của mình, không ghi (sản lượng do tổ trưởng kiểm kê nhập) |
-| HR | ProjectReadAll, TaskReadAll, TaskCreateConfidential | Nghiệp vụ nhân sự |
-| Accountant | ProjectReadAll, TaskReadAll | Theo dõi tiến độ (chỉ đọc) |
-| SystemAdmin | (tất cả) | — |
-
-> **Tách rõ 2 role** (khác plan trước): `DepartmentManager` = **ban kế hoạch cấp công ty** (tạo đơn, định nghĩa/áp quy trình, xem toàn bộ) — không gắn 1 xưởng cụ thể, không có quyền `*Department` (không duyệt Done thay tổ trưởng). `ProjectManager` = **tổ trưởng xưởng**, quyền giới hạn trong xưởng mình (`Department.ManagerId`), và là người duy nhất có `TaskApproveDepartment`. Việc gán "ai là tổ trưởng xưởng nào" nằm ở `Department.ManagerId` (định nghĩa trong `department-module-plan.md`), không phải qua role suông — 1 user giữ role `ProjectManager` nhưng không phải `ManagerId` của xưởng X thì không có quyền `*Department` trên xưởng X (kiểm tra thêm trong handler, permission chỉ là điều kiện cần).
-
-### 2.6 Seed role DeputyDirector
-
-**File:** migration mới sau DepartmentModule
-
-```sql
-INSERT INTO Roles (Id, Name) VALUES (8, 'DeputyDirector');
--- Sau đó seed RolePermissions cho DeputyDirector theo bảng trên
-```
-
-### 2.7 Seed ProcessTemplate mẫu
-
-Thêm vào migration data seed: 1-2 quy trình mẫu thực tế (vd: "Gia công khung tranh A4") với các bước: Cắt phôi → Ghép góc → Chà nhám → Sơn → Lắp kính → Đóng gói (dependency tuyến tính theo `StepOrder`, `EstimatedHoursPerUnit` hợp lý).
-
-### 2.8 Tạo Migration
-
-```bash
-dotnet ef migrations add TaskModule \
-  --project src/MPS.Infrastructure \
-  --startup-project src/MPS.API
-```
+### 2.6 Seed ProcessTemplate mẫu + 2.7 Migration
+> Code thực đã có sẵn `TaskModule` + `TaskModuleSimplify` (v3). Chuyển sang v5 = **1 migration mới `TaskModuleV5`** (drop `TaskDailyLogs`, thêm `TaskAssignees`/`ProductionAttachments`, đổi cột `ProjectTasks`/`Projects`/`ProcessSteps`, seed permission 110–125). Thêm giá trị enum `ProcessTemplate` vào `AttachmentOwnerType` **KHÔNG** cần migration (lưu string).
 
 ---
 
@@ -765,778 +435,252 @@ dotnet ef migrations add TaskModule \
 
 ### 3.1 DTOs
 
-**File:** `src/MPS.Application/DTOs/ProcessTemplateDto.cs`
+- `ProcessTemplateDto` / `ProcessStepDto` (thêm `DefaultProgressType`).
+- `ProjectDto`: thêm `CompletedByUserId/Name`, `CompletedAt`, `CompletionNote`; **tiến độ đơn** (xem 3.7): `CompletionPercent` (theo trọng số), `TimeElapsedPercent`, `ScheduleStatus` (OnTrack/AtRisk/Late), `PlannedValue/EarnedValue/Spi` (chỉ tính trên task Quantity).
+- `ProjectTaskDto`: thêm `ProgressType`, `RequiresHandover`, `Assignees[]` (userId+name), `WasLate`, `CompletedByName/At`, `TaskCompletionPercent`, `Children[]`. `Attachments[]` để **rỗng** trong DTO (lấy qua endpoint attachment riêng — tránh phải Include navigation polymorphic).
+- `TaskAssigneeDto(int UserId, string UserName)`.
+- `ProductionAttachmentDto(int Id, string OwnerType, int OwnerId, string FileName, string ContentType, long SizeBytes, string? Note, string DownloadUrl /*presigned*/, string UploadedByName, DateTime UploadedAt)`.
 
-```csharp
-public record ProcessStepDto(
-    int Id,
-    string Name,
-    string? Description,
-    int StepOrder,
-    int EstimatedHoursPerUnit,
-    int? Priority,
-    IReadOnlyList<int> PredecessorStepIds);
+### 3.2 ProcessTemplate — CRUD commands/queries (như cũ).
 
-public record ProcessTemplateDto(
-    int Id,
-    string Code,
-    string Name,
-    string? Description,
-    bool IsActive,
-    int? DefaultDepartmentId,
-    string? DefaultDepartmentName,
-    IReadOnlyList<ProcessStepDto> Steps);
-```
+### 3.3 Project — commands/queries
+- `ProjectCreateCommand` (PM tạo cho xưởng mình — check scope).
+- `ProjectGenerateTasksCommand(ProjectId, ProcessTemplateId, Overrides[{StepId, PlannedQuantityOverride?, EstimatedHoursOverride?, DeadlineOverride?, ProgressTypeOverride?}])` → sinh task cha.
+- `ProjectUpdateCommand`, `ProjectDeleteCommand`.
+- **`ProjectCompleteCommand`** ⭐ (PM đóng đơn: Status=Completed, CompletionNote, optional attachments).
+- Queries: `GetAll` (ReadAll: mọi đơn; ReadDepartment: xưởng mình), `GetById` (cây task + tiến độ), `GetPaged`, `ProjectAuditHistory` (scoped).
 
-**File:** `src/MPS.Application/DTOs/ProjectDto.cs`
+### 3.4 ProjectTask — commands/queries
+- **`TaskCreateCommand`** ⭐ — tạo 1 task (1 người / nhóm):
+  ```csharp
+  record TaskCreateCommand(
+    int? ProjectId, int DepartmentId, int? ParentTaskId,
+    string Title, string? Description,
+    ProgressType ProgressType,
+    int PlannedQuantity, int EstimatedHoursPerUnit, int EstimatedHours,   // theo ProgressType
+    bool RequiresHandover, DateTime? Deadline, int? Priority,
+    IReadOnlyList<int> AssigneeUserIds,             // 1 phần tử = task 1 người; nhiều = task nhóm
+    IReadOnlyList<int>? PredecessorTaskIds);        // step-gating (nếu là công đoạn)
+  ```
+  Logic: check quyền + scope xưởng; validate mọi `AssigneeUserId` thuộc đúng xưởng (`GetMemberUserIdsAsync`); tạo `ProjectTask` + N dòng `TaskAssignee`; Status `Blocked` nếu có predecessor chưa Done, ngược lại `Todo`.
+- **`TaskUpdateProgressCommand(TaskId, CompletedQuantity, RowVersion)`** ⭐ — chỉ task `Quantity`: set `CompletedQuantity` (clamp ≤ PlannedQuantity), `ProgressUpdatedAt=now`; nếu >0 và đang Todo → InProgress. KHÔNG tự Done.
+- **`TaskCompleteCommand(TaskId, RowVersion)`** ⭐ — bấm hoàn thành:
+  - Check quyền + scope; validate: nếu `RequiresHandover` → `CountByOwnerAsync(TaskCompletion, taskId) >= 1` (bắt buộc đính kèm), else 400.
+  - Set Status=Done, CompletedByUserId, CompletedAt=now; `WasLate = Deadline != null && now > Deadline`.
+  - Nếu là task con → sau khi Done, **persist cha Done bằng UPDATE nguyên tử** (WHERE mọi con Done) → `UnblockDependentsAsync`.
+- `TaskUpdateCommand` (sửa title/deadline/priority/assignees/progressType).
+- `TaskDeleteCommand` (chặn nếu HasChildren | IsPredecessorOfOpen).
+- `TaskCreateConfidentialCommand`.
+- Queries: `GetById` (kèm assignees + attachments + children), `GetMyAssigned` (qua TaskAssignee), `GetByDepartment`, `GetByProject`, `TaskAuditHistory` (scoped).
+- **Bỏ** `EmployeePerformanceQuery` theo daily-log. (Hiệu suất nếu cần → suy từ task Done đúng/chậm hạn — Phase mở rộng.)
 
-```csharp
-public record ProjectDto(
-    int Id,
-    string Title,
-    string? Description,
-    string Status,
-    DateTime? Deadline,
-    int Quantity,
-    int? DepartmentId,
-    string? DepartmentName,
-    int? ProcessTemplateId,
-    string? ProcessTemplateName,
-    int CreatedByUserId,
-    string CreatedByName,
-    // Tiến độ đơn = % theo SẢN LƯỢNG (EV), không đếm số task thô.
-    // Earned Value (xem 3.7):
-    double PlannedValue,        // PV — giá trị kế hoạch tới thời điểm hiện tại
-    double EarnedValue,         // EV — giá trị đã hoàn thành (task Done)
-    double SchedulePerformanceIndex,  // SPI = EV/PV (>1 vượt, <1 chậm)
-    int CompletionPercent,      // = EV/BAC × 100 — CHỈ SỐ TIẾN ĐỘ CHÍNH hiển thị (vd "52%")
-    // (tham khảo, tùy chọn hiển thị) số công đoạn để drill-down:
-    int TotalStages,            // số công đoạn (task cha IsBatchParent) của đơn
-    int CompletedStages);       // số công đoạn đã Done (mọi con Done)
-```
-
-> **Tiến độ đơn ưu tiên hiển thị `CompletionPercent` (theo sản lượng/EV)** — đúng bản chất "làm được bao nhiêu sản phẩm", không phải "xong mấy task". `TotalStages`/`CompletedStages` chỉ là số phụ để giám đốc drill-down theo giai đoạn nếu muốn.
-
-**File:** `src/MPS.Application/DTOs/ProjectTaskDto.cs`
-
-```csharp
-public record ProjectTaskDto(
-    int Id,
-    string Title,
-    string? Description,
-    string Status,
-    string Type,
-    bool IsConfidential,
-    int? Priority,
-    int StepOrder,
-    DateTime? Deadline,
-    int PlannedQuantity,
-    int CompletedQuantity,
-    int EstimatedHoursPerUnit,
-    int? ProjectId,
-    string? ProjectTitle,
-    int? DepartmentId,
-    string? DepartmentName,
-    int? SourceStepId,
-    int? ParentTaskId,
-    string? ParentTaskTitle,
-    int? AssignedToUserId,           // nullable — task chưa gán
-    string? AssignedToName,
-    int CreatedByUserId,
-    string CreatedByName,
-    bool IsBlockedByDependencies,     // còn predecessor chưa Done?
-    bool IsBatchParent,               // true = task CÔNG ĐOẠN (tầng 2) — tiến độ = tổng Children, không ai làm trực tiếp
-    IReadOnlyList<int> PredecessorTaskIds,
-    int TaskCompletionPercent,        // CompletedQuantity / PlannedQuantity
-    IReadOnlyList<TaskDailyLogDto> DailyLogs,   // lịch sử chốt theo ngày (chỉ populate khi GetById)
-    List<ProjectTaskDto> Children);   // chỉ populate khi GetById
-
-public record TaskDailyLogDto(
-    int Id, DateOnly WorkDate, int TargetQuantity, int QuantityDone,
-    double EfficiencyPercent, string? Note, string LoggedByName, DateTime LoggedAt);
-```
-
-### 3.2 Commands & Queries — ProcessTemplate (Ban kế hoạch)
-
-```
-src/MPS.Application/Features/ProcessTemplate/
-├── Commands/
-│   ├── ProcessTemplateCreateCommand.cs + Handler + Validator   ← tạo quy trình + các bước + dependency
-│   ├── ProcessTemplateUpdateCommand.cs + Handler + Validator
-│   └── ProcessTemplateDeleteCommand.cs + Handler + Validator   ← chặn xóa nếu đang gắn với đơn active
-└── Queries/
-    ├── ProcessTemplateGetAllQuery.cs + Handler
-    ├── ProcessTemplateGetByIdQuery.cs + Handler                ← include Steps + dependency
-    └── ProcessTemplateGetPagedQuery.cs + Handler
-```
-
-### 3.3 Commands & Queries — Project (Đơn hàng)
-
-```
-src/MPS.Application/Features/Project/
-├── Commands/
-│   ├── ProjectCreateCommand.cs + Handler + Validator
-│   ├── ProjectGenerateTasksCommand.cs + Handler + Validator    ← ⭐ sinh task từ ProcessTemplate + auto-assign
-│   ├── ProjectUpdateCommand.cs + Handler + Validator
-│   └── ProjectDeleteCommand.cs + Handler + Validator
-└── Queries/
-    ├── ProjectGetAllQuery.cs + Handler            ← ReadAll: mọi đơn; ReadDepartment: đơn của xưởng mình
-    ├── ProjectGetByIdQuery.cs + Handler           ← include cây task + EV/PV
-    └── ProjectGetPagedQuery.cs + Handler
-```
-
-### 3.4 Commands & Queries — ProjectTask
-
-```
-src/MPS.Application/Features/ProjectTask/
-├── Commands/
-│   ├── TaskCreateAdHocCommand.cs + Handler + Validator      ← Ban KH/tổ trưởng thêm 1 task thủ công
-│   ├── TaskBulkCreateCommand.cs + Handler + Validator       ← ⭐ tạo hàng loạt task giống nhau, chia SL cho N người (1 thao tác)
-│   ├── TaskCreateConfidentialCommand.cs + Handler + Validator
-│   ├── TaskUpdateCommand.cs + Handler + Validator           ← tổ trưởng sửa (deadline/priority/qty)
-│   ├── TaskReassignCommand.cs + Handler + Validator         ← ⭐ tổ trưởng chuyển assign nhân viên
-│   ├── TaskLogDailyCommand.cs + Handler + Validator         ← ⭐ tổ trưởng chốt sản lượng cuối ngày (TaskDailyLog)
-│   ├── TaskApproveCommand.cs + Handler + Validator          ← ⭐ CHỈ tổ trưởng: duyệt chuyển Done
-│   └── TaskDeleteCommand.cs + Handler + Validator           ← chặn nếu HasChildren | IsPredecessorOfOpen | HasDailyLog
-└── Queries/
-    ├── TaskGetByIdQuery.cs + Handler                        ← kèm DailyLogs (lịch sử chốt theo ngày)
-    ├── TaskGetMyAssignedQuery.cs + Handler                  ← task của tôi (nhân viên — chỉ xem)
-    ├── TaskGetByDepartmentQuery.cs + Handler                ← toàn bộ task của xưởng (tổ trưởng)
-    ├── TaskGetByProjectQuery.cs + Handler                   ← cây task của đơn (Ban KH/GĐ)
-    └── EmployeePerformanceQuery.cs + Handler                ← ⭐ hiệu suất nhân viên (từ TaskDailyLog): SL đạt/mục tiêu theo người, theo ngày/tuần
-```
-
-### 3.5 Service — Sinh task từ template + Auto-assign round-robin
-
-**File:** `src/MPS.Application/Services/ITaskGenerator.cs`
+### 3.5 Service — sinh khung công đoạn từ template (KHÔNG auto-assign)
 
 ```csharp
 public interface ITaskGenerator
 {
-    // Sinh các task CHA (công đoạn, IsBatchParent) từ ProcessTemplate cho một đơn.
-    // KHÔNG auto-chia con cho công nhân — tổ trưởng chia sau bằng BulkCreate.
     Task<IReadOnlyList<ProjectTask>> GenerateStagesAsync(
         Project project, ProcessTemplate template,
         IReadOnlyList<GenerateStepOverride>? overrides, CancellationToken ct);
 }
+record GenerateStepOverride(int StepId, int? PlannedQuantityOverride,
+    int? EstimatedHoursOverride, DateTime? DeadlineOverride, ProgressType? ProgressTypeOverride);
 ```
+Mỗi step → 1 task cha `IsBatchParent=true`, `AssignedTo` rỗng, `ProgressType` theo override ?? step.DefaultProgressType, `Deadline`/`PlannedQuantity` theo override. Map dependency giữa các cha. **Không** tạo con — PM chia sau bằng `TaskCreate(ParentTaskId=cha)`.
 
-> Bỏ auto-assign round-robin khỏi Generate. `GetMemberUserIdsAsync` / `CountActiveByUserAsync` giờ chỉ dùng ở **BulkCreate** (khi tổ trưởng chọn "chia đều cho cả xưởng" — FE gợi ý danh sách công nhân + tải hiện tại).
-
-**Request cho phép override số liệu mẫu** (`ProjectGenerateTasksCommand`):
-
-```csharp
-public record GenerateStepOverride(int StepId, int? PlannedQuantityOverride, int? EstimatedHoursPerUnitOverride);
-
-public record ProjectGenerateTasksCommand(
-    int ProjectId,
-    int ProcessTemplateId,
-    IReadOnlyList<GenerateStepOverride>? Overrides);   // rỗng/null = dùng nguyên số liệu mẫu
-```
-
-Logic `GenerateTasksCommandHandler` (qua `ITaskGenerator`):
-
-> ⭐ **Chốt nghiệp vụ**: Generate CHỈ tạo **task cha (công đoạn)** — KHÔNG auto-chia con cho công nhân. Tổ trưởng chủ động chia sau bằng `BulkCreate` (đường đi ở 3.6). Nhờ vậy không còn "khoảng trống" hay "2 cha cho 1 công đoạn".
-
-```
-1. Load ProcessTemplate.GetByIdWithStepsAsync (kèm Steps + step dependencies)
-2. Xác định xưởng: project.DepartmentId ?? template.DefaultDepartmentId
-   → nếu null: throw ValidationException("Đơn chưa gán xưởng")
-3. Với mỗi ProcessStep (sắp theo StepOrder), tạo 1 task CHA (công đoạn — IsBatchParent = true):
-   - Title = step.Name, StepOrder, SourceStepId = step.Id, IsBatchParent = true
-   - PlannedQuantity = override?.PlannedQuantityOverride ?? project.Quantity     ← chỉnh được khi áp
-   - EstimatedHoursPerUnit = override?.EstimatedHoursPerUnitOverride ?? step.EstimatedHoursPerUnit
-   - DepartmentId = xưởng, ProjectId = project.Id, Type = ProcessTask, AssignedToUserId = null
-   - Status: CHỈ Blocked nếu bước này CÓ khai DependsOn (predecessor tường minh); ngược lại Todo
-     ⚠ KHÔNG suy ra Blocked từ StepOrder — StepOrder chỉ để hiển thị.
-   - CHƯA có task con — tổ trưởng chia bằng BulkCreate(ParentTaskId = cha) sau.
-4. Map ProcessStepDependency (chỉ những cặp được KHAI) → TaskDependency giữa các task CHA vừa tạo
-5. AddRangeAsync toàn bộ task cha + dependencies trong 1 transaction
-6. KHÔNG idempotent-chặn: gọi GenerateTasks nhiều lần (template khác, override khác) vẫn được — mỗi lần
-   thêm 1 lô công đoạn mới. Đơn có thể trộn nhiều nguồn (Template A + B + ad-hoc). FE nên disable nút
-   sau khi generate để tránh gọi lại y hệt (không chặn cứng ở BE).
-```
-
-> Vì quy trình chỉ là **áp nhanh**, `GenerateTasks` có thể gọi **nhiều lần trên cùng 1 đơn**. `ITaskGenerator.GenerateAsync` không còn cần danh sách nhân viên (không auto-chia) — chỉ tạo khung công đoạn.
-
-### 3.6 Commands trọng tâm — BulkCreate, LogDaily, Approve + Step-gating
-
-**File:** `src/MPS.Application/Services/IStepGatingService.cs`
+### 3.6 Service — Step-gating
 
 ```csharp
 public interface IStepGatingService
 {
-    // Sau khi 1 công đoạn (task cha) được coi là Done, mở (Blocked → Todo) các công đoạn phụ thuộc
-    // nếu MỌI predecessor (được khai DependsOn) đã Done.
-    // Task cha (IsBatchParent) coi là Done khi TẤT CẢ Children đã được tổ trưởng duyệt Done.
-    Task UnblockDependentsAsync(int approvedTaskId, CancellationToken ct);
-
-    // Kiểm tra 1 task có được phép bắt đầu chốt sản lượng không.
-    // Task KHÔNG khai DependsOn → luôn true (mở, làm song song/gối đầu).
-    // Task CÓ khai DependsOn → true chỉ khi mọi predecessor đã Done.
-    Task<bool> CanStartAsync(int taskId, CancellationToken ct);
+    Task UnblockDependentsAsync(int doneTaskId, CancellationToken ct);  // UPDATE nguyên tử, idempotent
+    Task<bool> CanStartAsync(int taskId, CancellationToken ct);         // không DependsOn → true
 }
 ```
+Cha Done (mọi con Done) → mở công đoạn phụ thuộc (Blocked→Todo) khi mọi predecessor Done. Dùng `ExecuteUpdateAsync` có điều kiện, không "đọc-rồi-ghi".
 
-#### `TaskBulkCreateCommandHandler` (⭐ tạo hàng loạt task giống nhau, chia SL cho N người — 1 thao tác)
-
-Giải quyết yêu cầu: *"1 đơn 500 khung, chia cho nhiều người, tạo 1 lần rồi chọn số người thì tạo từng ấy task giống nhau"*.
-
-```csharp
-public record BulkTaskAssignment(int AssignedToUserId, int Quantity);   // dòng chia (có thể sửa tay)
-
-public record TaskBulkCreateCommand(
-    // Chế độ (a) — tạo công đoạn MỚI (đơn không quy trình / ad-hoc): để ExistingParentTaskId = null.
-    // Chế độ (b) — chia con vào công đoạn ĐÃ SINH từ Generate: set ExistingParentTaskId = task cha đó.
-    int? ExistingParentTaskId,    // ⭐ null = tạo cha mới; có = chia con vào cha có sẵn (nối Generate→BulkCreate)
-    int? ProjectId,               // gắn đơn (null = task nội bộ xưởng) — bỏ qua nếu dùng ExistingParentTaskId (kế thừa cha)
-    int DepartmentId,             // xưởng — bỏ qua nếu dùng ExistingParentTaskId
-    int? SourceStepId,            // lấy tên/định mức từ bước mẫu (tùy chọn); null = ad-hoc
-    string? Title,                // bắt buộc khi tạo cha mới; null khi dùng cha có sẵn
-    int? Priority,
-    DateTime? Deadline,
-    int TotalQuantity,            // tổng SL cần chia (= PlannedQuantity của cha)
-    IReadOnlyList<BulkTaskAssignment> Assignments,  // đã chia (FE tính đều sẵn, tổ trưởng chỉnh)
-    IReadOnlyList<int>? PredecessorTaskIds);        // chỉ dùng khi tạo cha mới; gắn ở cha
-```
-
-Logic:
-
-```
-1. Kiểm tra quyền: permission TaskBulkCreateDepartment + IDepartmentManagerAuthorizer.IsManagerOfAsync(currentUser.Id, DepartmentId)
-
-2. Xác định TASK CHA:
-   (b) ExistingParentTaskId != null → load cha đó; validate: IsBatchParent==true, chưa có Children,
-       thuộc đúng DepartmentId. TotalQuantity phải == cha.PlannedQuantity. Kế thừa Project/Dept/SourceStep/DependsOn từ cha.
-   (a) ExistingParentTaskId == null → LUÔN tạo 1 task cha mới IsBatchParent=true
-       (Title, PlannedQuantity=TotalQuantity, AssignedToUserId=null, DependsOn=PredecessorTaskIds,
-        Status: Blocked nếu có Predecessor, ngược lại Todo).
-
-3. Validate INVARIANT: Sum(Assignments.Quantity) == cha.PlannedQuantity (không thiếu/thừa).
-   → FE mặc định CHIA ĐỀU: mỗi người = Total / SoNguoi (dư dồn người cuối), tổ trưởng CHỈNH TAY rồi gọi API.
-
-4. Với mỗi Assignment: tạo 1 ProjectTask CON:
-   - Title = cha.Title + " - {tên NV}", AssignedToUserId = Assignment.AssignedToUserId
-   - PlannedQuantity = Assignment.Quantity   ← MỤC TIÊU TỔNG của người đó (KHÔNG theo ngày)
-   - ParentTaskId = cha.Id, ProjectId/DepartmentId/SourceStepId/Priority/Deadline/EstimatedHoursPerUnit kế thừa cha
-   - Status theo cha (Blocked nếu cha bị chặn, ngược lại Todo).
-   - ⚠ Con KHÔNG giữ DependsOn riêng — ràng buộc chỉ ở cha (khớp TaskGenerator).
-
-5. AddRangeAsync trong 1 transaction (RowVersion của cha kiểm tra concurrency), trả về cha + con.
-```
-
-> **Đường đi Generate → BulkCreate (lấp khoảng trống)**: Generate sinh cha "Cắt khung 500" (chưa con). Tổ trưởng gọi BulkCreate với `ExistingParentTaskId = <cha đó>`, chọn 5 người → chia con vào chính cha đó. **Không** sinh cha thứ 2. Nếu đơn KHÔNG áp quy trình, tổ trưởng gọi BulkCreate chế độ (a) để tạo cả cha + con.
->
-> **Invariant "tổng con = PlannedQuantity cha"** (lỗi tiến độ nếu lệch): BulkCreate validate ngay. Task ad-hoc thêm lẻ sau đó (nếu có) cũng phải qua BulkCreate vào đúng cha để giữ invariant — KHÔNG cho thêm con rời rạc làm lệch tổng. `UpdateTask` đổi PlannedQuantity con phải re-validate tổng con == cha (hoặc chặn).
-
-#### `TaskLogDailyCommandHandler` (⭐ tổ trưởng chốt sản lượng cuối ngày — thay cho "tạo task mỗi ngày")
-
-Giải quyết yêu cầu: *"cuối ngày tổ trưởng kiểm kê xem làm được bao nhiêu (50/100), đánh giá hiệu suất, mà không phải tạo task mỗi ngày"*.
+### 3.7 Service — Đo tiến độ LAI (`IProgressService`)
 
 ```csharp
-public record TaskLogDailyCommand(
-    int TaskId,
-    DateOnly WorkDate,        // mặc định = hôm nay
-    int? WorkerUserId,        // người thực làm (mặc định = task.AssignedToUserId nếu null)
-    int TargetQuantity,       // mục tiêu ngày — TỔ TRƯỞNG ĐẶT TAY (vd 100)
-    int QuantityDone,         // thực tế kiểm kê (vd 50 hoặc 120)
-    string? Note,
-    byte[] RowVersion);       // optimistic concurrency của task
-```
-
-```
-1. Load task; kiểm tra quyền: permission TaskLogDailyDepartment + IsManagerOfAsync(currentUser.Id, task.DepartmentId)
-   ⚠ Chốt trên task CON (task nhân viên cụ thể), KHÔNG chốt trên task cha IsBatchParent.
-   Validate task.RowVersion == command.RowVersion (chống đua) — lệch thì trả 409, FE reload.
-2. Kiểm tra task.Status != Blocked (predecessor chưa xong thì chưa chốt được); nếu Todo → chuyển InProgress
-3. Upsert TaskDailyLog theo (TaskId, WorkDate) TRONG CÙNG TRANSACTION:
-   - WorkerUserId = command.WorkerUserId ?? task.AssignedToUserId  (⭐ SNAPSHOT, để Reassign không dịch lịch sử)
-   - đã có (TaskId,WorkDate) → update Target/Done/Note/Worker; chưa có → insert, LoggedByUserId=currentUser, LoggedAt=now
-4. RECOMPUTE task.CompletedQuantity = SUM(DailyLogs.QuantityDone) trong cùng transaction (không +=, luôn tính lại)
-5. Nếu CompletedQuantity >= task.PlannedQuantity → task.Status = PendingReview (gợi ý "đã đủ, chờ duyệt")
-6. SaveChanges (EF kiểm RowVersion) — nếu DbUpdateConcurrencyException → trả 409
-```
-
-> Mỗi ngày tổ trưởng nhập **1 dòng/người** (2 số + chọn người làm nếu khác người được gán). Hiệu suất tính theo `WorkerUserId` của log, KHÔNG theo `AssignedToUserId` hiện tại → Reassign an toàn.
-
-#### `TaskApproveCommandHandler` (⭐ chỉ tổ trưởng xưởng — duyệt Done)
-
-```
-1. Load task; kiểm quyền IsManagerOfAsync(currentUser.Id, task.DepartmentId). Validate RowVersion.
-   ⚠ Duyệt trên task CON (task nhân viên). Cha IsBatchParent KHÔNG duyệt trực tiếp.
-2. Kiểm tra Status == PendingReview (mặc định). Cho phép "duyệt non" (CompletedQuantity < Planned) nếu bật cấu hình.
-3. Set Status = Done, ApprovedByUserId = currentUser.Id, ApprovedAt = now.
-   ⚠ Nếu duyệt non: KHÔNG đụng CompletedQuantity — EV sẽ tự tính theo CompletedQuantity thực (xem 3.7),
-     KHÔNG nhảy lên 100%. (sửa lỗi "duyệt non phồng EV").
-4. PERSIST trạng thái cha: nếu TẤT CẢ Children của cha đã Done → set hẳn cha.Status = Done + cha.ApprovedAt = now
-   (persist thật, không "coi như"). Rồi UnblockDependentsAsync(cha.Id): mở các công đoạn phụ thuộc cha này
-   (nếu mọi predecessor Done) → chuyển các con dưới công đoạn vừa mở từ Blocked → Todo.
-5. SaveChanges (kiểm RowVersion) — 409 nếu đua.
-```
-
-#### Ví dụ minh họa ràng buộc công đoạn (step-gating)
-
-**Trường hợp A — quy trình KHÔNG khai ràng buộc (mặc định, gối đầu tự do):**
-
-```
-Đơn 500 khung — các công đoạn đều Todo (mở) ngay:
-  📦 Cắt khung   [Todo]  ─┐
-  📦 Ghép góc    [Todo]   ├─ mở hết cùng lúc; tổ trưởng điều phối:
-  📦 Sơn         [Todo]   │   "cắt được 50 → giao sơn 50, vẫn cắt tiếp 450"
-  📦 Đóng gói    [Todo]  ─┘
-  StepOrder (1,2,3,4) chỉ để xếp danh sách hiển thị cho gọn — KHÔNG chặn.
-```
-
-**Trường hợp B — khai ràng buộc cho 1 cặp bắt buộc:**
-
-```
-Template khai: DependsOn( "Đóng gói" ← "Sơn" )   (chỉ 1 cặp này)
-Sinh task:
-  📦 Cắt khung   [Todo]     (không phụ thuộc → mở)
-  📦 Ghép góc    [Todo]     (không khai → mở, gối đầu với Cắt)
-  📦 Sơn         [Todo]     (không khai → mở)
-  📦 Đóng gói    [Blocked]  ← chờ "Sơn" (cả 5 con của Sơn) Done
-
-Tổ trưởng duyệt hết task con của "Sơn":
-  → cha "Sơn" coi là Done
-  → UnblockDependents: "Đóng gói" có mọi predecessor Done → mở (Blocked→Todo)
-    → task con của "Đóng gói" cũng chuyển Todo
-```
-
-**Trường hợp C — nhánh song song có hội tụ (nếu cần):**
-
-```
-DependsOn:  "Đóng gói" ← "Sơn"  VÀ  "Đóng gói" ← "Cắt kính"
-  📦 Cắt khung, 📦 Cắt kính    [Todo]  (2 nhánh chạy song song)
-  📦 Đóng gói  [Blocked]  → chỉ mở khi CẢ "Sơn" lẫn "Cắt kính" đều Done
-```
-
-> Tóm lại: **có gối đầu là mặc định** (không khai gì); **chặn cứng là chủ động khai** `DependsOn` đúng cặp cần; hội tụ nhiều nhánh = khai nhiều predecessor cho cùng 1 công đoạn.
-
-### 3.7 Service — Earned Value (EV/PV) & chốt tiến độ cuối ngày
-
-**File:** `src/MPS.Application/Services/IEarnedValueService.cs`
-
-```csharp
-public interface IEarnedValueService
+public interface IProgressService
 {
-    // Tính EV/PV/SPI cho một đơn tại thời điểm asOf.
-    ProjectEarnedValue Compute(Project project, IReadOnlyList<ProjectTask> tasks, DateTime asOf);
+    ProjectProgress Compute(Project project, IReadOnlyList<ProjectTask> tasks, DateTime asOf);
 }
-
-public record ProjectEarnedValue(
-    double PlannedValue, double EarnedValue, double SchedulePerformanceIndex, int CompletionPercent);
+public record ProjectProgress(
+    int CompletionPercent,        // theo TRỌNG SỐ công việc
+    int TimeElapsedPercent,       // % thời gian đã trôi (StartDate→asOf / StartDate→Deadline)
+    string ScheduleStatus,        // OnTrack | AtRisk | Late
+    double PlannedValue, double EarnedValue, double Spi);  // EV/PV — CHỈ trên task Quantity
 ```
 
-Công thức (EV theo sản phẩm **đã được tổ trưởng duyệt**, PV theo lịch 8h/ngày):
+**Công thức (chỉ tính trên task CON, cha không cộng — tránh đếm đôi):**
 
 ```
-Chỉ tính trên task CON (IsBatchParent == false). Task cha KHÔNG cộng (tránh đếm đôi — cha = tổng con).
+Trọng số 1 task con:
+  Quantity  → PlannedQuantity × EstimatedHoursPerUnit   (giờ công)
+  Milestone → EstimatedHours                            (giờ ước lượng)
+TotalWeight = Σ trọng số mọi task con của đơn
 
-BudgetOfTask (giờ)   = PlannedQuantity × EstimatedHoursPerUnit
-BAC (Budget At Completion) = Σ BudgetOfTask trên mọi task CON của đơn
+EarnedWeight 1 task:
+  Quantity  → min(CompletedQuantity, PlannedQuantity) × EstimatedHoursPerUnit
+  Milestone → Status == Done ? EstimatedHours : 0
+CompletionPercent = TotalWeight > 0 ? round(Σ EarnedWeight / TotalWeight × 100) : 0
 
-EV (Earned Value)    = Σ ( EarnedQuantity(task) × EstimatedHoursPerUnit )
-  trong đó EarnedQuantity(task):
-    - Status == Done  →  min(CompletedQuantity, PlannedQuantity)
-        ⭐ dùng SỐ LƯỢNG THỰC (không phải PlannedQuantity cứng). Duyệt-non (Done nhưng
-          CompletedQuantity < Planned) chỉ tính đúng phần đã làm → KHÔNG phồng EV ảo.
-        Duyệt-đủ thì CompletedQuantity == Planned nên = 100% tự nhiên.
-    - Status != Done  →  0  (chưa duyệt thì chưa tính, kể cả PendingReview — tránh tiến độ ảo)
-  → EV chỉ tăng khi tổ trưởng Approve, đúng nguyên tắc "Done do tổ trưởng quyết định".
+--- Chiều thời gian (đơn đo theo thời gian) ---
+TimeElapsedPercent = Deadline != null
+  ? clamp( (asOf - StartDate) / (Deadline - StartDate) × 100, 0, 100 ) : 0
+ScheduleStatus:
+  Late    nếu asOf > Deadline và chưa 100%      (đã trễ hạn)
+  AtRisk  nếu CompletionPercent < TimeElapsedPercent - NGƯỠNG (vd 10)   (chậm hơn lịch)
+  OnTrack ngược lại
 
-PV (Planned Value)   = BAC × min(1, elapsedWorkHours / plannedWorkHours)
-  trong đó:
-    WORK_HOURS_PER_DAY = 8   (hằng số cấu hình)
-    start              = Project.StartDate   ← ⭐ mốc bắt đầu SẢN XUẤT (không phải CreatedAt)
-    plannedWorkHours   = số ngày làm việc (start → Deadline) × 8
-    elapsedWorkHours   = số ngày làm việc (start → asOf) × 8
-    → nếu Project.Deadline == null: PV không xác định → trả PV=0, SPI=0 (chỉ hiện CompletionPercent).
-
-SPI = PV > 0 ? EV / PV : 0        // >1 vượt tiến độ, <1 chậm
-CompletionPercent = BAC > 0 ? round(EV / BAC × 100) : 0
+--- EV/PV (chỉ subset task Quantity, cho ai muốn xem chỉ số PM chuẩn) ---
+BAC = Σ (PlannedQuantity × EstimatedHoursPerUnit) trên task Quantity
+EV  = Σ (min(CompletedQuantity,Planned) × EstimatedHoursPerUnit)
+PV  = BAC × min(1, TimeElapsedPercent/100)
+Spi = PV > 0 ? EV/PV : 0
 ```
 
-**Chốt tiến độ cuối ngày**: `WORK_HOURS_PER_DAY = 8` trong `ProductionConstants`. `asOf` mặc định = cuối ngày làm việc hiện tại. Cần `Project.StartDate` + `Deadline` mới tính được PV/SPI; thiếu Deadline → chỉ hiện % hoàn thành (EV/BAC).
+> **Đây là cách đo LAI bạn chốt**: đơn nhìn tổng theo **trọng số + thời gian** (`CompletionPercent` vs `TimeElapsedPercent` → OnTrack/AtRisk/Late), còn **task có sản lượng** vẫn cho EV/PV/SPI như bình thường. Task Milestone không phá EV vì tính bằng trọng số giờ ước lượng. `WORK_HOURS_PER_DAY` không còn bắt buộc (đo theo % thời gian lịch, không quy ra giờ tuyệt đối) — giữ hằng số nếu muốn quy đổi.
 
-> **Lưu ý về EV (đã sửa 2 lỗi)**: (1) EV dùng `CompletedQuantity` thực khi Done — duyệt-non không nhảy 100%; (2) mốc thời gian PV dùng `Project.StartDate`, không dùng `CreatedAt`. `CompletedQuantity` = tổng cộng dồn `TaskDailyLog` do tổ trưởng chốt nên đáng tin.
-
-### 3.7b Query — Hiệu suất nhân viên (`EmployeePerformanceQuery`)
-
-**File:** `src/MPS.Application/Features/ProjectTask/Queries/EmployeePerformanceQueryHandler.cs`
+### 3.8 Service — Attachment (`IProductionAttachmentService`)
 
 ```csharp
-public record EmployeePerformanceQuery(
-    int DepartmentId, DateOnly FromDate, DateOnly ToDate, int? UserId);  // UserId null = cả xưởng
-
-public record EmployeeDailyPerformance(
-    int UserId, string UserName, DateOnly WorkDate,
-    int TargetQuantity, int QuantityDone, double EfficiencyPercent);      // Done/Target × 100
-
-public record EmployeePerformanceSummary(
-    int UserId, string UserName,
-    int TotalTarget, int TotalDone, double AvgEfficiencyPercent,
-    IReadOnlyList<EmployeeDailyPerformance> Daily);
+public interface IProductionAttachmentService
+{
+    Task<ProductionAttachmentDto> UploadAsync(AttachmentOwnerType type, int ownerId,
+        Stream content, string fileName, string contentType, string? note, CancellationToken ct);
+    Task<IReadOnlyList<ProductionAttachmentDto>> ListAsync(AttachmentOwnerType type, int ownerId, CancellationToken ct); // kèm presigned URL
+    Task DeleteAsync(int attachmentId, CancellationToken ct);  // xóa DB + object MinIO
+}
 ```
+- `userId` lấy từ `ICurrentUserService` trong service (không truyền qua tham số).
+- Upload: `IFileStorageService.UploadAsync(new FileUploadRequest(content, objectKey, contentType))` với `objectKey = $"production/{type}/{ownerId}/{guid}_{fileName}"` → lưu `ProductionAttachment` từ `StoredFileMetadata`.
+- List: mỗi item gọi `GeneratePresignedDownloadUrlAsync(objectKey, TimeSpan.FromSeconds(900), bucket)` → `DownloadUrl` để FE xem/tải (ảnh hiển thị trực tiếp). File nhúng trong cây task **KHÔNG** kèm URL — lấy qua endpoint attachment riêng.
 
-Logic: join `TaskDailyLog` ↔ `ProjectTask` (theo `DepartmentId`, khoảng ngày), group theo `AssignedToUserId` + `WorkDate`. Trả về hiệu suất từng người từng ngày (50/100 = 50%, 120/100 = 120%) + tổng hợp trung bình. Chỉ tổ trưởng/Ban KH xem (`TaskReadDepartment | TaskReadAll`).
+**⭐ Phân quyền theo tầng (chốt: "tầng dưới không nhìn task tầng trên/của người khác"):**
 
-### 3.8 AutoMapper
+| Owner | ĐỌC (list) | GHI (upload/xóa) |
+|-------|-----------|------------------|
+| **Project** | `ProductionAttachmentReadAll` **HOẶC** user thuộc xưởng của đơn (`GetDepartmentIdOfUserAsync == project.DepartmentId`) — cả **công nhân** xưởng đó xem được (tài liệu CHUNG của đơn) | quản lý xưởng của đơn (`IsManagerOfAsync`) |
+| **Task / TaskCompletion** | `ReadAll` **HOẶC** quản lý xưởng của task **HOẶC** **chính người được giao** task đó (assignee). Công nhân KHÁC → **403** | quản lý xưởng của task |
+| **ProcessTemplate** | `ProcessTemplateReadAll` (dùng chung, không thuộc xưởng) | `ProcessTemplateCreateAll` |
 
-**File:** `src/MPS.Application/Mappings/ProcessTemplateMappingProfile.cs`
-**File:** `src/MPS.Application/Mappings/ProjectMappingProfile.cs`
-**File:** `src/MPS.Application/Mappings/ProjectTaskMappingProfile.cs`
+> Luật này **khớp với luật xem task**: nhân viên thấy task lá của mình → xem được tài liệu task đó; không thấy task người khác → không xem tài liệu của họ; đơn là tài liệu chung nên cả xưởng xem được. `IsUserInDepartmentAsync(userId, dept)` = `GetDepartmentIdOfUserAsync(userId) == dept`.
 
-- `ProjectTaskDto.CompletedQuantity`: đã denormalized = `SUM(DailyLogs.QuantityDone)`; `TaskCompletionPercent` = `CompletedQuantity / PlannedQuantity`
-- `ProjectTaskDto.IsBlockedByDependencies` / `PredecessorTaskIds`: từ `DependsOn`
-- `ProjectDto` EV/PV: gọi `IEarnedValueService` trong handler (không map thuần)
+### 3.9 AutoMapper — profiles cho Template/Project/Task/Attachment. `ProjectDto` tiến độ gọi `IProgressService` trong handler.
 
 ---
 
 ## Phase 4 — API Layer
 
-### 4.1 ProcessTemplateController
-
-**File:** `src/MPS.API/Controllers/ProcessTemplateController.cs`
-
+### 4.1 ProcessTemplateController — CRUD + attachment
 ```
-GET    /api/ProcessTemplate           → GetAll   [ProcessTemplateReadAll]
-GET    /api/ProcessTemplate/paged     → GetPaged [ProcessTemplateReadAll]
-GET    /api/ProcessTemplate/{id}      → GetById  [ProcessTemplateReadAll]
-POST   /api/ProcessTemplate           → Create   [ProcessTemplateCreateAll]
-PUT    /api/ProcessTemplate/{id}      → Update   [ProcessTemplateUpdateAll]
-DELETE /api/ProcessTemplate/{id}      → Delete   [ProcessTemplateDeleteAll]
+GET/POST/PUT/DELETE /api/ProcessTemplate[...]   (CRUD như cũ)
+GET  /api/ProcessTemplate/{id}/attachments   [ProcessTemplate.Read.All]   ⭐ bản vẽ/hướng dẫn quy trình (presigned)
+POST /api/ProcessTemplate/{id}/attachments   [ProcessTemplate.Create.All] ⭐ upload (multipart file + note)
 ```
 
-### 4.2 ProjectController (Đơn hàng)
-
-**File:** `src/MPS.API/Controllers/ProjectController.cs`
-
+### 4.2 ProjectController
 ```
-GET    /api/Project                   → GetAll   [ProjectReadAll | ProjectReadDepartment]
-GET    /api/Project/paged             → GetPaged [ProjectReadAll | ProjectReadDepartment]
-GET    /api/Project/{id}              → GetById (cây task + EV/PV) [ProjectReadAll | ProjectReadDepartment]
-POST   /api/Project                   → Create   [ProjectCreateAll]                 ← ProcessTemplateId tùy chọn
-POST   /api/Project/{id}/generate-tasks → GenerateTasks (từ template, cho phép override số liệu, gọi lại được nhiều lần) [ProjectGenerateTasks]
-PUT    /api/Project/{id}              → Update   [ProjectUpdateAll]
-DELETE /api/Project/{id}              → Delete   [ProjectDeleteAll]
+GET    /api/Project                      [Project.Read.All | Read.Department]
+GET    /api/Project/paged
+GET    /api/Project/{id}                  (cây task + tiến độ lai)
+GET    /api/Project/{id}/audit-history    [Task.Audit.Read.All | Read.Department] (scoped, 403 xưởng khác)
+POST   /api/Project                       [Project.Create.All] (PM: check scope xưởng)
+POST   /api/Project/{id}/generate-tasks   [Project.GenerateTasks] (override qty/hours/deadline/progressType)
+PATCH  /api/Project/{id}/complete         [Project.Complete.Department] ⭐ đóng đơn + CompletionNote
+PUT    /api/Project/{id}
+DELETE /api/Project/{id}
+POST   /api/Project/{id}/attachments      [ProductionAttachment.Write.Department] ⭐ upload tài liệu đơn
+GET    /api/Project/{id}/attachments      [ProductionAttachment.Read.*] (trả presigned URL)
 ```
 
 ### 4.3 ProjectTaskController
-
-**File:** `src/MPS.API/Controllers/ProjectTaskController.cs`
-
 ```
-GET    /api/Task/my                   → GetMyAssigned    [TaskReadAssigned | TaskReadDepartment | TaskReadAll]
-GET    /api/Task/department/{id}      → GetByDepartment  [TaskReadDepartment | TaskReadAll]
-GET    /api/Task/project/{id}         → GetByProject     [TaskReadAll | TaskReadDepartment]
-GET    /api/Task/{id}                 → GetById (kèm DailyLogs) [TaskReadAssigned | TaskReadDepartment | TaskReadAll]
-GET    /api/Task/performance          → EmployeePerformance (SL đạt/mục tiêu theo người, theo ngày) [TaskReadDepartment | TaskReadAll]
-POST   /api/Task/adhoc                → CreateAdHoc      [TaskCreateAdHoc]             ← thêm 1 task thủ công
-POST   /api/Task/bulk                 → BulkCreate       [TaskBulkCreateDepartment]    ← ⭐ tạo hàng loạt task giống nhau, chia SL cho N người
-POST   /api/Task/confidential         → CreateConfidential [TaskCreateConfidential]
-PUT    /api/Task/{id}                 → Update           [TaskUpdateDepartment]
-PATCH  /api/Task/{id}/reassign        → Reassign         [TaskReassignDepartment]
-POST   /api/Task/{id}/daily-log       → LogDaily         [TaskLogDailyDepartment]      ← ⭐ tổ trưởng chốt sản lượng cuối ngày (target + actual)
-PATCH  /api/Task/{id}/approve         → Approve          [TaskApproveDepartment]       ← ⭐ CHỈ tổ trưởng: duyệt Done
-DELETE /api/Task/{id}                 → Delete           [TaskDeleteDepartment]
+GET    /api/Task/my                       [Task.Read.Assigned|Department|All] (qua TaskAssignee)
+GET    /api/Task/department/{id}          [Task.Read.Department|All]
+GET    /api/Task/project/{id}             [Task.Read.All|Department]
+GET    /api/Task/{id}                     (kèm assignees + children; attachments lấy qua endpoint riêng)
+GET    /api/Task/{id}/audit-history        [Task.Audit.Read.*] (scoped)
+POST   /api/Task                          [Task.Create.Department] ⭐ tạo task 1 người / nhóm (AssigneeUserIds[])
+POST   /api/Task/confidential             [Task.Create.Confidential]
+PUT    /api/Task/{id}                     [Task.Update.Department]
+PATCH  /api/Task/{id}/progress            [Task.UpdateProgress.Department] ⭐ cập nhật CompletedQuantity (task Quantity)
+PATCH  /api/Task/{id}/complete            [Task.Complete.Department] ⭐ bấm hoàn thành (+WasLate; bàn giao bắt buộc attachment)
+DELETE /api/Task/{id}                     [Task.Delete.Department]
+POST   /api/Task/{id}/attachments         [ProductionAttachment.Write.Department] ⭐ (query ?completion=true → OwnerType=TaskCompletion, else Task)
+GET    /api/Task/{id}/attachments         [ProductionAttachment.Read.* ] (query ?completion=true để lấy riêng bằng chứng nghiệm thu)
+DELETE /api/Task/attachments/{attachmentId} [ProductionAttachment.Write.Department] (scoped xưởng)
 ```
 
-> Không còn endpoint cho nhân viên ghi (bỏ `/progress`). Nhân viên chỉ `GET /api/Task/my` để xem việc; sản lượng do tổ trưởng nhập qua `/daily-log`.
+### 4.4 Request models — CreateTaskRequest (AssigneeUserIds[], ProgressType, RequiresHandover...), UpdateProgressRequest (CompletedQuantity, RowVersion), CompleteTaskRequest (RowVersion), CompleteProjectRequest (CompletionNote), GenerateTasksRequest (Overrides[...DeadlineOverride, ProgressTypeOverride]), UploadAttachmentRequest (multipart file + note).
 
-### 4.4 Request Models
-
-```
-src/MPS.API/Requests/ProcessTemplate/
-├── CreateProcessTemplateRequest.cs  (Code, Name, Description?, DefaultDepartmentId?, Steps[])
-│     Steps[]: (Name, Description?, StepOrder, EstimatedHoursPerUnit, Priority?, PredecessorStepOrders[])
-└── UpdateProcessTemplateRequest.cs  (Name, Description?, IsActive, DefaultDepartmentId?, Steps[])
-
-src/MPS.API/Requests/Project/
-├── CreateProjectRequest.cs          (Title, Description?, Deadline?, Quantity, DepartmentId?, ProcessTemplateId?)  ← ProcessTemplateId để trống = tạo task thủ công hoàn toàn
-├── GenerateTasksRequest.cs          (ProcessTemplateId, Overrides?: [{StepId, PlannedQuantityOverride?, EstimatedHoursPerUnitOverride?}])
-└── UpdateProjectRequest.cs          (Title, Description?, Deadline?, Status?, Quantity)
-
-src/MPS.API/Requests/ProjectTask/
-├── CreateAdHocTaskRequest.cs        (ProjectId?, DepartmentId, Title, Description?, PlannedQuantity, EstimatedHoursPerUnit, AssignedToUserId?, StepOrder?, PredecessorTaskIds?, Deadline?, Priority?)
-├── BulkCreateTaskRequest.cs         (ProjectId?, DepartmentId, SourceStepId?, Title, TotalQuantity, Priority?, Deadline?, PredecessorTaskIds?, Assignments: [{AssignedToUserId, Quantity}])
-├── CreateConfidentialTaskRequest.cs (Title, Description?, AssignedToUserId, Deadline?, Priority?)
-├── UpdateTaskRequest.cs             (Title, Description?, Deadline?, Priority?, PlannedQuantity)
-├── ReassignTaskRequest.cs           (NewAssignedToUserId)
-├── DailyLogRequest.cs               (WorkDate?, TargetQuantity, QuantityDone, Note?)   ← tổ trưởng chốt cuối ngày
-└── ApproveTaskRequest.cs            ()                                 ← body rỗng, chỉ cần TaskId trên route
-```
-
-### 4.5 DI Registration
-
-**File:** `src/MPS.Infrastructure/DependencyInjection.cs`
-
-```csharp
-services.AddScoped<IProcessTemplateRepository, ProcessTemplateRepository>();
-services.AddScoped<IProjectRepository, ProjectRepository>();
-services.AddScoped<IProjectTaskRepository, ProjectTaskRepository>();
-services.AddScoped<ITaskGenerator, TaskGenerator>();
-services.AddScoped<IStepGatingService, StepGatingService>();
-services.AddScoped<IEarnedValueService, EarnedValueService>();
-// IDepartmentManagerAuthorizer ĐƯỢC ĐỊNH NGHĨA & ĐĂNG KÝ Ở DEPARTMENT MODULE (xem department-module-plan.md 4.4).
-// Task module chỉ TIÊU THỤ (inject vào các handler *Department để kiểm tra "currentUser là tổ trưởng xưởng X").
-// KHÔNG khai lại ở đây để tránh double-registration.
-```
+### 4.5 DI — đăng ký `IProductionAttachmentRepository` + `ITaskGenerator` + `IProgressService` + `IProductionAttachmentService` (3 repo Template/Project/Task đã đăng ký sẵn). Bỏ `IEarnedValueService` (thay bằng `IProgressService`). `IDepartmentManagerAuthorizer` đã ở Department module (v5 dùng `GetDepartmentIdOfUserAsync`). **Không** dùng `IStepGatingService` — step-gating đã bỏ khỏi code (`TaskModuleSimplify`); cha Done qua `TrySetParentDoneAsync` nguyên tử.
 
 ---
 
-## Phase 5 — Kiểm thử
+## Phase 5 — Kiểm thử (điểm chính)
 
-### 5.1 Unit Tests — Application Layer
-
-```
-tests/MPS.Application.Tests/Features/ProcessTemplate/
-├── ProcessTemplateCreateCommandHandlerTests.cs
-│   ├── Should_CreateTemplateWithSteps_WhenValid
-│   ├── Should_Throw_WhenDuplicateCode
-│   └── Should_Throw_WhenDependencyRefersUnknownStep
-└── ProcessTemplateDeleteCommandHandlerTests.cs
-    └── Should_Throw_WhenTemplateUsedByActiveOrder
-
-tests/MPS.Application.Tests/Features/Project/
-├── ProjectCreateCommandHandlerTests.cs
-├── ProjectGenerateTasksCommandHandlerTests.cs    ← ⭐ trọng tâm
-│   ├── Should_CreateOneBatchParentPerStep          ← mỗi công đoạn 1 task cha IsBatchParent
-│   ├── Should_ApplyOverrides_ForPlannedQuantityAndHours
-│   ├── Should_SetBlocked_ONLY_WhenStepHasDependsOn  ← có khai DependsOn mới Blocked
-│   ├── Should_SetTodo_WhenNoDependsOn_EvenIfLaterStepOrder ← StepOrder KHÔNG chặn (gối đầu)
-│   ├── Should_MapStepDependencies_ToTaskDependencies_OnParents ← ràng buộc gắn ở task cha
-│   ├── Should_AutoAssign_RoundRobin_ByLoad_ToChildTasks
-│   ├── Should_LeaveParentWithoutChildren_WhenDepartmentHasNoEmployees
-│   ├── Should_UseProjectDepartment_OverTemplateDefault
-│   ├── Should_Throw_WhenProjectHasNoDepartment
-│   ├── Should_AllowMultipleTemplates_OnSameProject     ← đơn có thể áp 2 quy trình
-│   └── Should_AllowSkippingTemplate_WhenProjectHasNone  ← Project không bắt buộc ProcessTemplateId
-└── ProjectDeleteCommandHandlerTests.cs
-
-tests/MPS.Application.Tests/Features/ProjectTask/
-├── TaskCreateAdHocCommandHandlerTests.cs
-│   ├── Should_CreateAdHoc_WhenPlannerCreatesWithoutTemplate    ← Ban KH tạo đơn không áp quy trình
-│   ├── Should_CreateAdHoc_WhenManagerOfDepartmentAddsExtra
-│   └── Should_Throw_WhenNotManagerOfThatDepartment
-├── TaskBulkCreateCommandHandlerTests.cs        ← ⭐ tạo hàng loạt
-│   ├── Should_AlwaysCreateBatchParent_EvenForSingleAssignment  ← luôn có task cha (cây 3 tầng)
-│   ├── Should_CreateOneChildPerAssignment_WithCorrectQuantities ← 5 người → 5 con
-│   ├── Should_Throw_WhenAssignmentsSumMismatchesTotal
-│   ├── Should_SetDependsOn_OnParentNotChildren        ← ràng buộc gắn ở cha
-│   └── Should_Throw_WhenCallerNotManagerOfDepartment
-├── TaskReassignCommandHandlerTests.cs
-│   ├── Should_Reassign_WhenManagerMovesTaskBetweenEmployees
-│   ├── Should_NotShiftPastPerformance_WhenReassigned   ← log cũ giữ WorkerUserId gốc
-│   ├── Should_Throw_WhenTargetNotInSameDepartment
-│   └── Should_Throw_WhenCallerNotDepartmentManager
-├── TaskLogDailyCommandHandlerTests.cs           ← ⭐ chốt sản lượng cuối ngày
-│   ├── Should_InsertDailyLog_WhenFirstLogOfDay
-│   ├── Should_UpdateDailyLog_WhenLoggingSameDayAgain          ← upsert theo (TaskId, WorkDate)
-│   ├── Should_RecomputeCompletedQuantity_FromAllLogs          ← 50+120+90 = 260 (recompute, không +=)
-│   ├── Should_SnapshotWorkerUserId_OnLog                      ← lưu người thực làm, không suy từ AssignedTo
-│   ├── Should_SetPendingReview_WhenTotalReachesPlanned
-│   ├── Should_SetInProgress_OnFirstLog_WhenWasTodo
-│   ├── Should_Throw_WhenTaskBlocked
-│   ├── Should_Throw_409_WhenRowVersionStale                   ← concurrency
-│   └── Should_Throw_WhenCallerNotManagerOfDepartment
-├── TaskApproveCommandHandlerTests.cs
-│   ├── Should_ApproveDone_WhenManagerOfDepartment
-│   ├── Should_SetApprovedByAndApprovedAt
-│   ├── Should_PersistParentDone_WhenLastChildApproved         ← cha Status=Done thật, không "coi như"
-│   ├── Should_UnblockDependents_WhenParentDone
-│   ├── Should_NotInflateEV_OnEarlyApprove                     ← duyệt non: EV theo CompletedQuantity thực
-│   ├── Should_Throw_WhenCallerNotManagerOfThatDepartment      ← kể cả role ProjectManager của xưởng KHÁC
-│   └── Should_Throw_WhenStatusNotPendingReview
-└── TaskDeleteCommandHandlerTests.cs
-    ├── Should_Delete_WhenLeafTask_NoLog
-    ├── Should_Throw_WhenTaskIsPredecessorOfOpenTask
-    ├── Should_Throw_WhenTaskHasChildren
-    └── Should_Throw_WhenTaskHasDailyLog                       ← ⭐ chặn xóa nếu đã ghi sản lượng
-
-tests/MPS.Application.Tests/Services/
-├── TaskGeneratorTests.cs
-│   ├── Should_CreateStagesOnly_NoChildren                     ← Generate chỉ tạo cha, không auto-chia
-│   └── Should_MapStepDependencies_ToParentStages
-├── StepGatingServiceTests.cs
-│   ├── CanStart_ReturnsTrue_WhenNoDependsOn          ← mặc định không chặn (gối đầu)
-│   ├── Should_Unblock_WhenAllPredecessorsApproved
-│   ├── Should_KeepBlocked_WhenAnyPredecessorNotApproved
-│   ├── Should_TreatParentDone_OnlyWhenAllChildrenDone
-│   ├── Should_OpenConvergingStep_OnlyWhenAllBranchesDone  ← nhánh song song hội tụ
-│   └── CanStart_ReturnsFalse_WhenDeclaredPredecessorOpen
-└── EarnedValueServiceTests.cs
-    ├── Should_ComputeEV_FromCompletedQuantity_OfDoneTasks     ← duyệt-đủ = 100%
-    ├── Should_NotInflateEV_WhenEarlyApproved                  ← duyệt-non < 100%
-    ├── Should_ExcludeBatchParents_FromBAC                     ← chỉ tính task con
-    ├── Should_UsePStartDate_AsScheduleStart                   ← mốc StartDate, không CreatedAt
-    ├── Should_ReturnZeroPV_WhenNoDeadline
-    ├── Should_ComputeSPI_AsEvOverPv
-    └── Should_Cap_PV_AtBAC_WhenPastDeadline
-
-tests/MPS.Application.Tests/Features/ProjectTask/Queries/
-├── TaskGetByDepartmentQueryHandlerTests.cs
-│   ├── Should_ReturnAllDepartmentTasks_WhenManager
-│   └── Should_Throw_WhenNotManagerOfDepartment
-├── TaskGetByProjectQueryHandlerTests.cs
-│   ├── Should_ReturnAllTasks_WhenReadAll
-│   └── Should_HideConfidential_WhenNoConfidentialPermission
-├── TaskGetMyAssignedQueryHandlerTests.cs
-│   └── Should_ReturnOnlyOwnTasks
-└── EmployeePerformanceQueryHandlerTests.cs      ← ⭐ hiệu suất nhân viên
-    ├── Should_ReturnDailyEfficiency_PerUser        ← 50/100=50%, 120/100=120%
-    ├── Should_AggregateTotals_OverDateRange
-    ├── Should_FilterByUser_WhenUserIdProvided
-    └── Should_Throw_WhenCallerNotManagerOrPlanner
-```
-
-### 5.2 Integration Tests — API Layer
-
-```
-tests/MPS.API.Tests/Controllers/ProcessTemplateController/
-├── Create_Returns201_WhenManagerWithValidSteps
-└── Create_Returns403_WhenEmployee
-
-tests/MPS.API.Tests/Controllers/ProjectController/
-├── Create_Returns201_WhenPlannerWithValidData
-├── GenerateTasks_Returns200_AndCreatesTasksFromTemplate
-├── GenerateTasks_Returns400_WhenNoDepartment
-└── GetById_Returns_EarnedValueFields
-
-tests/MPS.API.Tests/Controllers/ProjectTaskController/
-├── BulkCreate_Returns200_AndCreatesNTasks_WhenManager     ← 5 người → 5 task 1 lần
-├── BulkCreate_Returns403_WhenEmployee
-├── Reassign_Returns200_WhenManager
-├── Reassign_Returns403_WhenEmployee
-├── GetMyAssigned_Returns200_WithOnlyOwnTasks
-├── DailyLog_Returns200_WhenManagerLogsProduction
-├── DailyLog_UpsertsSameDate_OnSecondCall
-├── DailyLog_Returns403_WhenEmployeeTriesToLog            ← nhân viên KHÔNG được nhập sản lượng
-├── Performance_Returns200_WithPerUserEfficiency
-├── Approve_Returns200_AndSetsDone_WhenManagerOfDepartment
-├── Approve_Returns403_WhenEmployeeTriesToApprove
-├── Approve_Returns403_WhenManagerOfDifferentDepartment
-└── Delete_Returns400_WhenTaskIsPredecessor
-```
-
----
-
-## Phase 6 — (Tùy chọn) Snapshot tiến độ cuối ngày
-
-Nếu cần lưu lịch sử EV/PV để vẽ đường S-curve:
-
-- Entity `ProjectProgressSnapshot(ProjectId, Date, PlannedValue, EarnedValue, Spi, CompletionPercent)`
-- Job chạy cuối mỗi ngày làm việc (Hangfire/BackgroundService hoặc `/loop`/`schedule`) → tính qua `IEarnedValueService` và ghi snapshot
-- Query lịch sử để dashboard vẽ biểu đồ
-
-> Chưa bắt buộc cho MVP — EV/PV tính realtime trong `ProjectGetByIdQuery` là đủ. Đưa vào backlog.
+- **TaskCreate**: 1 assignee → 1 TaskAssignee; N assignee → N dòng, chung 1 task; reject assignee ngoài xưởng; Blocked khi có predecessor.
+- **UpdateProgress**: clamp ≤ Planned; Todo→InProgress; 409 khi RowVersion cũ; chỉ áp task Quantity.
+- **Complete**: set Done + CompletedBy/At; `WasLate=true` khi quá deadline; **reject nếu RequiresHandover mà chưa có attachment**; task cha Done khi mọi con Done (UPDATE nguyên tử, chống race); unblock dependents.
+- **ProgressService**: CompletionPercent theo trọng số; task Milestone tính bằng EstimatedHours; EV/PV chỉ trên task Quantity; ScheduleStatus OnTrack/AtRisk/Late đúng ngưỡng; loại task cha khỏi tổng.
+- **Attachment**: upload gọi MinIO đúng objectKey; list trả presigned URL; delete xóa cả DB + MinIO; scope xưởng (403 xưởng khác).
+- **ProjectComplete**: Status=Completed + CompletionNote.
+- **Scope v5**: PM xưởng A thao tác task/đơn xưởng B → 403/401.
 
 ---
 
 ## Thứ tự thực hiện (checklist)
 
-### Prerequisite (Department Module phải xong trước)
-- [ ] Department Module hoàn thành và migrate xong (Department = **xưởng**, `ManagerId` = **tổ trưởng**)
-- [ ] Role `DeputyDirector` được thêm vào `SystemRoles.cs` (có thể làm trong Department plan)
+**Phase 1 — Domain**
+- [ ] `ProcessTemplate/Step/StepDependency` (+ `DefaultProgressType`)
+- [ ] `Project` (+ StartDate, DepartmentId, Completed*, CompletionNote)
+- [ ] `ProjectTask` (ProgressType, RequiresHandover, EstimatedHours, Completed*, WasLate, RowVersion; **bỏ** daily/approve fields)
+- [ ] `TaskAssignee` (bảng nối multi-assignee) ⭐
+- [ ] `TaskDependency`
+- [ ] `ProductionAttachment` + enum `AttachmentOwnerType` ⭐
+- [ ] Permissions 100–125
+- [ ] 3 repository interfaces (+ `GetDepartmentIdOfUserAsync` v5 đã có)
 
-### Phase 1 — Domain
-- [ ] **1.1** — Thêm `DeputyDirector` vào `SystemRoles`
-- [ ] **1.2** — Tạo `ProcessTemplate`, `ProcessStep`, `ProcessStepDependency`
-- [ ] **1.3** — Tạo/mở rộng `Project` (thêm `Quantity`, **`StartDate`**, `DepartmentId`, `ProcessTemplateId`)
-- [ ] **1.4** — Tạo/mở rộng `ProjectTask` (EV fields, `DepartmentId`, `SourceStepId`, nullable assignee, `ApprovedByUserId`/`ApprovedAt`, `IsBatchParent`, **`RowVersion`**) + `TaskDependency` + enum `TaskItemStatus`
-- [ ] **1.4b** — Tạo `TaskDailyLog` (nhật ký chốt sản lượng theo ngày, **có `WorkerUserId` snapshot**) ⭐
-- [ ] **1.5** — Thêm permissions (dải 100–121) vào `Permissions.cs`
-- [ ] **1.6** — Tạo `IProcessTemplateRepository`, `IProjectRepository`, `IProjectTaskRepository` (kèm DailyLog + performance methods)
+**Phase 2 — Infrastructure**
+- [ ] EF configs (Template/Project/Task/TaskAssignee/TaskDependency/Attachment)
+- [ ] Implement repositories
+- [ ] RolePermission seed (PM nhận quyền lập kế hoạch + complete + attachment)
+- [ ] Seed ProcessTemplate mẫu
+- [ ] Migration `TaskModule`
 
-### Phase 2 — Infrastructure
-- [ ] **2.1** — `ProcessTemplate/Step/StepDependency` EF configs
-- [ ] **2.2** — `ProjectEntityConfiguration`
-- [ ] **2.3** — `ProjectTaskEntityConfiguration` + `TaskDependencyEntityConfiguration` + `TaskDailyLogEntityConfiguration`
-- [ ] **2.4** — Implement 3 repositories (kèm upsert DailyLog, sum, performance query)
-- [ ] **2.5** — Cập nhật `RolePermissionEntityConfiguration`
-- [ ] **2.6** — Seed role `DeputyDirector` + permissions
-- [ ] **2.7** — Seed `ProcessTemplate` mẫu (khung tranh)
-- [ ] **2.8** — Chạy migration `TaskModule`
+**Phase 3 — Application**
+- [ ] DTOs
+- [ ] ProcessTemplate CRUD
+- [ ] Project (Create/Generate/Update/Delete/**Complete**) + queries + audit
+- [ ] ProjectTask (**Create** đa-assignee, **UpdateProgress**, **Complete**, Update, Delete, Confidential) + queries
+- [ ] `ITaskGenerator` (sinh công đoạn, không auto-assign)
+- [ ] `IStepGatingService`
+- [ ] `IProgressService` (đo lai: trọng số + thời gian + EV/PV subset) ⭐
+- [ ] `IProductionAttachmentService` (MinIO) ⭐
+- [ ] AutoMapper
 
-### Phase 3 — Application
-- [ ] **3.1** — DTOs (ProcessTemplate, Project + EV/PV, ProjectTask + DailyLog)
-- [ ] **3.2** — ProcessTemplate commands/queries/handlers
-- [ ] **3.3** — Project commands/queries/handlers (kèm GenerateTasks)
-- [ ] **3.4** — ProjectTask commands/queries/handlers (AdHoc, **BulkCreate**, Reassign, **LogDaily**, **Approve**, Delete)
-- [ ] **3.5** — `ITaskGenerator` (sinh task + auto-assign round-robin)
-- [ ] **3.6** — `IStepGatingService` (mở khóa task theo bước) + BulkCreate/LogDaily/Approve handlers
-- [ ] **3.7** — `IEarnedValueService` (EV/PV/SPI, 8h/ngày)
-- [ ] **3.7b** — `EmployeePerformanceQuery` (hiệu suất từ TaskDailyLog) ⭐
-- [ ] **3.8** — AutoMapper profiles
+**Phase 4 — API**
+- [ ] 3 controllers + attachment endpoints
+- [ ] Request models
+- [ ] DI
 
-### Phase 4 — API
-- [ ] **4.1** — `ProcessTemplateController`
-- [ ] **4.2** — `ProjectController` (+ generate-tasks)
-- [ ] **4.3** — `ProjectTaskController` (+ bulk, reassign, daily-log, approve, performance)
-- [ ] **4.4** — Request models
-- [ ] **4.5** — DI registration
-
-### Phase 5 — Testing
-- [ ] **5.1** — Unit tests (services trước: TaskGenerator, StepGating, EarnedValue)
-- [ ] **5.2** — Integration tests
-- [ ] **Final** — `dotnet build` sạch, `dotnet test` pass
+**Phase 5 — Test** → build sạch, test pass.
 
 ---
 
 ## Lưu ý kỹ thuật
 
-### 1. Tên entity `ProjectTask` thay vì `Task`
-C# có `System.Threading.Tasks.Task` — đặt tên `Task` sẽ gây xung đột trên toàn codebase. Dùng `ProjectTask` nhất quán.
-
-### 2. Self-referencing & bảng nối với `OnDelete(Restrict)` + chặn xóa 3 điều kiện
-SQL Server không cho cascade trên self-referencing FK / dễ multiple cascade path qua bảng nối. Một chiều mỗi cặp FK dùng `Restrict`. **`ProjectTask → TaskDailyLog` cũng `Restrict`** (không cascade). Logic xóa task kiểm tra **cả 3**: `HasChildrenAsync`, `IsPredecessorOfOpenTaskAsync`, `HasDailyLogAsync` — có 1 trong 3 thì chặn (bảo toàn lịch sử sản lượng cho lương).
-
-### 3. Chia việc cho công nhan — qua BulkCreate, KHÔNG auto-chia khi Generate
-- `GenerateTasks` chỉ tạo **task cha (công đoạn)**, không tạo con, không auto-assign.
-- Tổ trưởng chia con qua `BulkCreate(ExistingParentTaskId = cha)`. FE gợi ý "chia đều" dùng `GetMemberUserIdsAsync` (danh sách công nhân xưởng) + `CountActiveByUserAsync` (tải hiện tại) để đề xuất, tổ trưởng chỉnh tay.
-- **Invariant**: Σ PlannedQuantity của con == PlannedQuantity của cha — BulkCreate validate; UpdateTask đổi SL con phải re-validate.
-
-### 4. Step-gating — TÙY CHỌN (mặc định không chặn) + tránh circular dependency
-**Mặc định KHÔNG chặn**: task không khai `DependsOn` → `Todo` ngay, làm song song / gối đầu. `StepOrder` chỉ để hiển thị. Chỉ task **có khai** `DependsOn` mới khởi tạo `Blocked`. Ràng buộc gắn ở **task cha (công đoạn)**, không ở con. `UnblockDependentsAsync` chạy khi predecessor `Done`; **cha được PERSIST `Status = Done`** khi con cuối cùng Done (không "coi như"). Không chạy khi mới `PendingReview`. Validate đồ thị **không chu trình** khi lưu.
-
-### 5. EV/PV — 8h/ngày, mốc StartDate, duyệt-non không phồng EV
-`WORK_HOURS_PER_DAY = 8` trong `ProductionConstants`. **EV = Σ (min(CompletedQuantity, Planned) × giờ/SP) trên task Done** — dùng số lượng thực nên **duyệt-non không nhảy 100%**. PV theo lịch **`Project.StartDate` → `Deadline`** (KHÔNG dùng CreatedAt); thiếu Deadline → chỉ hiện %hoàn thành. Chỉ tính trên **task con** (cha không cộng, tránh đếm đôi). Bỏ qua cuối tuần/lễ ở MVP. Snapshot cuối ngày là Phase 6.
-
-### 5b. Reassign & lịch sử hiệu suất — snapshot WorkerUserId
-`TaskDailyLog.WorkerUserId` được **chốt cứng tại thời điểm ghi log**, `EmployeePerformanceQuery` group theo nó (KHÔNG theo `task.AssignedToUserId`). Nhờ vậy Reassign task cho người khác **không** làm dịch chuyển lịch sử ngày công cũ. Reassign chỉ đổi người cho các ngày TỚI. (Không cần chặn reassign khi task đã có log.)
-
-### 5c. Concurrency — RowVersion trên ProjectTask
-`ProjectTask.RowVersion` (`[Timestamp]`). LogDaily/Approve/UpdateTask nhận `RowVersion` từ client, EF kiểm khi SaveChanges → lệch thì `DbUpdateConcurrencyException` → API trả **409**, FE reload. `CompletedQuantity` luôn **RECOMPUTE** (`= SUM(DailyLogs)`) trong cùng transaction với upsert log, không dùng `+=`, để không trôi số.
-
-### 4b. Done là quyết định của tổ trưởng — không tự động; nhân viên chỉ xem
-Nhân viên **không có quyền ghi** bất kỳ trường nào của task (bỏ `ReportProgress`). Sản lượng do **tổ trưởng kiểm kê nhập** qua `TaskLogDailyCommand` (`TaskLogDailyDepartment`). Task tự lên `PendingReview` khi tổng chốt đạt `PlannedQuantity`, nhưng chuyển `Done` **chỉ** qua `TaskApproveCommand` (`TaskApproveDepartment`), và **chỉ** người là `Department.ManagerId` của xưởng chứa task mới gọi được (kiểm tra thêm ngoài permission — permission chỉ xác nhận role `ProjectManager`, chưa xác nhận đúng xưởng).
-
-### 4c. Quy trình mẫu là tùy chọn và có thể áp nhiều lần / override
-`Project.ProcessTemplateId` không bắt buộc — nhiều đơn có thể **không dùng quy trình mẫu nào**, tạo task hoàn toàn qua `TaskCreateAdHoc`/`TaskBulkCreate`. Khi có áp dụng, `GenerateTasks` chấp nhận override `PlannedQuantity`/`EstimatedHoursPerUnit` theo từng bước, và có thể gọi lại nhiều lần trên cùng 1 đơn — không ràng buộc "1 đơn chỉ 1 lần generate".
-
-### 4d. ⭐ Giải bài toán "task lặp mỗi ngày" — KHÔNG tạo task theo ngày, dùng TaskDailyLog
-Đây là điểm quan trọng nhất về giảm thao tác thủ công:
-- **Task tạo 1 lần** với `PlannedQuantity` = mục tiêu TỔNG (vd An: 500 khung), tồn tại xuyên suốt đến khi xong.
-- Mỗi cuối ngày tổ trưởng chỉ thêm **1 dòng `TaskDailyLog`/người** (2 số: mục tiêu-ngày do tổ trưởng đặt tay + thực đạt kiểm kê). `CompletedQuantity` cộng dồn tự động.
-- **Không có "task theo ngày"** nào phải tạo lại — thay N task/ngày bằng N dòng log/ngày (nhẹ hơn nhiều, không rác task).
-- **Hiệu suất** = query `TaskDailyLog` (`EmployeePerformanceQuery`): so `QuantityDone`/`TargetQuantity` từng người từng ngày (50/100 chậm, 120/100 vượt).
-
-### 4e. Cây drill-down 3 tầng + BulkCreate (thay vì multi-assignee, thay vì tree cấp bậc)
-- **Cấu trúc = cây phân rã để XEM (drill-down), không phải tree ủy quyền cấp bậc cũ**: Đơn (tầng 1) → công đoạn/task cha `IsBatchParent` (tầng 2) → task từng nhân viên (tầng 3). Sâu **đúng 3 tầng cố định**. Giám đốc/Ban KH thấy toàn cây; chỉ công nhân bị giới hạn.
-- **LUÔN có task cha (tầng công đoạn)** — kể cả công đoạn 1 người cũng có 1 cha bọc 1 con — để cây đều 3 tầng, drill-down nhất quán, và ràng buộc công đoạn (`DependsOn`) luôn gắn ở cha.
-- **Không** thêm bảng multi-assignee (task ↔ nhiều user). `TaskBulkCreateCommand`: chọn tổng SL + N người → chia đều mặc định (500/5=100), tổ trưởng chỉnh tay, tạo 1 task cha + N task con 1 lần. Mỗi con vẫn 1 người/1 SL riêng — giữ "1 task = 1 assignee = 1 số liệu rõ ràng", tiện tính lương theo sản phẩm sau này.
-
-### 6. Permission ID không trùng
-- Dải 95–99: Department module (theo department-module-plan.md)
-- Dải 100–121: Task/Production module (plan này)
-- Dải 122–129: dành cho EV/PV snapshot (Phase 6)
-- Dải 130+: module sau
-
-### 7. DeputyDirector chưa có trong SystemRoles hiện tại
-Department plan chưa thêm role này. Đề xuất: thêm vào Task module migration để department plan không bị phụ thuộc.
-
-### 8. Confidential Task
-Không gắn đơn/xưởng (`ProjectId = null`, `DepartmentId = null`). Ẩn với mọi người trừ người tạo, người được assign, GĐ. Cân nhắc flag `ExcludeFromGeneralAudit` nếu `[Auditable]` log tất cả.
-
-### 9. ✅ ĐÃ CHỐT — điều kiện giải tán Department
-Trước đây bỏ ngỏ giữa (a) suy ra qua nhân viên và (b) thêm `DepartmentId` vào `Project`. **Đã chốt phương án (b)**: `Project.DepartmentId` + `ProjectTask.DepartmentId` là FK trực tiếp. `IProjectRepository.HasActiveByDepartmentAsync` cho phép `DepartmentDeleteCommandHandler` chặn giải tán xưởng khi còn đơn `Active`. Xem cập nhật tương ứng trong `department-module-plan.md`.
+1. **`ProjectTask` tên** (tránh trùng `System.Threading.Tasks.Task`).
+2. **Multi-assignee vs task cha**: task nhóm là **task CON** có nhiều assignee — KHÔNG phải task cha. Task cha (`IsBatchParent`) vẫn không assignee, chỉ bọc con. Cây vẫn 3 tầng.
+3. **Đo lai**: `ProgressType` quyết định task tính EV (Quantity) hay chỉ Done+deadline (Milestone). Đơn luôn có 2 chỉ số: `CompletionPercent` (việc) và `TimeElapsedPercent` (thời gian) → so nhau ra OnTrack/AtRisk/Late. EV/PV là chỉ số phụ cho subset Quantity.
+4. **Bỏ daily-log**: cập nhật `CompletedQuantity` bất kỳ lúc nào qua `UpdateProgress`; lịch sử đã có AuditLog. Không ép chốt hàng ngày.
+5. **Complete + WasLate**: quá deadline vẫn Done, chỉ gắn cờ chậm — không chặn. Task bàn giao (`RequiresHandover`) bắt buộc attachment.
+6. **Attachment polymorphic**: không FK cứng → xóa Project/Task phải dọn attachment + object MinIO ở handler (transaction: xóa DB rồi best-effort xóa MinIO; nếu MinIO fail chỉ log, không rollback DB).
+7. **Scope v5**: dùng `GetDepartmentIdOfUserAsync` (nhiều PM/xưởng). Không dùng `ManagerId`.
+8. **MinIO tái dùng 100%**: `IFileStorageService` + models `FileUploadRequest`/`StoredFileMetadata` đã có; presigned URL hết hạn theo `MinioOptions.PresignedUrlMaxExpirySeconds` (900s).
+9. **Confidential Task**: ProjectId/DepartmentId null; ẩn trừ người tạo + assignee + GĐ.
+10. **KHÔNG quản lý kho**: chỉ đơn sản xuất; không có `OrderType`/nhánh hàng-có-sẵn.
+11. **Permission ID**: 95–99 Department; 100–125 Task/Production (plan này); 126+ dành cho sau.

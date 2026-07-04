@@ -43,14 +43,14 @@ public class EmployeeInformationGetByIdQueryHandler
         if (entity.UserId == _currentUserService.UserId)
             return _mapper.Map<EmployeeInformationDto>(entity);
 
-        // Read.Department → tổ trưởng xem được nhân viên thuộc xưởng mình quản lý.
+        // Read.Department → xem được nhân viên thuộc CÙNG xưởng mình trực thuộc.
         var currentUserId = _currentUserService.UserId;
         if (currentUserId is not null
             && _currentUserService.HasPermission(Permissions.EmployeeInformationReadDepartment)
             && entity.DepartmentId is not null)
         {
-            var managed = await _departmentRepository.GetByManagerUserIdAsync(currentUserId.Value, cancellationToken);
-            if (managed is not null && managed.Id == entity.DepartmentId)
+            var myDeptId = await _departmentRepository.GetDepartmentIdOfUserAsync(currentUserId.Value, cancellationToken);
+            if (myDeptId is not null && myDeptId.Value == entity.DepartmentId)
                 return _mapper.Map<EmployeeInformationDto>(entity);
         }
 

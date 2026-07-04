@@ -56,6 +56,14 @@ public class AppDbContext : DbContext
     public DbSet<ComplianceAuthoritativeSource> ComplianceAuthoritativeSources => Set<ComplianceAuthoritativeSource>();
     public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
 
+    // ===== Task/Production module =====
+    public DbSet<ProcessTemplate> ProcessTemplates => Set<ProcessTemplate>();
+    public DbSet<ProcessStep> ProcessSteps => Set<ProcessStep>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<ProductionAttachment> ProductionAttachments => Set<ProductionAttachment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

@@ -42,14 +42,14 @@ public class EmployeeInformationGetAllQueryHandler
         if (currentUserId is null)
             return Array.Empty<EmployeeInformationDto>();
 
-        // Tầng 2 — Read.Department: tổ trưởng xưởng chỉ xem nhân viên trong xưởng mình quản lý.
+        // Tầng 2 — Read.Department: quản lý xưởng chỉ xem nhân viên trong xưởng MÌNH TRỰC THUỘC.
         if (_currentUserService.HasPermission(Permissions.EmployeeInformationReadDepartment))
         {
-            var managed = await _departmentRepository.GetByManagerUserIdAsync(currentUserId.Value, cancellationToken);
-            if (managed is null)
+            var myDeptId = await _departmentRepository.GetDepartmentIdOfUserAsync(currentUserId.Value, cancellationToken);
+            if (myDeptId is null)
                 return Array.Empty<EmployeeInformationDto>();
 
-            var members = await _repository.GetByDepartmentIdAsync(managed.Id, cancellationToken);
+            var members = await _repository.GetByDepartmentIdAsync(myDeptId.Value, cancellationToken);
             return _mapper.Map<IReadOnlyList<EmployeeInformationDto>>(members);
         }
 

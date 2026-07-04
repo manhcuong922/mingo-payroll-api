@@ -93,6 +93,32 @@ public class DepartmentRepository : IDepartmentRepository
             .AsNoTracking()
             .AnyAsync(e => e.Id == managerEmployeeId && e.UserId != null, ct);
 
+    public async Task<IReadOnlyList<EligibleManager>> GetEligibleManagersAsync(
+        string? keyword, IReadOnlyList<int> roleIds, CancellationToken ct)
+    {
+        // Điều kiện: có tài khoản (đăng nhập) + role thuộc whitelist (ProjectManager…).
+        // Không còn loại người đã làm tổ trưởng xưởng khác — nhiều PM/xưởng đều hợp lệ; ManagerId chỉ là danh nghĩa.
+        var query = _context.EmployeeInformations
+            .AsNoTracking()
+            .Where(e => e.User != null && roleIds.Contains(e.User.RoleId));
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim().ToLower();
+            query = query.Where(e => e.FullName.ToLower().Contains(kw));
+        }
+
+        return await query
+            .OrderBy(e => e.FullName)
+            .Select(e => new EligibleManager(
+                e.Id,
+                e.FullName,
+                e.Position != null ? e.Position.Name : null,
+                e.User!.RoleId,
+                e.User!.Role.Name))
+            .ToListAsync(ct);
+    }
+
     public async Task<int> AddAsync(Department entity, CancellationToken ct)
     {
         await _context.Departments.AddAsync(entity, ct);
@@ -131,11 +157,23 @@ public class DepartmentRepository : IDepartmentRepository
 
     // ===== Bắc cầu User ↔ Department =====
 
-    public Task<Department?> GetByManagerUserIdAsync(int userId, CancellationToken ct) =>
-        _context.Departments
+    public async Task<int?> GetDepartmentIdOfUserAsync(int userId, CancellationToken ct)
+    {
+        // Xưởng user trực thuộc qua hồ sơ nhân viên. Chỉ tính xưởng còn hoạt động.
+        var deptId = await _context.EmployeeInformations
             .AsNoTracking()
-            .Where(d => d.IsActive && d.Manager != null && d.Manager.UserId == userId)
+            .Where(e => e.UserId == userId && e.DepartmentId != null)
+            .Select(e => e.DepartmentId)
             .FirstOrDefaultAsync(ct);
+
+        if (deptId is null) return null;
+
+        var isActive = await _context.Departments
+            .AsNoTracking()
+            .AnyAsync(d => d.Id == deptId.Value && d.IsActive, ct);
+
+        return isActive ? deptId : null;
+    }
 
     public async Task<IReadOnlyList<int>> GetMemberUserIdsAsync(int departmentId, CancellationToken ct) =>
         await _context.EmployeeInformations

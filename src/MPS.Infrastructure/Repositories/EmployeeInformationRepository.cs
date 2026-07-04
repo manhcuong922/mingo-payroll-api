@@ -95,6 +95,15 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default) =>
         _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId, cancellationToken);
 
+    public async Task<int?> GetUserRoleIdAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var role = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => (int?)u.RoleId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return role;
+    }
+
     public Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken = default) =>
         _context.Positions.AsNoTracking().AnyAsync(p => p.Id == positionId, cancellationToken);
 

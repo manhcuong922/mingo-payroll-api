@@ -2,9 +2,11 @@
 
 > Ngày tạo: 2026-06-23
 > Cập nhật: 2026-07-02 — `Department` đóng vai **xưởng sản xuất**; `ManagerId` = **tổ trưởng xưởng**. Giải tán xưởng = **soft-delete** (`IsActive=false`), chặn khi còn **đơn active** (xem [Lưu ý #5] & [#10]).
-> Cập nhật vai trò: 2026-07-02 (v2) — `Department.ManagerId` trỏ tới nhân viên giữ role **`ProjectManager`** (tổ trưởng xưởng), **không phải** `DepartmentManager`. `DepartmentManager` là vai **Ban kế hoạch cấp công ty**, quản lý đa xưởng, không gắn 1-1 với 1 Department. Xem giải thích đầy đủ trong `task-module-plan.md`.
+> Cập nhật vai trò: 2026-07-02 (v2) — `Department.ManagerId` trỏ tới nhân viên giữ role **`ProjectManager`** (tổ trưởng xưởng), **không phải** `DepartmentManager`.
+> **Cập nhật mô hình vai trò: 2026-07-03 (v4) — GỘP VAI, BỎ TẦNG BAN KẾ HOẠCH.** `Department.ManagerId` = `ProjectManager` = **quản lý xưởng ra kế hoạch trực tiếp**: người này vừa lập kế hoạch (tạo đơn, áp quy trình mẫu cho xưởng mình) vừa điều phối (chia việc, chốt sản lượng, duyệt Done) — chi tiết ở `task-module-plan.md`. Role `DepartmentManager` **KHÔNG còn tham gia luồng sản xuất** (không cấp quyền Task/Project); việc xuyên xưởng thuộc `Director`/`DeputyDirector`. Đổi này **xóa nợ đặt tên gây nhầm lẫn** trước đây.
+> **⭐ Cập nhật mô hình quản lý: 2026-07-04 (v5) — NHIỀU PM/XƯỞNG, BỎ RÀNG BUỘC "1 NGƯỜI 1 XƯỞNG".** "Quản lý xưởng" giờ = **bất kỳ nhân viên role `ProjectManager` TRỰC THUỘC xưởng** (`EmployeeInformation.DepartmentId`), một xưởng có **nhiều PM**. Scoped access của Task/Project kiểm theo `IDepartmentRepository.GetDepartmentIdOfUserAsync` (xưởng user trực thuộc), **KHÔNG** theo `Department.ManagerId`. `ManagerId` chỉ còn là **trưởng phòng đại diện danh nghĩa** (hiển thị). Đã **bỏ** validator "1 người 1 xưởng" (`IsManagerOfAnotherDepartmentAsync`) và method `GetByManagerUserIdAsync`. → Các phần bên dưới nói `ManagerId` = tổ trưởng gác-quyền đã **lỗi thời**; xem `docs/api/department-api.md` (đã đồng bộ v5) cho hành vi thực tế.
 > Nhánh hiện tại: `feature/department-manager`
-> Mục tiêu: Thêm entity Department (phòng ban/xưởng), liên kết với EmployeeInformation, scoped access cho tổ trưởng xưởng (role `ProjectManager`)
+> Mục tiêu: Thêm entity Department (phòng ban/xưởng), liên kết với EmployeeInformation, scoped access cho quản lý xưởng (role `ProjectManager`)
 
 ---
 
@@ -12,12 +14,12 @@
 
 Hiện tại hệ thống chỉ có `Position` (chức vụ). Cần bổ sung `Department` (phòng ban / **xưởng sản xuất**) để:
 1. Phân nhóm nhân viên theo phòng ban/xưởng
-2. Cho phép tổ trưởng xưởng (`Department.ManagerId`, role `ProjectManager`) chỉ xem/quản lý nhân viên **trong xưởng mình**, thay vì toàn công ty
+2. Cho phép quản lý xưởng (`Department.ManagerId`, role `ProjectManager`) chỉ xem/quản lý nhân viên **trong xưởng mình**, thay vì toàn công ty
 3. Là đơn vị **gắn đơn hàng + task sản xuất** (xem `task-module-plan.md`): mỗi `Project`/`ProjectTask` gắn `DepartmentId` = xưởng thực hiện
 
-> **Mô hình sản xuất**: Trong nghiệp vụ gia công (vd: khung tranh), một `Department` là một **xưởng**. `Department.ManagerId` là **tổ trưởng xưởng** (role `ProjectManager`) — người điều phối task, chuyển assign giữa công nhân, và là người **duy nhất duyệt task chuyển `Done`**. **Ban kế hoạch** (role `DepartmentManager`, tên role giữ nguyên vì lý do lịch sử — không đổi để tránh phá permission hiện có) đứng ở cấp công ty, phát đơn xuống nhiều xưởng, chọn/áp quy trình mẫu, nhưng **không** có quyền duyệt Done hay reassign trong 1 xưởng cụ thể. Chi tiết: `task-module-plan.md`.
+> **Mô hình sản xuất (v4 — gộp vai)**: Trong nghiệp vụ gia công (vd: khung tranh), một `Department` là một **xưởng**. `Department.ManagerId` là **quản lý xưởng** (role `ProjectManager`) — người **ra kế hoạch trực tiếp** cho xưởng mình (tạo đơn, áp quy trình mẫu, chốt SL/deadline) **và** điều phối task (chia việc, chuyển assign, chốt sản lượng), là người **duy nhất duyệt task chuyển `Done`**. Không còn tầng "ban kế hoạch" trung gian: việc xuyên xưởng (định nghĩa quy trình mẫu dùng chung, xem tiến độ toàn công ty, giao đơn cấp cao) do **`Director`/`DeputyDirector`** giữ quyền `All`. Chi tiết: `task-module-plan.md`.
 
-> ⚠️ **Lưu ý đặt tên gây nhầm lẫn**: role tên là `DepartmentManager` nhưng nghĩa nghiệp vụ lại là "Ban kế hoạch" (không quản lý riêng 1 Department nào), còn role **thực sự quản lý 1 Department** (tổ trưởng xưởng, gắn `ManagerId`) lại tên là `ProjectManager`. Đây là do giữ nguyên tên role cũ (`SystemRoles.cs`) để không phá permission đã seed — khi build UI/tài liệu người dùng, nên hiển thị nhãn tiếng Việt "Ban kế hoạch" / "Tổ trưởng xưởng" thay vì tên role kỹ thuật.
+> ✅ **Nợ đặt tên đã xử lý (v4)**: trước đây role `DepartmentManager` mang nghĩa "ban kế hoạch" gây nhầm lẫn. Sau khi **gộp vai**, `DepartmentManager` **không còn tham gia luồng sản xuất** — mọi việc lập kế hoạch + điều phối đều do `ProjectManager` (quản lý xưởng, gắn `ManagerId`) đảm nhiệm. Khi build UI, hiển thị nhãn tiếng Việt "Quản lý xưởng" cho `ProjectManager`. Role `DepartmentManager` giữ trong `SystemRoles.cs` (id 5) chỉ để không phá seed cũ; nếu công ty phình to cần tách lại tầng ban kế hoạch tập trung thì mới cấp lại quyền cho role này.
 
 ---
 
@@ -118,7 +120,7 @@ public const string DepartmentCreateAll = "Department.Create.All";
 public const string DepartmentUpdateAll = "Department.Update.All";
 public const string DepartmentDeleteAll = "Department.Delete.All";
 
-// Scoped — DepartmentManager chỉ đọc nhân viên phòng mình
+// Scoped — ProjectManager (quản lý xưởng) chỉ đọc nhân viên xưởng mình
 public const string EmployeeInformationReadDepartment = "EmployeeInformation.Read.Department";
 
 // Cuối class PermissionIds — tiếp từ 94
@@ -178,7 +180,7 @@ Xóa bỏ `HasMany`/`HasOne` Department ở entity config (đã khai báo ở `D
 
 Implement `IDepartmentRepository` — pattern giống `PositionRepository`:
 - `GetAllAsync`: include `Manager`, `Employees.Count`
-- `GetByManagerEmployeeIdAsync`: dùng để tìm phòng của DepartmentManager hiện tại
+- `GetByManagerEmployeeIdAsync`: dùng để tìm xưởng mà ProjectManager (quản lý xưởng) hiện tại phụ trách
 - `GetPagedAsync`: filter theo keyword (Code, Name)
 
 ### 2.4 Cập nhật `RolePermissionEntityConfiguration`
@@ -189,13 +191,14 @@ Implement `IDepartmentRepository` — pattern giống `PositionRepository`:
 |------|-----------|----------|
 | SystemAdmin | DepartmentReadAll, CreateAll, UpdateAll, DeleteAll | — |
 | HR | DepartmentReadAll, CreateAll, UpdateAll, DeleteAll | — |
-| Director | DepartmentReadAll | — |
+| Director | DepartmentReadAll, **EmployeeInformationReadAll** (nhìn nhân sự đa xưởng cấp công ty) | — |
+| DeputyDirector | DepartmentReadAll, **EmployeeInformationReadAll** | — |
 | Accountant | DepartmentReadAll | — |
-| DepartmentManager | DepartmentReadAll, **EmployeeInformationReadAll** (giữ nguyên — Ban KH xem toàn công ty để lên kế hoạch đa xưởng) | — |
+| DepartmentManager | *(không thêm quyền sản xuất — v4 gộp vai, không tham gia luồng)* | — |
 | **ProjectManager** | DepartmentReadAll, **EmployeeInformationReadDepartment** | (không có `ReadAll` — chỉ xem nhân viên xưởng mình) |
 | Employee | DepartmentReadAll | — |
 
-> ⚠️ **Đổi so với plan gốc**: quyền `EmployeeInformationReadDepartment` (chỉ xem nhân viên **trong xưởng mình**) được gán cho **`ProjectManager`** (tổ trưởng xưởng, người thực sự là `Department.ManagerId`), **không phải** `DepartmentManager` như bản đầu. `DepartmentManager` (Ban kế hoạch) giữ nguyên `EmployeeInformationReadAll` vì họ cần nhìn nhân sự đa xưởng để lập kế hoạch phân bổ đơn hàng. Lý do đổi: xem [Lưu ý vai trò ở đầu file] và `task-module-plan.md`.
+> ⚠️ **v4 — gộp vai**: quyền `EmployeeInformationReadDepartment` (chỉ xem nhân viên **trong xưởng mình**) gán cho **`ProjectManager`** (quản lý xưởng = `Department.ManagerId`). Việc nhìn nhân sự **đa xưởng** để điều phối cấp công ty chuyển hẳn về **`Director`/`DeputyDirector`** (giữ `EmployeeInformationReadAll`). `DepartmentManager` **không còn được cấp** `EmployeeInformationReadAll` cho mục đích lập kế hoạch — vì role này đã ra khỏi luồng sản xuất. Lý do đổi: xem [Lưu ý vai trò ở đầu file] và `task-module-plan.md`.
 
 ### 2.5 Seed data mẫu
 
@@ -259,7 +262,7 @@ Logic mới (3 tầng, dựa thuần trên permission — không hard-code theo 
 
 ```
 Có EmployeeInformation.Read.All?
-    → Trả về tất cả nhân viên (SystemAdmin, HR, Accountant, Director, DepartmentManager = Ban KH)
+    → Trả về tất cả nhân viên (SystemAdmin, HR, Accountant, Director, DeputyDirector)
 
 Có EmployeeInformation.Read.Department?
     → Tìm EmployeeInformation của user hiện tại
@@ -445,7 +448,7 @@ tests/MPS.API.Tests/Controllers/DepartmentControllerTests.cs
    - **Tổ trưởng xưởng**: người được đặt `Department.ManagerId` (là 1 `EmployeeInformation`) cũng phải có `UserId` để đăng nhập và dùng quyền `Task*Department`. `GetByManagerUserIdAsync` dựa vào liên kết này.
    - Khuyến nghị: khi tạo tài khoản cho công nhân/tổ trưởng, quy trình onboarding nên **bắt buộc gán DepartmentId + liên kết User↔EmployeeInformation** (validation ở tầng tạo nhân sự), tránh task "mồ côi xưởng".
 
-8. **Nhất quán vai trò với Task module**: `Department.ManagerId` = tổ trưởng (role `ProjectManager`), là người **duy nhất** duyệt Done / chốt sản lượng / reassign trong xưởng mình (qua `IDepartmentManagerAuthorizer`). `DepartmentManager` (Ban KH) KHÔNG có quyền `*Department` — chi tiết bảng permission ở `task-module-plan.md` mục 2.5. Xem thêm [Lưu ý đặt tên gây nhầm lẫn] ở đầu file.
+8. **Nhất quán vai trò với Task module (v4 — gộp vai)**: `Department.ManagerId` = quản lý xưởng (role `ProjectManager`), là người **ra kế hoạch trực tiếp** (tạo đơn, áp quy trình) **và** duy nhất duyệt Done / chốt sản lượng / reassign trong xưởng mình (qua `IDepartmentManagerAuthorizer`). `DepartmentManager` **không còn tham gia luồng sản xuất** (không có quyền Task/Project) — chi tiết bảng permission ở `task-module-plan.md` mục 2.5. Xem thêm [Nợ đặt tên đã xử lý] ở đầu file.
 
 9. **`ManagerExistsAsync` phải kiểm tra Manager có UserId**: khi set `Department.ManagerId`, nên validate `EmployeeInformation` đó có `UserId != null` (nếu không, tổ trưởng không đăng nhập được để duyệt Done → xưởng tê liệt). Cân nhắc trả lỗi rõ ràng ở `DepartmentCreate/Update` validator.
 
