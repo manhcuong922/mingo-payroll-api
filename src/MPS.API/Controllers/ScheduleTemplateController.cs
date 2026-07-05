@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MPS.API.Authorization;
 using MPS.API.Requests.Attendance;
+using MPS.API.Services;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Queries;
 using MPS.Domain.Constants;
+using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.API.Controllers;
 
@@ -15,10 +17,14 @@ namespace MPS.API.Controllers;
 public class ScheduleTemplateController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly IShiftTemplateRepository _shiftTemplateRepository;
 
-    public ScheduleTemplateController(IMediator mediator)
+    public ScheduleTemplateController(
+        IMediator mediator,
+        IShiftTemplateRepository shiftTemplateRepository)
     {
         _mediator = mediator;
+        _shiftTemplateRepository = shiftTemplateRepository;
     }
 
     [HttpGet]
@@ -109,21 +115,29 @@ public class ScheduleTemplateController : ControllerBase
 
     [HttpGet("import-monthly/template")]
     [HasPermission(Permissions.EmployeeShiftCreateAll)]
-    public IActionResult DownloadMonthlyImportTemplate()
+    public async Task<IActionResult> DownloadMonthlyImportTemplate(
+        [FromQuery] int? year,
+        [FromQuery] int? month,
+        CancellationToken cancellationToken)
     {
-        const string resourceName = "MPS.API.Resources.sample-monthly-shift-import.xlsx";
-        var assembly = typeof(ScheduleTemplateController).Assembly;
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream is null)
-            return NotFound(new { error = "Template resource not found." });
+        var targetMonth = ResolveTemplateMonth(year, month);
+        if (targetMonth is null)
+            return BadRequest(new { error = "Query year/month không hợp lệ." });
 
-        using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
+        var activeShifts = await _shiftTemplateRepository.GetPagedAsync(
+            isActive: true,
+            page: 1,
+            size: 1000,
+            cancellationToken);
+        var bytes = MonthlyScheduleImportTemplateGenerator.Generate(
+            targetMonth.Value.Year,
+            targetMonth.Value.Month,
+            activeShifts.Items);
 
         return File(
-            buffer.ToArray(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "phan-ca-thang-mau.xlsx");
+            bytes,
+            MonthlyScheduleImportTemplateGenerator.ExcelContentType,
+            $"phan-ca-thang-{targetMonth.Value.Month:00}-{targetMonth.Value.Year}-mau.xlsx");
     }
 
     [HttpPost("import-monthly/preview")]
@@ -158,5 +172,19 @@ public class ScheduleTemplateController : ControllerBase
                 request.AcknowledgeWeeklyOvertimeWarnings),
             cancellationToken);
         return Ok(result);
+    }
+
+    private static DateOnly? ResolveTemplateMonth(int? year, int? month)
+    {
+        var nowVietnam = DateTime.UtcNow.AddHours(7);
+        var resolvedYear = year ?? nowVietnam.Year;
+        var resolvedMonth = month ?? nowVietnam.Month;
+
+        if (resolvedYear is < 2000 or > 2100)
+            return null;
+        if (resolvedMonth is < 1 or > 12)
+            return null;
+
+        return new DateOnly(resolvedYear, resolvedMonth, 1);
     }
 }
