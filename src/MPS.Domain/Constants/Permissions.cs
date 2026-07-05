@@ -123,6 +123,55 @@ public static class Permissions
     public const string ComplianceAutoUpdateRunAll = "ComplianceAutoUpdate.Run.All";
     public const string ComplianceAutoUpdateReadAll = "ComplianceAutoUpdate.Read.All";
     public const string ComplianceAutoUpdateApproveAll = "ComplianceAutoUpdate.Approve.All";
+
+    // ===== Department module — IDs 95–99 =====
+
+    public const string DepartmentReadAll   = "Department.Read.All";
+    public const string DepartmentCreateAll = "Department.Create.All";
+    public const string DepartmentUpdateAll = "Department.Update.All";
+    public const string DepartmentDeleteAll = "Department.Delete.All";
+
+    public const string EmployeeInformationReadDepartment = "EmployeeInformation.Read.Department";
+
+    // ===== Task/Production module (v5) — IDs 100–125 =====
+
+    // ProcessTemplate (quy trình mẫu) — GĐ định nghĩa dùng chung; PM đọc để áp
+    public const string ProcessTemplateReadAll   = "ProcessTemplate.Read.All";
+    public const string ProcessTemplateCreateAll = "ProcessTemplate.Create.All";
+    public const string ProcessTemplateUpdateAll = "ProcessTemplate.Update.All";
+    public const string ProcessTemplateDeleteAll = "ProcessTemplate.Delete.All";
+
+    // Project/Order (đơn hàng)
+    public const string ProjectReadAll          = "Project.Read.All";
+    public const string ProjectReadDepartment   = "Project.Read.Department";
+    public const string ProjectCreateAll        = "Project.Create.All";
+    public const string ProjectUpdateAll        = "Project.Update.All";
+    public const string ProjectDeleteAll        = "Project.Delete.All";
+    public const string ProjectGenerateTasks    = "Project.GenerateTasks";
+    public const string ProjectCompleteDepartment = "Project.Complete.Department";  // ⭐ đóng đơn thủ công
+
+    // Task — xem theo scope
+    public const string TaskReadAll          = "Task.Read.All";
+    public const string TaskReadDepartment   = "Task.Read.Department";
+    public const string TaskReadAssigned     = "Task.Read.Assigned";
+    public const string TaskReadConfidential = "Task.Read.Confidential";
+
+    // Task — thao tác (PM xưởng; nhân viên KHÔNG có quyền ghi task nào)
+    public const string TaskCreateDepartment      = "Task.Create.Department";        // ⭐ tạo task 1 người / nhóm
+    public const string TaskCreateConfidential    = "Task.Create.Confidential";
+    public const string TaskUpdateDepartment      = "Task.Update.Department";
+    public const string TaskUpdateProgressDepartment = "Task.UpdateProgress.Department"; // ⭐ cập nhật CompletedQuantity
+    public const string TaskCompleteDepartment    = "Task.Complete.Department";      // ⭐ bấm hoàn thành (+ WasLate)
+    public const string TaskDeleteDepartment      = "Task.Delete.Department";
+
+    // Attachment (tài liệu/ảnh)
+    public const string ProductionAttachmentReadDepartment  = "ProductionAttachment.Read.Department";
+    public const string ProductionAttachmentWriteDepartment = "ProductionAttachment.Write.Department";
+    public const string ProductionAttachmentReadAll         = "ProductionAttachment.Read.All";
+
+    // Audit — xem lịch sử chỉnh sửa task/đơn (scoped theo xưởng)
+    public const string TaskAuditReadAll        = "Task.Audit.Read.All";
+    public const string TaskAuditReadDepartment = "Task.Audit.Read.Department";
 }
 
 public static class PermissionIds
@@ -235,18 +284,60 @@ public static class PermissionIds
     public const int LaborLawConstantsUpdateAll = 87;
     public const int LaborLawConstantsDeleteAll = 88;
 
-    // ===== Audit Log module (FT-39) =====
+    // ===== LegalDocument module — ID 89 (đã seed trong DB trước AuditLog) =====
 
-    public const int AuditLogReadAll = 89;
-
-    // ===== LegalDocument module — IDs 89–90 =====
-
-    public const int LegalDocumentReadAll = 90;
+    public const int LegalDocumentReadAll = 89;
     public const int LegalDocumentWriteAll = 91;
+
+    // ===== Audit Log module (FT-39) — ID 90 =====
+
+    public const int AuditLogReadAll = 90;
 
     // ===== Compliance Auto-Update module — IDs 92–93 =====
 
     public const int ComplianceAutoUpdateRunAll = 92;
     public const int ComplianceAutoUpdateReadAll = 93;
     public const int ComplianceAutoUpdateApproveAll = 94;
+
+    // ===== Department module — IDs 95–99 =====
+
+    public const int DepartmentReadAll   = 95;
+    public const int DepartmentCreateAll = 96;
+    public const int DepartmentUpdateAll = 97;
+    public const int DepartmentDeleteAll = 98;
+
+    public const int EmployeeInformationReadDepartment = 99;
+
+    // ===== Task/Production module (v5) — IDs 100–125 =====
+    public const int ProcessTemplateReadAll     = 100;
+    public const int ProcessTemplateCreateAll   = 101;
+    public const int ProcessTemplateUpdateAll   = 102;
+    public const int ProcessTemplateDeleteAll   = 103;
+
+    public const int ProjectReadAll             = 104;
+    public const int ProjectReadDepartment      = 105;
+    public const int ProjectCreateAll           = 106;
+    public const int ProjectUpdateAll           = 107;
+    public const int ProjectDeleteAll           = 108;
+    public const int ProjectGenerateTasks       = 109;
+    public const int ProjectCompleteDepartment  = 110;
+
+    public const int TaskReadAll                = 111;
+    public const int TaskReadDepartment         = 112;
+    public const int TaskReadAssigned           = 113;
+    public const int TaskReadConfidential       = 114;
+
+    public const int TaskCreateDepartment          = 115;
+    public const int TaskCreateConfidential        = 116;
+    public const int TaskUpdateDepartment          = 117;
+    public const int TaskUpdateProgressDepartment  = 118;
+    public const int TaskCompleteDepartment        = 119;
+    public const int TaskDeleteDepartment          = 120;
+
+    public const int ProductionAttachmentReadDepartment  = 121;
+    public const int ProductionAttachmentWriteDepartment = 122;
+    public const int ProductionAttachmentReadAll         = 123;
+
+    public const int TaskAuditReadAll           = 124;
+    public const int TaskAuditReadDepartment    = 125;
 }

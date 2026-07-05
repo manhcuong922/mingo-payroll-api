@@ -16,6 +16,7 @@ public sealed record UpdateEmployeeInformationRequest(
     string? PhoneNo,
     string? EducationLevel,
     int PositionId,
+    int? DepartmentId,
     int DependentsNo,
     string? TaxNo,
     string? SocialNo,

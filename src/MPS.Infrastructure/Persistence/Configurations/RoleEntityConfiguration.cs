@@ -37,6 +37,7 @@ public class RoleEntityConfiguration : IEntityTypeConfiguration<Role>
         NewSystemRole(SystemRoles.DepartmentManagerId, SystemRoles.DepartmentManager, "Trưởng phòng — quản lý KPI nhân viên trong phòng."),
         NewSystemRole(SystemRoles.ProjectManagerId, SystemRoles.ProjectManager, "Quản lý dự án — theo dõi KPI dự án."),
         NewSystemRole(SystemRoles.EmployeeId, SystemRoles.Employee, "Nhân viên — chỉ xem/sửa thông tin của chính mình."),
+        NewSystemRole(SystemRoles.DeputyDirectorId, SystemRoles.DeputyDirector, "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình."),
     };
 
     private static Role NewSystemRole(int id, string name, string description) => new()

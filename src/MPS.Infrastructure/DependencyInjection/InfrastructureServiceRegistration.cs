@@ -40,6 +40,18 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEmployeeInformationRepository, EmployeeInformationRepository>();
         services.AddScoped<IPositionRepository, PositionRepository>();
+        services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+        services.AddScoped<MPS.Application.Services.IDepartmentManagerAuthorizer,
+            MPS.Application.Services.DepartmentManagerAuthorizer>();
+
+        // Task/Production module
+        services.AddScoped<IProcessTemplateRepository, ProcessTemplateRepository>();
+        services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<IProjectTaskRepository, ProjectTaskRepository>();
+        services.AddScoped<IProductionAttachmentRepository, ProductionAttachmentRepository>();
+        services.AddScoped<MPS.Application.Services.ITaskGenerator, MPS.Application.Services.TaskGenerator>();
+        services.AddScoped<MPS.Application.Services.IProgressService, MPS.Application.Services.ProgressService>();
+        services.AddScoped<MPS.Application.Services.IProductionAttachmentService, MPS.Application.Services.ProductionAttachmentService>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();

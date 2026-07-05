@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<EmployeeInformation> EmployeeInformations => Set<EmployeeInformation>();
     public DbSet<Position> Positions => Set<Position>();
+    public DbSet<Department> Departments => Set<Department>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -54,6 +55,14 @@ public class AppDbContext : DbContext
     public DbSet<ComplianceUpdateProposal> ComplianceUpdateProposals => Set<ComplianceUpdateProposal>();
     public DbSet<ComplianceAuthoritativeSource> ComplianceAuthoritativeSources => Set<ComplianceAuthoritativeSource>();
     public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
+
+    // ===== Task/Production module =====
+    public DbSet<ProcessTemplate> ProcessTemplates => Set<ProcessTemplate>();
+    public DbSet<ProcessStep> ProcessSteps => Set<ProcessStep>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<ProductionAttachment> ProductionAttachments => Set<ProductionAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
