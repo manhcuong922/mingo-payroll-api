@@ -37,7 +37,10 @@ public class EmployeeInformation
     public string? GuardianPhoneNo { get; set; }
     public string? GuardianAddress { get; set; }
 
+    public int? DepartmentId { get; set; }
+
     // Navigation
     public Position Position { get; set; } = null!;
     public User? User { get; set; }
+    public Department? Department { get; set; }
 }

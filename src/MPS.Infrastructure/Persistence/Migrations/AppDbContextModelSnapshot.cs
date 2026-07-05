@@ -2811,6 +2811,47 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int?>("ManagerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("ManagerId");
+
+                    b.ToTable("Departments", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.EmployeeInformation", b =>
                 {
                     b.Property<int>("Id")
@@ -2838,6 +2879,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<string>("ContactAddress")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
 
                     b.Property<int>("DependentsNo")
                         .HasColumnType("int");
@@ -2906,6 +2950,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CitizenId")
                         .IsUnique();
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("PositionId");
 
@@ -3607,6 +3653,285 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "Tạo phiên bản pháp nhân NSDLĐ mới (append-only).",
                             Resource = "ContractParty",
                             Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 95,
+                            Action = "Read",
+                            Code = "Department.Read.All",
+                            Description = "Xem danh sách phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 96,
+                            Action = "Create",
+                            Code = "Department.Create.All",
+                            Description = "Tạo phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 97,
+                            Action = "Update",
+                            Code = "Department.Update.All",
+                            Description = "Cập nhật phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 98,
+                            Action = "Delete",
+                            Code = "Department.Delete.All",
+                            Description = "Xóa phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 99,
+                            Action = "Read",
+                            Code = "EmployeeInformation.Read.Department",
+                            Description = "Xem nhân viên trong phòng ban mình quản lý.",
+                            Resource = "EmployeeInformation",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 100,
+                            Action = "Read",
+                            Code = "ProcessTemplate.Read.All",
+                            Description = "Xem quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 101,
+                            Action = "Create",
+                            Code = "ProcessTemplate.Create.All",
+                            Description = "Tạo quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 102,
+                            Action = "Update",
+                            Code = "ProcessTemplate.Update.All",
+                            Description = "Cập nhật quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 103,
+                            Action = "Delete",
+                            Code = "ProcessTemplate.Delete.All",
+                            Description = "Xóa quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 104,
+                            Action = "Read",
+                            Code = "Project.Read.All",
+                            Description = "Xem mọi đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 105,
+                            Action = "Read",
+                            Code = "Project.Read.Department",
+                            Description = "Xem đơn hàng của xưởng mình.",
+                            Resource = "Project",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 106,
+                            Action = "Create",
+                            Code = "Project.Create.All",
+                            Description = "Tạo đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 107,
+                            Action = "Update",
+                            Code = "Project.Update.All",
+                            Description = "Cập nhật đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 108,
+                            Action = "Delete",
+                            Code = "Project.Delete.All",
+                            Description = "Xóa đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 109,
+                            Action = "GenerateTasks",
+                            Code = "Project.GenerateTasks",
+                            Description = "Sinh task từ quy trình mẫu.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 110,
+                            Action = "Complete",
+                            Code = "Project.Complete.Department",
+                            Description = "Đóng đơn của xưởng mình.",
+                            Resource = "Project",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 111,
+                            Action = "Read",
+                            Code = "Task.Read.All",
+                            Description = "Xem mọi task.",
+                            Resource = "Task",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 112,
+                            Action = "Read",
+                            Code = "Task.Read.Department",
+                            Description = "Xem task của xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 113,
+                            Action = "Read",
+                            Code = "Task.Read.Assigned",
+                            Description = "Xem task được giao cho mình.",
+                            Resource = "Task",
+                            Scope = "Assigned"
+                        },
+                        new
+                        {
+                            Id = 114,
+                            Action = "Read",
+                            Code = "Task.Read.Confidential",
+                            Description = "Xem task nhạy cảm.",
+                            Resource = "Task",
+                            Scope = "Confidential"
+                        },
+                        new
+                        {
+                            Id = 115,
+                            Action = "Create",
+                            Code = "Task.Create.Department",
+                            Description = "Tạo task (1 người / nhóm) trong xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 116,
+                            Action = "Create",
+                            Code = "Task.Create.Confidential",
+                            Description = "Tạo task nhạy cảm.",
+                            Resource = "Task",
+                            Scope = "Confidential"
+                        },
+                        new
+                        {
+                            Id = 117,
+                            Action = "Update",
+                            Code = "Task.Update.Department",
+                            Description = "Sửa task của xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 118,
+                            Action = "UpdateProgress",
+                            Code = "Task.UpdateProgress.Department",
+                            Description = "Cập nhật sản lượng task xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 119,
+                            Action = "Complete",
+                            Code = "Task.Complete.Department",
+                            Description = "Hoàn thành task xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 120,
+                            Action = "Delete",
+                            Code = "Task.Delete.Department",
+                            Description = "Xóa task lá của xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 121,
+                            Action = "Read",
+                            Code = "ProductionAttachment.Read.Department",
+                            Description = "Xem tài liệu/ảnh của xưởng mình.",
+                            Resource = "ProductionAttachment",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 122,
+                            Action = "Write",
+                            Code = "ProductionAttachment.Write.Department",
+                            Description = "Tải lên/xóa tài liệu của xưởng mình.",
+                            Resource = "ProductionAttachment",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 123,
+                            Action = "Read",
+                            Code = "ProductionAttachment.Read.All",
+                            Description = "Xem tài liệu/ảnh mọi xưởng.",
+                            Resource = "ProductionAttachment",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 124,
+                            Action = "Audit.Read",
+                            Code = "Task.Audit.Read.All",
+                            Description = "Xem lịch sử chỉnh sửa task/đơn mọi xưởng.",
+                            Resource = "Task",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 125,
+                            Action = "Audit.Read",
+                            Code = "Task.Audit.Read.Department",
+                            Description = "Xem lịch sử chỉnh sửa task/đơn xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
                         });
                 });
 
@@ -3637,6 +3962,308 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Positions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DefaultProgressType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("DefaultWeight")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int?>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProcessTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessTemplateId", "StepOrder");
+
+                    b.ToTable("ProcessSteps", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("DefaultDepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("DefaultDepartmentId");
+
+                    b.ToTable("ProcessTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProductionAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Bucket")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OwnerType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Sha256Hex")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UploadedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("OwnerType", "OwnerId");
+
+                    b.ToTable("ProductionAttachments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Project", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CompletionNote")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.ToTable("Projects", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProjectTask", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CompletedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsBatchParent")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsConfidential")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("ParentTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlannedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProgressType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("ProgressUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresHandover")
+                        .HasColumnType("bit");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<bool>("WasLate")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Weight")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("ParentTaskId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ProjectTasks", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.RefreshToken", b =>
@@ -3787,6 +4414,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "AI Service account — chấm công và đọc embedding từ camera nhận diện khuôn mặt.",
                             IsSystem = true,
                             Name = "AiService"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình.",
+                            IsSystem = true,
+                            Name = "DeputyDirector"
                         });
                 });
 
@@ -4127,6 +4762,161 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 1,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 96
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 97
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 98
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 99
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 100
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 101
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 102
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 103
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 104
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 105
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 106
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 107
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 108
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 109
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 110
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 111
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 112
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 113
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 114
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 115
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 116
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 117
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 118
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 119
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 120
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 121
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 122
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 123
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 124
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 125
+                        },
+                        new
+                        {
                             RoleId = 2,
                             PermissionId = 1
                         },
@@ -4204,6 +4994,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 2,
                             PermissionId = 16
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 96
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 97
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 98
                         },
                         new
                         {
@@ -4347,6 +5157,21 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 2,
+                            PermissionId = 104
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 111
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 116
+                        },
+                        new
+                        {
                             RoleId = 3,
                             PermissionId = 2
                         },
@@ -4378,6 +5203,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 3,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 3,
                             PermissionId = 33
                         },
                         new
@@ -4394,6 +5224,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 3,
                             PermissionId = 47
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 104
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 111
                         },
                         new
                         {
@@ -4448,6 +5288,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 4,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 96
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 97
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 98
+                        },
+                        new
+                        {
+                            RoleId = 4,
                             PermissionId = 17
                         },
                         new
@@ -4482,26 +5342,236 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
-                            RoleId = 5,
-                            PermissionId = 1
+                            RoleId = 4,
+                            PermissionId = 100
                         },
                         new
                         {
-                            RoleId = 5,
+                            RoleId = 4,
+                            PermissionId = 101
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 102
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 103
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 104
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 106
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 107
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 108
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 109
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 110
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 111
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 114
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 116
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 115
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 117
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 118
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 119
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 120
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 123
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 122
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 124
+                        },
+                        new
+                        {
+                            RoleId = 9,
                             PermissionId = 2
                         },
                         new
                         {
-                            RoleId = 5,
+                            RoleId = 9,
                             PermissionId = 5
                         },
                         new
                         {
-                            RoleId = 5,
+                            RoleId = 9,
                             PermissionId = 7
                         },
                         new
                         {
+                            RoleId = 9,
+                            PermissionId = 8
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 11
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 95
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 100
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 104
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 106
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 109
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 110
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 111
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 114
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 116
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 115
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 117
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 118
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 119
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 120
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 123
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 122
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 124
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 2
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 5
+                        },
+                        new
+                        {
                             RoleId = 5,
                             PermissionId = 8
                         },
@@ -4518,32 +5588,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 5,
-                            PermissionId = 17
+                            PermissionId = 95
                         },
                         new
                         {
                             RoleId = 5,
                             PermissionId = 18
-                        },
-                        new
-                        {
-                            RoleId = 5,
-                            PermissionId = 19
-                        },
-                        new
-                        {
-                            RoleId = 5,
-                            PermissionId = 20
-                        },
-                        new
-                        {
-                            RoleId = 5,
-                            PermissionId = 21
-                        },
-                        new
-                        {
-                            RoleId = 5,
-                            PermissionId = 22
                         },
                         new
                         {
@@ -4563,6 +5613,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 6,
+                            PermissionId = 99
+                        },
+                        new
+                        {
+                            RoleId = 6,
                             PermissionId = 8
                         },
                         new
@@ -4574,6 +5629,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 6,
                             PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 95
                         },
                         new
                         {
@@ -4607,6 +5667,81 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 6,
+                            PermissionId = 100
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 105
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 106
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 107
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 109
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 110
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 112
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 115
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 117
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 118
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 119
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 120
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 121
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 122
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 125
+                        },
+                        new
+                        {
                             RoleId = 7,
                             PermissionId = 2
                         },
@@ -4629,6 +5764,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 95
                         },
                         new
                         {
@@ -4659,6 +5799,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionId = 48
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 113
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 121
                         });
                 });
 
@@ -4719,6 +5869,24 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasFilter("[IsActive] = 1");
 
                     b.ToTable("SalaryGrades", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.TaskAssignee", b =>
+                {
+                    b.Property<int>("TaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("TaskId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TaskAssignees", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.TypePerformanceMetric", b =>
@@ -5582,8 +6750,23 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("WrittenNoticeFile");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "Manager")
+                        .WithMany()
+                        .HasForeignKey("ManagerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Manager");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.EmployeeInformation", b =>
                 {
+                    b.HasOne("MPS.Domain.Entities.Department", "Department")
+                        .WithMany("Employees")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("MPS.Domain.Entities.Position", "Position")
                         .WithMany("EmployeeInformations")
                         .HasForeignKey("PositionId")
@@ -5594,6 +6777,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .WithOne("EmployeeInformation")
                         .HasForeignKey("MPS.Domain.Entities.EmployeeInformation", "UserId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Department");
 
                     b.Navigation("Position");
 
@@ -5620,6 +6805,102 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("TypePerformanceMetric");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessStep", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.ProcessTemplate", "ProcessTemplate")
+                        .WithMany("Steps")
+                        .HasForeignKey("ProcessTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProcessTemplate");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Department", "DefaultDepartment")
+                        .WithMany()
+                        .HasForeignKey("DefaultDepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DefaultDepartment");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProductionAttachment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Project", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CompletedBy")
+                        .WithMany()
+                        .HasForeignKey("CompletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CompletedBy");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProjectTask", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CompletedBy")
+                        .WithMany()
+                        .HasForeignKey("CompletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.ProjectTask", "ParentTask")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentTaskId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Project", "Project")
+                        .WithMany("Tasks")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("CompletedBy");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("ParentTask");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.RefreshToken", b =>
@@ -5661,6 +6942,25 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Position");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.TaskAssignee", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.ProjectTask", "Task")
+                        .WithMany("Assignees")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Task");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.User", b =>
@@ -5764,6 +7064,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("ContractTerminations");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.Navigation("Employees");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Permission", b =>
                 {
                     b.Navigation("RolePermissions");
@@ -5772,6 +7077,23 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.Position", b =>
                 {
                     b.Navigation("EmployeeInformations");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessTemplate", b =>
+                {
+                    b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Project", b =>
+                {
+                    b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProjectTask", b =>
+                {
+                    b.Navigation("Assignees");
+
+                    b.Navigation("Children");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Role", b =>

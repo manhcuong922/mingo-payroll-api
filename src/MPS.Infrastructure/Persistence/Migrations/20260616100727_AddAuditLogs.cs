@@ -121,13 +121,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 columns: new[] { "UserId", "Timestamp" },
                 descending: new[] { false, true });
 
-            // Seed Permission AuditLog.Read.All (Id=89) — chỉ gán cho SystemAdmin (RoleId=1).
+            // Seed Permission AuditLog.Read.All (Id=90) — chỉ gán cho SystemAdmin (RoleId=1).
+            // NOTE: Id 89 đã bị LegalDocument.Read.All chiếm trước trong DB, AuditLog dùng 90.
             migrationBuilder.InsertData(
                 table: "Permissions",
                 columns: new[] { "Id", "Action", "Code", "Description", "Resource", "Scope" },
                 values: new object[,]
                 {
-                    { 89, "Read", "AuditLog.Read.All", "Xem toàn bộ audit log của hệ thống.", "AuditLog", "All" }
+                    { 90, "Read", "AuditLog.Read.All", "Xem toàn bộ audit log của hệ thống.", "AuditLog", "All" }
                 });
 
             migrationBuilder.InsertData(
@@ -135,7 +136,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 columns: new[] { "PermissionId", "RoleId" },
                 values: new object[,]
                 {
-                    { 89, 1 }
+                    { 90, 1 }
                 });
         }
 
@@ -145,12 +146,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 89, 1 });
+                keyValues: new object[] { 90, 1 });
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValue: 89);
+                keyValue: 90);
 
             migrationBuilder.DropTable(
                 name: "AuditLogs");

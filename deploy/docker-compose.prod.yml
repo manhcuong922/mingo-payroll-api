@@ -43,6 +43,22 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      llmproxy:
+        condition: service_started
+    networks:
+      - mingo
+
+  # Proxy LLM cho module Compliance — dùng OAuth Claude Pro (không tính tiền token).
+  # KHÔNG publish port ra ngoài; chỉ "api" gọi nội bộ qua http://llmproxy:8317.
+  # Token OAuth ở ./llmproxy/auths (mount /root/.cli-proxy-api) — KHÔNG commit.
+  llmproxy:
+    image: eceasy/cli-proxy-api:latest
+    container_name: mingo-llmproxy
+    restart: unless-stopped
+    volumes:
+      - ./llmproxy/config.yaml:/CLIProxyAPI/config.yaml:ro
+      - ./llmproxy/auths:/root/.cli-proxy-api
+      - ./llmproxy/logs:/CLIProxyAPI/logs
     networks:
       - mingo
 

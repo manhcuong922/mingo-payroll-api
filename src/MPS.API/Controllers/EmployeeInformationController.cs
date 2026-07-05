@@ -20,10 +20,11 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpGet]
-    [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
-    public async Task<IActionResult> GetAll(
-        [FromQuery] bool? hasActiveContract,
-        CancellationToken cancellationToken)
+    [HasAnyPermission(
+        Permissions.EmployeeInformationReadAll,
+        Permissions.EmployeeInformationReadDepartment,
+        Permissions.EmployeeInformationReadSelf)]
+    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new EmployeeInformationGetAllQuery(hasActiveContract), cancellationToken);
         return Ok(result);
@@ -50,7 +51,10 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
+    [HasAnyPermission(
+        Permissions.EmployeeInformationReadAll,
+        Permissions.EmployeeInformationReadDepartment,
+        Permissions.EmployeeInformationReadSelf)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new EmployeeInformationGetByIdQuery(id), cancellationToken);
@@ -78,6 +82,7 @@ public class EmployeeInformationController : ControllerBase
             request.PhoneNo,
             request.EducationLevel,
             request.PositionId,
+            request.DepartmentId,
             request.DependentsNo,
             request.TaxNo,
             request.SocialNo,
@@ -113,6 +118,7 @@ public class EmployeeInformationController : ControllerBase
             request.PhoneNo,
             request.EducationLevel,
             request.PositionId,
+            request.DepartmentId,
             request.DependentsNo,
             request.TaxNo,
             request.SocialNo,

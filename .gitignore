@@ -67,6 +67,11 @@ appsettings.Local.json
 appsettings.*.local.json
 secrets.json
 
+# CLIProxyAPI (deploy) — config thật + token OAuth + log, KHÔNG commit
+deploy/llmproxy/config.yaml
+deploy/llmproxy/auths/
+deploy/llmproxy/logs/
+
 # Misc
 *.DS_Store
 Thumbs.db
