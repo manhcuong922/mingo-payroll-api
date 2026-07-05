@@ -72,6 +72,13 @@ public sealed record ScheduleTemplateEmployeeDto(
     string EmployeeFullName,
     string? EmployeeCode);
 
+public sealed record ScheduleTemplateShiftDto(
+    int ShiftTemplateId,
+    string ShiftTemplateCode,
+    string ShiftTemplateName,
+    TimeOnly StartTime,
+    TimeOnly EndTime);
+
 public sealed record ScheduleTemplateDto(
     int Id,
     string Name,
@@ -87,6 +94,8 @@ public sealed record ScheduleTemplateDto(
     bool IsActive,
     string? Notes,
     IReadOnlyList<ScheduleTemplateEmployeeDto> Employees,
+    IReadOnlyList<int> ShiftTemplateIds,
+    IReadOnlyList<ScheduleTemplateShiftDto> Shifts,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 

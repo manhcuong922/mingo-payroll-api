@@ -56,7 +56,7 @@ public class ScheduleTemplateController : ControllerBase
     {
         var result = await _mediator.Send(new CreateScheduleTemplateCommand(
             request.Name,
-            request.ShiftTemplateId,
+            ResolveShiftTemplateIds(request.ShiftTemplateId, request.ShiftTemplateIds),
             request.EffectiveFrom,
             request.EffectiveTo,
             request.RepeatUnit,
@@ -79,7 +79,7 @@ public class ScheduleTemplateController : ControllerBase
         await _mediator.Send(new UpdateScheduleTemplateCommand(
             id,
             request.Name,
-            request.ShiftTemplateId,
+            ResolveShiftTemplateIds(request.ShiftTemplateId, request.ShiftTemplateIds),
             request.EffectiveFrom,
             request.EffectiveTo,
             request.RepeatUnit,
@@ -186,5 +186,19 @@ public class ScheduleTemplateController : ControllerBase
             return null;
 
         return new DateOnly(resolvedYear, resolvedMonth, 1);
+    }
+
+    private static IReadOnlyList<int> ResolveShiftTemplateIds(
+        int shiftTemplateId,
+        IReadOnlyList<int>? shiftTemplateIds)
+    {
+        var ids = shiftTemplateIds is { Count: > 0 }
+            ? shiftTemplateIds
+            : new[] { shiftTemplateId };
+
+        return ids
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
     }
 }

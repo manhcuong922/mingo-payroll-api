@@ -1,3 +1,4 @@
+using System.Globalization;
 using MPS.Application.Common.Interfaces;
 
 namespace MPS.Application.Common.Exceptions;
@@ -13,15 +14,46 @@ public sealed class RegularHoursCapExceededException : Exception
     public RegularHoursCapExceededException(
         IReadOnlyList<DailyCapWarning> dailyViolations,
         IReadOnlyList<WeeklyCapWarning> weeklyViolations)
-        : base(BuildMessage(dailyViolations.Count, weeklyViolations.Count))
+        : base(BuildMessage(dailyViolations, weeklyViolations))
     {
         DailyViolations = dailyViolations;
         WeeklyViolations = weeklyViolations;
     }
 
-    private static string BuildMessage(int dailyCount, int weeklyCount)
+    private static string BuildMessage(
+        IReadOnlyList<DailyCapWarning> dailyViolations,
+        IReadOnlyList<WeeklyCapWarning> weeklyViolations)
     {
-        var total = dailyCount + weeklyCount;
-        return $"Không thể phân ca: phát hiện {total} vi phạm giới hạn giờ làm việc bình thường (8h/ngày hoặc 48h/tuần).";
+        var parts = new List<string>();
+
+        if (dailyViolations.Count > 0)
+        {
+            var dailyDetails = dailyViolations
+                .OrderBy(v => v.WorkDate)
+                .ThenBy(v => v.EmployeeInformationId)
+                .Select(v =>
+                    $"NV #{v.EmployeeInformationId} ngày {v.WorkDate:yyyy-MM-dd}: {FormatHours(v.TotalHoursAfter)}/{FormatHours(v.CapHours)}h")
+                .ToList();
+
+            parts.Add($"Vượt 8h/ngày: {string.Join("; ", dailyDetails)}");
+        }
+
+        if (weeklyViolations.Count > 0)
+        {
+            var weeklyDetails = weeklyViolations
+                .OrderBy(v => v.IsoYear)
+                .ThenBy(v => v.IsoWeek)
+                .ThenBy(v => v.EmployeeInformationId)
+                .Select(v =>
+                    $"NV #{v.EmployeeInformationId} tuần {v.IsoYear}-W{v.IsoWeek:00} ({v.WeekStart:yyyy-MM-dd} đến {v.WeekEnd:yyyy-MM-dd}): {FormatHours(v.TotalHoursAfter)}/{FormatHours(v.CapHours)}h")
+                .ToList();
+
+            parts.Add($"Vượt 48h/tuần: {string.Join("; ", weeklyDetails)}");
+        }
+
+        return $"Không thể phân ca: {string.Join(". ", parts)}.";
     }
+
+    private static string FormatHours(decimal value) =>
+        value.ToString("0.##", CultureInfo.InvariantCulture);
 }

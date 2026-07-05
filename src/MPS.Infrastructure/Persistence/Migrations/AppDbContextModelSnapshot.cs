@@ -975,6 +975,30 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("ScheduleTemplateEmployees", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateShift", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ScheduleTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduleTemplateId", "ShiftTemplateId")
+                        .IsUnique();
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.ToTable("ScheduleTemplateShifts", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
                 {
                     b.Property<int>("Id")
@@ -5179,6 +5203,25 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("ScheduleTemplate");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateShift", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.ScheduleTemplate", "ScheduleTemplate")
+                        .WithMany("Shifts")
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany()
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ScheduleTemplate");
+
+                    b.Navigation("ShiftTemplate");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.Attendance.AttendanceRule", "AppliedAttendanceRule")
@@ -5659,6 +5702,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>
                 {
                     b.Navigation("Employees");
+
+                    b.Navigation("Shifts");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>

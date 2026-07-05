@@ -18,11 +18,13 @@ public interface IScheduleTemplateRepository
     Task<int> AddAsync(
         ScheduleTemplate entity,
         IReadOnlyCollection<int> employeeInformationIds,
+        IReadOnlyCollection<int> shiftTemplateIds,
         CancellationToken cancellationToken = default);
 
     Task UpdateAsync(
         ScheduleTemplate entity,
         IReadOnlyCollection<int> employeeInformationIds,
+        IReadOnlyCollection<int> shiftTemplateIds,
         CancellationToken cancellationToken = default);
 
     Task<bool> DeactivateAsync(int id, int updatedByUserId, DateTime nowUtc, CancellationToken cancellationToken = default);

@@ -56,5 +56,10 @@ public class ScheduleTemplateEntityConfiguration : IEntityTypeConfiguration<Sche
             .WithOne(e => e.ScheduleTemplate)
             .HasForeignKey(e => e.ScheduleTemplateId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(e => e.Shifts)
+            .WithOne(e => e.ScheduleTemplate)
+            .HasForeignKey(e => e.ScheduleTemplateId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

@@ -4,10 +4,12 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
+using MPS.Application.Features.Attendance.ShiftTemplate.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using ScheduleTemplateEntity = MPS.Domain.Entities.Attendance.ScheduleTemplate;
+using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
 using MPS.Domain.Entities.Attendance;
 
 namespace MPS.Application.Features.Attendance.ScheduleTemplate.Commands;
@@ -74,12 +76,7 @@ public class CreateScheduleTemplateCommandHandler
             throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
         }
 
-        var shift = await _shiftRepository.GetByIdAsync(request.ShiftTemplateId, cancellationToken)
-            ?? throw new NotFoundException($"Shift template {request.ShiftTemplateId} not found.");
-        if (!shift.IsActive)
-        {
-            throw new DomainValidationException($"Shift template {request.ShiftTemplateId} không active.");
-        }
+        var shifts = await LoadActiveShiftsAsync(request.ShiftTemplateIds, cancellationToken);
 
         await EnsureEmployeesHaveActiveContractsAsync(request.EmployeeInformationIds, cancellationToken);
 
@@ -93,11 +90,11 @@ public class CreateScheduleTemplateCommandHandler
             DaysOfWeekMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfWeek),
             DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth),
         };
+        EnsureSelectedShiftsDoNotOverlapOnPattern(templateShape, shifts);
         await EnsureNoPatternOverlapAsync(
             request.EmployeeInformationIds,
             templateShape,
-            shift.StartTime,
-            shift.EndTime,
+            shifts,
             excludeTemplateId: null,
             cancellationToken);
 
@@ -106,7 +103,7 @@ public class CreateScheduleTemplateCommandHandler
         await EnsureRegularHoursCapAsync(
             request.EmployeeInformationIds,
             templateShape,
-            shift.StandardHours,
+            shifts,
             request.AcknowledgeWeeklyOvertimeWarnings,
             cancellationToken);
 
@@ -114,7 +111,7 @@ public class CreateScheduleTemplateCommandHandler
         var entity = new ScheduleTemplateEntity
         {
             Name = name,
-            ShiftTemplateId = request.ShiftTemplateId,
+            ShiftTemplateId = shifts[0].Id,
             EffectiveFrom = request.EffectiveFrom,
             EffectiveTo = request.EffectiveTo,
             RepeatUnit = request.RepeatUnit,
@@ -127,10 +124,42 @@ public class CreateScheduleTemplateCommandHandler
             CreatedByUserId = userId
         };
 
-        var id = await _repository.AddAsync(entity, request.EmployeeInformationIds, cancellationToken);
+        var shiftIds = shifts.Select(s => s.Id).ToList();
+        var id = await _repository.AddAsync(entity, request.EmployeeInformationIds, shiftIds, cancellationToken);
         entity.Id = id;
 
         return await ApplyAsync(entity, request.EmployeeInformationIds, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ShiftTemplateEntity>> LoadActiveShiftsAsync(
+        IReadOnlyCollection<int> shiftTemplateIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = shiftTemplateIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            throw new DomainValidationException("Chọn ít nhất 1 ca làm việc.");
+        }
+
+        var shifts = new List<ShiftTemplateEntity>(ids.Count);
+        foreach (var id in ids)
+        {
+            var shift = await _shiftRepository.GetByIdAsync(id, cancellationToken)
+                ?? throw new NotFoundException($"Shift template {id} not found.");
+            if (!shift.IsActive)
+            {
+                throw new DomainValidationException($"Shift template {id} không active.");
+            }
+            shifts.Add(shift);
+        }
+
+        return shifts
+            .OrderBy(s => s.StartTime)
+            .ThenBy(s => s.Code)
+            .ToList();
     }
 
     private async Task EnsureEmployeesHaveActiveContractsAsync(
@@ -154,17 +183,18 @@ public class CreateScheduleTemplateCommandHandler
     private async Task EnsureRegularHoursCapAsync(
         IReadOnlyList<int> employeeIds,
         ScheduleTemplateEntity templateShape,
-        decimal standardHoursPerOp,
+        IReadOnlyList<ShiftTemplateEntity> shifts,
         bool acknowledgeWarnings,
         CancellationToken cancellationToken)
     {
         var dates = _expander.ExpandDates(templateShape);
         if (dates.Count == 0 || employeeIds.Count == 0) return;
 
-        var deltas = new List<WeeklyCapDelta>(dates.Count * employeeIds.Count);
+        var deltas = new List<WeeklyCapDelta>(dates.Count * employeeIds.Count * shifts.Count);
         foreach (var empId in employeeIds)
         foreach (var date in dates)
-            deltas.Add(new WeeklyCapDelta(empId, date, standardHoursPerOp));
+        foreach (var shift in shifts)
+            deltas.Add(new WeeklyCapDelta(empId, date, shift.StandardHours));
 
         var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
         var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
@@ -186,16 +216,20 @@ public class CreateScheduleTemplateCommandHandler
                 template.Id, dates.Count, 0, 0, 0, Array.Empty<ScheduleTemplateApplyConflictDto>());
         }
 
-        var operations = new List<BatchShiftOperation>(dates.Count * employeeIds.Count);
+        var shiftIds = TemplateShiftIds(template);
+        var operations = new List<BatchShiftOperation>(dates.Count * employeeIds.Count * shiftIds.Count);
         foreach (var empId in employeeIds)
         {
             foreach (var date in dates)
             {
-                operations.Add(new BatchShiftOperation(
-                    BatchShiftOperationKind.Add,
-                    empId,
-                    date,
-                    template.ShiftTemplateId));
+                foreach (var shiftId in shiftIds)
+                {
+                    operations.Add(new BatchShiftOperation(
+                        BatchShiftOperationKind.Add,
+                        empId,
+                        date,
+                        shiftId));
+                }
             }
         }
 
@@ -219,8 +253,7 @@ public class CreateScheduleTemplateCommandHandler
     private async Task EnsureNoPatternOverlapAsync(
         IReadOnlyList<int> employeeIds,
         ScheduleTemplateEntity templateShape,
-        TimeOnly newShiftStart,
-        TimeOnly newShiftEnd,
+        IReadOnlyList<ShiftTemplateEntity> shifts,
         int? excludeTemplateId,
         CancellationToken cancellationToken)
     {
@@ -233,16 +266,72 @@ public class CreateScheduleTemplateCommandHandler
             .SelectMany(empId => dates.Select(d => (EmployeeInformationId: empId, WorkDate: d)))
             .ToList();
 
-        var conflicts = await _assignmentRepository.GetOwnedConflictsAsync(
-            pairs, excludeTemplateId, newShiftStart, newShiftEnd, cancellationToken);
-        if (conflicts.Count == 0) return;
+        foreach (var shift in shifts)
+        {
+            var conflicts = await _assignmentRepository.GetOwnedConflictsAsync(
+                pairs, excludeTemplateId, shift.StartTime, shift.EndTime, cancellationToken);
+            if (conflicts.Count == 0) continue;
 
-        var summary = conflicts
-            .GroupBy(c => c.OtherScheduleTemplateName)
-            .Select(g => $"\"{g.Key}\" ({g.Count()} ngày)")
-            .Take(3);
-        throw new ConflictException(
-            $"Không thể tạo: ca mới trùng giờ với {string.Join(", ", summary)}.");
+            var summary = conflicts
+                .GroupBy(c => c.OtherScheduleTemplateName)
+                .Select(g => $"\"{g.Key}\" ({g.Count()} ngày)")
+                .Take(3);
+            throw new ConflictException(
+                $"Không thể tạo: ca \"{shift.Name}\" trùng giờ với {string.Join(", ", summary)}.");
+        }
+    }
+
+    private void EnsureSelectedShiftsDoNotOverlapOnPattern(
+        ScheduleTemplateEntity templateShape,
+        IReadOnlyList<ShiftTemplateEntity> shifts)
+    {
+        if (shifts.Count < 2) return;
+
+        var dates = _expander.ExpandDates(templateShape);
+        if (dates.Count == 0) return;
+
+        var dateSet = dates.ToHashSet();
+        foreach (var date in dates)
+        {
+            EnsureSelectedShiftsDoNotOverlap(shifts, date, date);
+
+            var nextDate = date.AddDays(1);
+            if (dateSet.Contains(nextDate))
+            {
+                EnsureSelectedShiftsDoNotOverlap(shifts, date, nextDate);
+            }
+        }
+    }
+
+    private static void EnsureSelectedShiftsDoNotOverlap(
+        IReadOnlyList<ShiftTemplateEntity> shifts,
+        DateOnly leftDate,
+        DateOnly rightDate)
+    {
+        for (var i = 0; i < shifts.Count; i++)
+        for (var j = i + 1; j < shifts.Count; j++)
+        {
+            var left = shifts[i];
+            var right = shifts[j];
+            if (!ShiftTimeCalculator.Overlaps(leftDate, left.StartTime, left.EndTime, rightDate, right.StartTime, right.EndTime))
+            {
+                continue;
+            }
+
+            throw new DomainValidationException(
+                $"Hai ca \"{left.Name}\" và \"{right.Name}\" trùng giờ, không thể cùng nằm trong một bảng phân ca.");
+        }
+    }
+
+    private static IReadOnlyList<int> TemplateShiftIds(ScheduleTemplateEntity template)
+    {
+        var ids = template.Shifts
+            .Select(s => s.ShiftTemplateId)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count > 0) return ids;
+        return new[] { template.ShiftTemplateId };
     }
 
     private static IReadOnlyList<ScheduleTemplateApplyConflictDto> ExtractConflicts(

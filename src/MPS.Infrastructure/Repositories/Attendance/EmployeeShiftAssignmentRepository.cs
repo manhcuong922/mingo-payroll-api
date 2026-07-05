@@ -258,6 +258,8 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
     public async Task<int> DeleteStaleByScheduleTemplateAsync(
         int scheduleTemplateId,
         IReadOnlyCollection<DateOnly> retainDates,
+        IReadOnlyCollection<int> retainShiftTemplateIds,
+        IReadOnlyCollection<int> retainEmployeeInformationIds,
         CancellationToken cancellationToken = default)
     {
         var owned = await _context.EmployeeShiftAssignments
@@ -266,8 +268,14 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
         if (owned.Count == 0) return 0;
 
         var retainSet = retainDates.ToHashSet();
+        var retainShiftSet = retainShiftTemplateIds.ToHashSet();
+        var retainEmployeeSet = retainEmployeeInformationIds.ToHashSet();
 
-        var stale = owned.Where(a => !retainSet.Contains(a.WorkDate)).ToList();
+        var stale = owned
+            .Where(a => !retainSet.Contains(a.WorkDate)
+                || !retainShiftSet.Contains(a.ShiftTemplateId)
+                || !retainEmployeeSet.Contains(a.EmployeeInformationId))
+            .ToList();
         if (stale.Count == 0) return 0;
 
         var staleEmployeeIds = stale.Select(a => a.EmployeeInformationId).Distinct().ToList();
@@ -284,6 +292,38 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
         var lockedSet = lockedRows.Select(r => (r.EmployeeInformationId, r.WorkDate, r.ShiftTemplateId)).ToHashSet();
 
         var toRemove = stale
+            .Where(a => !lockedSet.Contains((a.EmployeeInformationId, a.WorkDate, a.ShiftTemplateId)))
+            .ToList();
+        if (toRemove.Count == 0) return 0;
+
+        _context.EmployeeShiftAssignments.RemoveRange(toRemove);
+        await _context.SaveChangesAsync(cancellationToken);
+        return toRemove.Count;
+    }
+
+    public async Task<int> DeleteUnlockedByScheduleTemplateAsync(
+        int scheduleTemplateId,
+        CancellationToken cancellationToken = default)
+    {
+        var owned = await _context.EmployeeShiftAssignments
+            .Where(a => a.ScheduleTemplateId == scheduleTemplateId)
+            .ToListAsync(cancellationToken);
+        if (owned.Count == 0) return 0;
+
+        var employeeIds = owned.Select(a => a.EmployeeInformationId).Distinct().ToList();
+        var minDate = owned.Min(a => a.WorkDate);
+        var maxDate = owned.Max(a => a.WorkDate);
+
+        var lockedRows = await _context.AttendanceRecords
+            .AsNoTracking()
+            .Where(r => employeeIds.Contains(r.EmployeeInformationId)
+                && r.WorkDate >= minDate
+                && r.WorkDate <= maxDate)
+            .Select(r => new { r.EmployeeInformationId, r.WorkDate, r.ShiftTemplateId })
+            .ToListAsync(cancellationToken);
+        var lockedSet = lockedRows.Select(r => (r.EmployeeInformationId, r.WorkDate, r.ShiftTemplateId)).ToHashSet();
+
+        var toRemove = owned
             .Where(a => !lockedSet.Contains((a.EmployeeInformationId, a.WorkDate, a.ShiftTemplateId)))
             .ToList();
         if (toRemove.Count == 0) return 0;

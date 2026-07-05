@@ -6,7 +6,7 @@ namespace MPS.Application.Features.Attendance.ScheduleTemplate.Commands;
 public sealed record UpdateScheduleTemplateCommand(
     int Id,
     string Name,
-    int ShiftTemplateId,
+    IReadOnlyList<int> ShiftTemplateIds,
     DateOnly EffectiveFrom,
     DateOnly EffectiveTo,
     ScheduleRepeatUnit RepeatUnit,

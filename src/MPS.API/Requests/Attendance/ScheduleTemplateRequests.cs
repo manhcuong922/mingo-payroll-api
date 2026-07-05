@@ -5,6 +5,7 @@ namespace MPS.API.Requests.Attendance;
 public sealed record CreateScheduleTemplateRequest(
     string Name,
     int ShiftTemplateId,
+    IReadOnlyList<int>? ShiftTemplateIds,
     DateOnly EffectiveFrom,
     DateOnly EffectiveTo,
     ScheduleRepeatUnit RepeatUnit,
@@ -18,6 +19,7 @@ public sealed record CreateScheduleTemplateRequest(
 public sealed record UpdateScheduleTemplateRequest(
     string Name,
     int ShiftTemplateId,
+    IReadOnlyList<int>? ShiftTemplateIds,
     DateOnly EffectiveFrom,
     DateOnly EffectiveTo,
     ScheduleRepeatUnit RepeatUnit,

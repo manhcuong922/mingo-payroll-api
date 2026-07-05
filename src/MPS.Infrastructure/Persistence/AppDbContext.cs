@@ -76,6 +76,7 @@ public class AppDbContext : DbContext
     public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<ScheduleTemplateEmployee> ScheduleTemplateEmployees => Set<ScheduleTemplateEmployee>();
+    public DbSet<ScheduleTemplateShift> ScheduleTemplateShifts => Set<ScheduleTemplateShift>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -148,7 +148,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
                     CreatedByUserId = userId,
                 };
 
-                var newTemplateId = await _scheduleRepository.AddAsync(st, empIds, cancellationToken);
+                var newTemplateId = await _scheduleRepository.AddAsync(st, empIds, new[] { shiftId }, cancellationToken);
 
                 // Re-emit operations với SourceScheduleTemplateId trỏ về template vừa tạo.
                 var opsForBatch = ops
