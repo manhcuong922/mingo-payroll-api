@@ -1,7 +1,8 @@
 using MediatR;
+using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Attendance.Common;
-using MPS.Domain.Constants;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -16,12 +17,13 @@ namespace MPS.Application.Features.Attendance.Attendance.Commands;
 /// </summary>
 public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAttendanceCommand, BulkRecordAttendanceResult>
 {
-    private const int EditWindowDays = 3;
-
     private readonly IAttendanceRecordRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IContractRepository _contractRepository;
     private readonly ICurrentUserService _currentUser;
+    private readonly IWorkHourSplitter _splitter;
+    private readonly IComplianceLookupService _complianceLookup;
+    private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly IClock _clock;
 
     public BulkRecordAttendanceCommandHandler(
@@ -29,12 +31,18 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         IShiftTemplateRepository shiftRepository,
         IContractRepository contractRepository,
         ICurrentUserService currentUser,
+        IWorkHourSplitter splitter,
+        IComplianceLookupService complianceLookup,
+        IAttendanceEditLockChecker lockChecker,
         IClock clock)
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
         _contractRepository = contractRepository;
         _currentUser = currentUser;
+        _splitter = splitter;
+        _complianceLookup = complianceLookup;
+        _lockChecker = lockChecker;
         _clock = clock;
     }
 
@@ -43,9 +51,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
 
-        var hasOverride = _currentUser.HasPermission(Permissions.AttendanceAdjustmentOverrideAll);
-        var today = DateOnly.FromDateTime(_clock.UtcNow);
-        var daysSince = today.DayNumber - request.WorkDate.DayNumber;
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
 
         var created = 0;
         var updated = 0;
@@ -56,8 +62,16 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         {
             try
             {
+                await _lockChecker.EnsureCanModifyAsync(
+                    request.WorkDate, row.OverrideReason, cancellationToken);
+
+                var rowCheckInAt = row.CheckInAt;
+                var rowCheckOutAt = row.CheckOutAt;
+                if (!AttendanceTimeRules.HasValidObservedRange(rowCheckInAt, rowCheckOutAt))
+                    throw new DomainValidationException("CheckOutAt must be later than CheckInAt.");
+
                 var futureError = AttendanceTimeRules.ValidateNotInFuture(
-                    request.WorkDate, row.CheckInTime, row.CheckOutTime, _clock.UtcNow);
+                    request.WorkDate, rowCheckInAt, rowCheckOutAt, _clock.UtcNow);
                 if (futureError is not null)
                     throw new DomainValidationException(futureError);
 
@@ -71,6 +85,15 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                 var existing = await _repository.GetByKeyAsync(
                     row.EmployeeInformationId, request.WorkDate, row.ShiftTemplateId, cancellationToken);
 
+                var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+                    _splitter,
+                    row.Status,
+                    rowCheckInAt,
+                    rowCheckOutAt,
+                    laborLaw.NightStartTime,
+                    laborLaw.NightEndTime,
+                    shift);
+
                 if (existing is null)
                 {
                     if (!await _contractRepository.HasActiveContractAsync(row.EmployeeInformationId, cancellationToken))
@@ -82,8 +105,10 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                         EmployeeInformationId = row.EmployeeInformationId,
                         WorkDate = request.WorkDate,
                         ShiftTemplateId = row.ShiftTemplateId,
-                        CheckInTime = row.CheckInTime,
-                        CheckOutTime = row.CheckOutTime,
+                        CheckInAt = rowCheckInAt,
+                        CheckOutAt = rowCheckOutAt,
+                        DayHours = dayHours,
+                        NightHours = nightHours,
                         Status = row.Status,
                         Notes = row.Notes,
                         CreatedAt = _clock.UtcNow,
@@ -95,16 +120,10 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                 }
                 else
                 {
-                    if (!hasOverride && daysSince > EditWindowDays)
-                        throw new DomainValidationException(
-                            $"BR-2: Cannot edit attendance for {request.WorkDate:yyyy-MM-dd} — outside the {EditWindowDays}-day edit window.");
-
-                    if (hasOverride && daysSince > EditWindowDays && string.IsNullOrWhiteSpace(row.OverrideReason))
-                        throw new DomainValidationException(
-                            "BR-3: OverrideReason is required when HR edits an attendance record outside the 3-day edit window.");
-
-                    existing.CheckInTime = row.CheckInTime;
-                    existing.CheckOutTime = row.CheckOutTime;
+                    existing.CheckInAt = rowCheckInAt;
+                    existing.CheckOutAt = rowCheckOutAt;
+                    existing.DayHours = dayHours;
+                    existing.NightHours = nightHours;
                     existing.Status = row.Status;
                     existing.Notes = row.Notes;
                     if (!string.IsNullOrWhiteSpace(row.OverrideReason))

@@ -14,6 +14,10 @@ public class EmployeeInformationMappingProfile : Profile
             .ForCtorParam(nameof(EmployeeInformationDto.Gender),
                 opt => opt.MapFrom(src => src.Gender.ToString()))
             .ForCtorParam(nameof(EmployeeInformationDto.PositionName),
-                opt => opt.MapFrom(src => src.Position.Name));
+                opt => opt.MapFrom(src => src.Position.Name))
+            .ForCtorParam(nameof(EmployeeInformationDto.DepartmentId),
+                opt => opt.MapFrom(src => src.DepartmentId))
+            .ForCtorParam(nameof(EmployeeInformationDto.DepartmentName),
+                opt => opt.MapFrom(src => src.Department != null ? src.Department.Name : null));
     }
 }

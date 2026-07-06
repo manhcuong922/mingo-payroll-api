@@ -6,8 +6,8 @@ namespace MPS.Application.Features.Attendance.Attendance.Commands;
 public sealed record BulkRecordAttendanceItem(
     int EmployeeInformationId,
     int ShiftTemplateId,
-    TimeOnly? CheckInTime,
-    TimeOnly? CheckOutTime,
+    DateTime? CheckInAt,
+    DateTime? CheckOutAt,
     AttendanceStatus Status,
     string? Notes,
     string? OverrideReason);

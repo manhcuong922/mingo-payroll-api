@@ -1,0 +1,21 @@
+# ============================================================
+# CLIProxyAPI — cấu hình proxy LLM cho module Compliance (PROD)
+#
+# Trên VPS:  cp config.example.yaml config.yaml   (rồi sửa api-keys nếu cần)
+# Image:     eceasy/cli-proxy-api:latest   (service "llmproxy" trong compose)
+#
+# Proxy KHÔNG mở port ra ngoài — chỉ container "api" gọi nội bộ qua
+# http://llmproxy:8317. Token OAuth Claude Pro nằm ở thư mục auths/
+# (mount vào /root/.cli-proxy-api), KHÔNG commit lên repo.
+# ============================================================
+
+# Cổng lắng nghe (khớp ComplianceAutoUpdate__Llm__BaseUrl=http://llmproxy:8317).
+port: 8317
+
+# Thư mục chứa token OAuth sau khi login Claude Pro (mount từ ./llmproxy/auths).
+auth-dir: "/root/.cli-proxy-api"
+
+# Key mà client (API .NET) phải gửi qua header x-api-key.
+# PHẢI khớp biến OPERIX_LLM_API_KEY trong /opt/mingo/.env.
+api-keys:
+  - "doi-thanh-key-manh-o-day"

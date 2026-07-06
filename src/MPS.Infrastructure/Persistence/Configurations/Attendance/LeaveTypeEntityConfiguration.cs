@@ -22,6 +22,13 @@ public class LeaveTypeEntityConfiguration : IEntityTypeConfiguration<LeaveType>
         builder.Property(e => e.IsPaid).IsRequired();
         builder.Property(e => e.PaidRate).HasColumnType("decimal(4,2)");
         builder.Property(e => e.MaxDaysPerRequest).HasColumnType("decimal(5,1)");
+        builder.Property(e => e.AllowEmployeeSelection).IsRequired().HasDefaultValue(true);
+        builder.Property(e => e.MaxDaysPerYear).HasColumnType("decimal(5,1)");
+        builder.Property(e => e.MaxDaysPerMonth).HasColumnType("decimal(5,1)");
+        builder.Property(e => e.MaxDaysPerWeek).HasColumnType("decimal(5,1)");
+        builder.Property(e => e.ApplyScope).HasMaxLength(50).IsRequired().HasDefaultValue("AllEmployees");
+        builder.Property(e => e.TargetDepartmentIds).HasMaxLength(1000);
+        builder.Property(e => e.TargetEmployeeIds).HasMaxLength(1000);
         builder.Property(e => e.RequireDocument).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.DeductsBalance).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);

@@ -1,5 +1,3 @@
-using AttendanceEnums = MPS.Domain.Enums.Attendance;
-
 namespace MPS.Domain.Entities.Attendance;
 
 public class PublicHoliday
@@ -7,8 +5,7 @@ public class PublicHoliday
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public DateOnly HolidayDate { get; set; }
-    public AttendanceEnums.PublicHolidayCategory Category { get; set; }
-    public decimal? PayRateOverride { get; set; }
+    public DateOnly HolidayEndDate { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
 

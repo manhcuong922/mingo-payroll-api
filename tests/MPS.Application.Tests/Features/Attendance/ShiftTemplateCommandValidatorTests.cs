@@ -1,5 +1,8 @@
 using FluentAssertions;
 using FluentValidation.TestHelper;
+using Moq;
+using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Compliance;
 using MPS.Application.Features.Attendance.ShiftTemplate.Commands;
 using MPS.Application.Features.Attendance.ShiftTemplate.Validators;
 
@@ -13,7 +16,7 @@ public sealed class ShiftTemplateCommandValidatorTests
     [InlineData("A")]
     public async Task Code_Must_Match_Rev7_Format(string code)
     {
-        var validator = new CreateShiftTemplateCommandValidator();
+        var validator = NewValidator();
         var result = await validator.TestValidateAsync(ValidCreate() with { Code = code });
 
         result.ShouldHaveValidationErrorFor(c => c.Code);
@@ -22,7 +25,7 @@ public sealed class ShiftTemplateCommandValidatorTests
     [Fact]
     public async Task Break_Time_Must_Be_Set_Together()
     {
-        var validator = new CreateShiftTemplateCommandValidator();
+        var validator = NewValidator();
         var result = await validator.TestValidateAsync(ValidCreate() with
         {
             BreakStartTime = new TimeOnly(12, 0),
@@ -35,7 +38,7 @@ public sealed class ShiftTemplateCommandValidatorTests
     [Fact]
     public async Task StandardHours_Cannot_Exceed_Net_Shift_Hours()
     {
-        var validator = new CreateShiftTemplateCommandValidator();
+        var validator = NewValidator();
         var result = await validator.TestValidateAsync(ValidCreate() with
         {
             BreakStartTime = new TimeOnly(12, 0),
@@ -47,54 +50,68 @@ public sealed class ShiftTemplateCommandValidatorTests
     }
 
     [Fact]
-    public async Task Pay_Rates_Must_Not_Be_Below_Floor()
+    public async Task StandardHours_Cannot_Exceed_LegalCap_From_Snapshot()
     {
-        var validator = new UpdateShiftPayRatesCommandValidator();
-        var result = await validator.TestValidateAsync(new UpdateShiftPayRatesCommand(
-            ShiftTemplateId: 1,
-            WorkRateNormal: 1.0m,
-            WorkRateWeeklyRest: 1.9m,
-            WorkRateHoliday: 3.0m));
+        var validator = NewValidator();
+        var result = await validator.TestValidateAsync(ValidCreate() with
+        {
+            StartTime = new TimeOnly(7, 0),
+            EndTime = new TimeOnly(18, 0),
+            BreakStartTime = new TimeOnly(12, 0),
+            BreakEndTime = new TimeOnly(13, 0),
+            StandardHours = 9.0m
+        });
 
-        result.ShouldHaveValidationErrorFor(c => c.WorkRateWeeklyRest);
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Điều 105.1"));
     }
 
     [Fact]
-    public async Task Create_Pay_Rates_Must_Not_Be_Below_Floor()
+    public async Task AppliedAttendanceRuleId_Is_Required()
     {
-        var validator = new CreateShiftTemplateCommandValidator();
-        var result = await validator.TestValidateAsync(ValidCreate() with
-        {
-            WorkRateNormal = 0.9m
-        });
+        var validator = NewValidator();
+        var result = await validator.TestValidateAsync(ValidCreate() with { AppliedAttendanceRuleId = 0 });
 
-        result.ShouldHaveValidationErrorFor(c => c.WorkRateNormal);
-    }
-
-    [Fact]
-    public async Task Create_With_Preset_Does_Not_Validate_Client_Pay_Rates()
-    {
-        var validator = new CreateShiftTemplateCommandValidator();
-        var result = await validator.TestValidateAsync(ValidCreate() with
-        {
-            AppliedAttendanceRuleId = 1,
-            WorkRateNormal = 0.0m,
-            WorkRateWeeklyRest = 0.0m,
-            WorkRateHoliday = 0.0m
-        });
-
-        result.ShouldNotHaveValidationErrorFor(c => c.WorkRateNormal);
-        result.ShouldNotHaveValidationErrorFor(c => c.WorkRateWeeklyRest);
-        result.ShouldNotHaveValidationErrorFor(c => c.WorkRateHoliday);
+        result.ShouldHaveValidationErrorFor(c => c.AppliedAttendanceRuleId);
     }
 
     [Fact]
     public async Task Valid_Create_Command_Passes()
     {
-        var validator = new CreateShiftTemplateCommandValidator();
+        var validator = NewValidator();
         var result = await validator.TestValidateAsync(ValidCreate());
 
         result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    private static CreateShiftTemplateCommandValidator NewValidator()
+    {
+        var snapshot = new LaborLawConstantsSnapshot(
+            VersionId: 1,
+            ValidFrom: new DateOnly(2026, 1, 1),
+            ProbationSalaryMinPercent: 85m,
+            OvertimeNightExtraPercent: 20m,
+            NightWorkSurchargePercent: 30m,
+            OvertimeNormalUpliftPercent: 50m,
+            NightStartTime: new TimeOnly(22, 0),
+            NightEndTime: new TimeOnly(6, 0),
+            StandardWorkingHoursPerDay: 8m,
+            MaxRegularHoursPerWeek: 48m,
+            StandardWorkingDaysPerMonth: 26m,
+            AnnualLeaveMinDays: 12,
+            WorkRateNormalFloor: 1m,
+            WorkRateWeeklyRestFloor: 2m,
+            WorkRateHolidayFloor: 3m,
+            OvertimeMaxHoursPerDay: 4m,
+            OvertimeMaxHoursPerMonth: 40m,
+            OvertimeMaxHoursPerYear: 300,
+            LegalReference: "BLLĐ 2019");
+
+        var complianceMock = new Mock<IComplianceLookupService>();
+        complianceMock
+            .Setup(s => s.GetActiveLaborLawConstantsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshot);
+
+        return new CreateShiftTemplateCommandValidator(complianceMock.Object);
     }
 
     private static CreateShiftTemplateCommand ValidCreate() => new(
@@ -106,10 +123,6 @@ public sealed class ShiftTemplateCommandValidatorTests
         BreakEndTime: new TimeOnly(13, 0),
         StandardHours: 8.0m,
         StandardDays: 1.0m,
-        WorkRateNormal: 1.0m,
-        WorkRateWeeklyRest: 2.0m,
-        WorkRateHoliday: 3.0m,
-        IsNightShift: false,
-        AppliedAttendanceRuleId: null,
+        AppliedAttendanceRuleId: 1,
         Notes: null);
 }

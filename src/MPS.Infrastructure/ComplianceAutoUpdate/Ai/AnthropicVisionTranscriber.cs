@@ -63,9 +63,11 @@ public sealed class AnthropicVisionTranscriber : IVisionTranscriber
         }
 
         var base64 = Convert.ToBase64String(pdfBytes);
+        // Model OCR riêng (rẻ hơn) — rỗng thì fallback về model chung của LLM.
+        var model = string.IsNullOrWhiteSpace(_ocr.Model) ? _llm.Model : _ocr.Model;
         var payload = new
         {
-            model = _llm.Model,
+            model,
             max_tokens = _ocr.MaxOutputTokens,
             system = TranscriptionPrompt.System,
             messages = new[]

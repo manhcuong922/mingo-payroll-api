@@ -14,16 +14,17 @@ namespace MPS.Application.Tests.Features.EmployeeInformation;
 public sealed class EmployeeInformationGetAllQueryHandlerTests
 {
     private readonly Mock<IEmployeeInformationRepository> _repo = new();
+    private readonly Mock<IDepartmentRepository> _departmentRepo = new();
     private readonly Mock<IMapper> _mapper = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private EmployeeInformationGetAllQueryHandler CreateSut() =>
-        new(_repo.Object, _mapper.Object, _currentUser.Object);
+        new(_repo.Object, _departmentRepo.Object, _mapper.Object, _currentUser.Object);
 
     private static EmployeeInformationDto MakeDto(int id, int? userId) =>
         new(id, userId, null, "Test", new DateTime(1990, 1, 1), "Male", $"0{id:D11}",
-            null, null, "Hà Nội", null, null, null, null, 1, "Pos", 0, null, null, null,
-            null, null, null, null);
+            null, null, "Hà Nội", null, null, null, null, 1, "Pos", null, null, 0, null, null,
+            null, null, null, null, null);
 
     [Fact]
     public async Task Handle_ReturnsAll_WhenHasReadAll()
@@ -34,7 +35,7 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
             new() { Id = 2, UserId = 22 },
         };
         _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(true);
-        _repo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(entities);
+        _repo.Setup(r => r.GetAllAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(entities);
         _mapper.Setup(m => m.Map<IReadOnlyList<EmployeeInformationDto>>(entities))
             .Returns(new List<EmployeeInformationDto> { MakeDto(1, 11), MakeDto(2, 22) });
 
@@ -56,7 +57,44 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
 
         result.Should().HaveCount(1);
         result[0].UserId.Should().Be(99);
-        _repo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.GetAllAsync(It.IsAny<bool?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsDepartmentMembers_WhenHasReadDepartmentAndManagesDepartment()
+    {
+        var members = new List<Entity>
+        {
+            new() { Id = 1, UserId = 11, DepartmentId = 7 },
+            new() { Id = 2, UserId = 22, DepartmentId = 7 },
+        };
+        _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
+        _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadDepartment)).Returns(true);
+        _currentUser.SetupGet(c => c.UserId).Returns(50);
+        _departmentRepo.Setup(r => r.GetDepartmentIdOfUserAsync(50, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(7);
+        _repo.Setup(r => r.GetByDepartmentIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(members);
+        _mapper.Setup(m => m.Map<IReadOnlyList<EmployeeInformationDto>>(members))
+            .Returns(new List<EmployeeInformationDto> { MakeDto(1, 11), MakeDto(2, 22) });
+
+        var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        _repo.Verify(r => r.GetAllAsync(It.IsAny<bool?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsEmpty_WhenReadDepartmentButManagesNoDepartment()
+    {
+        _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadAll)).Returns(false);
+        _currentUser.Setup(c => c.HasPermission(Permissions.EmployeeInformationReadDepartment)).Returns(true);
+        _currentUser.SetupGet(c => c.UserId).Returns(50);
+        _departmentRepo.Setup(r => r.GetDepartmentIdOfUserAsync(50, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int?)null);
+
+        var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
+
+        result.Should().BeEmpty();
     }
 
     [Fact]

@@ -12,6 +12,14 @@ public interface IShiftTemplateRepository
 
     Task<ShiftTemplate?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Batch lookup cho import bảng phân ca: trả về map Code → Id, CHỈ shift active.
+    /// Match exact (collation DB quyết case-sensitive); caller normalize input nếu cần.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> GetActiveIdsByCodesAsync(
+        IEnumerable<string> codes,
+        CancellationToken cancellationToken = default);
+
     Task<bool> ExistsByCodeAsync(string code, int? excludeId, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsByNameAsync(string name, int? excludeId, CancellationToken cancellationToken = default);

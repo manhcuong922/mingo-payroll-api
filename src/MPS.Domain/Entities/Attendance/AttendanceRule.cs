@@ -8,6 +8,7 @@ public class AttendanceRule
     public decimal WorkRateNormal { get; set; } = 1.00m;
     public decimal WorkRateWeeklyRest { get; set; } = 2.00m;
     public decimal WorkRateHoliday { get; set; } = 3.00m;
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }

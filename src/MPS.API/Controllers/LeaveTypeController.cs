@@ -56,8 +56,16 @@ public class LeaveTypeController : ControllerBase
             request.IsPaid,
             request.PaidRate,
             request.MaxDaysPerRequest,
+            request.AllowEmployeeSelection,
+            request.MaxDaysPerYear,
+            request.MaxDaysPerMonth,
+            request.MaxDaysPerWeek,
+            request.ApplyScope,
+            request.TargetDepartmentIds,
+            request.TargetEmployeeIds,
             request.RequireDocument,
-            request.DeductsBalance), cancellationToken);
+            request.DeductsBalance,
+            request.IsActive), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -76,6 +84,13 @@ public class LeaveTypeController : ControllerBase
             request.IsPaid,
             request.PaidRate,
             request.MaxDaysPerRequest,
+            request.AllowEmployeeSelection,
+            request.MaxDaysPerYear,
+            request.MaxDaysPerMonth,
+            request.MaxDaysPerWeek,
+            request.ApplyScope,
+            request.TargetDepartmentIds,
+            request.TargetEmployeeIds,
             request.RequireDocument,
             request.DeductsBalance,
             request.IsActive), cancellationToken);

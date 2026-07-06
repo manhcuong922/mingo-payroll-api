@@ -196,11 +196,21 @@ public sealed class ComplianceProposalApplier
         return await _sender.Send(new CreateLaborLawConstantsCommand(
             validFrom, applyImmediately,
             D(values, "ProbationSalaryMinPercent", active.ProbationSalaryMinPercent),
-            D(values, "NightShiftSurchargePercent", active.NightShiftSurchargePercent),
+            D(values, "OvertimeNightExtraPercent",
+                D(values, "NightShiftSurchargePercent", active.OvertimeNightExtraPercent)),
+            D(values, "NightWorkSurchargePercent", active.NightWorkSurchargePercent),
+            D(values, "OvertimeNormalUpliftPercent", active.OvertimeNormalUpliftPercent),
+            active.NightStartTime,
+            active.NightEndTime,
             D(values, "StandardWorkingHoursPerDay", active.StandardWorkingHoursPerDay),
+            D(values, "MaxRegularHoursPerWeek", active.MaxRegularHoursPerWeek),
             D(values, "StandardWorkingDaysPerMonth", active.StandardWorkingDaysPerMonth),
             I(values, "AnnualLeaveMinDays", active.AnnualLeaveMinDays),
+            RateFloor(values, "WorkRateNormalFloor", "WorkRateNormalFloorPercent", active.WorkRateNormalFloor),
+            RateFloor(values, "WorkRateWeeklyRestFloor", "WorkRateWeeklyRestFloorPercent", active.WorkRateWeeklyRestFloor),
+            RateFloor(values, "WorkRateHolidayFloor", "WorkRateHolidayFloorPercent", active.WorkRateHolidayFloor),
             D(values, "OvertimeMaxHoursPerDay", active.OvertimeMaxHoursPerDay),
+            D(values, "OvertimeMaxHoursPerMonth", active.OvertimeMaxHoursPerMonth),
             I(values, "OvertimeMaxHoursPerYear", active.OvertimeMaxHoursPerYear),
             legalRef, note, legalDocIds), ct);
     }
@@ -273,4 +283,19 @@ public sealed class ComplianceProposalApplier
 
     private static int I(IReadOnlyDictionary<string, decimal> values, string field, int fallback)
         => values.TryGetValue(field, out var v) ? (int)v : fallback;
+
+    private static decimal RateFloor(
+        IReadOnlyDictionary<string, decimal> values,
+        string rateField,
+        string legacyPercentField,
+        decimal fallback)
+    {
+        if (values.TryGetValue(rateField, out var rate))
+            return rate;
+
+        if (values.TryGetValue(legacyPercentField, out var percent))
+            return percent > 10m ? percent / 100m : percent;
+
+        return fallback;
+    }
 }

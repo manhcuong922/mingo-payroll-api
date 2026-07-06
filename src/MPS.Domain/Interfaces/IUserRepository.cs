@@ -6,6 +6,16 @@ public interface IUserRepository
 {
     Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<User?> GetByEmployeeCodeAsync(string employeeCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Batch lookup cho import flow (vd parse excel bảng phân ca). Trả về map
+    /// EmployeeCode → EmployeeInformationId cho các user có liên kết EmployeeInformation.
+    /// User chưa link EmployeeInformation bị bỏ qua, caller tự coi như "không tìm thấy".
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> GetEmployeeInformationIdsByCodesAsync(
+        IEnumerable<string> employeeCodes,
+        CancellationToken cancellationToken = default);
+
     Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken = default);
 

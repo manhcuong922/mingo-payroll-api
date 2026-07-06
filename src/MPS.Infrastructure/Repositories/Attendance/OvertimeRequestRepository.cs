@@ -27,6 +27,7 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         var query = _context.OvertimeRequests
             .AsNoTracking()
             .Include(r => r.EmployeeInformation)
+            .Include(r => r.OvertimeSlotTemplate)
             .AsQueryable();
 
         if (employeeInformationId.HasValue)
@@ -53,6 +54,7 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         _context.OvertimeRequests
             .AsNoTracking()
             .Include(r => r.EmployeeInformation)
+            .Include(r => r.OvertimeSlotTemplate)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
     public async Task<decimal> GetTotalOtHoursInMonthAsync(int employeeInformationId, int year, int month, CancellationToken cancellationToken = default)
@@ -94,6 +96,8 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         if (tracked is null) return false;
 
         tracked.Status = entity.Status;
+        tracked.OtDayHours = entity.OtDayHours;
+        tracked.OtNightHours = entity.OtNightHours;
         tracked.ReviewNote = entity.ReviewNote;
         tracked.ReviewedByUserId = entity.ReviewedByUserId;
         tracked.ReviewedAt = entity.ReviewedAt;

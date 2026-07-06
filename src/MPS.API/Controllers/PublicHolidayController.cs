@@ -40,9 +40,10 @@ public class PublicHolidayController : ControllerBase
         [FromBody] CreatePublicHolidayRequest request,
         CancellationToken cancellationToken)
     {
+        var endDate = request.HolidayEndDate ?? request.HolidayDate;
         var id = await _mediator.Send(new CreatePublicHolidayCommand(
-            request.Name, request.HolidayDate, request.Category,
-            request.PayRateOverride, request.Description), cancellationToken);
+            request.Name, request.HolidayDate, endDate,
+            request.Description), cancellationToken);
         return Created($"/api/public-holidays/{id}", new { id });
     }
 
@@ -53,9 +54,10 @@ public class PublicHolidayController : ControllerBase
         [FromBody] UpdatePublicHolidayRequest request,
         CancellationToken cancellationToken)
     {
+        var endDate = request.HolidayEndDate ?? request.HolidayDate;
         var updated = await _mediator.Send(new UpdatePublicHolidayCommand(
-            id, request.Name, request.HolidayDate, request.Category,
-            request.PayRateOverride, request.Description), cancellationToken);
+            id, request.Name, request.HolidayDate, endDate,
+            request.Description), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }

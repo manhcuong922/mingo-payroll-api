@@ -23,6 +23,8 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
     {
         var query = _context.ScheduleTemplates.AsNoTracking()
             .Include(t => t.ShiftTemplate)
+            .Include(t => t.Shifts)
+                .ThenInclude(s => s.ShiftTemplate)
             .Include(t => t.Employees)
                 .ThenInclude(e => e.EmployeeInformation)
                 .ThenInclude(e => e.User)
@@ -53,6 +55,8 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
         _context.ScheduleTemplates
             .AsNoTracking()
             .Include(t => t.ShiftTemplate)
+            .Include(t => t.Shifts)
+                .ThenInclude(s => s.ShiftTemplate)
             .Include(t => t.Employees)
                 .ThenInclude(e => e.EmployeeInformation)
                 .ThenInclude(e => e.User)
@@ -66,11 +70,16 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
     public async Task<int> AddAsync(
         ScheduleTemplate entity,
         IReadOnlyCollection<int> employeeInformationIds,
+        IReadOnlyCollection<int> shiftTemplateIds,
         CancellationToken cancellationToken = default)
     {
         entity.Employees = employeeInformationIds
             .Distinct()
             .Select(empId => new ScheduleTemplateEmployee { EmployeeInformationId = empId })
+            .ToList();
+        entity.Shifts = shiftTemplateIds
+            .Distinct()
+            .Select(shiftId => new ScheduleTemplateShift { ShiftTemplateId = shiftId })
             .ToList();
 
         await _context.ScheduleTemplates.AddAsync(entity, cancellationToken);
@@ -81,10 +90,12 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
     public async Task UpdateAsync(
         ScheduleTemplate entity,
         IReadOnlyCollection<int> employeeInformationIds,
+        IReadOnlyCollection<int> shiftTemplateIds,
         CancellationToken cancellationToken = default)
     {
         var tracked = await _context.ScheduleTemplates
             .Include(t => t.Employees)
+            .Include(t => t.Shifts)
             .FirstOrDefaultAsync(t => t.Id == entity.Id, cancellationToken)
             ?? throw new InvalidOperationException($"ScheduleTemplate {entity.Id} not found.");
 
@@ -116,6 +127,24 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
             if (!desired.Contains(empId))
             {
                 _context.ScheduleTemplateEmployees.Remove(link);
+            }
+        }
+
+        var desiredShiftIds = shiftTemplateIds.Distinct().ToHashSet();
+        var existingShifts = tracked.Shifts.ToDictionary(e => e.ShiftTemplateId);
+
+        foreach (var shiftId in desiredShiftIds)
+        {
+            if (!existingShifts.ContainsKey(shiftId))
+            {
+                tracked.Shifts.Add(new ScheduleTemplateShift { ShiftTemplateId = shiftId });
+            }
+        }
+        foreach (var (shiftId, link) in existingShifts)
+        {
+            if (!desiredShiftIds.Contains(shiftId))
+            {
+                _context.ScheduleTemplateShifts.Remove(link);
             }
         }
 

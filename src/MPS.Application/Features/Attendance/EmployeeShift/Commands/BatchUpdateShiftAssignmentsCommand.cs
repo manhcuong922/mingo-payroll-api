@@ -51,7 +51,13 @@ public sealed record BatchUpdateShiftAssignmentsResult(
     int Conflicts,
     IReadOnlyList<BatchShiftItemResult> Items);
 
+/// <summary>
+/// Batch phân ca với cap §9 Điều 105 BLLĐ.
+/// Vượt 8h/ngày hoặc 48h/tuần thì handler chặn cứng; flag acknowledge chỉ giữ
+/// lại để tương thích request cũ và không còn bypass cap phân ca.
+/// </summary>
 public sealed record BatchUpdateShiftAssignmentsCommand(
     IReadOnlyList<BatchShiftOperation> Operations,
     BatchShiftConflictPolicy ConflictPolicy,
-    int? SourceScheduleTemplateId = null) : IRequest<BatchUpdateShiftAssignmentsResult>;
+    int? SourceScheduleTemplateId = null,
+    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<BatchUpdateShiftAssignmentsResult>;

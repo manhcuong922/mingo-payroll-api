@@ -15,7 +15,8 @@ internal static class ScheduleTemplateValidation
         int repeatEvery,
         IReadOnlyList<int>? daysOfWeek,
         IReadOnlyList<int>? daysOfMonth,
-        IReadOnlyList<int> employeeIds)
+        IReadOnlyList<int> employeeIds,
+        bool requireEmployees = true)
     {
         if (effectiveTo < effectiveFrom)
         {
@@ -30,7 +31,7 @@ internal static class ScheduleTemplateValidation
         {
             throw new DomainValidationException($"BR-34: RepeatEvery phải trong [1, {MaxRepeatEvery}].");
         }
-        if (employeeIds is null || employeeIds.Count == 0)
+        if (requireEmployees && (employeeIds is null || employeeIds.Count == 0))
         {
             throw new DomainValidationException("Phải chọn ít nhất 1 nhân viên áp dụng.");
         }

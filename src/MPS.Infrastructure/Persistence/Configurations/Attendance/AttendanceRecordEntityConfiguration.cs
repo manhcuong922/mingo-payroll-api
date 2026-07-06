@@ -15,8 +15,10 @@ public class AttendanceRecordEntityConfiguration : IEntityTypeConfiguration<Atte
         builder.Property(e => e.EmployeeInformationId).IsRequired();
         builder.Property(e => e.WorkDate).IsRequired();
         builder.Property(e => e.ShiftTemplateId).IsRequired();
-        builder.Property(e => e.CheckInTime);
-        builder.Property(e => e.CheckOutTime);
+        builder.Property(e => e.CheckInAt).HasColumnType("datetime2");
+        builder.Property(e => e.CheckOutAt).HasColumnType("datetime2");
+        builder.Property(e => e.DayHours).HasColumnType("decimal(5,2)").IsRequired().HasDefaultValue(0m);
+        builder.Property(e => e.NightHours).HasColumnType("decimal(5,2)").IsRequired().HasDefaultValue(0m);
         builder.Property(e => e.Status).HasConversion<byte>().IsRequired();
         builder.Property(e => e.Notes).HasMaxLength(500);
         builder.Property(e => e.OverrideReason).HasMaxLength(1000);

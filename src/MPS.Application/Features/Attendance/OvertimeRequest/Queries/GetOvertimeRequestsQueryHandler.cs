@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Models;
 using MPS.Application.DTOs.Attendance;
+using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Queries;
@@ -22,10 +23,7 @@ public class GetOvertimeRequestsQueryHandler : IRequestHandler<GetOvertimeReques
         var (items, total) = await _repository.GetPagedAsync(
             request.EmployeeInformationId, request.Status, request.FromDate, request.ToDate, page, size, cancellationToken);
 
-        var dtos = items.Select(r => new OvertimeRequestDto(
-            r.Id, r.EmployeeInformationId, r.EmployeeInformation?.FullName ?? string.Empty,
-            r.WorkDate, r.OtStartTime, r.OtEndTime, r.OtHours, r.Status,
-            r.Reason, r.ReviewNote, r.ReviewedByUserId, r.ReviewedAt, r.CreatedAt)).ToList();
+        var dtos = items.Select(OvertimeRequestMapper.ToDto).ToList();
 
         return new PagedResult<OvertimeRequestDto>(dtos, total, page, size);
     }

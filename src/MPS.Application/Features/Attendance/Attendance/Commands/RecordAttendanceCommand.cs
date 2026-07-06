@@ -7,7 +7,8 @@ public sealed record RecordAttendanceCommand(
     int EmployeeInformationId,
     DateOnly WorkDate,
     int ShiftTemplateId,
-    TimeOnly? CheckInTime,
-    TimeOnly? CheckOutTime,
+    DateTime? CheckInAt,
+    DateTime? CheckOutAt,
     AttendanceStatus Status,
-    string? Notes) : IRequest<int>;
+    string? Notes,
+    string? OverrideReason = null) : IRequest<int>;

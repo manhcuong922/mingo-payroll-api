@@ -16,26 +16,6 @@ public class GetShiftTemplateByIdQueryHandler : IRequestHandler<GetShiftTemplate
     public async Task<ShiftTemplateDto?> Handle(GetShiftTemplateByIdQuery request, CancellationToken cancellationToken)
     {
         var entity = await _repository.GetByIdAsync(request.Id, cancellationToken);
-        if (entity is null) return null;
-
-        return new ShiftTemplateDto(
-            entity.Id,
-            entity.Code,
-            entity.Name,
-            entity.StartTime,
-            entity.EndTime,
-            entity.BreakStartTime,
-            entity.BreakEndTime,
-            entity.StandardHours,
-            entity.StandardDays,
-            entity.WorkRateNormal,
-            entity.WorkRateWeeklyRest,
-            entity.WorkRateHoliday,
-            entity.IsNightShift,
-            entity.AppliedAttendanceRuleId,
-            entity.IsActive,
-            entity.Notes,
-            entity.CreatedAt,
-            entity.UpdatedAt);
+        return entity is null ? null : ShiftTemplateMapper.ToDto(entity);
     }
 }

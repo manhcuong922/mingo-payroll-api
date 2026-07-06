@@ -95,14 +95,13 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             var userId = _currentUser.UserId
                 ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
-            var checkInTime = TimeOnly.FromTimeSpan(localTime.TimeOfDay);
             var record = new AttendanceRecord
             {
                 EmployeeInformationId = employeeInformationId,
                 WorkDate              = workDate,
                 ShiftTemplateId       = shift.ShiftTemplateId,
-                CheckInTime           = checkInTime,
-                CheckOutTime          = null,
+                CheckInAt             = localTime,
+                CheckOutAt            = null,
                 Status                = AttendanceStatus.Present,
                 Notes                 = $"Face recognition - confidence: {request.Confidence:P0} - camera: {request.CameraId} - source: {request.Source}",
                 CreatedAt             = _clock.UtcNow,
@@ -116,13 +115,13 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 AttendanceLogId: newId.ToString(),
                 Message: "Chấm công vào ca thành công.",
                 ShiftName: shift.ShiftTemplate.Name,
-                CheckinTime: checkInTime,
+                CheckinTime: TimeOnly.FromDateTime(localTime),
                 CheckoutTime: null,
                 CooldownSecondsRemaining: null);
         }
 
         // ── Case 2: Đã có CheckIn lẫn CheckOut → Ca đã hoàn thành ────────────────
-        if (existing.CheckOutTime is not null)
+        if (existing.CheckOutAt is not null)
         {
             return new FaceCheckinResultDto(
                 Success: true,
@@ -130,13 +129,18 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 AttendanceLogId: existing.Id.ToString(),
                 Message: "Ca làm việc đã hoàn thành, không thể ghi thêm.",
                 ShiftName: existing.ShiftTemplate.Name,
-                CheckinTime: existing.CheckInTime,
-                CheckoutTime: existing.CheckOutTime,
+                CheckinTime: existing.CheckInAt is null ? null : TimeOnly.FromDateTime(existing.CheckInAt.Value),
+                CheckoutTime: TimeOnly.FromDateTime(existing.CheckOutAt.Value),
                 CooldownSecondsRemaining: null);
         }
 
         // ── Case 3: Có CheckIn, chưa có CheckOut → kiểm tra cooldown rồi checkout ─
-        var checkinDateTime = workDate.ToDateTime(existing.CheckInTime!.Value, DateTimeKind.Unspecified);
+        if (existing.CheckInAt is null)
+        {
+            return Fail("Bản ghi chấm công chưa có thời điểm vào ca.");
+        }
+
+        var checkinDateTime = existing.CheckInAt.Value;
         var secondsSince    = (localTime - checkinDateTime).TotalSeconds;
 
         if (secondsSince < CheckoutMinGapMinutes * 60)
@@ -148,7 +152,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 AttendanceLogId: existing.Id.ToString(),
                 Message: $"Chưa đủ {CheckoutMinGapMinutes} phút để tan ca. Còn {remaining} giây.",
                 ShiftName: existing.ShiftTemplate.Name,
-                CheckinTime: existing.CheckInTime,
+                CheckinTime: TimeOnly.FromDateTime(existing.CheckInAt.Value),
                 CheckoutTime: null,
                 CooldownSecondsRemaining: remaining);
         }
@@ -157,8 +161,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         var updateUserId = _currentUser.UserId
             ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
-        var checkOutTime = TimeOnly.FromTimeSpan(localTime.TimeOfDay);
-        existing.CheckOutTime    = checkOutTime;
+        existing.CheckOutAt      = localTime;
         existing.UpdatedAt       = _clock.UtcNow;
         existing.UpdatedByUserId = updateUserId;
 
@@ -170,8 +173,8 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             AttendanceLogId: existing.Id.ToString(),
             Message: "Tan ca thành công.",
             ShiftName: existing.ShiftTemplate.Name,
-            CheckinTime: existing.CheckInTime,
-            CheckoutTime: checkOutTime,
+            CheckinTime: TimeOnly.FromDateTime(existing.CheckInAt.Value),
+            CheckoutTime: TimeOnly.FromDateTime(localTime),
             CooldownSecondsRemaining: null);
     }
 

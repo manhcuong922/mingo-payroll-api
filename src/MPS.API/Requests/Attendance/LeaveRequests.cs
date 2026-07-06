@@ -21,8 +21,16 @@ public sealed record CreateLeaveTypeRequest(
     bool IsPaid,
     decimal? PaidRate,
     decimal? MaxDaysPerRequest,
+    bool AllowEmployeeSelection,
+    decimal? MaxDaysPerYear,
+    decimal? MaxDaysPerMonth,
+    decimal? MaxDaysPerWeek,
+    string ApplyScope,
+    string? TargetDepartmentIds,
+    string? TargetEmployeeIds,
     bool RequireDocument,
-    bool DeductsBalance);
+    bool DeductsBalance,
+    bool IsActive = true);
 
 public sealed record UpdateLeaveTypeRequest(
     string Code,
@@ -31,6 +39,13 @@ public sealed record UpdateLeaveTypeRequest(
     bool IsPaid,
     decimal? PaidRate,
     decimal? MaxDaysPerRequest,
+    bool AllowEmployeeSelection,
+    decimal? MaxDaysPerYear,
+    decimal? MaxDaysPerMonth,
+    decimal? MaxDaysPerWeek,
+    string ApplyScope,
+    string? TargetDepartmentIds,
+    string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
     bool IsActive);

@@ -17,17 +17,23 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
 {
     private readonly IOvertimeRequestRepository _repository;
     private readonly OvertimeCapChecker _capChecker;
+    private readonly IWorkHourSplitter _splitter;
+    private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
     public ApproveOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
         OvertimeCapChecker capChecker,
+        IWorkHourSplitter splitter,
+        IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
         _capChecker = capChecker;
+        _splitter = splitter;
+        _complianceLookup = complianceLookup;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -57,8 +63,21 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
             existing.OtHours,
             cancellationToken);
 
+        // Phase B: recompute night split tại thời điểm approve — Compliance version
+        // có thể đã đổi (vd HR sửa night window) giữa create và approve.
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(existing.WorkDate, cancellationToken);
+        var breakdown = _splitter.Split(new WorkHourSplitInput(
+            CheckIn: existing.OtStartTime,
+            CheckOut: existing.OtEndTime,
+            BreakStart: null,
+            BreakEnd: null,
+            NightStart: laborLaw.NightStartTime,
+            NightEnd: laborLaw.NightEndTime));
+
         var now = _clock.UtcNow;
         existing.Status = OtRequestStatus.Approved;
+        existing.OtDayHours = breakdown.DayHours;
+        existing.OtNightHours = breakdown.NightHours;
         existing.ReviewedByUserId = userId;
         existing.ReviewedAt = now;
         existing.ReviewNote = request.ReviewNote;

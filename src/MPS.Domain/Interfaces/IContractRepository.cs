@@ -122,6 +122,10 @@ public interface IContractRepository
     /// </summary>
     Task<bool> HasActiveContractAsync(int employeeInformationId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithActiveContractsAsync(
+        IReadOnlyCollection<int> employeeInformationIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Load HĐ kèm toàn bộ dữ liệu cần thiết để sinh DOCX: EI, EmployerParty, Position,
     /// SalaryGrade, ContractAllowances + AllowanceType, Template + TemplateFile.

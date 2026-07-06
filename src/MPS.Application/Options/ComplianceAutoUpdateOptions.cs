@@ -53,6 +53,12 @@ public sealed class OcrOptions
     /// <summary>Số trang tối đa gửi cho vision (kiểm soát token). Vượt → bỏ qua, báo lỗi.</summary>
     public int MaxPdfPages { get; set; } = 30;
 
+    /// <summary>
+    /// Model riêng cho OCR (rẻ hơn extract để tiết kiệm token/quota — OCR chỉ chép text, không cần reasoning).
+    /// Rỗng = dùng <see cref="LlmOptions.Model"/>.
+    /// </summary>
+    public string Model { get; set; } = "claude-haiku-4-5-20251001";
+
     /// <summary>max_tokens cho bản phiên âm.</summary>
     public int MaxOutputTokens { get; set; } = 16000;
 }

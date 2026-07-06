@@ -14,8 +14,21 @@ public class AttendanceRecord
     public int ShiftTemplateId { get; set; }
     public ShiftTemplate ShiftTemplate { get; set; } = null!;
 
-    public TimeOnly? CheckInTime { get; set; }
-    public TimeOnly? CheckOutTime { get; set; }
+    public DateTime? CheckInAt { get; set; }
+    public DateTime? CheckOutAt { get; set; }
+
+    /// <summary>
+    /// Giờ làm rơi NGOÀI khung đêm (22h–6h). Compute từ CheckIn/CheckOut và
+    /// shift break qua <c>IWorkHourSplitter</c> mỗi khi record được tạo/update.
+    /// 0 khi <see cref="Status"/> = OnLeave hoặc Absent.
+    /// </summary>
+    public decimal DayHours { get; set; }
+
+    /// <summary>
+    /// Giờ làm rơi TRONG khung đêm (22h–6h). Theo Điều 98.2 BLLĐ — payroll áp
+    /// hệ số +30% trên giờ này.
+    /// </summary>
+    public decimal NightHours { get; set; }
 
     public AttendanceEnums.AttendanceStatus Status { get; set; }
 

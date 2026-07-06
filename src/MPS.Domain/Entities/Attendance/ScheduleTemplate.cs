@@ -33,4 +33,5 @@ public class ScheduleTemplate
     public User? UpdatedByUser { get; set; }
 
     public ICollection<ScheduleTemplateEmployee> Employees { get; set; } = new List<ScheduleTemplateEmployee>();
+    public ICollection<ScheduleTemplateShift> Shifts { get; set; } = new List<ScheduleTemplateShift>();
 }

@@ -1,9 +1,9 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.ShiftTemplate.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
-using System.Text.RegularExpressions;
 using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
 
 namespace MPS.Application.Features.Attendance.ShiftTemplate.Commands;
@@ -14,17 +14,20 @@ public class CreateShiftTemplateCommandHandler : IRequestHandler<CreateShiftTemp
     private readonly IAttendanceRuleRepository _attendanceRuleRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IComplianceLookupService _complianceLookup;
 
     public CreateShiftTemplateCommandHandler(
         IShiftTemplateRepository repository,
         IAttendanceRuleRepository attendanceRuleRepository,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IComplianceLookupService complianceLookup)
     {
         _repository = repository;
         _attendanceRuleRepository = attendanceRuleRepository;
         _currentUser = currentUser;
         _clock = clock;
+        _complianceLookup = complianceLookup;
     }
 
     public async Task<int> Handle(CreateShiftTemplateCommand request, CancellationToken cancellationToken)
@@ -32,32 +35,35 @@ public class CreateShiftTemplateCommandHandler : IRequestHandler<CreateShiftTemp
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Authenticated user context is required to create a shift template.");
 
-        var code = request.Code.Trim();
         var name = request.Name.Trim();
 
-        EnsureValidCode(code);
-
-        if (await _repository.ExistsByCodeAsync(code, excludeId: null, cancellationToken))
-            throw new ConflictException($"Shift template with code '{code}' already exists.");
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainValidationException("Tên ca làm việc không được rỗng.");
 
         if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
             throw new ConflictException($"Shift template with name '{name}' already exists.");
 
-        if (request.EndTime <= request.StartTime)
-            throw new DomainValidationException("EndTime must be greater than StartTime.");
+        var code = await ShiftTemplateCodeGenerator.GenerateUniqueAsync(
+            name,
+            _repository,
+            excludeId: null,
+            cancellationToken);
+
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
 
         ValidateBreakAndStandardHours(
             request.StartTime,
             request.EndTime,
             request.BreakStartTime,
             request.BreakEndTime,
-            request.StandardHours);
+            request.StandardHours,
+            laborLaw.StandardWorkingHoursPerDay);
 
-        var (workRateNormal, workRateWeeklyRest, workRateHoliday) = await ResolveWorkRatesAsync(
-            request,
-            cancellationToken);
+        var rule = await _attendanceRuleRepository.GetByIdAsync(request.AppliedAttendanceRuleId, cancellationToken)
+            ?? throw new NotFoundException($"AttendanceRule {request.AppliedAttendanceRuleId} not found.");
 
-        PayRuleFloor.EnsureValid(workRateNormal, workRateWeeklyRest, workRateHoliday);
+        if (!rule.IsActive)
+            throw new DomainValidationException($"AttendanceRule {rule.Id} is inactive and cannot be applied.");
 
         var now = _clock.UtcNow;
         var entity = new ShiftTemplateEntity
@@ -70,11 +76,7 @@ public class CreateShiftTemplateCommandHandler : IRequestHandler<CreateShiftTemp
             BreakEndTime = request.BreakEndTime,
             StandardHours = request.StandardHours,
             StandardDays = request.StandardDays,
-            WorkRateNormal = workRateNormal,
-            WorkRateWeeklyRest = workRateWeeklyRest,
-            WorkRateHoliday = workRateHoliday,
-            IsNightShift = request.IsNightShift,
-            AppliedAttendanceRuleId = request.AppliedAttendanceRuleId,
+            AppliedAttendanceRuleId = rule.Id,
             IsActive = true,
             Notes = request.Notes,
             CreatedAt = now,
@@ -84,57 +86,35 @@ public class CreateShiftTemplateCommandHandler : IRequestHandler<CreateShiftTemp
         return await _repository.AddAsync(entity, cancellationToken);
     }
 
-    private async Task<(decimal Normal, decimal WeeklyRest, decimal Holiday)> ResolveWorkRatesAsync(
-        CreateShiftTemplateCommand request,
-        CancellationToken cancellationToken)
-    {
-        if (request.AppliedAttendanceRuleId is not { } presetId)
-            return (request.WorkRateNormal, request.WorkRateWeeklyRest, request.WorkRateHoliday);
-
-        var preset = await _attendanceRuleRepository.GetByIdAsync(presetId, cancellationToken)
-            ?? throw new NotFoundException($"AttendanceRule {presetId} not found.");
-
-        if (!preset.IsActive)
-            throw new DomainValidationException($"AttendanceRule {presetId} is inactive and cannot be applied.");
-
-        return (preset.WorkRateNormal, preset.WorkRateWeeklyRest, preset.WorkRateHoliday);
-    }
-
-    internal static void EnsureValidCode(string code)
-    {
-        if (!Regex.IsMatch(code, "^[A-Z0-9-]{2,20}$"))
-            throw new DomainValidationException(
-                "BR-29: Code must be 2-20 chars and contain only uppercase letters, digits, and hyphens.");
-    }
-
     internal static void ValidateBreakAndStandardHours(
         TimeOnly startTime,
         TimeOnly endTime,
         TimeOnly? breakStartTime,
         TimeOnly? breakEndTime,
-        decimal standardHours)
+        decimal standardHours,
+        decimal maxHoursPerDay)
     {
         if (breakStartTime.HasValue != breakEndTime.HasValue)
             throw new DomainValidationException("BR-28: BreakStartTime and BreakEndTime must be set together.");
 
-        var netHours = (decimal)(endTime - startTime).TotalHours;
+        if (!ShiftTimeCalculator.HasValidRange(startTime, endTime))
+            throw new DomainValidationException("StartTime and EndTime must be different.");
 
-        if (breakStartTime.HasValue && breakEndTime.HasValue)
-        {
-            var breakStart = breakStartTime.Value;
-            var breakEnd = breakEndTime.Value;
+        if (!ShiftTimeCalculator.HasValidBreakRange(startTime, endTime, breakStartTime, breakEndTime))
+            throw new DomainValidationException("BR-28: Break time must be within the shift time range.");
 
-            if (breakEnd <= breakStart)
-                throw new DomainValidationException("BR-28: BreakEndTime must be greater than BreakStartTime.");
-
-            if (breakStart < startTime || breakStart > endTime || breakEnd < startTime || breakEnd > endTime)
-                throw new DomainValidationException("BR-28: Break time must be within the shift time range.");
-
-            netHours -= (decimal)(breakEnd - breakStart).TotalHours;
-        }
+        var netHours = ShiftTimeCalculator.NetHours(
+            startTime,
+            endTime,
+            breakStartTime,
+            breakEndTime);
 
         if (standardHours > netHours)
             throw new DomainValidationException(
                 $"StandardHours ({standardHours}) cannot exceed net shift hours ({netHours}).");
+
+        if (standardHours > maxHoursPerDay)
+            throw new DomainValidationException(
+                $"StandardHours ({standardHours}) vượt cap {maxHoursPerDay}h/ngày — Điều 105.1 BLLĐ.");
     }
 }

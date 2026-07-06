@@ -24,7 +24,7 @@ public class DayTypeResolver : IDayTypeResolver
         CancellationToken cancellationToken = default)
     {
         var isHoliday = await _context.PublicHolidays.AsNoTracking()
-            .AnyAsync(h => h.HolidayDate == workDate, cancellationToken);
+            .AnyAsync(h => h.HolidayDate <= workDate && h.HolidayEndDate >= workDate && h.IsActive, cancellationToken);
         if (isHoliday)
             return AttendanceEnums.DayType.PublicHoliday;
 
@@ -54,10 +54,17 @@ public class DayTypeResolver : IDayTypeResolver
             return new Dictionary<DateOnly, AttendanceEnums.DayType>();
 
         var holidays = await _context.PublicHolidays.AsNoTracking()
-            .Where(h => h.HolidayDate >= fromDate && h.HolidayDate <= toDate)
-            .Select(h => h.HolidayDate)
+            .Where(h => h.IsActive && h.HolidayDate <= toDate && h.HolidayEndDate >= fromDate)
+            .Select(h => new { h.HolidayDate, h.HolidayEndDate })
             .ToListAsync(cancellationToken);
-        var holidaySet = holidays.ToHashSet();
+        var holidaySet = new HashSet<DateOnly>();
+        foreach (var holiday in holidays)
+        {
+            var start = holiday.HolidayDate < fromDate ? fromDate : holiday.HolidayDate;
+            var end = holiday.HolidayEndDate > toDate ? toDate : holiday.HolidayEndDate;
+            for (var d = start; d <= end; d = d.AddDays(1))
+                holidaySet.Add(d);
+        }
 
         var paidLeaves = await _context.LeaveRequests.AsNoTracking()
             .Where(l => l.EmployeeInformationId == employeeInformationId

@@ -41,6 +41,18 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEmployeeInformationRepository, EmployeeInformationRepository>();
         services.AddScoped<IPositionRepository, PositionRepository>();
+        services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+        services.AddScoped<MPS.Application.Services.IDepartmentManagerAuthorizer,
+            MPS.Application.Services.DepartmentManagerAuthorizer>();
+
+        // Task/Production module
+        services.AddScoped<IProcessTemplateRepository, ProcessTemplateRepository>();
+        services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<IProjectTaskRepository, ProjectTaskRepository>();
+        services.AddScoped<IProductionAttachmentRepository, ProductionAttachmentRepository>();
+        services.AddScoped<MPS.Application.Services.ITaskGenerator, MPS.Application.Services.TaskGenerator>();
+        services.AddScoped<MPS.Application.Services.IProgressService, MPS.Application.Services.ProgressService>();
+        services.AddScoped<MPS.Application.Services.IProductionAttachmentService, MPS.Application.Services.ProductionAttachmentService>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
@@ -66,6 +78,9 @@ public static class InfrastructureServiceRegistration
         // Contract module — termination (Phase 8)
         services.AddScoped<IContractTerminationRepository, ContractTerminationRepository>();
 
+        // Company Policy module
+        services.AddScoped<ICompanyPolicyRepository, CompanyPolicyRepository>();
+
         // Compliance module repositories
         services.AddScoped<ISocialInsuranceRateRepository, SocialInsuranceRateRepository>();
         services.AddScoped<IPitRegulationRepository, PitRegulationRepository>();
@@ -86,7 +101,9 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IEmployeeShiftAssignmentRepository, EmployeeShiftAssignmentRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IPublicHolidayRepository, PublicHolidayRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRecordRepository, AttendanceRecordRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceSettingRepository, AttendanceSettingRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeRequestRepository, OvertimeRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeSlotTemplateRepository, OvertimeSlotTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveTypeRepository, LeaveTypeRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveRequestRepository, LeaveRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();
@@ -95,7 +112,12 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IFaceRegistrationRepository, FaceRegistrationRepository>();
         services.AddScoped<IDayTypeResolver, DayTypeResolver>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IWorkHourSplitter, WorkHourSplitter>();
         services.AddScoped<MPS.Application.Common.Interfaces.IScheduleTemplateExpander, ScheduleTemplateExpander>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IRegularHoursCapChecker, RegularHoursCapChecker>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IAttendanceEditLockChecker, MPS.Application.Features.Attendance.AttendanceSetting.Common.AttendanceEditLockChecker>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleExcelParser, MonthlyScheduleExcelParser>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleImportCache, MonthlyScheduleImportCache>();
 
         // Compliance options
         services.AddOptions<ComplianceOptions>()

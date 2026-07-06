@@ -11,6 +11,13 @@ public sealed record UpdateLeaveTypeCommand(
     bool IsPaid,
     decimal? PaidRate,
     decimal? MaxDaysPerRequest,
+    bool AllowEmployeeSelection,
+    decimal? MaxDaysPerYear,
+    decimal? MaxDaysPerMonth,
+    decimal? MaxDaysPerWeek,
+    string ApplyScope,
+    string? TargetDepartmentIds,
+    string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
     bool IsActive) : IRequest<bool>, ILeaveTypeCommand;

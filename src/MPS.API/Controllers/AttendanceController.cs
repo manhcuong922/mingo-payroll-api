@@ -5,6 +5,8 @@ using MPS.API.Authorization;
 using MPS.API.Requests.Attendance;
 using MPS.Application.Features.Attendance.Attendance.Commands;
 using MPS.Application.Features.Attendance.Attendance.Queries;
+using MPS.Application.Features.Attendance.AttendanceSetting.Commands;
+using MPS.Application.Features.Attendance.AttendanceSetting.Queries;
 using MPS.Domain.Constants;
 
 namespace MPS.API.Controllers;
@@ -57,6 +59,39 @@ public class AttendanceController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("settings")]
+    [HasPermission(Permissions.AttendanceSettingReadAll)]
+    public async Task<IActionResult> GetSettings(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAttendanceSettingQuery(), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("settings")]
+    [HasPermission(Permissions.AttendanceSettingUpdateAll)]
+    public async Task<IActionResult> UpdateSettings(
+        [FromBody] UpdateAttendanceSettingRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateAttendanceSettingCommand(
+            request.IsEditLockEnabled,
+            request.DailyEditCutoffTime,
+            request.LockAfterDays,
+            request.AllowAdminOverride,
+            request.RequireOverrideReason), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("settings/lock-status")]
+    [HasPermission(Permissions.AttendanceReadAll)]
+    public async Task<IActionResult> GetLockStatus(
+        [FromQuery] DateOnly workDate,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAttendanceLockStatusQuery(workDate), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("me")]
     [HasPermission(Permissions.AttendanceReadSelf)]
     public async Task<IActionResult> GetMine(
@@ -76,7 +111,8 @@ public class AttendanceController : ControllerBase
     {
         var id = await _mediator.Send(new RecordAttendanceCommand(
             request.EmployeeInformationId, request.WorkDate, request.ShiftTemplateId,
-            request.CheckInTime, request.CheckOutTime, request.Status, request.Notes), cancellationToken);
+            request.CheckInAt, request.CheckOutAt,
+            request.Status, request.Notes, request.OverrideReason), cancellationToken);
         return Created($"/api/attendance/{request.EmployeeInformationId}/{request.WorkDate:yyyy-MM-dd}/{request.ShiftTemplateId}", new { id });
     }
 
@@ -87,9 +123,11 @@ public class AttendanceController : ControllerBase
         CancellationToken cancellationToken)
     {
         var rows = request.Records.Select(r => new BulkRecordAttendanceItem(
-            r.EmployeeInformationId, r.ShiftTemplateId, r.CheckInTime,
-            r.CheckOutTime, r.Status, r.Notes, r.OverrideReason)).ToList();
-        var result = await _mediator.Send(new BulkRecordAttendanceCommand(request.WorkDate, rows), cancellationToken);
+            r.EmployeeInformationId, r.ShiftTemplateId, r.CheckInAt, r.CheckOutAt,
+            r.Status, r.Notes, r.OverrideReason)).ToList();
+        var result = await _mediator.Send(
+            new BulkRecordAttendanceCommand(request.WorkDate, rows),
+            cancellationToken);
         return Ok(result);
     }
 
@@ -104,7 +142,8 @@ public class AttendanceController : ControllerBase
     {
         var updated = await _mediator.Send(new UpdateAttendanceCommand(
             employeeInformationId, workDate, shiftTemplateId,
-            request.CheckInTime, request.CheckOutTime, request.Status,
+            request.CheckInAt, request.CheckOutAt,
+            request.Status,
             request.Notes, request.OverrideReason), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();

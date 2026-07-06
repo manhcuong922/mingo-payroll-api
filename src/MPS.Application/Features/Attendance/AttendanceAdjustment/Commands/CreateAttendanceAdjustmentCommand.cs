@@ -6,6 +6,6 @@ namespace MPS.Application.Features.Attendance.AttendanceAdjustment.Commands;
 public sealed record CreateAttendanceAdjustmentCommand(
     int AttendanceRecordId,
     AttendanceStatus NewStatus,
-    TimeOnly? NewCheckInTime,
-    TimeOnly? NewCheckOutTime,
+    DateTime? NewCheckInAt,
+    DateTime? NewCheckOutAt,
     string Reason) : IRequest<int>;

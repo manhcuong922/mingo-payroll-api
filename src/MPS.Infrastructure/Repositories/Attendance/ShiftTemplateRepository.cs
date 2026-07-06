@@ -20,7 +20,10 @@ public class ShiftTemplateRepository : IShiftTemplateRepository
         int size,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.ShiftTemplates.AsNoTracking().AsQueryable();
+        var query = _context.ShiftTemplates
+            .AsNoTracking()
+            .Include(t => t.AppliedAttendanceRule)
+            .AsQueryable();
         if (isActive.HasValue)
             query = query.Where(t => t.IsActive == isActive.Value);
 
@@ -35,7 +38,34 @@ public class ShiftTemplateRepository : IShiftTemplateRepository
     }
 
     public Task<ShiftTemplate?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
-        _context.ShiftTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+        _context.ShiftTemplates
+            .AsNoTracking()
+            .Include(t => t.AppliedAttendanceRule)
+            .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<string, int>> GetActiveIdsByCodesAsync(
+        IEnumerable<string> codes,
+        CancellationToken cancellationToken = default)
+    {
+        var distinct = codes
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinct.Length == 0)
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        var rows = await _context.ShiftTemplates
+            .AsNoTracking()
+            .Where(t => t.IsActive && distinct.Contains(t.Code))
+            .Select(t => new { t.Code, t.Id })
+            .ToListAsync(cancellationToken);
+
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+            map[row.Code] = row.Id;
+        return map;
+    }
 
     public Task<bool> ExistsByCodeAsync(string code, int? excludeId, CancellationToken cancellationToken = default)
     {
@@ -75,10 +105,6 @@ public class ShiftTemplateRepository : IShiftTemplateRepository
         tracked.BreakEndTime = entity.BreakEndTime;
         tracked.StandardHours = entity.StandardHours;
         tracked.StandardDays = entity.StandardDays;
-        tracked.WorkRateNormal = entity.WorkRateNormal;
-        tracked.WorkRateWeeklyRest = entity.WorkRateWeeklyRest;
-        tracked.WorkRateHoliday = entity.WorkRateHoliday;
-        tracked.IsNightShift = entity.IsNightShift;
         tracked.AppliedAttendanceRuleId = entity.AppliedAttendanceRuleId;
         tracked.IsActive = entity.IsActive;
         tracked.Notes = entity.Notes;

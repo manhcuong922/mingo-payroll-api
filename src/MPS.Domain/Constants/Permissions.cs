@@ -144,11 +144,18 @@ public static class Permissions
     public const string AttendanceReadSelf = "Attendance.Read.Self";
     public const string AttendanceCreateAll = "Attendance.Create.All";
     public const string AttendanceUpdateAll = "Attendance.Update.All";
+    public const string AttendanceSettingReadAll = "AttendanceSetting.Read.All";
+    public const string AttendanceSettingUpdateAll = "AttendanceSetting.Update.All";
 
     public const string OvertimeRequestReadAll = "OvertimeRequest.Read.All";
     public const string OvertimeRequestReadSelf = "OvertimeRequest.Read.Self";
     public const string OvertimeRequestCreateSelf = "OvertimeRequest.Create.Self";
     public const string OvertimeRequestApproveAll = "OvertimeRequest.Approve.All";
+
+    public const string OvertimeSlotTemplateReadAll = "OvertimeSlotTemplate.Read.All";
+    public const string OvertimeSlotTemplateCreateAll = "OvertimeSlotTemplate.Create.All";
+    public const string OvertimeSlotTemplateUpdateAll = "OvertimeSlotTemplate.Update.All";
+    public const string OvertimeSlotTemplateDeleteAll = "OvertimeSlotTemplate.Delete.All";
 
     public const string LeaveRequestReadAll = "LeaveRequest.Read.All";
     public const string LeaveRequestReadSelf = "LeaveRequest.Read.Self";
@@ -170,10 +177,64 @@ public static class Permissions
     public const string LeaveTypeUpdateAll = "LeaveType.Update.All";
     public const string LeaveTypeDeleteAll = "LeaveType.Delete.All";
 
+    // ===== Company Policy module — IDs 130–133 =====
+
+    public const string CompanyPolicyReadAll = "CompanyPolicy.Read.All";
+    public const string CompanyPolicyCreateAll = "CompanyPolicy.Create.All";
+    public const string CompanyPolicyUpdateAll = "CompanyPolicy.Update.All";
+    public const string CompanyPolicyDeleteAll = "CompanyPolicy.Delete.All";
     // ===== FaceRegistration (Track B) =====
     public const string FaceRegistrationSubmitSelf = "FaceRegistration.Submit.Self";
     public const string FaceRegistrationReadAll    = "FaceRegistration.Read.All";
     public const string FaceRegistrationApproveAll = "FaceRegistration.Approve.All";
+    // ===== Department module - IDs 143-147 =====
+
+    public const string DepartmentReadAll   = "Department.Read.All";
+    public const string DepartmentCreateAll = "Department.Create.All";
+    public const string DepartmentUpdateAll = "Department.Update.All";
+    public const string DepartmentDeleteAll = "Department.Delete.All";
+
+    public const string EmployeeInformationReadDepartment = "EmployeeInformation.Read.Department";
+
+    // ===== Task/Production module (v5) - IDs 148-173 =====
+
+    // ProcessTemplate (quy trình mẫu) — GĐ định nghĩa dùng chung; PM đọc để áp
+    public const string ProcessTemplateReadAll   = "ProcessTemplate.Read.All";
+    public const string ProcessTemplateCreateAll = "ProcessTemplate.Create.All";
+    public const string ProcessTemplateUpdateAll = "ProcessTemplate.Update.All";
+    public const string ProcessTemplateDeleteAll = "ProcessTemplate.Delete.All";
+
+    // Project/Order (đơn hàng)
+    public const string ProjectReadAll          = "Project.Read.All";
+    public const string ProjectReadDepartment   = "Project.Read.Department";
+    public const string ProjectCreateAll        = "Project.Create.All";
+    public const string ProjectUpdateAll        = "Project.Update.All";
+    public const string ProjectDeleteAll        = "Project.Delete.All";
+    public const string ProjectGenerateTasks    = "Project.GenerateTasks";
+    public const string ProjectCompleteDepartment = "Project.Complete.Department";  // ⭐ đóng đơn thủ công
+
+    // Task — xem theo scope
+    public const string TaskReadAll          = "Task.Read.All";
+    public const string TaskReadDepartment   = "Task.Read.Department";
+    public const string TaskReadAssigned     = "Task.Read.Assigned";
+    public const string TaskReadConfidential = "Task.Read.Confidential";
+
+    // Task — thao tác (PM xưởng; nhân viên KHÔNG có quyền ghi task nào)
+    public const string TaskCreateDepartment      = "Task.Create.Department";        // ⭐ tạo task 1 người / nhóm
+    public const string TaskCreateConfidential    = "Task.Create.Confidential";
+    public const string TaskUpdateDepartment      = "Task.Update.Department";
+    public const string TaskUpdateProgressDepartment = "Task.UpdateProgress.Department"; // ⭐ cập nhật CompletedQuantity
+    public const string TaskCompleteDepartment    = "Task.Complete.Department";      // ⭐ bấm hoàn thành (+ WasLate)
+    public const string TaskDeleteDepartment      = "Task.Delete.Department";
+
+    // Attachment (tài liệu/ảnh)
+    public const string ProductionAttachmentReadDepartment  = "ProductionAttachment.Read.Department";
+    public const string ProductionAttachmentWriteDepartment = "ProductionAttachment.Write.Department";
+    public const string ProductionAttachmentReadAll         = "ProductionAttachment.Read.All";
+
+    // Audit — xem lịch sử chỉnh sửa task/đơn (scoped theo xưởng)
+    public const string TaskAuditReadAll        = "Task.Audit.Read.All";
+    public const string TaskAuditReadDepartment = "Task.Audit.Read.Department";
 }
 
 public static class PermissionIds
@@ -286,7 +347,7 @@ public static class PermissionIds
     public const int LaborLawConstantsUpdateAll = 87;
     public const int LaborLawConstantsDeleteAll = 88;
 
-    // ===== Audit Log module (FT-39) =====
+    // ===== LegalDocument module — ID 89 (đã seed trong DB trước AuditLog) =====
 
     public const int AuditLogReadAll = 89;
 
@@ -347,8 +408,65 @@ public static class PermissionIds
     public const int LeaveTypeUpdateAll = 128;
     public const int LeaveTypeDeleteAll = 129;
 
-    // ===== FaceRegistration (Track B) — IDs 130–132 =====
-    public const int FaceRegistrationSubmitSelf = 130;
-    public const int FaceRegistrationReadAll    = 131;
-    public const int FaceRegistrationApproveAll = 132;
+    // ===== Company Policy module — IDs 130–133 =====
+
+    public const int CompanyPolicyReadAll = 130;
+    public const int CompanyPolicyCreateAll = 131;
+    public const int CompanyPolicyUpdateAll = 132;
+    public const int CompanyPolicyDeleteAll = 133;
+    // ===== FaceRegistration (Track B) — IDs 134–136 =====
+    public const int FaceRegistrationSubmitSelf = 134;
+    public const int FaceRegistrationReadAll    = 135;
+    public const int FaceRegistrationApproveAll = 136;
+
+    // ===== OvertimeSlotTemplate (Attendance ext) — IDs 137–140 =====
+    public const int OvertimeSlotTemplateReadAll = 137;
+    public const int OvertimeSlotTemplateCreateAll = 138;
+    public const int OvertimeSlotTemplateUpdateAll = 139;
+    public const int OvertimeSlotTemplateDeleteAll = 140;
+
+    // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
+    public const int AttendanceSettingReadAll = 141;
+    public const int AttendanceSettingUpdateAll = 142;
+    // ===== Department module - IDs 143-147 =====
+
+    public const int DepartmentReadAll   = 143;
+    public const int DepartmentCreateAll = 144;
+    public const int DepartmentUpdateAll = 145;
+    public const int DepartmentDeleteAll = 146;
+
+    public const int EmployeeInformationReadDepartment = 147;
+
+    // ===== Task/Production module (v5) - IDs 148-173 =====
+    public const int ProcessTemplateReadAll     = 148;
+    public const int ProcessTemplateCreateAll   = 149;
+    public const int ProcessTemplateUpdateAll   = 150;
+    public const int ProcessTemplateDeleteAll   = 151;
+
+    public const int ProjectReadAll             = 152;
+    public const int ProjectReadDepartment      = 153;
+    public const int ProjectCreateAll           = 154;
+    public const int ProjectUpdateAll           = 155;
+    public const int ProjectDeleteAll           = 156;
+    public const int ProjectGenerateTasks       = 157;
+    public const int ProjectCompleteDepartment  = 158;
+
+    public const int TaskReadAll                = 159;
+    public const int TaskReadDepartment         = 160;
+    public const int TaskReadAssigned           = 161;
+    public const int TaskReadConfidential       = 162;
+
+    public const int TaskCreateDepartment          = 163;
+    public const int TaskCreateConfidential        = 164;
+    public const int TaskUpdateDepartment          = 165;
+    public const int TaskUpdateProgressDepartment  = 166;
+    public const int TaskCompleteDepartment        = 167;
+    public const int TaskDeleteDepartment          = 168;
+
+    public const int ProductionAttachmentReadDepartment  = 169;
+    public const int ProductionAttachmentWriteDepartment = 170;
+    public const int ProductionAttachmentReadAll         = 171;
+
+    public const int TaskAuditReadAll           = 172;
+    public const int TaskAuditReadDepartment    = 173;
 }

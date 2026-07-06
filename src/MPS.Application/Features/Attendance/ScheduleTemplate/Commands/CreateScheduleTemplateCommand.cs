@@ -6,7 +6,7 @@ namespace MPS.Application.Features.Attendance.ScheduleTemplate.Commands;
 
 public sealed record CreateScheduleTemplateCommand(
     string Name,
-    int ShiftTemplateId,
+    IReadOnlyList<int> ShiftTemplateIds,
     DateOnly EffectiveFrom,
     DateOnly EffectiveTo,
     ScheduleRepeatUnit RepeatUnit,
@@ -14,4 +14,7 @@ public sealed record CreateScheduleTemplateCommand(
     IReadOnlyList<int>? DaysOfWeek,
     IReadOnlyList<int>? DaysOfMonth,
     IReadOnlyList<int> EmployeeInformationIds,
-    string? Notes) : IRequest<ScheduleTemplateApplyResultDto>;
+    string? Notes,
+    bool AcknowledgeWeeklyOvertimeWarnings = false,
+    ScheduleApplyTarget? ApplyTarget = null,
+    IReadOnlyList<int>? DepartmentIds = null) : IRequest<ScheduleTemplateApplyResultDto>;

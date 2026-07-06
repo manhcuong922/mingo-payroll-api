@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
+using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.Persistence;
@@ -20,6 +21,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 
     public Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default) =>
@@ -27,19 +29,40 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.UserId == userId, cancellationToken);
 
-    public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
+        bool? hasActiveContract = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.EmployeeInformations
+            .AsNoTracking()
+            .Include(e => e.Position)
+            .Include(e => e.User)
+            .Include(e => e.Department)
+            .AsQueryable();
+
+        query = ApplyActiveContractFilter(query, hasActiveContract);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<EmployeeInformation>> GetByDepartmentIdAsync(
+        int departmentId, CancellationToken cancellationToken = default) =>
         await _context.EmployeeInformations
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
+            .Where(e => e.DepartmentId == departmentId)
             .ToListAsync(cancellationToken);
 
     public async Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
         string? keyword,
         int? positionId,
         bool? hasAccount,
+        bool? hasActiveContract,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default)
@@ -48,6 +71,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(keyword))
@@ -67,6 +91,8 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
                 ? query.Where(e => e.UserId != null)
                 : query.Where(e => e.UserId == null);
 
+        query = ApplyActiveContractFilter(query, hasActiveContract);
+
         var total = await query.CountAsync(cancellationToken);
 
         var items = await query
@@ -78,8 +104,30 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         return (items, total);
     }
 
+    private IQueryable<EmployeeInformation> ApplyActiveContractFilter(
+        IQueryable<EmployeeInformation> query,
+        bool? hasActiveContract)
+    {
+        if (!hasActiveContract.HasValue) return query;
+
+        return hasActiveContract.Value
+            ? query.Where(e => _context.Contracts
+                .Any(c => c.EmployeeInformationId == e.Id && c.Status == ContractStatus.Active))
+            : query.Where(e => !_context.Contracts
+                .Any(c => c.EmployeeInformationId == e.Id && c.Status == ContractStatus.Active));
+    }
+
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default) =>
         _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId, cancellationToken);
+
+    public async Task<int?> GetUserRoleIdAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var role = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => (int?)u.RoleId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return role;
+    }
 
     public Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken = default) =>
         _context.Positions.AsNoTracking().AnyAsync(p => p.Id == positionId, cancellationToken);
@@ -135,6 +183,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         existing.SocialNo = entity.SocialNo;
         existing.BankNumber = entity.BankNumber;
         existing.PositionId = entity.PositionId;
+        existing.DepartmentId = entity.DepartmentId;
         existing.DependentsNo = entity.DependentsNo;
         existing.GuardianFullName = entity.GuardianFullName;
         existing.GuardianRelationship = entity.GuardianRelationship;

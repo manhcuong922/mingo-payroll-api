@@ -12,15 +12,18 @@ public class UpdateAttendanceRuleCommandHandler : IRequestHandler<UpdateAttendan
     private readonly IAttendanceRuleRepository _repository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IComplianceLookupService _complianceLookup;
 
     public UpdateAttendanceRuleCommandHandler(
         IAttendanceRuleRepository repository,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IComplianceLookupService complianceLookup)
     {
         _repository = repository;
         _currentUser = currentUser;
         _clock = clock;
+        _complianceLookup = complianceLookup;
     }
 
     public async Task<bool> Handle(UpdateAttendanceRuleCommand request, CancellationToken cancellationToken)
@@ -35,10 +38,15 @@ public class UpdateAttendanceRuleCommandHandler : IRequestHandler<UpdateAttendan
         if (await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
             throw new ConflictException($"Attendance rule with name '{name}' already exists.");
 
-        PayRuleFloor.EnsureValid(
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(cancellationToken);
+
+        WorkRateFloorValidator.EnsureValid(
             request.WorkRateNormal,
             request.WorkRateWeeklyRest,
-            request.WorkRateHoliday);
+            request.WorkRateHoliday,
+            laborLaw.WorkRateNormalFloor,
+            laborLaw.WorkRateWeeklyRestFloor,
+            laborLaw.WorkRateHolidayFloor);
 
         var entity = new AttendanceRuleEntity
         {

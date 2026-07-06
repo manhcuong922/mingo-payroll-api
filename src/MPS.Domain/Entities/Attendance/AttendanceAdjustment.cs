@@ -13,8 +13,8 @@ public class AttendanceAdjustment
     public EmployeeInformation EmployeeInformation { get; set; } = null!;
 
     public AttendanceEnums.AttendanceStatus NewStatus { get; set; }
-    public TimeOnly? NewCheckInTime { get; set; }
-    public TimeOnly? NewCheckOutTime { get; set; }
+    public DateTime? NewCheckInAt { get; set; }
+    public DateTime? NewCheckOutAt { get; set; }
 
     public string Reason { get; set; } = string.Empty;
 
@@ -26,8 +26,8 @@ public class AttendanceAdjustment
     public DateTime? ReviewedAt { get; set; }
 
     public AttendanceEnums.AttendanceStatus? OriginalStatus { get; set; }
-    public TimeOnly? OriginalCheckInTime { get; set; }
-    public TimeOnly? OriginalCheckOutTime { get; set; }
+    public DateTime? OriginalCheckInAt { get; set; }
+    public DateTime? OriginalCheckOutAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }

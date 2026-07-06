@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<EmployeeInformation> EmployeeInformations => Set<EmployeeInformation>();
     public DbSet<Position> Positions => Set<Position>();
+    public DbSet<Department> Departments => Set<Department>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -37,6 +38,10 @@ public class AppDbContext : DbContext
     // Audit log module (FT-39)
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AuditLogArchive> AuditLogsArchive => Set<AuditLogArchive>();
+
+    // Company Policy module
+    public DbSet<CompanyPolicy> CompanyPolicies => Set<CompanyPolicy>();
+    public DbSet<CompanyPolicyFile> CompanyPolicyFiles => Set<CompanyPolicyFile>();
 
     // Compliance module (FE-06)
     public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
@@ -63,7 +68,9 @@ public class AppDbContext : DbContext
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<AttendanceSetting> AttendanceSettings => Set<AttendanceSetting>();
     public DbSet<OvertimeRequest> OvertimeRequests => Set<OvertimeRequest>();
+    public DbSet<OvertimeSlotTemplate> OvertimeSlotTemplates => Set<OvertimeSlotTemplate>();
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
@@ -71,6 +78,14 @@ public class AppDbContext : DbContext
     public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<ScheduleTemplateEmployee> ScheduleTemplateEmployees => Set<ScheduleTemplateEmployee>();
+    public DbSet<ScheduleTemplateShift> ScheduleTemplateShifts => Set<ScheduleTemplateShift>();
+    // ===== Task/Production module =====
+    public DbSet<ProcessTemplate> ProcessTemplates => Set<ProcessTemplate>();
+    public DbSet<ProcessStep> ProcessSteps => Set<ProcessStep>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<ProductionAttachment> ProductionAttachments => Set<ProductionAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,0 +1,11 @@
+namespace MPS.Domain.Enums;
+
+// v5: task sống theo deadline + trạng thái hoàn thành. Không còn "task theo ngày".
+//   Todo → InProgress (task Quantity: đã cập nhật sản lượng > 0) → Done (quản lý xưởng bấm Complete).
+//   Quá deadline vẫn Done được nhưng gắn cờ ProjectTask.WasLate = true (chậm tiến độ).
+public enum TaskItemStatus
+{
+    Todo,        // đã giao, chưa bắt đầu / chưa có sản lượng
+    InProgress,  // đang làm (task Quantity: CompletedQuantity > 0)
+    Done,        // đã hoàn thành (bấm Complete)
+}

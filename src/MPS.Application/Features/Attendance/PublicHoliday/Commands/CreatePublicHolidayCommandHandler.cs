@@ -8,6 +8,8 @@ namespace MPS.Application.Features.Attendance.PublicHoliday.Commands;
 
 public class CreatePublicHolidayCommandHandler : IRequestHandler<CreatePublicHolidayCommand, int>
 {
+    private const int MaxRangeDays = 366;
+
     private readonly IPublicHolidayRepository _repository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
@@ -27,23 +29,31 @@ public class CreatePublicHolidayCommandHandler : IRequestHandler<CreatePublicHol
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
 
-        if (await _repository.ExistsByDateAsync(request.HolidayDate, excludeId: null, cancellationToken))
-            throw new ConflictException($"A public holiday already exists on {request.HolidayDate:yyyy-MM-dd}.");
+        EnsureValidRange(request.HolidayDate, request.HolidayEndDate);
 
-        if (request.PayRateOverride is { } rate && rate < 1.0m)
-            throw new DomainValidationException("PayRateOverride phải ≥ 1.0 nếu được set.");
+        if (await _repository.ExistsOverlapAsync(request.HolidayDate, request.HolidayEndDate, excludeId: null, cancellationToken))
+            throw new ConflictException($"A public holiday already overlaps {request.HolidayDate:yyyy-MM-dd} - {request.HolidayEndDate:yyyy-MM-dd}.");
 
         var entity = new PublicHolidayEntity
         {
             Name = request.Name.Trim(),
             HolidayDate = request.HolidayDate,
-            Category = request.Category,
-            PayRateOverride = request.PayRateOverride,
+            HolidayEndDate = request.HolidayEndDate,
             Description = request.Description,
             CreatedAt = _clock.UtcNow,
             CreatedByUserId = userId
         };
 
         return await _repository.AddAsync(entity, cancellationToken);
+    }
+
+    private static void EnsureValidRange(DateOnly start, DateOnly end)
+    {
+        if (end < start)
+            throw new DomainValidationException("HolidayEndDate must be on/after HolidayDate.");
+
+        var count = end.DayNumber - start.DayNumber + 1;
+        if (count > MaxRangeDays)
+            throw new DomainValidationException($"Holiday range cannot exceed {MaxRangeDays} days.");
     }
 }

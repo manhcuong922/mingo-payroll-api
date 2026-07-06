@@ -191,6 +191,35 @@ cp .env.example .env
 > `MSSQL_SA_PASSWORD` khớp password trong `ConnectionStrings__DefaultConnection`,
 > `MINIO_BACKEND_PASSWORD` khớp `Minio__SecretKey`.)
 
+### 6.2b. Cấu hình proxy LLM (CLIProxyAPI — module Compliance)
+
+Module Compliance gọi LLM/OCR qua container `llmproxy` (OAuth Claude Pro, không tốn
+token). Token OAuth là secret nên KHÔNG nằm trong repo — phải đưa lên VPS thủ công 1 lần.
+
+```cmd
+:: (trên VPS) tạo config từ template rồi đổi key cho khớp .env
+cd /opt/mingo/llmproxy
+cp config.example.yaml config.yaml
+:: sửa "api-keys" trong config.yaml = OPERIX_LLM_API_KEY trong /opt/mingo/.env
+```
+
+Lấy token OAuth (làm ở MÁY LOCAL có trình duyệt, vì VPS headless):
+```cmd
+:: chạy login bằng image proxy ở local, lưu token vào thư mục .\auths
+docker run --rm -it -p 8317:8317 -v %CD%\auths:/root/.cli-proxy-api eceasy/cli-proxy-api:latest login
+:: đăng nhập Claude Pro trên trình duyệt → token được ghi vào .\auths
+```
+Rồi copy thư mục `auths` lên VPS:
+```cmd
+scp -i C:\Users\Admin\mingo_deploy_key -r .\auths deploy@103.179.173.60:/opt/mingo/llmproxy/
+```
+> Refresh token tự gia hạn. Nếu proxy chết / token hết hạn, Compliance tự fallback
+> Offline extractor (không crash). `docker logs mingo-llmproxy` để xem trạng thái.
+>
+> ⚠️ Dùng gói **Claude Pro/Max cá nhân** cho server tự động là rủi ro theo ToS Anthropic
+> (có thể bị khóa tài khoản). Muốn an toàn lâu dài: bỏ `ComplianceAutoUpdate__Llm__BaseUrl`
+> trong `.env` và đặt `OPERIX_LLM_API_KEY` = API key Anthropic trả tiền (gọi thẳng, bỏ proxy).
+
 ### 6.3. Kích hoạt build + deploy lần đầu
 Image chưa tồn tại trên GHCR cho tới khi pipeline build. Vì vậy **để pipeline lo trọn gói**:
 bạn **merge `dev`→`main`** (hoặc vào tab **Actions** → workflow `Build & Deploy API` → **Run workflow**).

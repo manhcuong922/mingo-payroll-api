@@ -143,11 +143,17 @@ public sealed class ComplianceDiffService : IComplianceDiffService
                 if (ll != null)
                 {
                     map["ProbationSalaryMinPercent"] = ll.ProbationSalaryMinPercent;
-                    map["NightShiftSurchargePercent"] = ll.NightShiftSurchargePercent;
+                    map["OvertimeNightExtraPercent"] = ll.OvertimeNightExtraPercent;
+                    map["NightWorkSurchargePercent"] = ll.NightWorkSurchargePercent;
                     map["StandardWorkingHoursPerDay"] = ll.StandardWorkingHoursPerDay;
+                    map["MaxRegularHoursPerWeek"] = ll.MaxRegularHoursPerWeek;
                     map["StandardWorkingDaysPerMonth"] = ll.StandardWorkingDaysPerMonth;
                     map["AnnualLeaveMinDays"] = ll.AnnualLeaveMinDays;
+                    map["WorkRateNormalFloor"] = ll.WorkRateNormalFloor;
+                    map["WorkRateWeeklyRestFloor"] = ll.WorkRateWeeklyRestFloor;
+                    map["WorkRateHolidayFloor"] = ll.WorkRateHolidayFloor;
                     map["OvertimeMaxHoursPerDay"] = ll.OvertimeMaxHoursPerDay;
+                    map["OvertimeMaxHoursPerMonth"] = ll.OvertimeMaxHoursPerMonth;
                     map["OvertimeMaxHoursPerYear"] = ll.OvertimeMaxHoursPerYear;
                 }
                 break;

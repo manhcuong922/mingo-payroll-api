@@ -15,6 +15,8 @@ public interface ILeaveTypeRepository
 
     Task<LeaveType?> GetByCodeAsync(string code, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<LeaveType>> GetActiveAsync(CancellationToken cancellationToken = default);
+
     Task<bool> ExistsByCodeAsync(string code, int? excludeId, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsByNameAsync(string name, int? excludeId, CancellationToken cancellationToken = default);

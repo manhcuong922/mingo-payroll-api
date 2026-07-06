@@ -8,6 +8,6 @@ public sealed record OverrideAttendanceCommand(
     DateOnly WorkDate,
     int ShiftTemplateId,
     AttendanceStatus NewStatus,
-    TimeOnly? NewCheckInTime,
-    TimeOnly? NewCheckOutTime,
+    DateTime? NewCheckInAt,
+    DateTime? NewCheckOutAt,
     string OverrideReason) : IRequest<int>;

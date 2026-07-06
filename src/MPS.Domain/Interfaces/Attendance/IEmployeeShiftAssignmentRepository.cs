@@ -67,5 +67,11 @@ public interface IEmployeeShiftAssignmentRepository
     Task<int> DeleteStaleByScheduleTemplateAsync(
         int scheduleTemplateId,
         IReadOnlyCollection<DateOnly> retainDates,
+        IReadOnlyCollection<int> retainShiftTemplateIds,
+        IReadOnlyCollection<int> retainEmployeeInformationIds,
+        CancellationToken cancellationToken = default);
+
+    Task<int> DeleteUnlockedByScheduleTemplateAsync(
+        int scheduleTemplateId,
         CancellationToken cancellationToken = default);
 }

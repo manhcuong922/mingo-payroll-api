@@ -11,12 +11,14 @@ public class ShiftTemplate
     public TimeOnly? BreakEndTime { get; set; }
     public decimal StandardHours { get; set; }
     public decimal StandardDays { get; set; } = 1.00m;
-    public decimal WorkRateNormal { get; set; } = 1.00m;
-    public decimal WorkRateWeeklyRest { get; set; } = 2.00m;
-    public decimal WorkRateHoliday { get; set; } = 3.00m;
-    public bool IsNightShift { get; set; }
-    public int? AppliedAttendanceRuleId { get; set; }
-    public AttendanceRule? AppliedAttendanceRule { get; set; }
+
+    /// <summary>
+    /// FK NOT NULL tới <see cref="AttendanceRule"/> — single source of truth cho hệ số công.
+    /// ShiftTemplate KHÔNG snapshot rate; mọi consumer đọc qua navigation property.
+    /// </summary>
+    public int AppliedAttendanceRuleId { get; set; }
+    public AttendanceRule AppliedAttendanceRule { get; set; } = null!;
+
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
 

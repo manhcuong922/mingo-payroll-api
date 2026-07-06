@@ -6,14 +6,15 @@ public sealed record RecordAttendanceRequest(
     int EmployeeInformationId,
     DateOnly WorkDate,
     int ShiftTemplateId,
-    TimeOnly? CheckInTime,
-    TimeOnly? CheckOutTime,
+    DateTime? CheckInAt,
+    DateTime? CheckOutAt,
     AttendanceStatus Status,
-    string? Notes);
+    string? Notes,
+    string? OverrideReason);
 
 public sealed record UpdateAttendanceRequest(
-    TimeOnly? CheckInTime,
-    TimeOnly? CheckOutTime,
+    DateTime? CheckInAt,
+    DateTime? CheckOutAt,
     AttendanceStatus Status,
     string? Notes,
     string? OverrideReason);
@@ -21,8 +22,8 @@ public sealed record UpdateAttendanceRequest(
 public sealed record BulkRecordAttendanceRowRequest(
     int EmployeeInformationId,
     int ShiftTemplateId,
-    TimeOnly? CheckInTime,
-    TimeOnly? CheckOutTime,
+    DateTime? CheckInAt,
+    DateTime? CheckOutAt,
     AttendanceStatus Status,
     string? Notes,
     string? OverrideReason);
@@ -30,3 +31,10 @@ public sealed record BulkRecordAttendanceRowRequest(
 public sealed record BulkRecordAttendanceRequest(
     DateOnly WorkDate,
     IReadOnlyList<BulkRecordAttendanceRowRequest> Records);
+
+public sealed record UpdateAttendanceSettingRequest(
+    bool IsEditLockEnabled,
+    TimeOnly DailyEditCutoffTime,
+    int LockAfterDays,
+    bool AllowAdminOverride,
+    bool RequireOverrideReason);

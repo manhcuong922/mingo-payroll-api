@@ -6,7 +6,7 @@ namespace MPS.Application.Features.Attendance.ScheduleTemplate.Commands;
 public sealed record UpdateScheduleTemplateCommand(
     int Id,
     string Name,
-    int ShiftTemplateId,
+    IReadOnlyList<int> ShiftTemplateIds,
     DateOnly EffectiveFrom,
     DateOnly EffectiveTo,
     ScheduleRepeatUnit RepeatUnit,
@@ -15,4 +15,6 @@ public sealed record UpdateScheduleTemplateCommand(
     IReadOnlyList<int>? DaysOfMonth,
     IReadOnlyList<int> EmployeeInformationIds,
     bool IsActive,
-    string? Notes) : IRequest<Unit>;
+    string? Notes,
+    ScheduleApplyTarget? ApplyTarget = null,
+    IReadOnlyList<int>? DepartmentIds = null) : IRequest<Unit>;

@@ -39,6 +39,18 @@ public static class ObjectKeyBuilder
         return key;
     }
 
+    public static string ForCompanyPolicy(int policyId, int version, string extension)
+    {
+        if (policyId <= 0) throw new ArgumentOutOfRangeException(nameof(policyId));
+        if (version <= 0) throw new ArgumentOutOfRangeException(nameof(version));
+        var ext = (extension ?? string.Empty).TrimStart('.').ToLowerInvariant();
+        if (ext != "pdf" && ext != "docx")
+            throw new ArgumentException("Company policy file extension must be 'pdf' or 'docx'.", nameof(extension));
+        var key = $"company-policies/{policyId}/v{version}.{ext}";
+        ValidateLength(key);
+        return key;
+    }
+
     public static string ForEmployeeAvatar(int employeeId, string fileExtension)
     {
         if (string.IsNullOrWhiteSpace(fileExtension))

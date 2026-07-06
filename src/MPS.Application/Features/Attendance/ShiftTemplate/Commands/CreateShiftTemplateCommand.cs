@@ -11,9 +11,5 @@ public sealed record CreateShiftTemplateCommand(
     TimeOnly? BreakEndTime,
     decimal StandardHours,
     decimal StandardDays,
-    decimal WorkRateNormal,
-    decimal WorkRateWeeklyRest,
-    decimal WorkRateHoliday,
-    bool IsNightShift,
-    int? AppliedAttendanceRuleId,
+    int AppliedAttendanceRuleId,
     string? Notes) : IRequest<int>, IShiftTemplateCommand;

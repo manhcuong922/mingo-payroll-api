@@ -29,6 +29,30 @@ public class UserRepository : IUserRepository
             .Include(u => u.EmployeeInformation)
             .FirstOrDefaultAsync(u => u.EmployeeCode == employeeCode, cancellationToken);
 
+    public async Task<IReadOnlyDictionary<string, int>> GetEmployeeInformationIdsByCodesAsync(
+        IEnumerable<string> employeeCodes,
+        CancellationToken cancellationToken = default)
+    {
+        var distinct = employeeCodes
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinct.Length == 0)
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        var rows = await _context.Users
+            .AsNoTracking()
+            .Where(u => distinct.Contains(u.EmployeeCode) && u.EmployeeInformation != null)
+            .Select(u => new { u.EmployeeCode, EmployeeInformationId = u.EmployeeInformation!.Id })
+            .ToListAsync(cancellationToken);
+
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+            map[row.EmployeeCode] = row.EmployeeInformationId;
+        return map;
+    }
+
     public Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default) =>
         _context.Users
             .AsNoTracking()

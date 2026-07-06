@@ -17,6 +17,7 @@ public record EmployeeInformationCreateCommand(
     string? PhoneNo,
     string? EducationLevel,
     int PositionId,
+    int? DepartmentId,
     int DependentsNo,
     string? TaxNo,
     string? SocialNo,

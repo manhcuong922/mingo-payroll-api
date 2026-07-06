@@ -6,8 +6,8 @@ namespace MPS.Application.Common.Interfaces;
 /// Read-side lookup cho Payroll Engine. Chỉ publish rates/amounts theo luật.
 /// Eligibility (thử việc có đóng BHXH không, nhân viên ở vùng nào) là engine concern.
 /// payDate trong GetXxxAt() không bị validate > today — engine có thể preview kỳ tương lai.
-/// OT Rate đã tách sang module riêng — dùng LaborLawConstantsSnapshot.NightShiftSurchargePercent
-/// và OvertimeMaxHoursPerDay/Year cho tính hệ số OT.
+/// OT Rate đã tách sang module riêng — dùng LaborLawConstantsSnapshot.OvertimeNightExtraPercent
+/// và OvertimeMaxHoursPerDay/Month/Year cho tính hệ số/giới hạn OT.
 /// </summary>
 public interface IComplianceLookupService
 {

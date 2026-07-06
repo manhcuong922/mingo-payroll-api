@@ -10,6 +10,8 @@ namespace MPS.API.Middleware;
 
 public class ExceptionHandlingMiddleware
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
 
@@ -56,6 +58,41 @@ public class ExceptionHandlingMiddleware
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(
                 JsonSerializer.Serialize(new { error = cfex.Message }));
+        }
+        catch (RegularHoursCapWarningException rcex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = "REGULAR_HOURS_CAP_WARNING",
+                error = rcex.Message,
+                dailyCapWarnings = rcex.DailyWarnings,
+                weeklyCapWarnings = rcex.WeeklyWarnings,
+            }, JsonOptions));
+        }
+        catch (RegularHoursCapExceededException rhex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = "REGULAR_HOURS_CAP_EXCEEDED",
+                error = rhex.Message,
+                dailyCapViolations = rhex.DailyViolations,
+                weeklyCapViolations = rhex.WeeklyViolations,
+            }, JsonOptions));
+        }
+        catch (WeeklyRegularHoursCapWarningException wcex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = "WEEKLY_REGULAR_HOURS_CAP_WARNING",
+                error = wcex.Message,
+                weeklyCapWarnings = wcex.Warnings,
+            }, JsonOptions));
         }
         catch (DomainValidationException dvex)
         {

@@ -11,24 +11,21 @@ public static class AttendanceTimeRules
     public static bool IsWorkDateInFuture(DateOnly workDate, DateTime nowUtc) =>
         workDate > DateOnly.FromDateTime(nowUtc);
 
+    public static bool HasValidObservedRange(DateTime? checkInAt, DateTime? checkOutAt) =>
+        checkInAt is null || checkOutAt is null || checkOutAt > checkInAt;
+
     /// <summary>
-    /// Trả về error message nếu CheckInTime/CheckOutTime gắn với WorkDate vượt quá now.
+    /// Trả về error message nếu WorkDate vượt quá now.
     /// Trả về null nếu hợp lệ.
     /// </summary>
     public static string? ValidateNotInFuture(
         DateOnly workDate,
-        TimeOnly? checkInTime,
-        TimeOnly? checkOutTime,
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
         DateTime nowUtc)
     {
         if (IsWorkDateInFuture(workDate, nowUtc))
             return $"WorkDate {workDate:yyyy-MM-dd} is in the future; attendance can only be recorded for past or current day.";
-
-        if (checkInTime is { } ci && workDate.ToDateTime(ci) > nowUtc)
-            return $"CheckInTime {ci:HH:mm} on {workDate:yyyy-MM-dd} is in the future.";
-
-        if (checkOutTime is { } co && workDate.ToDateTime(co) > nowUtc)
-            return $"CheckOutTime {co:HH:mm} on {workDate:yyyy-MM-dd} is in the future.";
 
         return null;
     }

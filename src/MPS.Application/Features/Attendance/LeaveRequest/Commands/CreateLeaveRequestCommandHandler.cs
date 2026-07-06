@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.LeaveType.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -18,6 +19,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly ILeaveTypeRepository _leaveTypeRepository;
     private readonly ILeaveBalanceRepository _balanceRepository;
     private readonly IContractLookupReader _lookup;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -26,6 +28,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         ILeaveTypeRepository leaveTypeRepository,
         ILeaveBalanceRepository balanceRepository,
         IContractLookupReader lookup,
+        IEmployeeInformationRepository employeeRepository,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -33,6 +36,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _leaveTypeRepository = leaveTypeRepository;
         _balanceRepository = balanceRepository;
         _lookup = lookup;
+        _employeeRepository = employeeRepository;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -43,6 +47,8 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
         var employeeId = await _lookup.GetEmployeeInformationIdByUserIdAsync(userId, cancellationToken)
             ?? throw new NotFoundException($"No employee profile linked to user {userId}.");
+        var employee = await _employeeRepository.GetByIdAsync(employeeId, cancellationToken)
+            ?? throw new NotFoundException($"Employee profile {employeeId} not found.");
 
         if (request.EndDate < request.StartDate)
             throw new DomainValidationException("EndDate must be on/after StartDate.");
@@ -51,6 +57,10 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             ?? throw new NotFoundException($"Leave type {request.LeaveTypeId} not found.");
         if (!leaveType.IsActive)
             throw new DomainValidationException($"Leave type '{leaveType.Code}' is inactive.");
+        if (!leaveType.AllowEmployeeSelection)
+            throw new DomainValidationException($"Leave type '{leaveType.Code}' is not available for employee self-service.");
+        if (!LeaveTypeAssignmentPolicy.AppliesToEmployee(leaveType, employeeId, employee.DepartmentId))
+            throw new DomainValidationException($"Leave type '{leaveType.Code}' is not assigned to this employee.");
 
         // TotalDays = số ngày trong khoảng trừ Chủ nhật
         var totalDays = CountWorkingDays(request.StartDate, request.EndDate);
@@ -65,11 +75,26 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             throw new DomainValidationException(
                 $"Leave type '{leaveType.Code}' requires a SupportingDocumentUrl.");
 
-        if (leaveType.DeductsBalance)
+        if (LeaveTypeAssignmentPolicy.TracksYearlyBalance(leaveType))
         {
             var balance = await _balanceRepository.GetByKeyAsync(
                 employeeId, request.StartDate.Year, leaveType.Id, cancellationToken);
-            var remaining = (balance?.TotalDays ?? 0m) - (balance?.UsedDays ?? 0m);
+            var yearlyQuota = LeaveTypeAssignmentPolicy.ResolveYearlyQuota(leaveType);
+            if ((balance is null || balance.TotalDays <= 0m) && yearlyQuota > 0m)
+            {
+                await _balanceRepository.UpsertForLeaveTypeAsync(
+                    leaveType.Id,
+                    request.StartDate.Year,
+                    new[] { employeeId },
+                    yearlyQuota,
+                    userId,
+                    _clock.UtcNow,
+                    cancellationToken);
+                balance = await _balanceRepository.GetByKeyAsync(
+                    employeeId, request.StartDate.Year, leaveType.Id, cancellationToken);
+            }
+
+            var remaining = (balance?.TotalDays ?? yearlyQuota) - (balance?.UsedDays ?? 0m);
             if (remaining < totalDays)
                 throw new DomainValidationException(
                     $"Insufficient '{leaveType.Code}' balance. Remaining={remaining}, requested={totalDays}.");
