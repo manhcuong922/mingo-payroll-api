@@ -18,6 +18,7 @@ public class UpdateScheduleTemplateCommandHandler
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -27,6 +28,7 @@ public class UpdateScheduleTemplateCommandHandler
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
         IContractRepository contractRepository,
+        IEmployeeInformationRepository employeeRepository,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -35,6 +37,7 @@ public class UpdateScheduleTemplateCommandHandler
         _expander = expander;
         _assignmentRepository = assignmentRepository;
         _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -53,6 +56,14 @@ public class UpdateScheduleTemplateCommandHandler
             throw new DomainValidationException("Tên bảng phân ca không được rỗng.");
         }
 
+        var employeeIds = await ScheduleTemplateEmployeeResolver.ResolveAsync(
+            request.ApplyTarget,
+            request.EmployeeInformationIds,
+            request.DepartmentIds,
+            _employeeRepository,
+            requireEmployees: false,
+            cancellationToken);
+
         ScheduleTemplateValidation.EnsureValidShape(
             request.EffectiveFrom,
             request.EffectiveTo,
@@ -60,7 +71,7 @@ public class UpdateScheduleTemplateCommandHandler
             request.RepeatEvery,
             request.DaysOfWeek,
             request.DaysOfMonth,
-            request.EmployeeInformationIds,
+            employeeIds,
             requireEmployees: false);
 
         if (await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
@@ -72,7 +83,7 @@ public class UpdateScheduleTemplateCommandHandler
         // vì đang refactor — đơn giản hơn).
         var shifts = await LoadActiveShiftsAsync(request.ShiftTemplateIds, cancellationToken);
 
-        await EnsureEmployeesHaveActiveContractsAsync(request.EmployeeInformationIds, cancellationToken);
+        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
 
         // Hướng mới: pattern-date overlap check chỉ chặn khi ca mới giao thoa thời gian với ca đã có.
         var newShape = new ScheduleTemplateEntity
@@ -86,7 +97,7 @@ public class UpdateScheduleTemplateCommandHandler
         };
         EnsureSelectedShiftsDoNotOverlapOnPattern(newShape, shifts);
         await EnsureNoPatternOverlapAsync(
-            request.EmployeeInformationIds,
+            employeeIds,
             newShape,
             shifts,
             excludeTemplateId: request.Id,
@@ -105,7 +116,7 @@ public class UpdateScheduleTemplateCommandHandler
         existing.UpdatedAt = _clock.UtcNow;
         existing.UpdatedByUserId = userId;
 
-        await _repository.UpdateAsync(existing, request.EmployeeInformationIds, shifts.Select(s => s.Id).ToList(), cancellationToken);
+        await _repository.UpdateAsync(existing, employeeIds, shifts.Select(s => s.Id).ToList(), cancellationToken);
 
         return Unit.Value;
     }

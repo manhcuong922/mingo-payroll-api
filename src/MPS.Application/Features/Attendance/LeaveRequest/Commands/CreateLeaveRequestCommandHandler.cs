@@ -19,6 +19,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly ILeaveTypeRepository _leaveTypeRepository;
     private readonly ILeaveBalanceRepository _balanceRepository;
     private readonly IContractLookupReader _lookup;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -27,6 +28,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         ILeaveTypeRepository leaveTypeRepository,
         ILeaveBalanceRepository balanceRepository,
         IContractLookupReader lookup,
+        IEmployeeInformationRepository employeeRepository,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -34,6 +36,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _leaveTypeRepository = leaveTypeRepository;
         _balanceRepository = balanceRepository;
         _lookup = lookup;
+        _employeeRepository = employeeRepository;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -44,6 +47,8 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
         var employeeId = await _lookup.GetEmployeeInformationIdByUserIdAsync(userId, cancellationToken)
             ?? throw new NotFoundException($"No employee profile linked to user {userId}.");
+        var employee = await _employeeRepository.GetByIdAsync(employeeId, cancellationToken)
+            ?? throw new NotFoundException($"Employee profile {employeeId} not found.");
 
         if (request.EndDate < request.StartDate)
             throw new DomainValidationException("EndDate must be on/after StartDate.");
@@ -54,7 +59,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             throw new DomainValidationException($"Leave type '{leaveType.Code}' is inactive.");
         if (!leaveType.AllowEmployeeSelection)
             throw new DomainValidationException($"Leave type '{leaveType.Code}' is not available for employee self-service.");
-        if (!LeaveTypeAssignmentPolicy.AppliesToEmployee(leaveType, employeeId))
+        if (!LeaveTypeAssignmentPolicy.AppliesToEmployee(leaveType, employeeId, employee.DepartmentId))
             throw new DomainValidationException($"Leave type '{leaveType.Code}' is not assigned to this employee.");
 
         // TotalDays = số ngày trong khoảng trừ Chủ nhật

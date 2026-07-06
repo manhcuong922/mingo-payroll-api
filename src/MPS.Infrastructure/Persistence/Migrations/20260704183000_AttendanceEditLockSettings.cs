@@ -26,8 +26,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     LockAfterDays = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
                     AllowAdminOverride = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
                     RequireOverrideReason = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    TimezoneId = table.Column<string>(type: "nvarchar(80)", maxLength: 80, nullable: false),
-                    Notes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     CreatedByUserId = table.Column<int>(type: "int", nullable: true),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
@@ -63,10 +61,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.Sql("""
                 INSERT INTO [AttendanceSettings]
                     ([IsEditLockEnabled], [DailyEditCutoffTime], [LockAfterDays],
-                     [AllowAdminOverride], [RequireOverrideReason], [TimezoneId], [CreatedAt])
+                     [AllowAdminOverride], [RequireOverrideReason], [CreatedAt])
                 SELECT
                     CAST(0 AS bit), CAST('18:00:00' AS time), 0,
-                    CAST(1 AS bit), CAST(1 AS bit), N'Asia/Ho_Chi_Minh', SYSUTCDATETIME()
+                    CAST(1 AS bit), CAST(1 AS bit), SYSUTCDATETIME()
                 WHERE NOT EXISTS (SELECT 1 FROM [AttendanceSettings]);
                 """);
 

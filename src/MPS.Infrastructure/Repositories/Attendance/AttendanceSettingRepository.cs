@@ -30,7 +30,6 @@ public class AttendanceSettingRepository : IAttendanceSettingRepository
             LockAfterDays = 0,
             AllowAdminOverride = true,
             RequireOverrideReason = true,
-            TimezoneId = "Asia/Ho_Chi_Minh",
             CreatedAt = nowUtc,
         };
 
@@ -59,8 +58,6 @@ public class AttendanceSettingRepository : IAttendanceSettingRepository
         tracked.LockAfterDays = entity.LockAfterDays;
         tracked.AllowAdminOverride = entity.AllowAdminOverride;
         tracked.RequireOverrideReason = entity.RequireOverrideReason;
-        tracked.TimezoneId = entity.TimezoneId;
-        tracked.Notes = entity.Notes;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
 

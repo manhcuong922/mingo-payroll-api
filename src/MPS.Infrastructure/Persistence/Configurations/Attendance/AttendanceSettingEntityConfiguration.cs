@@ -17,8 +17,6 @@ public class AttendanceSettingEntityConfiguration : IEntityTypeConfiguration<Att
         builder.Property(e => e.LockAfterDays).IsRequired().HasDefaultValue(0);
         builder.Property(e => e.AllowAdminOverride).IsRequired().HasDefaultValue(true);
         builder.Property(e => e.RequireOverrideReason).IsRequired().HasDefaultValue(true);
-        builder.Property(e => e.TimezoneId).HasMaxLength(80).IsRequired();
-        builder.Property(e => e.Notes).HasMaxLength(500);
 
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.CreatedByUserId);

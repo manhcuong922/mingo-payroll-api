@@ -48,12 +48,12 @@ public sealed class AttendanceEditLockChecker : IAttendanceEditLockChecker
         var lockedAtLocal = workDate
             .AddDays(setting.LockAfterDays)
             .ToDateTime(setting.DailyEditCutoffTime);
-        var lockedAtUtc = lockedAtLocal - ResolveOffset(setting.TimezoneId);
-        var nowLocal = _clock.UtcNow + ResolveOffset(setting.TimezoneId);
+        var lockedAtUtc = lockedAtLocal - VietnamOffset;
+        var nowLocal = _clock.UtcNow + VietnamOffset;
         var isLocked = nowLocal >= lockedAtLocal;
         var requiresReason = isLocked && setting.RequireOverrideReason;
         var message = isLocked
-            ? $"ATTENDANCE_LOCKED: Dữ liệu chấm công ngày {workDate:dd/MM/yyyy} đã bị khóa từ {lockedAtLocal:HH:mm dd/MM/yyyy}."
+            ? $"Dữ liệu chấm công ngày {workDate:dd/MM/yyyy} đã bị khóa từ {lockedAtLocal:HH:mm dd/MM/yyyy}."
             : null;
 
         return new AttendanceLockStatusDto(
@@ -78,26 +78,14 @@ public sealed class AttendanceEditLockChecker : IAttendanceEditLockChecker
         if (!status.CanOverride)
         {
             throw new DomainValidationException(
-                status.Message ?? $"ATTENDANCE_LOCKED: Dữ liệu chấm công ngày {workDate:dd/MM/yyyy} đã bị khóa.");
+                status.Message ?? $"Dữ liệu chấm công ngày {workDate:dd/MM/yyyy} đã bị khóa.");
         }
 
         if (status.RequiresOverrideReason && string.IsNullOrWhiteSpace(overrideReason))
         {
             throw new DomainValidationException(
-                "ATTENDANCE_LOCKED_OVERRIDE_REASON_REQUIRED: Cần nhập lý do override khi sửa dữ liệu chấm công đã khóa.");
+                "Cần nhập lý do override khi sửa dữ liệu chấm công đã khóa.");
         }
     }
 
-    private static TimeSpan ResolveOffset(string timezoneId)
-    {
-        if (timezoneId.Equals("Asia/Ho_Chi_Minh", StringComparison.OrdinalIgnoreCase)
-            || timezoneId.Equals("UTC+7", StringComparison.OrdinalIgnoreCase)
-            || timezoneId.Equals("UTC+07:00", StringComparison.OrdinalIgnoreCase)
-            || timezoneId.Equals("SE Asia Standard Time", StringComparison.OrdinalIgnoreCase))
-        {
-            return VietnamOffset;
-        }
-
-        return VietnamOffset;
-    }
 }

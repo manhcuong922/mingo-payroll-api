@@ -269,19 +269,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
                     b.Property<bool>("RequireOverrideReason")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
-
-                    b.Property<string>("TimezoneId")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("nvarchar(80)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");

@@ -65,7 +65,9 @@ public class ScheduleTemplateController : ControllerBase
             request.DaysOfMonth,
             request.EmployeeInformationIds,
             request.Notes,
-            request.AcknowledgeWeeklyOvertimeWarnings), cancellationToken);
+            request.AcknowledgeWeeklyOvertimeWarnings,
+            request.ApplyTarget,
+            request.DepartmentIds), cancellationToken);
         return Created($"/api/schedule-templates/{result.ScheduleTemplateId}", result);
     }
 
@@ -88,7 +90,9 @@ public class ScheduleTemplateController : ControllerBase
             request.DaysOfMonth,
             request.EmployeeInformationIds,
             request.IsActive,
-            request.Notes), cancellationToken);
+            request.Notes,
+            request.ApplyTarget,
+            request.DepartmentIds), cancellationToken);
         return NoContent();
     }
 

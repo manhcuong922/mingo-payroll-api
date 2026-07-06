@@ -158,8 +158,6 @@ public sealed record AttendanceSettingDto(
     int LockAfterDays,
     bool AllowAdminOverride,
     bool RequireOverrideReason,
-    string TimezoneId,
-    string? Notes,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 

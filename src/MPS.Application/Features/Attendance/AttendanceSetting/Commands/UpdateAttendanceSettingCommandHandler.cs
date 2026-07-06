@@ -41,10 +41,6 @@ public sealed class UpdateAttendanceSettingCommandHandler
             LockAfterDays = request.LockAfterDays,
             AllowAdminOverride = request.AllowAdminOverride,
             RequireOverrideReason = request.RequireOverrideReason,
-            TimezoneId = string.IsNullOrWhiteSpace(request.TimezoneId)
-                ? "Asia/Ho_Chi_Minh"
-                : request.TimezoneId.Trim(),
-            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             CreatedAt = current.CreatedAt,
             CreatedByUserId = current.CreatedByUserId,
             UpdatedAt = _clock.UtcNow,

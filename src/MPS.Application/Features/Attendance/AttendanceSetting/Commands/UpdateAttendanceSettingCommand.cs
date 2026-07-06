@@ -8,6 +8,4 @@ public sealed record UpdateAttendanceSettingCommand(
     TimeOnly DailyEditCutoffTime,
     int LockAfterDays,
     bool AllowAdminOverride,
-    bool RequireOverrideReason,
-    string? TimezoneId,
-    string? Notes) : IRequest<AttendanceSettingDto>;
+    bool RequireOverrideReason) : IRequest<AttendanceSettingDto>;

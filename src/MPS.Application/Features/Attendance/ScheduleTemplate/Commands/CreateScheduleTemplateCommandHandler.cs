@@ -22,6 +22,7 @@ public class CreateScheduleTemplateCommandHandler
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IRegularHoursCapChecker _capChecker;
     private readonly IMediator _mediator;
     private readonly ICurrentUserService _currentUser;
@@ -33,6 +34,7 @@ public class CreateScheduleTemplateCommandHandler
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
         IContractRepository contractRepository,
+        IEmployeeInformationRepository employeeRepository,
         IRegularHoursCapChecker capChecker,
         IMediator mediator,
         ICurrentUserService currentUser,
@@ -43,6 +45,7 @@ public class CreateScheduleTemplateCommandHandler
         _expander = expander;
         _assignmentRepository = assignmentRepository;
         _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
         _capChecker = capChecker;
         _mediator = mediator;
         _currentUser = currentUser;
@@ -62,6 +65,14 @@ public class CreateScheduleTemplateCommandHandler
             throw new DomainValidationException("Tên bảng phân ca không được rỗng.");
         }
 
+        var employeeIds = await ScheduleTemplateEmployeeResolver.ResolveAsync(
+            request.ApplyTarget,
+            request.EmployeeInformationIds,
+            request.DepartmentIds,
+            _employeeRepository,
+            requireEmployees: true,
+            cancellationToken);
+
         ScheduleTemplateValidation.EnsureValidShape(
             request.EffectiveFrom,
             request.EffectiveTo,
@@ -69,7 +80,7 @@ public class CreateScheduleTemplateCommandHandler
             request.RepeatEvery,
             request.DaysOfWeek,
             request.DaysOfMonth,
-            request.EmployeeInformationIds);
+            employeeIds);
 
         if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
         {
@@ -78,7 +89,7 @@ public class CreateScheduleTemplateCommandHandler
 
         var shifts = await LoadActiveShiftsAsync(request.ShiftTemplateIds, cancellationToken);
 
-        await EnsureEmployeesHaveActiveContractsAsync(request.EmployeeInformationIds, cancellationToken);
+        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
 
         // Build a transient shape for pattern expansion (entity not yet persisted).
         var templateShape = new ScheduleTemplateEntity
@@ -92,7 +103,7 @@ public class CreateScheduleTemplateCommandHandler
         };
         EnsureSelectedShiftsDoNotOverlapOnPattern(templateShape, shifts);
         await EnsureNoPatternOverlapAsync(
-            request.EmployeeInformationIds,
+            employeeIds,
             templateShape,
             shifts,
             excludeTemplateId: null,
@@ -101,7 +112,7 @@ public class CreateScheduleTemplateCommandHandler
         // Pre-check cap before AddAsync to avoid creating an orphan ScheduleTemplate row
         // when shift assignments would be blocked.
         await EnsureRegularHoursCapAsync(
-            request.EmployeeInformationIds,
+            employeeIds,
             templateShape,
             shifts,
             request.AcknowledgeWeeklyOvertimeWarnings,
@@ -125,10 +136,10 @@ public class CreateScheduleTemplateCommandHandler
         };
 
         var shiftIds = shifts.Select(s => s.Id).ToList();
-        var id = await _repository.AddAsync(entity, request.EmployeeInformationIds, shiftIds, cancellationToken);
+        var id = await _repository.AddAsync(entity, employeeIds, shiftIds, cancellationToken);
         entity.Id = id;
 
-        return await ApplyAsync(entity, request.EmployeeInformationIds, cancellationToken);
+        return await ApplyAsync(entity, employeeIds, cancellationToken);
     }
 
     private async Task<IReadOnlyList<ShiftTemplateEntity>> LoadActiveShiftsAsync(

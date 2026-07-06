@@ -40,6 +40,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .AsQueryable();
 
         query = ApplyActiveContractFilter(query, hasActiveContract);

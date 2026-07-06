@@ -364,23 +364,44 @@ public sealed class DatabaseSeeder
             return;
         }
 
-        var userIds = users.Select(u => u.Id).ToList();
-        var alreadyLinked = await _context.EmployeeInformations
-            .AsNoTracking()
-            .Where(e => e.UserId != null && userIds.Contains(e.UserId!.Value))
-            .Select(e => e.UserId!.Value)
-            .ToListAsync(cancellationToken);
-        var linkedSet = alreadyLinked.ToHashSet();
-
         var created = new Dictionary<string, EmployeeInformation>(StringComparer.OrdinalIgnoreCase);
-        foreach (var u in users.Where(u => !linkedSet.Contains(u.Id)))
+        var touchedExisting = false;
+
+        foreach (var u in users)
         {
+            var citizenId = $"DEMO{u.Id:D9}";
+            var existing = await _context.EmployeeInformations
+                .FirstOrDefaultAsync(e => e.UserId == u.Id || e.CitizenId == citizenId, cancellationToken);
+
+            if (existing is not null)
+            {
+                if (existing.UserId is null)
+                {
+                    existing.UserId = u.Id;
+                    touchedExisting = true;
+                }
+
+                if (existing.DepartmentId is null)
+                {
+                    existing.DepartmentId = itDepartment.Id;
+                    touchedExisting = true;
+                }
+
+                if (existing.PositionId <= 0)
+                {
+                    existing.PositionId = position.Id;
+                    touchedExisting = true;
+                }
+
+                continue;
+            }
+
             var emp = new EmployeeInformation
             {
                 UserId = u.Id,
                 FullName = string.IsNullOrWhiteSpace(u.FullName) ? u.Username : u.FullName,
                 Dob = u.Dob,
-                CitizenId = $"DEMO{u.Id:D9}",
+                CitizenId = citizenId,
                 PermanentAddress = "N/A (demo seed)",
                 Email = u.Email,
                 PhoneNo = u.PhoneNo,
@@ -392,11 +413,14 @@ public sealed class DatabaseSeeder
             created[u.Username] = emp;
         }
 
-        if (created.Count > 0)
+        if (created.Count > 0 || touchedExisting)
         {
             await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded {Count} demo EmployeeInformation(s): {Users}.",
-                created.Count, string.Join(", ", created.Keys));
+            if (created.Count > 0)
+            {
+                _logger.LogInformation("Seeded {Count} demo EmployeeInformation(s): {Users}.",
+                    created.Count, string.Join(", ", created.Keys));
+            }
         }
 
         await AssignItDepartmentManagerAsync(itDepartment, created, cancellationToken);
