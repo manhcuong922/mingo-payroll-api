@@ -207,6 +207,8 @@ public sealed class DatabaseSeeder
         await _context.Users.AddAsync(aiUser, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded AI service account '{Username}'.", username);
+
+    }
     private async Task SeedDefaultDepartmentsAsync(CancellationToken cancellationToken)
     {
         // Idempotent theo Code (KHÔNG skip toàn bộ nếu bảng đã có phòng) — vì migration DepartmentIsActive

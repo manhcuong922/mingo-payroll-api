@@ -110,7 +110,7 @@ public class PermissionEntityConfiguration : IEntityTypeConfiguration<Permission
         P(PermissionIds.ContractPartyReadAll, Permissions.ContractPartyReadAll, "ContractParty", "Read", PermissionScope.All, "Xem pháp nhân NSDLĐ."),
         P(PermissionIds.ContractPartyCreateAll, Permissions.ContractPartyCreateAll, "ContractParty", "Create", PermissionScope.All, "Tạo phiên bản pháp nhân NSDLĐ mới (append-only)."),
 
-        // ===== Department module — IDs 95–99 =====
+        // ===== Department module - IDs 143-147 =====
         // LegalDocument (89/91), AuditLog (90), ComplianceAutoUpdate (92-94) được seed
         // qua migrations riêng — KHÔNG đặt ở đây để tránh EF sinh INSERT duplicate.
 
@@ -122,7 +122,7 @@ public class PermissionEntityConfiguration : IEntityTypeConfiguration<Permission
         P(PermissionIds.EmployeeInformationReadDepartment, Permissions.EmployeeInformationReadDepartment,
             "EmployeeInformation", "Read", "Department", "Xem nhân viên trong phòng ban mình quản lý."),
 
-        // ===== Task/Production module — IDs 100–123 =====
+        // ===== Task/Production module - IDs 148-173 =====
         P(PermissionIds.ProcessTemplateReadAll,   Permissions.ProcessTemplateReadAll,   "ProcessTemplate", "Read",   PermissionScope.All, "Xem quy trình mẫu."),
         P(PermissionIds.ProcessTemplateCreateAll, Permissions.ProcessTemplateCreateAll, "ProcessTemplate", "Create", PermissionScope.All, "Tạo quy trình mẫu."),
         P(PermissionIds.ProcessTemplateUpdateAll, Permissions.ProcessTemplateUpdateAll, "ProcessTemplate", "Update", PermissionScope.All, "Cập nhật quy trình mẫu."),

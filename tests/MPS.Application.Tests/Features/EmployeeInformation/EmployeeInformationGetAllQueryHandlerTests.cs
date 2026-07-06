@@ -80,7 +80,7 @@ public sealed class EmployeeInformationGetAllQueryHandlerTests
         var result = await CreateSut().Handle(new EmployeeInformationGetAllQuery(), CancellationToken.None);
 
         result.Should().HaveCount(2);
-        _repo.Verify(r => r.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.GetAllAsync(It.IsAny<bool?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

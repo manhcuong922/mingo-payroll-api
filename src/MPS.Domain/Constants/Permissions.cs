@@ -187,7 +187,7 @@ public static class Permissions
     public const string FaceRegistrationSubmitSelf = "FaceRegistration.Submit.Self";
     public const string FaceRegistrationReadAll    = "FaceRegistration.Read.All";
     public const string FaceRegistrationApproveAll = "FaceRegistration.Approve.All";
-    // ===== Department module — IDs 95–99 =====
+    // ===== Department module - IDs 143-147 =====
 
     public const string DepartmentReadAll   = "Department.Read.All";
     public const string DepartmentCreateAll = "Department.Create.All";
@@ -196,7 +196,7 @@ public static class Permissions
 
     public const string EmployeeInformationReadDepartment = "EmployeeInformation.Read.Department";
 
-    // ===== Task/Production module (v5) — IDs 100–125 =====
+    // ===== Task/Production module (v5) - IDs 148-173 =====
 
     // ProcessTemplate (quy trình mẫu) — GĐ định nghĩa dùng chung; PM đọc để áp
     public const string ProcessTemplateReadAll   = "ProcessTemplate.Read.All";
@@ -428,45 +428,45 @@ public static class PermissionIds
     // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
     public const int AttendanceSettingReadAll = 141;
     public const int AttendanceSettingUpdateAll = 142;
-    // ===== Department module — IDs 95–99 =====
+    // ===== Department module - IDs 143-147 =====
 
-    public const int DepartmentReadAll   = 95;
-    public const int DepartmentCreateAll = 96;
-    public const int DepartmentUpdateAll = 97;
-    public const int DepartmentDeleteAll = 98;
+    public const int DepartmentReadAll   = 143;
+    public const int DepartmentCreateAll = 144;
+    public const int DepartmentUpdateAll = 145;
+    public const int DepartmentDeleteAll = 146;
 
-    public const int EmployeeInformationReadDepartment = 99;
+    public const int EmployeeInformationReadDepartment = 147;
 
-    // ===== Task/Production module (v5) — IDs 100–125 =====
-    public const int ProcessTemplateReadAll     = 100;
-    public const int ProcessTemplateCreateAll   = 101;
-    public const int ProcessTemplateUpdateAll   = 102;
-    public const int ProcessTemplateDeleteAll   = 103;
+    // ===== Task/Production module (v5) - IDs 148-173 =====
+    public const int ProcessTemplateReadAll     = 148;
+    public const int ProcessTemplateCreateAll   = 149;
+    public const int ProcessTemplateUpdateAll   = 150;
+    public const int ProcessTemplateDeleteAll   = 151;
 
-    public const int ProjectReadAll             = 104;
-    public const int ProjectReadDepartment      = 105;
-    public const int ProjectCreateAll           = 106;
-    public const int ProjectUpdateAll           = 107;
-    public const int ProjectDeleteAll           = 108;
-    public const int ProjectGenerateTasks       = 109;
-    public const int ProjectCompleteDepartment  = 110;
+    public const int ProjectReadAll             = 152;
+    public const int ProjectReadDepartment      = 153;
+    public const int ProjectCreateAll           = 154;
+    public const int ProjectUpdateAll           = 155;
+    public const int ProjectDeleteAll           = 156;
+    public const int ProjectGenerateTasks       = 157;
+    public const int ProjectCompleteDepartment  = 158;
 
-    public const int TaskReadAll                = 111;
-    public const int TaskReadDepartment         = 112;
-    public const int TaskReadAssigned           = 113;
-    public const int TaskReadConfidential       = 114;
+    public const int TaskReadAll                = 159;
+    public const int TaskReadDepartment         = 160;
+    public const int TaskReadAssigned           = 161;
+    public const int TaskReadConfidential       = 162;
 
-    public const int TaskCreateDepartment          = 115;
-    public const int TaskCreateConfidential        = 116;
-    public const int TaskUpdateDepartment          = 117;
-    public const int TaskUpdateProgressDepartment  = 118;
-    public const int TaskCompleteDepartment        = 119;
-    public const int TaskDeleteDepartment          = 120;
+    public const int TaskCreateDepartment          = 163;
+    public const int TaskCreateConfidential        = 164;
+    public const int TaskUpdateDepartment          = 165;
+    public const int TaskUpdateProgressDepartment  = 166;
+    public const int TaskCompleteDepartment        = 167;
+    public const int TaskDeleteDepartment          = 168;
 
-    public const int ProductionAttachmentReadDepartment  = 121;
-    public const int ProductionAttachmentWriteDepartment = 122;
-    public const int ProductionAttachmentReadAll         = 123;
+    public const int ProductionAttachmentReadDepartment  = 169;
+    public const int ProductionAttachmentWriteDepartment = 170;
+    public const int ProductionAttachmentReadAll         = 171;
 
-    public const int TaskAuditReadAll           = 124;
-    public const int TaskAuditReadDepartment    = 125;
+    public const int TaskAuditReadAll           = 172;
+    public const int TaskAuditReadDepartment    = 173;
 }
