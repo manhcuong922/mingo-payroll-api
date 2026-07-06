@@ -55,11 +55,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 columns: new[] { "Id", "Action", "Code", "Description", "Resource", "Scope" },
                 values: new object[,]
                 {
-                    { 95, "Read", "Department.Read.All", "Xem danh sách phòng ban.", "Department", "All" },
-                    { 96, "Create", "Department.Create.All", "Tạo phòng ban.", "Department", "All" },
-                    { 97, "Update", "Department.Update.All", "Cập nhật phòng ban.", "Department", "All" },
-                    { 98, "Delete", "Department.Delete.All", "Xóa phòng ban.", "Department", "All" },
-                    { 99, "Read", "EmployeeInformation.Read.Department", "Xem nhân viên trong phòng ban mình quản lý.", "EmployeeInformation", "Department" }
+                    { 143, "Read", "Department.Read.All", "Xem danh sách phòng ban.", "Department", "All" },
+                    { 144, "Create", "Department.Create.All", "Tạo phòng ban.", "Department", "All" },
+                    { 145, "Update", "Department.Update.All", "Cập nhật phòng ban.", "Department", "All" },
+                    { 146, "Delete", "Department.Delete.All", "Xóa phòng ban.", "Department", "All" },
+                    { 147, "Read", "EmployeeInformation.Read.Department", "Xem nhân viên trong phòng ban mình quản lý.", "EmployeeInformation", "Department" }
                 });
 
             migrationBuilder.InsertData(
@@ -67,24 +67,24 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 columns: new[] { "PermissionId", "RoleId" },
                 values: new object[,]
                 {
-                    { 95, 1 },
-                    { 96, 1 },
-                    { 97, 1 },
-                    { 98, 1 },
-                    { 99, 1 },
-                    { 95, 2 },
-                    { 96, 2 },
-                    { 97, 2 },
-                    { 98, 2 },
-                    { 95, 3 },
-                    { 95, 4 },
-                    { 96, 4 },
-                    { 97, 4 },
-                    { 98, 4 },
-                    { 95, 5 },
-                    { 99, 5 },
-                    { 95, 6 },
-                    { 95, 7 }
+                    { 143, 1 },
+                    { 144, 1 },
+                    { 145, 1 },
+                    { 146, 1 },
+                    { 147, 1 },
+                    { 143, 2 },
+                    { 144, 2 },
+                    { 145, 2 },
+                    { 146, 2 },
+                    { 143, 3 },
+                    { 143, 4 },
+                    { 144, 4 },
+                    { 145, 4 },
+                    { 146, 4 },
+                    { 143, 5 },
+                    { 147, 5 },
+                    { 143, 6 },
+                    { 143, 7 }
                 });
 
             migrationBuilder.CreateIndex(
@@ -129,117 +129,117 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 95, 1 });
+                keyValues: new object[] { 143, 1 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 96, 1 });
+                keyValues: new object[] { 144, 1 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 97, 1 });
+                keyValues: new object[] { 145, 1 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 98, 1 });
+                keyValues: new object[] { 146, 1 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 99, 1 });
+                keyValues: new object[] { 147, 1 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 95, 2 });
+                keyValues: new object[] { 143, 2 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 96, 2 });
+                keyValues: new object[] { 144, 2 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 97, 2 });
+                keyValues: new object[] { 145, 2 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 98, 2 });
+                keyValues: new object[] { 146, 2 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 95, 3 });
+                keyValues: new object[] { 143, 3 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 95, 4 });
+                keyValues: new object[] { 143, 4 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 96, 4 });
+                keyValues: new object[] { 144, 4 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 97, 4 });
+                keyValues: new object[] { 145, 4 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 98, 4 });
+                keyValues: new object[] { 146, 4 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 95, 5 });
+                keyValues: new object[] { 143, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 99, 5 });
+                keyValues: new object[] { 147, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 95, 6 });
+                keyValues: new object[] { 143, 6 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 95, 7 });
+                keyValues: new object[] { 143, 7 });
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValue: 95);
+                keyValue: 143);
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValue: 96);
+                keyValue: 144);
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValue: 97);
+                keyValue: 145);
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValue: 98);
+                keyValue: 146);
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValue: 99);
+                keyValue: 147);
 
             migrationBuilder.DropColumn(
                 name: "DepartmentId",

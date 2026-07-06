@@ -971,7 +971,9 @@ public sealed class DatabaseSeeder
 
         foreach (var w in demoWorkers)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == w.Username, ct);
+            var user = await _context.Users.FirstOrDefaultAsync(
+                u => u.Username == w.Username || u.EmployeeCode == w.Code || u.Email == w.Email,
+                ct);
             if (user is null)
             {
                 user = new User
@@ -988,7 +990,15 @@ public sealed class DatabaseSeeder
                     PasswordChangedAt = DateTime.UtcNow,
                 };
                 await _context.Users.AddAsync(user, ct);
-                await _context.SaveChangesAsync(ct);
+                 await _context.SaveChangesAsync(ct);
+            }
+            else if (!string.Equals(user.Username, w.Username, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(user.EmployeeCode, w.Code, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(user.Email, w.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug(
+                    "Demo worker seed reused existing user id={UserId} username={Username} code={EmployeeCode} email={Email}.",
+                    user.Id, user.Username, user.EmployeeCode, user.Email);
             }
 
             var citizenId = $"DEMO{user.Id:D9}";

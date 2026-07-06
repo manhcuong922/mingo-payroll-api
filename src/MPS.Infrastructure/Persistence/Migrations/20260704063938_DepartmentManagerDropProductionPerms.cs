@@ -45,67 +45,67 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 100, 5 });
+                keyValues: new object[] { 148, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 101, 5 });
+                keyValues: new object[] { 149, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 102, 5 });
+                keyValues: new object[] { 150, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 103, 5 });
+                keyValues: new object[] { 151, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 104, 5 });
+                keyValues: new object[] { 152, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 106, 5 });
+                keyValues: new object[] { 154, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 107, 5 });
+                keyValues: new object[] { 155, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 108, 5 });
+                keyValues: new object[] { 156, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 109, 5 });
+                keyValues: new object[] { 157, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 110, 5 });
+                keyValues: new object[] { 158, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 114, 5 });
+                keyValues: new object[] { 162, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 116, 5 });
+                keyValues: new object[] { 164, 5 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 122, 5 });
+                keyValues: new object[] { 170, 5 });
         }
 
         /// <inheritdoc />
@@ -122,19 +122,19 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     { 20, 5 },
                     { 21, 5 },
                     { 22, 5 },
-                    { 100, 5 },
-                    { 101, 5 },
-                    { 102, 5 },
-                    { 103, 5 },
-                    { 104, 5 },
-                    { 106, 5 },
-                    { 107, 5 },
-                    { 108, 5 },
-                    { 109, 5 },
-                    { 110, 5 },
-                    { 114, 5 },
-                    { 116, 5 },
-                    { 122, 5 }
+                    { 148, 5 },
+                    { 149, 5 },
+                    { 150, 5 },
+                    { 151, 5 },
+                    { 152, 5 },
+                    { 154, 5 },
+                    { 155, 5 },
+                    { 156, 5 },
+                    { 157, 5 },
+                    { 158, 5 },
+                    { 162, 5 },
+                    { 164, 5 },
+                    { 170, 5 }
                 });
         }
     }

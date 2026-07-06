@@ -15,7 +15,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 99, 5 });
+                keyValues: new object[] { 147, 5 });
 
             migrationBuilder.InsertData(
                 table: "RolePermissions",
@@ -23,7 +23,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                 values: new object[,]
                 {
                     { 7, 5 },
-                    { 99, 6 }
+                    { 147, 6 }
                 });
         }
 
@@ -38,12 +38,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 99, 6 });
+                keyValues: new object[] { 147, 6 });
 
             migrationBuilder.InsertData(
                 table: "RolePermissions",
                 columns: new[] { "PermissionId", "RoleId" },
-                values: new object[] { 99, 5 });
+                values: new object[] { 147, 5 });
         }
     }
 }

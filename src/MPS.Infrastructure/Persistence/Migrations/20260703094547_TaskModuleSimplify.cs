@@ -34,17 +34,17 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 120, 1 });
+                keyValues: new object[] { 168, 1 });
 
             migrationBuilder.DeleteData(
                 table: "RolePermissions",
                 keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 120, 6 });
+                keyValues: new object[] { 168, 6 });
 
             migrationBuilder.DeleteData(
                 table: "Permissions",
                 keyColumn: "Id",
-                keyValue: 120);
+                keyValue: 168);
 
             migrationBuilder.DropColumn(
                 name: "ApprovedAt",
@@ -121,15 +121,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
             migrationBuilder.InsertData(
                 table: "Permissions",
                 columns: new[] { "Id", "Action", "Code", "Description", "Resource", "Scope" },
-                values: new object[] { 120, "Approve", "Task.Approve.Department", "Duyệt chuyển Done trong xưởng mình.", "Task", "Department" });
+                values: new object[] { 168, "Approve", "Task.Approve.Department", "Duyệt chuyển Done trong xưởng mình.", "Task", "Department" });
 
             migrationBuilder.InsertData(
                 table: "RolePermissions",
                 columns: new[] { "PermissionId", "RoleId" },
                 values: new object[,]
                 {
-                    { 120, 1 },
-                    { 120, 6 }
+                    { 168, 1 },
+                    { 168, 6 }
                 });
 
             migrationBuilder.CreateIndex(
