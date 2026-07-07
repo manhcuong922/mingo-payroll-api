@@ -57,7 +57,8 @@ public class EmployeeShiftController : ControllerBase
                 operations,
                 request.ConflictPolicy,
                 SourceScheduleTemplateId: null,
-                AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings),
+                AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings,
+                IncludeRestDaysAndHolidays: request.IncludeRestDaysAndHolidays),
             cancellationToken);
         return Ok(result);
     }

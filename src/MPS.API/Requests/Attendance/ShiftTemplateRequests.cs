@@ -52,4 +52,6 @@ public sealed record BatchShiftOperationRequest(
 public sealed record BatchUpdateShiftAssignmentsRequest(
     IReadOnlyList<BatchShiftOperationRequest> Operations,
     BatchShiftConflictPolicy ConflictPolicy,
-    bool AcknowledgeWeeklyOvertimeWarnings = false);
+    bool AcknowledgeWeeklyOvertimeWarnings = false,
+    /// <summary>Bypass auto-skip WeeklyRestDay + PublicHoliday. FE truyền true khi user xác nhận ở dialog.</summary>
+    bool IncludeRestDaysAndHolidays = false);

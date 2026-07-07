@@ -17,4 +17,5 @@ public sealed record CreateScheduleTemplateCommand(
     string? Notes,
     bool AcknowledgeWeeklyOvertimeWarnings = false,
     ScheduleApplyTarget? ApplyTarget = null,
-    IReadOnlyList<int>? DepartmentIds = null) : IRequest<ScheduleTemplateApplyResultDto>;
+    IReadOnlyList<int>? DepartmentIds = null,
+    bool IncludeRestDaysAndHolidays = false) : IRequest<ScheduleTemplateApplyResultDto>;

@@ -66,6 +66,7 @@ public class AppDbContext : DbContext
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
+    public DbSet<WeeklyDayOffRule> WeeklyDayOffRules => Set<WeeklyDayOffRule>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
     public DbSet<AttendanceSetting> AttendanceSettings => Set<AttendanceSetting>();
     public DbSet<OvertimeRequest> OvertimeRequests => Set<OvertimeRequest>();

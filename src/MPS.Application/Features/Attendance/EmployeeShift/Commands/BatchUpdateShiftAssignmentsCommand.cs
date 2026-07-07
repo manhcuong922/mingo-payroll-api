@@ -27,7 +27,11 @@ public enum BatchShiftItemStatus
     InvalidShiftTemplate = 7,
     InvalidEmployee = 8,
     /// <summary>Multi-shift: ca mới giao thoa thời gian với ca đã có trên cùng ngày.</summary>
-    OverlapsExistingShift = 9
+    OverlapsExistingShift = 9,
+    /// <summary>Ngày rơi vào WeeklyRestDay của NV (theo WeeklyDayOffRule) — bỏ qua khi chưa acknowledge.</summary>
+    SkippedWeeklyRestDay = 10,
+    /// <summary>Ngày rơi vào PublicHoliday áp dụng cho NV — bỏ qua khi chưa acknowledge.</summary>
+    SkippedPublicHoliday = 11
 }
 
 public sealed record BatchShiftOperation(
@@ -55,9 +59,15 @@ public sealed record BatchUpdateShiftAssignmentsResult(
 /// Batch phân ca với cap §9 Điều 105 BLLĐ.
 /// Vượt 8h/ngày hoặc 48h/tuần thì handler chặn cứng; flag acknowledge chỉ giữ
 /// lại để tương thích request cũ và không còn bypass cap phân ca.
+///
+/// <see cref="IncludeRestDaysAndHolidays"/> — mặc định false: auto-skip các op Add rơi vào
+/// WeeklyRestDay của NV hoặc PublicHoliday. Trả về status
+/// <see cref="BatchShiftItemStatus.SkippedWeeklyRestDay"/> / <see cref="BatchShiftItemStatus.SkippedPublicHoliday"/>
+/// để FE hỏi xác nhận. Set true để bỏ qua guard này và tạo assignment bình thường.
 /// </summary>
 public sealed record BatchUpdateShiftAssignmentsCommand(
     IReadOnlyList<BatchShiftOperation> Operations,
     BatchShiftConflictPolicy ConflictPolicy,
     int? SourceScheduleTemplateId = null,
-    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<BatchUpdateShiftAssignmentsResult>;
+    bool AcknowledgeWeeklyOvertimeWarnings = false,
+    bool IncludeRestDaysAndHolidays = false) : IRequest<BatchUpdateShiftAssignmentsResult>;

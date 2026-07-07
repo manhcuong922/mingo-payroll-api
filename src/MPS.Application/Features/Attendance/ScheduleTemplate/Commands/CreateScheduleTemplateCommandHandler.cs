@@ -139,7 +139,7 @@ public class CreateScheduleTemplateCommandHandler
         var id = await _repository.AddAsync(entity, employeeIds, shiftIds, cancellationToken);
         entity.Id = id;
 
-        return await ApplyAsync(entity, employeeIds, cancellationToken);
+        return await ApplyAsync(entity, employeeIds, request.IncludeRestDaysAndHolidays, cancellationToken);
     }
 
     private async Task<IReadOnlyList<ShiftTemplateEntity>> LoadActiveShiftsAsync(
@@ -218,6 +218,7 @@ public class CreateScheduleTemplateCommandHandler
     private async Task<ScheduleTemplateApplyResultDto> ApplyAsync(
         ScheduleTemplateEntity template,
         IReadOnlyCollection<int> employeeIds,
+        bool includeRestDaysAndHolidays,
         CancellationToken cancellationToken)
     {
         var dates = _expander.ExpandDates(template);
@@ -249,7 +250,8 @@ public class CreateScheduleTemplateCommandHandler
                 operations,
                 BatchShiftConflictPolicy.ReplaceIfNoAttendance,
                 SourceScheduleTemplateId: template.Id,
-                AcknowledgeWeeklyOvertimeWarnings: true),
+                AcknowledgeWeeklyOvertimeWarnings: true,
+                IncludeRestDaysAndHolidays: includeRestDaysAndHolidays),
             cancellationToken);
 
         return new ScheduleTemplateApplyResultDto(

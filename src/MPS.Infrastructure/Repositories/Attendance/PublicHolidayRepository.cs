@@ -67,6 +67,9 @@ public class PublicHolidayRepository : IPublicHolidayRepository
         tracked.HolidayDate = entity.HolidayDate;
         tracked.HolidayEndDate = entity.HolidayEndDate;
         tracked.Description = entity.Description;
+        tracked.ApplyScope = entity.ApplyScope;
+        tracked.TargetDepartmentIds = entity.TargetDepartmentIds;
+        tracked.TargetEmployeeIds = entity.TargetEmployeeIds;
         tracked.IsActive = entity.IsActive;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
