@@ -13,17 +13,20 @@ public class GetMyLeaveBalanceQueryHandler : IRequestHandler<GetMyLeaveBalanceQu
     private readonly ILeaveBalanceRepository _repository;
     private readonly ILeaveTypeRepository _leaveTypeRepository;
     private readonly IContractLookupReader _lookup;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly ICurrentUserService _currentUser;
 
     public GetMyLeaveBalanceQueryHandler(
         ILeaveBalanceRepository repository,
         ILeaveTypeRepository leaveTypeRepository,
         IContractLookupReader lookup,
+        IEmployeeInformationRepository employeeRepository,
         ICurrentUserService currentUser)
     {
         _repository = repository;
         _leaveTypeRepository = leaveTypeRepository;
         _lookup = lookup;
+        _employeeRepository = employeeRepository;
         _currentUser = currentUser;
     }
 
@@ -33,12 +36,14 @@ public class GetMyLeaveBalanceQueryHandler : IRequestHandler<GetMyLeaveBalanceQu
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
         var employeeId = await _lookup.GetEmployeeInformationIdByUserIdAsync(userId, cancellationToken)
             ?? throw new NotFoundException($"No employee profile linked to user {userId}.");
+        var employee = await _employeeRepository.GetByIdAsync(employeeId, cancellationToken)
+            ?? throw new NotFoundException($"Employee profile {employeeId} not found.");
 
         var items = await _repository.GetByEmployeeAsync(employeeId, request.Year, cancellationToken);
         var activeTypes = await _leaveTypeRepository.GetActiveAsync(cancellationToken);
         var assignedTypes = activeTypes
             .Where(t => LeaveTypeAssignmentPolicy.TracksYearlyBalance(t)
-                && LeaveTypeAssignmentPolicy.AppliesToEmployee(t, employeeId))
+                && LeaveTypeAssignmentPolicy.AppliesToEmployee(t, employeeId, employee.DepartmentId))
             .ToDictionary(t => t.Id);
 
         var result = items

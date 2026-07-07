@@ -65,7 +65,10 @@ public class ScheduleTemplateController : ControllerBase
             request.DaysOfMonth,
             request.EmployeeInformationIds,
             request.Notes,
-            request.AcknowledgeWeeklyOvertimeWarnings), cancellationToken);
+            request.AcknowledgeWeeklyOvertimeWarnings,
+            request.ApplyTarget,
+            request.DepartmentIds,
+            request.IncludeRestDaysAndHolidays), cancellationToken);
         return Created($"/api/schedule-templates/{result.ScheduleTemplateId}", result);
     }
 
@@ -88,7 +91,9 @@ public class ScheduleTemplateController : ControllerBase
             request.DaysOfMonth,
             request.EmployeeInformationIds,
             request.IsActive,
-            request.Notes), cancellationToken);
+            request.Notes,
+            request.ApplyTarget,
+            request.DepartmentIds), cancellationToken);
         return NoContent();
     }
 
@@ -97,10 +102,11 @@ public class ScheduleTemplateController : ControllerBase
     public async Task<IActionResult> Reapply(
         int id,
         [FromQuery] bool acknowledgeWeeklyOvertimeWarnings = false,
+        [FromQuery] bool includeRestDaysAndHolidays = false,
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(
-            new ReapplyScheduleTemplateCommand(id, acknowledgeWeeklyOvertimeWarnings),
+            new ReapplyScheduleTemplateCommand(id, acknowledgeWeeklyOvertimeWarnings, includeRestDaysAndHolidays),
             cancellationToken);
         return Ok(result);
     }

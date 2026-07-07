@@ -119,9 +119,32 @@ public sealed record PublicHolidayDto(
     DateOnly HolidayDate,
     DateOnly HolidayEndDate,
     string? Description,
+    string ApplyScope,
+    string? TargetDepartmentIds,
+    string? TargetEmployeeIds,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
+
+public sealed record WeeklyDayOffRuleDto(
+    int Id,
+    string Name,
+    string? Description,
+    IReadOnlyList<int> DaysOfWeek,
+    string ApplyScope,
+    string? TargetDepartmentIds,
+    string? TargetEmployeeIds,
+    DateOnly EffectiveFrom,
+    DateOnly? EffectiveTo,
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt);
+
+public sealed record WeeklyDayOffResolveDto(
+    int EmployeeInformationId,
+    DateOnly Date,
+    IReadOnlyList<int> DaysOfWeek,
+    bool IsWeeklyRestDay);
 
 public sealed record AttendanceRecordDto(
     int Id,
@@ -158,8 +181,6 @@ public sealed record AttendanceSettingDto(
     int LockAfterDays,
     bool AllowAdminOverride,
     bool RequireOverrideReason,
-    string TimezoneId,
-    string? Notes,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 

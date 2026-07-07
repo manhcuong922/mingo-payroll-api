@@ -235,6 +235,13 @@ public static class Permissions
     // Audit — xem lịch sử chỉnh sửa task/đơn (scoped theo xưởng)
     public const string TaskAuditReadAll        = "Task.Audit.Read.All";
     public const string TaskAuditReadDepartment = "Task.Audit.Read.Department";
+
+    // ===== WeeklyDayOff module — IDs 174–177 =====
+
+    public const string WeeklyDayOffReadAll   = "WeeklyDayOff.Read.All";
+    public const string WeeklyDayOffCreateAll = "WeeklyDayOff.Create.All";
+    public const string WeeklyDayOffUpdateAll = "WeeklyDayOff.Update.All";
+    public const string WeeklyDayOffDeleteAll = "WeeklyDayOff.Delete.All";
 }
 
 public static class PermissionIds
@@ -469,4 +476,10 @@ public static class PermissionIds
 
     public const int TaskAuditReadAll           = 172;
     public const int TaskAuditReadDepartment    = 173;
+
+    // ===== WeeklyDayOff module — IDs 174–177 =====
+    public const int WeeklyDayOffReadAll   = 174;
+    public const int WeeklyDayOffCreateAll = 175;
+    public const int WeeklyDayOffUpdateAll = 176;
+    public const int WeeklyDayOffDeleteAll = 177;
 }

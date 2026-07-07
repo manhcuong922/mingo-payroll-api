@@ -90,7 +90,7 @@ public class UpdateLeaveTypeCommandHandler : IRequestHandler<UpdateLeaveTypeComm
         var employees = await _employeeRepository.GetAllAsync(cancellationToken: cancellationToken);
         var targetIds = LeaveTypeAssignmentPolicy.ResolveTargetEmployeeIds(
             entity,
-            employees.Select(employee => employee.Id).ToArray());
+            employees);
 
         await _balanceRepository.UpsertForLeaveTypeAsync(
             entity.Id,

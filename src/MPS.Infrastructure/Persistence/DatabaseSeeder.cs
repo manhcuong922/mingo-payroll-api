@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities;
+using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Entities.Compliance;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Compliance;
@@ -44,6 +45,10 @@ public sealed class DatabaseSeeder
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
+        // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (1/2/3) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
+        await SeedDefaultAttendanceRuleAsync(cancellationToken);
+        await SeedDefaultShiftTemplatesAsync(cancellationToken);
+        await SeedDefaultWeeklyDayOffRuleAsync(cancellationToken);
         // Task/Production demo: quy trình mẫu + đơn hàng + cây task + nhật ký sản lượng.
         await SeedTaskProductionDemoAsync(cancellationToken);
     }
@@ -364,23 +369,44 @@ public sealed class DatabaseSeeder
             return;
         }
 
-        var userIds = users.Select(u => u.Id).ToList();
-        var alreadyLinked = await _context.EmployeeInformations
-            .AsNoTracking()
-            .Where(e => e.UserId != null && userIds.Contains(e.UserId!.Value))
-            .Select(e => e.UserId!.Value)
-            .ToListAsync(cancellationToken);
-        var linkedSet = alreadyLinked.ToHashSet();
-
         var created = new Dictionary<string, EmployeeInformation>(StringComparer.OrdinalIgnoreCase);
-        foreach (var u in users.Where(u => !linkedSet.Contains(u.Id)))
+        var touchedExisting = false;
+
+        foreach (var u in users)
         {
+            var citizenId = $"DEMO{u.Id:D9}";
+            var existing = await _context.EmployeeInformations
+                .FirstOrDefaultAsync(e => e.UserId == u.Id || e.CitizenId == citizenId, cancellationToken);
+
+            if (existing is not null)
+            {
+                if (existing.UserId is null)
+                {
+                    existing.UserId = u.Id;
+                    touchedExisting = true;
+                }
+
+                if (existing.DepartmentId is null)
+                {
+                    existing.DepartmentId = itDepartment.Id;
+                    touchedExisting = true;
+                }
+
+                if (existing.PositionId <= 0)
+                {
+                    existing.PositionId = position.Id;
+                    touchedExisting = true;
+                }
+
+                continue;
+            }
+
             var emp = new EmployeeInformation
             {
                 UserId = u.Id,
                 FullName = string.IsNullOrWhiteSpace(u.FullName) ? u.Username : u.FullName,
                 Dob = u.Dob,
-                CitizenId = $"DEMO{u.Id:D9}",
+                CitizenId = citizenId,
                 PermanentAddress = "N/A (demo seed)",
                 Email = u.Email,
                 PhoneNo = u.PhoneNo,
@@ -392,11 +418,14 @@ public sealed class DatabaseSeeder
             created[u.Username] = emp;
         }
 
-        if (created.Count > 0)
+        if (created.Count > 0 || touchedExisting)
         {
             await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded {Count} demo EmployeeInformation(s): {Users}.",
-                created.Count, string.Join(", ", created.Keys));
+            if (created.Count > 0)
+            {
+                _logger.LogInformation("Seeded {Count} demo EmployeeInformation(s): {Users}.",
+                    created.Count, string.Join(", ", created.Keys));
+            }
         }
 
         await AssignItDepartmentManagerAsync(itDepartment, created, cancellationToken);
@@ -913,6 +942,203 @@ public sealed class DatabaseSeeder
                     legalDocumentIdsByCode, adminId, now, ct);
             }
         }
+    }
+
+    // ===== Attendance defaults =====
+    // AttendanceRule "Tiêu chuẩn" (1/2/3) = hệ số công mặc định để mọi ShiftTemplate FK vào.
+    // Idempotent theo Name (unique index).
+    private const string DefaultAttendanceRuleName = "Tiêu chuẩn";
+    private const string DefaultWeeklyDayOffRuleName = "Ngày nghỉ tuần mặc định";
+
+    private async Task SeedDefaultAttendanceRuleAsync(CancellationToken ct)
+    {
+        var exists = await _context.AttendanceRules
+            .AsNoTracking()
+            .AnyAsync(r => r.Name == DefaultAttendanceRuleName, ct);
+        if (exists)
+        {
+            _logger.LogDebug("Default AttendanceRule '{Name}' already seeded; skipping.", DefaultAttendanceRuleName);
+            return;
+        }
+
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+        if (adminId == 0)
+        {
+            _logger.LogWarning("No system admin found; skipping default AttendanceRule seed.");
+            return;
+        }
+
+        var rule = new AttendanceRule
+        {
+            Name = DefaultAttendanceRuleName,
+            Description = "Tiêu chuẩn",
+            WorkRateNormal = 1.00m,
+            WorkRateWeeklyRest = 2.00m,
+            WorkRateHoliday = 3.00m,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = adminId,
+        };
+
+        await _context.AttendanceRules.AddAsync(rule, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded default AttendanceRule '{Name}' (1/2/3).", DefaultAttendanceRuleName);
+    }
+
+    // Rule ngày nghỉ tuần mặc định — CN toàn công ty. Idempotent theo Name.
+    private async Task SeedDefaultWeeklyDayOffRuleAsync(CancellationToken ct)
+    {
+        var exists = await _context.WeeklyDayOffRules
+            .AsNoTracking()
+            .AnyAsync(r => r.Name == DefaultWeeklyDayOffRuleName, ct);
+        if (exists)
+        {
+            _logger.LogDebug("Default WeeklyDayOffRule '{Name}' already seeded; skipping.", DefaultWeeklyDayOffRuleName);
+            return;
+        }
+
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+        if (adminId == 0)
+        {
+            _logger.LogWarning("No system admin found; skipping default WeeklyDayOffRule seed.");
+            return;
+        }
+
+        var rule = new WeeklyDayOffRule
+        {
+            Name = DefaultWeeklyDayOffRuleName,
+            Description = "Ngày nghỉ tuần mặc định — Thứ 7 và Chủ nhật.",
+            DaysOfWeekMask = "0,6",
+            ApplyScope = "AllEmployees",
+            EffectiveFrom = DateOnly.FromDateTime(DateTime.UtcNow),
+            EffectiveTo = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = adminId,
+        };
+
+        await _context.WeeklyDayOffRules.AddAsync(rule, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded default WeeklyDayOffRule '{Name}' (Saturday + Sunday, all employees).", DefaultWeeklyDayOffRuleName);
+    }
+
+    // 4 ca làm việc mặc định: CA-SANG, CA-CHIEU, CA-DEM, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".
+    // Idempotent theo Code (unique index) — chỉ chèn Code còn thiếu.
+    private async Task SeedDefaultShiftTemplatesAsync(CancellationToken ct)
+    {
+        var rule = await _context.AttendanceRules
+            .AsNoTracking()
+            .Where(r => r.Name == DefaultAttendanceRuleName)
+            .Select(r => new { r.Id })
+            .FirstOrDefaultAsync(ct);
+        if (rule is null)
+        {
+            _logger.LogWarning("Default AttendanceRule not found; skipping shift template seed.");
+            return;
+        }
+
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+        if (adminId == 0)
+        {
+            _logger.LogWarning("No system admin found; skipping shift template seed.");
+            return;
+        }
+
+        var existingCodes = await _context.ShiftTemplates
+            .AsNoTracking()
+            .Select(s => s.Code)
+            .ToListAsync(ct);
+        var existing = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var now = DateTime.UtcNow;
+        var seeds = new List<ShiftTemplate>
+        {
+            new()
+            {
+                Code = "CA-SANG",
+                Name = "Ca sáng",
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(12, 0),
+                BreakStartTime = null,
+                BreakEndTime = null,
+                StandardHours = 4.00m,
+                StandardDays = 1.00m,
+                AppliedAttendanceRuleId = rule.Id,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "CA-CHIEU",
+                Name = "Ca chiều",
+                StartTime = new TimeOnly(13, 0),
+                EndTime = new TimeOnly(17, 0),
+                BreakStartTime = null,
+                BreakEndTime = null,
+                StandardHours = 4.00m,
+                StandardDays = 1.00m,
+                AppliedAttendanceRuleId = rule.Id,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "CA-DEM",
+                Name = "Ca đêm",
+                StartTime = new TimeOnly(22, 0),
+                EndTime = new TimeOnly(6, 0),
+                BreakStartTime = null,
+                BreakEndTime = null,
+                StandardHours = 8.00m,
+                StandardDays = 1.00m,
+                AppliedAttendanceRuleId = rule.Id,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "FULLTIME",
+                Name = "Fulltime",
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(17, 0),
+                BreakStartTime = new TimeOnly(12, 0),
+                BreakEndTime = new TimeOnly(13, 0),
+                StandardHours = 8.00m,
+                StandardDays = 1.00m,
+                AppliedAttendanceRuleId = rule.Id,
+                IsActive = true,
+                Notes = "Fulltime - hệ số tiêu chuẩn",
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+        };
+
+        var toAdd = seeds.Where(s => !existing.Contains(s.Code)).ToList();
+        if (toAdd.Count == 0)
+        {
+            _logger.LogDebug("All default ShiftTemplates already present; skipping insert.");
+            return;
+        }
+
+        await _context.ShiftTemplates.AddRangeAsync(toAdd, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded {Count} default ShiftTemplate(s): {Codes}.",
+            toAdd.Count, string.Join(", ", toAdd.Select(s => s.Code)));
     }
 
     // ===== Task/Production demo data =====

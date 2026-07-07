@@ -37,6 +37,4 @@ public sealed record UpdateAttendanceSettingRequest(
     TimeOnly DailyEditCutoffTime,
     int LockAfterDays,
     bool AllowAdminOverride,
-    bool RequireOverrideReason,
-    string? TimezoneId,
-    string? Notes);
+    bool RequireOverrideReason);

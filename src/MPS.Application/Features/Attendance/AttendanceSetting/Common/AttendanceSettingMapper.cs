@@ -12,8 +12,6 @@ internal static class AttendanceSettingMapper
         setting.LockAfterDays,
         setting.AllowAdminOverride,
         setting.RequireOverrideReason,
-        setting.TimezoneId,
-        setting.Notes,
         setting.CreatedAt,
         setting.UpdatedAt);
 }

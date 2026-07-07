@@ -82,7 +82,8 @@ public class ReapplyScheduleTemplateCommandHandler
                 operations,
                 BatchShiftConflictPolicy.ReplaceIfNoAttendance,
                 SourceScheduleTemplateId: template.Id,
-                AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings),
+                AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings,
+                IncludeRestDaysAndHolidays: request.IncludeRestDaysAndHolidays),
             cancellationToken);
 
         return new ScheduleTemplateApplyResultDto(

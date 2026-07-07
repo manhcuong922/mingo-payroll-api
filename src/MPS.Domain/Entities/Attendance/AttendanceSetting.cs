@@ -9,8 +9,6 @@ public class AttendanceSetting
     public int LockAfterDays { get; set; }
     public bool AllowAdminOverride { get; set; }
     public bool RequireOverrideReason { get; set; }
-    public string TimezoneId { get; set; } = "Asia/Ho_Chi_Minh";
-    public string? Notes { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public int? CreatedByUserId { get; set; }

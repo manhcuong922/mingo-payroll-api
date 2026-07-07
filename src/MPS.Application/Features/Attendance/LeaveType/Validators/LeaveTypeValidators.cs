@@ -89,6 +89,31 @@ internal sealed class LeaveTypeBaseValidator : AbstractValidator<ILeaveTypeComma
 
         RuleFor(x => x.TargetDepartmentIds).MaximumLength(1000);
         RuleFor(x => x.TargetEmployeeIds).MaximumLength(1000);
+
+        When(x => x.ApplyScope == "SpecificDepartments", () =>
+        {
+            RuleFor(x => x.TargetDepartmentIds)
+                .NotEmpty()
+                .Must(IsCsvOfPositiveIntegers)
+                .WithMessage("TargetDepartmentIds must contain one or more numeric department ids.");
+        });
+
+        When(x => x.ApplyScope == "SpecificEmployees", () =>
+        {
+            RuleFor(x => x.TargetEmployeeIds)
+                .NotEmpty()
+                .Must(IsCsvOfPositiveIntegers)
+                .WithMessage("TargetEmployeeIds must contain one or more numeric employee ids.");
+        });
+    }
+
+    private static bool IsCsvOfPositiveIntegers(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .All(part => int.TryParse(part, out var id) && id > 0);
     }
 }
 

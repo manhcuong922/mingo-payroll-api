@@ -78,9 +78,7 @@ public class AttendanceController : ControllerBase
             request.DailyEditCutoffTime,
             request.LockAfterDays,
             request.AllowAdminOverride,
-            request.RequireOverrideReason,
-            request.TimezoneId,
-            request.Notes), cancellationToken);
+            request.RequireOverrideReason), cancellationToken);
         return Ok(result);
     }
 

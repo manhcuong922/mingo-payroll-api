@@ -7,4 +7,7 @@ public sealed record UpdatePublicHolidayCommand(
     string Name,
     DateOnly HolidayDate,
     DateOnly HolidayEndDate,
-    string? Description) : IRequest<bool>;
+    string? Description,
+    string ApplyScope,
+    string? TargetDepartmentIds,
+    string? TargetEmployeeIds) : IRequest<bool>, IPublicHolidayTargetCommand;
