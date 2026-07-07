@@ -24,9 +24,12 @@ public sealed class TaskUpdateProgressCommandHandlerTests
 
     private static string Rv(byte[] b) => Convert.ToBase64String(b);
 
+    // Guard mới (v7 mục 8) siết task lá theo đúng PM phụ trách công đoạn cha — các test dưới đây
+    // không nhằm test phân quyền PM nên dùng GĐ (ProjectReadAll) để bypass, giữ tập trung vào business logic.
     private void SetupManager()
     {
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
+        _currentUser.Setup(c => c.HasPermission(MPS.Domain.Constants.Permissions.ProjectReadAll)).Returns(true);
         _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
     }

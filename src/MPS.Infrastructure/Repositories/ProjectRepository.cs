@@ -15,13 +15,19 @@ public class ProjectRepository : IProjectRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<Project>> GetAllAsync(CancellationToken ct) =>
-        await _context.Projects
+    public async Task<IReadOnlyList<Project>> GetAllAsync(CancellationToken ct, bool includeCancelled = false)
+    {
+        var query = _context.Projects
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
-            .OrderByDescending(p => p.Id)
-            .ToListAsync(ct);
+            .AsQueryable();
+
+        if (!includeCancelled)
+            query = query.Where(p => p.DeletedAt == null);
+
+        return await query.OrderByDescending(p => p.Id).ToListAsync(ct);
+    }
 
     public Task<Project?> GetByIdAsync(int id, CancellationToken ct) =>
         _context.Projects
@@ -39,17 +45,24 @@ public class ProjectRepository : IProjectRepository
             .Include(p => p.Tasks).ThenInclude(t => t.Assignees).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
-    public async Task<IReadOnlyList<Project>> GetByDepartmentAsync(int departmentId, CancellationToken ct) =>
-        await _context.Projects
+    public async Task<IReadOnlyList<Project>> GetByDepartmentAsync(
+        int departmentId, CancellationToken ct, bool includeCancelled = false)
+    {
+        var query = _context.Projects
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
             .Where(p => p.DepartmentId == departmentId)
-            .OrderByDescending(p => p.Id)
-            .ToListAsync(ct);
+            .AsQueryable();
+
+        if (!includeCancelled)
+            query = query.Where(p => p.DeletedAt == null);
+
+        return await query.OrderByDescending(p => p.Id).ToListAsync(ct);
+    }
 
     public async Task<(IReadOnlyList<Project> Items, int Total)> GetPagedAsync(
-        string? keyword, int? departmentId, int page, int pageSize, CancellationToken ct)
+        string? keyword, int? departmentId, int page, int pageSize, CancellationToken ct, bool includeCancelled = false)
     {
         var query = _context.Projects
             .AsNoTracking()
@@ -59,6 +72,9 @@ public class ProjectRepository : IProjectRepository
 
         if (departmentId.HasValue)
             query = query.Where(p => p.DepartmentId == departmentId);
+
+        if (!includeCancelled)
+            query = query.Where(p => p.DeletedAt == null);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {

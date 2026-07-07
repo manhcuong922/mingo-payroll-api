@@ -28,30 +28,51 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .Include(t => t.Children).ThenInclude(c => c.Assignees).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(t => t.Id == id, ct);
 
-    public async Task<IReadOnlyList<ProjectTask>> GetByProjectIdAsync(int projectId, CancellationToken ct) =>
-        await _context.ProjectTasks
+    public async Task<IReadOnlyList<ProjectTask>> GetByProjectIdAsync(
+        int projectId, CancellationToken ct, bool includeCancelled = false)
+    {
+        var query = _context.ProjectTasks
             .AsNoTracking()
             .Include(t => t.Assignees).ThenInclude(a => a.User)
             .Where(t => t.ProjectId == projectId)
-            .OrderBy(t => t.StepOrder).ThenBy(t => t.Id)
-            .ToListAsync(ct);
+            .AsQueryable();
 
-    public async Task<IReadOnlyList<ProjectTask>> GetByDepartmentAsync(int departmentId, CancellationToken ct) =>
-        await _context.ProjectTasks
+        if (!includeCancelled)
+            query = query.Where(t => t.DeletedAt == null);
+
+        return await query.OrderBy(t => t.StepOrder).ThenBy(t => t.Id).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProjectTask>> GetByDepartmentAsync(
+        int departmentId, CancellationToken ct, bool includeCancelled = false)
+    {
+        var query = _context.ProjectTasks
             .AsNoTracking()
             .Include(t => t.Assignees).ThenInclude(a => a.User)
             .Where(t => t.DepartmentId == departmentId)
-            .OrderBy(t => t.StepOrder).ThenBy(t => t.Id)
-            .ToListAsync(ct);
+            .AsQueryable();
 
-    public async Task<IReadOnlyList<ProjectTask>> GetAssignedToUserAsync(int userId, CancellationToken ct) =>
-        await _context.ProjectTasks
+        if (!includeCancelled)
+            query = query.Where(t => t.DeletedAt == null);
+
+        return await query.OrderBy(t => t.StepOrder).ThenBy(t => t.Id).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProjectTask>> GetAssignedToUserAsync(
+        int userId, CancellationToken ct, bool includeCancelled = false)
+    {
+        var query = _context.ProjectTasks
             .AsNoTracking()
             .Include(t => t.Department)
             .Include(t => t.Assignees)
             .Where(t => !t.IsBatchParent && t.Assignees.Any(a => a.UserId == userId))
-            .OrderBy(t => t.Deadline)
-            .ToListAsync(ct);
+            .AsQueryable();
+
+        if (!includeCancelled)
+            query = query.Where(t => t.DeletedAt == null);
+
+        return await query.OrderBy(t => t.Deadline).ToListAsync(ct);
+    }
 
     public Task<bool> HasChildrenAsync(int taskId, CancellationToken ct) =>
         _context.ProjectTasks.AnyAsync(t => t.ParentTaskId == taskId, ct);
@@ -145,4 +166,83 @@ public class ProjectTaskRepository : IProjectTaskRepository
 
         return affected == 1;
     }
+
+    // ⭐ Pause lan truyền: con trực tiếp của stageId lưu Status hiện tại vào StatusBeforePause rồi chuyển Paused,
+    // đánh dấu PausedByCascadeFromId=stageId ("bị lan truyền" — không tự Resume độc lập, plan mục 6.5).
+    public Task CascadePauseChildrenAsync(int stageId, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(c => c.ParentTaskId == stageId && c.Status != TaskItemStatus.Paused && c.Status != TaskItemStatus.Cancelled)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.StatusBeforePause, c => c.Status)
+                .SetProperty(c => c.Status, TaskItemStatus.Paused)
+                .SetProperty(c => c.PausedByCascadeFromId, stageId), ct);
+
+    // ⭐ Resume lan truyền: chỉ con đang Paused DO lan truyền TỪ ĐÚNG stageId này mới được trả lại status cũ.
+    public Task CascadeResumeChildrenAsync(int stageId, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(c => c.ParentTaskId == stageId && c.PausedByCascadeFromId == stageId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, c => c.StatusBeforePause ?? TaskItemStatus.Todo)
+                .SetProperty(c => c.StatusBeforePause, (TaskItemStatus?)null)
+                .SetProperty(c => c.PausedByCascadeFromId, (int?)null), ct);
+
+    // ⭐ Cancel lan truyền: con trực tiếp soft-delete + lưu status cũ (khác Pause: dùng DeletedAt thay StatusBeforePause riêng
+    // — dùng lại cùng field StatusBeforePause để Restore biết trả lại đúng trạng thái).
+    public Task CascadeCancelChildrenAsync(int stageId, DateTime deletedAt, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(c => c.ParentTaskId == stageId && c.Status != TaskItemStatus.Cancelled)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.StatusBeforePause, c => c.Status)
+                .SetProperty(c => c.Status, TaskItemStatus.Cancelled)
+                .SetProperty(c => c.PausedByCascadeFromId, stageId)
+                .SetProperty(c => c.DeletedAt, deletedAt), ct);
+
+    // ⭐ Restore lan truyền: chỉ con bị Cancel DO lan truyền TỪ ĐÚNG stageId này mới được khôi phục theo cha.
+    public Task CascadeRestoreChildrenAsync(int stageId, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(c => c.ParentTaskId == stageId && c.PausedByCascadeFromId == stageId && c.Status == TaskItemStatus.Cancelled)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, c => c.StatusBeforePause ?? TaskItemStatus.Todo)
+                .SetProperty(c => c.StatusBeforePause, (TaskItemStatus?)null)
+                .SetProperty(c => c.PausedByCascadeFromId, (int?)null)
+                .SetProperty(c => c.DeletedAt, (DateTime?)null), ct);
+
+    // Đơn (Tầng 1) không có bảng ProjectTask riêng để trỏ Id vào PausedByCascadeFromId — dùng -projectId
+    // (số ÂM) để phân biệt "lan truyền từ Đơn" với "lan truyền từ Công đoạn" (luôn dương, chính ProjectTask.Id).
+    private static int ProjectCascadeMarker(int projectId) => -projectId;
+
+    public Task CascadePauseByProjectAsync(int projectId, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(t => t.ProjectId == projectId && t.Status != TaskItemStatus.Paused && t.Status != TaskItemStatus.Cancelled)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(t => t.StatusBeforePause, t => t.Status)
+                .SetProperty(t => t.Status, TaskItemStatus.Paused)
+                .SetProperty(t => t.PausedByCascadeFromId, ProjectCascadeMarker(projectId)), ct);
+
+    public Task CascadeResumeByProjectAsync(int projectId, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(t => t.ProjectId == projectId && t.PausedByCascadeFromId == ProjectCascadeMarker(projectId))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(t => t.Status, t => t.StatusBeforePause ?? TaskItemStatus.Todo)
+                .SetProperty(t => t.StatusBeforePause, (TaskItemStatus?)null)
+                .SetProperty(t => t.PausedByCascadeFromId, (int?)null), ct);
+
+    public Task CascadeCancelByProjectAsync(int projectId, DateTime deletedAt, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(t => t.ProjectId == projectId && t.Status != TaskItemStatus.Cancelled)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(t => t.StatusBeforePause, t => t.Status)
+                .SetProperty(t => t.Status, TaskItemStatus.Cancelled)
+                .SetProperty(t => t.PausedByCascadeFromId, ProjectCascadeMarker(projectId))
+                .SetProperty(t => t.DeletedAt, deletedAt), ct);
+
+    public Task CascadeRestoreByProjectAsync(int projectId, CancellationToken ct) =>
+        _context.ProjectTasks
+            .Where(t => t.ProjectId == projectId && t.PausedByCascadeFromId == ProjectCascadeMarker(projectId)
+                && t.Status == TaskItemStatus.Cancelled)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(t => t.Status, t => t.StatusBeforePause ?? TaskItemStatus.Todo)
+                .SetProperty(t => t.StatusBeforePause, (TaskItemStatus?)null)
+                .SetProperty(t => t.PausedByCascadeFromId, (int?)null)
+                .SetProperty(t => t.DeletedAt, (DateTime?)null), ct);
 }

@@ -2,6 +2,8 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Services;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
+using ProjectTaskEntity = MPS.Domain.Entities.ProjectTask;
 
 namespace MPS.Application.Features.Project;
 
@@ -35,4 +37,56 @@ public static class ProjectScopeGuard
         IDepartmentManagerAuthorizer authorizer,
         CancellationToken ct) =>
         EnsureCanWriteAsync(taskDepartmentId, currentUser, authorizer, ct);
+
+    // v7 mục 8: tạo Công đoạn (IsBatchParent=true) → chỉ Manager của xưởng / GĐ.
+    // Tạo Task lá (IsBatchParent=false) → chỉ PM đang được giao phụ trách Công đoạn cha / GĐ.
+    public static async Task EnsureCanCreateTaskAsync(
+        bool isBatchParent,
+        int? departmentId,
+        int? assignedPmUserIdOfParent,
+        ICurrentUserService currentUser,
+        IDepartmentManagerAuthorizer authorizer,
+        CancellationToken ct)
+    {
+        if (currentUser.HasPermission(Permissions.ProjectReadAll)) return; // GĐ/Phó GĐ toàn quyền
+
+        if (isBatchParent)
+        {
+            await EnsureCanWriteAsync(departmentId, currentUser, authorizer, ct);
+            return;
+        }
+
+        var userId = currentUser.UserId
+            ?? throw new ForbiddenAccessException("Không xác định được người dùng hiện tại.");
+        if (assignedPmUserIdOfParent != userId)
+            throw new ForbiddenAccessException("Chỉ PM đang phụ trách công đoạn này mới được tạo task con.");
+    }
+
+    // v7 mục 8: ghi (sửa/hoàn thành/cập nhật sản lượng/pause/cancel/resume/restore) trên Công đoạn
+    // → Manager của xưởng/GĐ. Trên Task lá → CHỈ đúng PM đang phụ trách Công đoạn cha/GĐ — không phải
+    // "bất kỳ PM nào cùng xưởng" (khác EnsureCanWriteTaskAsync, vốn chỉ kiểm scope xưởng).
+    public static async Task EnsureCanWriteTaskLeafAsync(
+        ProjectTaskEntity task,
+        IProjectTaskRepository tasks,
+        ICurrentUserService currentUser,
+        IDepartmentManagerAuthorizer authorizer,
+        CancellationToken ct)
+    {
+        if (task.IsBatchParent)
+        {
+            await EnsureCanWriteTaskAsync(task.DepartmentId, currentUser, authorizer, ct);
+            return;
+        }
+
+        if (currentUser.HasPermission(Permissions.ProjectReadAll)) return; // GĐ/Phó GĐ toàn quyền
+
+        var userId = currentUser.UserId
+            ?? throw new ForbiddenAccessException("Không xác định được người dùng hiện tại.");
+
+        var parentPm = task.ParentTaskId is int parentId
+            ? (await tasks.GetByIdAsync(parentId, ct))?.AssignedPmUserId
+            : null;
+        if (parentPm != userId)
+            throw new ForbiddenAccessException("Chỉ PM đang phụ trách công đoạn này mới được thao tác task con.");
+    }
 }

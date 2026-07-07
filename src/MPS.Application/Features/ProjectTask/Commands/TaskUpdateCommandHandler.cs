@@ -2,6 +2,7 @@ using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
+using MPS.Domain.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -37,7 +38,7 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         var task = await _tasks.GetByIdWithGraphAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskAsync(task.DepartmentId, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
 
         await ValidateDeadlineScopeAsync(request, task, ct);
         await ValidateQuantityScopeAsync(request, task, ct);
@@ -48,9 +49,16 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         task.Priority = request.Priority;
 
         if (task.ProgressType == ProgressType.Quantity)
+        {
             task.PlannedQuantity = request.PlannedQuantity;
+        }
         else
+        {
+            // Plan mục 6.3: Weight <= 0 khiến Task Milestone không bao giờ ảnh hưởng % — không cho lưu.
+            if (request.Weight <= 0)
+                throw new DomainValidationException("Task theo mốc phải có trọng số lớn hơn 0.");
             task.Weight = request.Weight;
+        }
 
         await ApplyAssigneesAsync(request, task, ct);
 
@@ -104,7 +112,20 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         if (newAssignees.Any(id => !members.Contains(id)))
             throw new DomainValidationException("Có người được giao không thuộc xưởng của task.");
 
-        var now = DateTime.UtcNow;
+        if (!task.IsBatchParent)
+        {
+            var currentAssigneeIds = task.Assignees.Select(a => a.UserId).ToHashSet();
+            var addedUserIds = newAssignees.Distinct().Where(id => !currentAssigneeIds.Contains(id));
+            foreach (var userId in addedUserIds)
+            {
+                var openCount = await _tasks.CountActiveByUserAsync(userId, ct);
+                if (openCount > 0)
+                    throw new DomainValidationException(
+                        $"Nhân viên #{userId} đang có task chưa hoàn thành, không thể giao thêm task mới.");
+            }
+        }
+
+        var now = VietnamClock.Now;
         task.Assignees = newAssignees.Distinct()
             .Select(id => new TaskAssignee { TaskId = task.Id, UserId = id, AssignedAt = now })
             .ToList();

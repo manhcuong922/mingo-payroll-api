@@ -2,6 +2,8 @@ using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
+using MPS.Domain.Common;
+using MPS.Domain.Constants;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -37,17 +39,44 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Không xác định được người dùng hiện tại.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskAsync(request.DepartmentId, _currentUser, _authorizer, ct);
-
         ValidateAssignment(request);
 
         var parent = await LoadAndValidateParentAsync(request, ct);
+
+        // Tạo Công đoạn (IsBatchParent=true) → Manager/GĐ. Tạo Task lá → PM đang phụ trách Công đoạn cha/GĐ.
+        await ProjectScopeGuard.EnsureCanCreateTaskAsync(
+            request.IsBatchParent, request.DepartmentId, parent?.AssignedPmUserId, _currentUser, _authorizer, ct);
+
         await ValidateDeadlineScopeAsync(request, parent, ct);
         await ValidateQuantityScopeAsync(request, parent, ct);
         await ValidateAssigneesInDepartmentAsync(request, ct);
+        await ValidateAssignedPmAsync(request, ct);
+        ValidateParentNotDone(parent);
+        await ValidateAssigneesNotAlreadyBusyAsync(request, ct);
 
         var task = BuildTask(request, userId);
         return await _tasks.AddAsync(task, ct);
+    }
+
+    // Plan mục 3.2: AssignedPmUserId (nếu có, chỉ khi IsBatchParent) phải role ProjectManager, cùng xưởng Đơn.
+    private async Task ValidateAssignedPmAsync(TaskCreateCommand request, CancellationToken ct)
+    {
+        if (request.AssignedPmUserId is not int pmUserId) return;
+
+        if (!request.IsBatchParent)
+            throw new DomainValidationException("Chỉ Công đoạn (IsBatchParent=true) mới gán được PM chịu trách nhiệm.");
+
+        var isValidPm = await _departments.IsUserInDepartmentWithRoleAsync(
+            pmUserId, request.DepartmentId, SystemRoles.ProjectManagerId, ct);
+        if (!isValidPm)
+            throw new DomainValidationException("PM được gán phải có role ProjectManager và cùng xưởng với đơn.");
+    }
+
+    // Plan mục 6.3: không cho tạo task con mới trong Công đoạn đã Done — tránh % tự tụt sau khi đã chốt xong.
+    private static void ValidateParentNotDone(ProjectTaskEntity? parent)
+    {
+        if (parent?.Status == TaskItemStatus.Done)
+            throw new DomainValidationException("Không thể thêm task vào công đoạn đã hoàn thành (Done).");
     }
 
     // Công đoạn (tầng 2) thủ công: không giao ai trực tiếp, không có cha. Task lá: cần ≥1 người.
@@ -119,9 +148,24 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             throw new DomainValidationException("Có người được giao không thuộc xưởng của task.");
     }
 
+    // Plan mục 4 ràng buộc 4 / mục 9 điểm 2: 1 nhân viên chỉ 1 task Tầng 3 đang mở (chưa Done) tại 1 thời điểm —
+    // áp cho cả vai "chịu trách nhiệm" lẫn "thành viên hỗ trợ" (không phân biệt vai trong Assignees).
+    private async Task ValidateAssigneesNotAlreadyBusyAsync(TaskCreateCommand request, CancellationToken ct)
+    {
+        if (request.IsBatchParent || request.AssigneeUserIds.Count == 0) return;
+
+        foreach (var userId in request.AssigneeUserIds.Distinct())
+        {
+            var openCount = await _tasks.CountActiveByUserAsync(userId, ct);
+            if (openCount > 0)
+                throw new DomainValidationException(
+                    $"Nhân viên #{userId} đang có task chưa hoàn thành, không thể giao thêm task mới.");
+        }
+    }
+
     private static ProjectTaskEntity BuildTask(TaskCreateCommand request, int userId)
     {
-        var now = DateTime.UtcNow;
+        var now = VietnamClock.Now;
         return new ProjectTaskEntity
         {
             Title = request.Title.Trim(),
@@ -131,6 +175,7 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             ProgressType = request.ProgressType,
             RequiresHandover = request.RequiresHandover,
             IsBatchParent = request.IsBatchParent,
+            AssignedPmUserId = request.IsBatchParent ? request.AssignedPmUserId : null,
             Priority = request.Priority,
             Deadline = request.Deadline,
             StepOrder = request.StepOrder,

@@ -9,7 +9,8 @@ public record GenerateStepOverride(
     int? PlannedQuantityOverride,
     int? WeightOverride,
     DateTime? DeadlineOverride,
-    ProgressType? ProgressTypeOverride);
+    ProgressType? ProgressTypeOverride,
+    int? AssignedPmUserId = null);
 
 public interface ITaskGenerator
 {

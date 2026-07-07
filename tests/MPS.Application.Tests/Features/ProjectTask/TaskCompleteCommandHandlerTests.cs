@@ -26,9 +26,12 @@ public sealed class TaskCompleteCommandHandlerTests
 
     private static string Rv(byte[] bytes) => Convert.ToBase64String(bytes);
 
+    // Guard mới (v7 mục 8) siết task lá theo đúng PM phụ trách công đoạn cha — các test dưới đây
+    // không nhằm test phân quyền PM nên dùng GĐ (ProjectReadAll) để bypass, giữ tập trung vào business logic.
     private void SetupManager()
     {
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
+        _currentUser.Setup(c => c.HasPermission(MPS.Domain.Constants.Permissions.ProjectReadAll)).Returns(true);
         _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
     }
@@ -124,13 +127,17 @@ public sealed class TaskCompleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Complete_Throws403_WhenNotManagerOfDepartment()
+    public async Task Complete_Throws403_WhenNotAssignedPmOfParentStage()
     {
+        // Task lá thuộc công đoạn #99, PM phụ trách là user #999 — user hiện tại (#7) không phải PM đó.
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
-        _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: false);
+        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: false, parentId: 99);
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
+        _tasks.Setup(t => t.GetByIdAsync(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MPS.Domain.Entities.ProjectTask
+            {
+                Id = 99, IsBatchParent = true, DepartmentId = DeptId, AssignedPmUserId = 999,
+            });
 
         var act = () => CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
 

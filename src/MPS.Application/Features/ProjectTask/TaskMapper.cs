@@ -46,6 +46,7 @@ internal static class TaskMapper
             t.CreatedByUserId,
             t.CreatedBy?.Username,
             t.IsBatchParent,
+            t.AssignedPmUserId,
             taskPercent,
             t.WasLate,
             t.CompletedBy?.Username,

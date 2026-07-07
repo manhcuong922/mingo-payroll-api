@@ -24,6 +24,10 @@ public sealed class TaskCreateCommandHandlerTests
     private TaskCreateCommandHandler CreateSut() =>
         new(_tasks.Object, _projects.Object, _departments.Object, _authorizer.Object, _currentUser.Object);
 
+    private const int StageId = 5;
+
+    // Task lá (IsBatchParent=false) chỉ tạo được bởi đúng PM phụ trách công đoạn cha (v7 mục 8) —
+    // set ManagerUserId làm AssignedPmUserId của công đoạn #5 để các test tạo task lá qua được guard.
     private void SetupManagerWithMembers(params int[] memberUserIds)
     {
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
@@ -31,13 +35,19 @@ public sealed class TaskCreateCommandHandlerTests
             .ReturnsAsync(true);
         _departments.Setup(d => d.GetMemberUserIdsAsync(DeptId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(memberUserIds);
+        _tasks.Setup(t => t.GetByIdAsync(StageId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MPS.Domain.Entities.ProjectTask
+            {
+                Id = StageId, IsBatchParent = true, DepartmentId = DeptId, AssignedPmUserId = ManagerUserId,
+                ProgressType = ProgressType.Quantity, PlannedQuantity = 1000,
+            });
         _tasks.Setup(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(42);
     }
 
     private static TaskCreateCommand Command(IReadOnlyList<int> assignees) =>
         new(
-            ProjectId: 1, DepartmentId: DeptId, ParentTaskId: null,
+            ProjectId: 1, DepartmentId: DeptId, ParentTaskId: StageId,
             Title: "Cắt khung", Description: null,
             ProgressType: ProgressType.Quantity,
             PlannedQuantity: 100, Weight: 0,
@@ -86,11 +96,15 @@ public sealed class TaskCreateCommandHandlerTests
     }
 
     [Fact]
-    public async Task Create_Throws403_WhenNotManagerOfDepartment()
+    public async Task Create_Throws403_WhenNotAssignedPmOfParentStage()
     {
+        // Công đoạn #5 do PM khác (#999) phụ trách — user hiện tại (#7) không được tạo task con trong đó.
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
-        _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _tasks.Setup(t => t.GetByIdAsync(StageId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MPS.Domain.Entities.ProjectTask
+            {
+                Id = StageId, IsBatchParent = true, DepartmentId = DeptId, AssignedPmUserId = 999,
+            });
 
         var act = () => CreateSut().Handle(Command(new[] { 11 }), CancellationToken.None);
 

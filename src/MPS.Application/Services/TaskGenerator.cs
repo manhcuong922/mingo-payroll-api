@@ -43,6 +43,7 @@ public sealed class TaskGenerator : ITaskGenerator
                 DepartmentId = departmentId,
                 ProjectId = project.Id,
                 CreatedByUserId = createdByUserId,
+                AssignedPmUserId = ovr?.AssignedPmUserId,
             });
         }
 

@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Services;
+using MPS.Domain.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -36,7 +37,7 @@ public class ProjectCreateCommandHandler : IRequestHandler<ProjectCreateCommand,
             Title = request.Title.Trim(),
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             Status = ProjectStatus.Active,
-            StartDate = request.StartDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            StartDate = request.StartDate ?? DateOnly.FromDateTime(VietnamClock.Now),
             Deadline = request.Deadline,
             Quantity = request.Quantity,
             DepartmentId = request.DepartmentId,

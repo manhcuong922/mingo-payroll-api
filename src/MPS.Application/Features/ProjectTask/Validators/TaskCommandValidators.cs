@@ -20,9 +20,11 @@ public class TaskCreateCommandValidator : AbstractValidator<TaskCreateCommand>
                 .WithMessage("Task theo sản lượng phải có số lượng lớn hơn 0.");
         });
 
+        // Plan mục 6.3: Weight <= 0 khiến Task Milestone không bao giờ ảnh hưởng %, dễ gây hiểu nhầm "Done rồi mà % không tăng".
         When(x => x.ProgressType == ProgressType.Milestone, () =>
         {
-            RuleFor(x => x.Weight).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.Weight).GreaterThan(0)
+                .WithMessage("Task theo mốc phải có trọng số lớn hơn 0.");
         });
     }
 }

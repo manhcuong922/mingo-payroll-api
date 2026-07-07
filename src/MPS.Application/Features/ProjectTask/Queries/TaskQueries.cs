@@ -6,10 +6,10 @@ namespace MPS.Application.Features.ProjectTask.Queries;
 
 public record TaskGetByIdQuery(int Id) : IRequest<ProjectTaskDto?>;
 
-public record TaskGetMyAssignedQuery : IRequest<IReadOnlyList<ProjectTaskDto>>;
+public record TaskGetMyAssignedQuery(bool IncludeCancelled = false) : IRequest<IReadOnlyList<ProjectTaskDto>>;
 
-public record TaskGetByDepartmentQuery(int DepartmentId) : IRequest<IReadOnlyList<ProjectTaskDto>>;
+public record TaskGetByDepartmentQuery(int DepartmentId, bool IncludeCancelled = false) : IRequest<IReadOnlyList<ProjectTaskDto>>;
 
-public record TaskGetByProjectQuery(int ProjectId) : IRequest<IReadOnlyList<ProjectTaskDto>>;
+public record TaskGetByProjectQuery(int ProjectId, bool IncludeCancelled = false) : IRequest<IReadOnlyList<ProjectTaskDto>>;
 
 public record TaskAuditHistoryQuery(int TaskId) : IRequest<IReadOnlyList<AuditLogDto>>;

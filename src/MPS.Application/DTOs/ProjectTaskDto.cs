@@ -27,6 +27,7 @@ public record ProjectTaskDto(
     int CreatedByUserId,
     string? CreatedByName,
     bool IsBatchParent,
+    int? AssignedPmUserId,               // chỉ có ý nghĩa khi IsBatchParent=true — PM đang phụ trách Công đoạn
     int TaskCompletionPercent,          // Quantity: Completed/Planned×100; Milestone: Done?100:0
     bool WasLate,                       // Done sau deadline
     string? CompletedByName,

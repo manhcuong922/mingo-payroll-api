@@ -54,6 +54,11 @@ public class ProjectTask
     // loại khỏi "task của tôi" của nhân viên.
     public bool IsBatchParent { get; set; } = false;
 
+    // PM chịu trách nhiệm 1 Công đoạn (chỉ có ý nghĩa khi IsBatchParent=true). Đổi PM giữa chừng →
+    // PM mới thừa kế toàn bộ Công đoạn + task con hiện có (plan mục 3.3/4.9) — không cần field lịch sử riêng.
+    public int? AssignedPmUserId { get; set; }
+    public User? AssignedPmUser { get; set; }
+
     // ⭐ Multi-assignee: 1 task giao 1 HOẶC nhiều người (bảng nối). Task cha (IsBatchParent) để rỗng.
     public List<TaskAssignee> Assignees { get; set; } = new();
 
@@ -65,4 +70,15 @@ public class ProjectTask
     // Optimistic concurrency — chống đua khi 2 lần cập nhật sản lượng / complete đồng thời.
     [Timestamp]
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    // --- Pause/Cancel lan truyền theo tầng (plan mục 6.5) ---
+    // null = Pause trực tiếp (được Resume độc lập); khác null = Pause do lan truyền từ cha
+    // (trỏ tới Id của bản ghi cha đã ra lệnh) → chỉ Resume được khi cha Resume trước.
+    public int? PausedByCascadeFromId { get; set; }
+
+    // Status trước khi Pause/Cancel — Resume/Restore trả lại đúng giá trị này (Todo/InProgress/Done).
+    public TaskItemStatus? StatusBeforePause { get; set; }
+
+    // Soft-delete cho Cancel — bản ghi vẫn tồn tại trong DB, ẩn khỏi danh sách mặc định.
+    public DateTime? DeletedAt { get; set; }
 }

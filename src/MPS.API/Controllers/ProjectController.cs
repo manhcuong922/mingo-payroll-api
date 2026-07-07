@@ -25,8 +25,8 @@ public class ProjectController : ControllerBase
 
     [HttpGet]
     [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-        => Ok(await _mediator.Send(new ProjectGetAllQuery(), ct));
+    public async Task<IActionResult> GetAll([FromQuery] bool includeCancelled, CancellationToken ct)
+        => Ok(await _mediator.Send(new ProjectGetAllQuery(includeCancelled), ct));
 
     [HttpGet("paged")]
     [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
@@ -35,8 +35,9 @@ public class ProjectController : ControllerBase
         [FromQuery] int? departmentId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] bool includeCancelled = false,
         CancellationToken ct = default)
-        => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize), ct));
+        => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize, includeCancelled), ct));
 
     [HttpGet("{id:int}")]
     [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
@@ -92,6 +93,40 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> Complete(int id, [FromBody] CompleteProjectRequest request, CancellationToken ct)
     {
         var ok = await _mediator.Send(new ProjectCompleteCommand(id, request.CompletionNote), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    // ===== Pause/Resume/Cancel/Restore (plan mục 6.5) — lan truyền xuống toàn bộ Công đoạn + Task con =====
+
+    [HttpPatch("{id:int}/pause")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Pause(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectPauseCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/resume")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Resume(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectResumeCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/cancel")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Cancel(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectCancelCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/restore")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Restore(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectRestoreCommand(id), ct);
         return ok ? NoContent() : NotFound();
     }
 

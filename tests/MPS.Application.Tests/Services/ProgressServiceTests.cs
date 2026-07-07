@@ -13,7 +13,7 @@ public sealed class ProgressServiceTests
     private static Project Project(DateOnly start, DateTime? deadline) =>
         new() { Id = 1, StartDate = start, Deadline = deadline, Quantity = 100 };
 
-    private static ProjectTask Quantity(int planned, int completed, bool done = false) =>
+    private static ProjectTask Quantity(int planned, int completed, bool done = false, int? parentId = null) =>
         new()
         {
             ProgressType = ProgressType.Quantity,
@@ -21,28 +21,35 @@ public sealed class ProgressServiceTests
             PlannedQuantity = planned,
             CompletedQuantity = completed,
             Status = done ? TaskItemStatus.Done : TaskItemStatus.InProgress,
+            ParentTaskId = parentId,
         };
 
-    private static ProjectTask Milestone(int weight, bool done) =>
+    private static ProjectTask Milestone(int weight, bool done, int? parentId = null) =>
         new()
         {
             ProgressType = ProgressType.Milestone,
             IsBatchParent = false,
             Weight = weight,
             Status = done ? TaskItemStatus.Done : TaskItemStatus.Todo,
+            ParentTaskId = parentId,
         };
+
+    private static ProjectTask Stage(int id) =>
+        new() { Id = id, IsBatchParent = true, Status = TaskItemStatus.InProgress };
 
     [Fact]
     public void Compute_CompletionByWeight_QuantityTasks()
     {
         var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-5));
         var project = Project(start, DateTime.UtcNow.AddDays(5));
+        // Kiến trúc bottom-up (v7 mục 6.2): Tầng 1 chỉ đọc qua Công đoạn (Tầng 2) — task lá phải có cha.
         // Trọng số = plannedQuantity. Task1: 100 (đã 50 → earned 50). Task2: 100 (đã 100 → earned 100).
-        var tasks = new List<ProjectTask> { Quantity(100, 50), Quantity(100, 100) };
+        var stage = Stage(1);
+        var tasks = new List<ProjectTask> { stage, Quantity(100, 50, parentId: 1), Quantity(100, 100, parentId: 1) };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
-        // Earned 150 / Total 200 = 75%
+        // Công đoạn: earned 150 / total 200 = 75% → Đơn (1 công đoạn, trọng số 200) = 75%
         result.CompletionPercent.Should().Be(75);
     }
 
@@ -50,10 +57,9 @@ public sealed class ProgressServiceTests
     public void Compute_ExcludesBatchParents_ToAvoidDoubleCount()
     {
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
-        var parent = Quantity(100, 100);
-        parent.IsBatchParent = true;   // cha KHÔNG được cộng
-        var child = Quantity(100, 50);
-        var tasks = new List<ProjectTask> { parent, child };
+        var stage = Stage(1);
+        var child = Quantity(100, 50, parentId: 1);
+        var tasks = new List<ProjectTask> { stage, child };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
@@ -65,7 +71,8 @@ public sealed class ProgressServiceTests
     public void Compute_MilestoneTask_CountsWeightOnlyWhenDone()
     {
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
-        var tasks = new List<ProjectTask> { Milestone(10, done: false), Milestone(10, done: true) };
+        var stage = Stage(1);
+        var tasks = new List<ProjectTask> { stage, Milestone(10, done: false, parentId: 1), Milestone(10, done: true, parentId: 1) };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 

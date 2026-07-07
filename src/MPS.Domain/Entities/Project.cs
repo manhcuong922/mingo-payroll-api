@@ -33,4 +33,11 @@ public class Project
 
     public List<ProjectTask> Tasks { get; set; } = new();
     // Tài liệu/ảnh: KHÔNG navigation — ProductionAttachment polymorphic (OwnerType+OwnerId), query qua repo.
+
+    // Soft-delete cho Cancel (plan mục 6.5) — bản ghi vẫn tồn tại trong DB, ẩn khỏi danh sách mặc định.
+    // Project là gốc cây (Tầng 1) nên không có PausedByCascadeFromId — nó chỉ có thể là NGUỒN lan truyền, không là ĐÍCH.
+    public DateTime? DeletedAt { get; set; }
+
+    // Status trước khi Pause/Cancel — Resume/Restore trả lại đúng giá trị này (Active/Completed/Archived).
+    public ProjectStatus? StatusBeforePause { get; set; }
 }

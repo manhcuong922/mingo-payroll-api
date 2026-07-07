@@ -2,6 +2,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models.Storage;
 using MPS.Application.DTOs;
 using MPS.Application.Features.ProjectTask;
+using MPS.Domain.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums;
@@ -64,7 +65,7 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
             Sha256Hex = stored.Sha256Hex,
             Note = note,
             UploadedByUserId = userId,
-            UploadedAt = DateTime.UtcNow,
+            UploadedAt = VietnamClock.Now,
         };
 
         var id = await _attachments.AddAsync(entity, ct);
@@ -152,6 +153,9 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
                 throw new ForbiddenAccessException("Bạn không có quyền sửa tài liệu quy trình mẫu.");
             return;
         }
+
+        // GĐ / Phó GĐ có quyền toàn cục — bypass giống ProjectScopeGuard.EnsureCanWriteAsync.
+        if (_currentUser.HasPermission(Permissions.ProductionAttachmentReadAll)) return;
 
         var departmentId = await ResolveOwnerDepartmentAsync(ownerType, ownerId, ct);
         if (departmentId is null || !await _authorizer.IsManagerOfAsync(userId, departmentId.Value, ct))

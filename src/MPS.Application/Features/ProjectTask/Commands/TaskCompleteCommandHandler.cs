@@ -2,6 +2,7 @@ using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
+using MPS.Domain.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -35,13 +36,16 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         var task = await _tasks.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskAsync(task.DepartmentId, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
 
         if (task.IsBatchParent)
             throw new DomainValidationException("Không hoàn thành trực tiếp công đoạn (task cha) — cha tự Done khi mọi con Done.");
 
         if (task.Status == TaskItemStatus.Done)
             return true;
+
+        if (task.Status is TaskItemStatus.Paused or TaskItemStatus.Cancelled)
+            throw new DomainValidationException("Task đang bị dừng/hủy, không thể cập nhật.");
 
         // Task bàn giao: bắt buộc có ít nhất 1 bằng chứng nghiệm thu (TaskCompletion).
         if (task.RequiresHandover)
@@ -51,7 +55,7 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
                 throw new DomainValidationException("Task bàn giao phải đính kèm bằng chứng nghiệm thu trước khi hoàn thành.");
         }
 
-        var now = DateTime.UtcNow;
+        var now = VietnamClock.Now;
         var expectedRowVersion = DecodeRowVersion(request.RowVersion);
 
         task.Status = TaskItemStatus.Done;

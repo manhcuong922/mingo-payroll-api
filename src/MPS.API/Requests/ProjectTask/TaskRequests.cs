@@ -16,7 +16,10 @@ public record CreateTaskRequest(
     int? Priority,
     int StepOrder,
     IReadOnlyList<int> AssigneeUserIds,
-    bool IsBatchParent = false);
+    bool IsBatchParent = false,
+    int? AssignedPmUserId = null);
+
+public record AssignPmRequest(int PmUserId);
 
 public record CreateConfidentialTaskRequest(
     string Title,

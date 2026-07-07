@@ -1,6 +1,8 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Project;
 using MPS.Application.Services;
+using MPS.Domain.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -31,12 +33,11 @@ public class ProjectCompleteCommandHandler : IRequestHandler<ProjectCompleteComm
         var project = await _projects.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy đơn #{request.Id}.");
 
-        if (project.DepartmentId is null || !await _authorizer.IsManagerOfAsync(userId, project.DepartmentId.Value, ct))
-            throw new ForbiddenAccessException("Bạn không phải quản lý của xưởng thực hiện đơn này.");
+        await ProjectScopeGuard.EnsureCanWriteAsync(project.DepartmentId, _currentUser, _authorizer, ct);
 
         project.Status = ProjectStatus.Completed;
         project.CompletedByUserId = userId;
-        project.CompletedAt = DateTime.UtcNow;
+        project.CompletedAt = VietnamClock.Now;
         project.CompletionNote = string.IsNullOrWhiteSpace(request.CompletionNote)
             ? null : request.CompletionNote.Trim();
 

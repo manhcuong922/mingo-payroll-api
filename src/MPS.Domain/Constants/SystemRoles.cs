@@ -9,9 +9,9 @@ public static class SystemRoles
     public const int DepartmentManagerId = 5;
     public const int ProjectManagerId = 6;
     public const int EmployeeId = 7;
-    public const int AiServiceId = 8;
-    // id 8 đã bị chiếm bởi role tự tạo trên DB dev → dùng 9 cho DeputyDirector.
     public const int DeputyDirectorId = 9;
+    // id 8 đã bị chiếm bởi role tự tạo trên DB dev, id 9 bởi DeputyDirector → dùng 10 cho AiService.
+    public const int AiServiceId = 10;
 
     public const string SystemAdmin = "SystemAdmin";
     public const string Hr = "HR";
