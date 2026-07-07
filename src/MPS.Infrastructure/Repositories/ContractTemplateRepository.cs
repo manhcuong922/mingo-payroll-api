@@ -22,12 +22,15 @@ public class ContractTemplateRepository : IContractTemplateRepository
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<ContractTemplate>> GetAllAsync(
+        ContractKind? kind,
         ContractCategory? category,
         ContractSubtype? subtype,
         bool? isActive,
         CancellationToken cancellationToken = default)
     {
         IQueryable<ContractTemplate> query = _context.ContractTemplates.AsNoTracking();
+        if (kind.HasValue)
+            query = query.Where(t => t.Kind == kind.Value);
         if (category.HasValue)
             query = query.Where(t => t.ContractCategory == category.Value);
         if (subtype.HasValue)
@@ -43,6 +46,7 @@ public class ContractTemplateRepository : IContractTemplateRepository
     }
 
     public async Task<(IReadOnlyList<ContractTemplate> Items, int TotalCount)> GetPagedAsync(
+        ContractKind? kind,
         ContractCategory? category,
         ContractSubtype? subtype,
         bool? isActive,
@@ -51,6 +55,8 @@ public class ContractTemplateRepository : IContractTemplateRepository
         CancellationToken cancellationToken = default)
     {
         IQueryable<ContractTemplate> query = _context.ContractTemplates.AsNoTracking();
+        if (kind.HasValue)
+            query = query.Where(t => t.Kind == kind.Value);
         if (category.HasValue)
             query = query.Where(t => t.ContractCategory == category.Value);
         if (subtype.HasValue)
@@ -87,6 +93,7 @@ public class ContractTemplateRepository : IContractTemplateRepository
         if (existing is null) return false;
 
         existing.Name = entity.Name;
+        existing.Kind = entity.Kind;
         existing.ContractCategory = entity.ContractCategory;
         existing.ContractSubtype = entity.ContractSubtype;
         existing.Version = existing.Version + 1;

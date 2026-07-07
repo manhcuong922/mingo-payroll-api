@@ -11,6 +11,7 @@ public interface IContractRepository
         int? employeeInformationId,
         ContractStatus? status,
         ContractCategory? category,
+        ContractKind? kind,
         int page,
         int size,
         CancellationToken cancellationToken = default);

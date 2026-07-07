@@ -43,6 +43,7 @@ public class ContractRepository : IContractRepository
         int? employeeInformationId,
         ContractStatus? status,
         ContractCategory? category,
+        ContractKind? kind,
         int page,
         int size,
         CancellationToken cancellationToken = default)
@@ -58,6 +59,8 @@ public class ContractRepository : IContractRepository
             query = query.Where(c => c.Status == status.Value);
         if (category.HasValue)
             query = query.Where(c => c.ContractCategory == category.Value);
+        if (kind.HasValue)
+            query = query.Where(c => c.Kind == kind.Value);
 
         var total = await query.CountAsync(cancellationToken);
 
@@ -86,9 +89,11 @@ public class ContractRepository : IContractRepository
         int? excludeContractId,
         CancellationToken cancellationToken = default)
     {
+        // Điều 20 k.2c chỉ áp dụng cho HĐLĐ toàn thời gian — HĐ dịch vụ/khoán/CTV không tính vào giới hạn này.
         var query = _context.Contracts.AsNoTracking()
             .Where(c => c.EmployeeInformationId == employeeInformationId
                 && c.EmployerPartyId == employerPartyId
+                && c.Kind == ContractKind.LaborFullTime
                 && c.ContractCategory == ContractCategory.Definite
                 && c.ContractSubtype == ContractSubtype.Official
                 && (c.Status == ContractStatus.Active
@@ -413,11 +418,18 @@ public class ContractRepository : IContractRepository
     {
         // Cutoff = nowUtc - 30 ngày: HĐ Definite kết thúc ≥ 30 ngày trước mà vẫn Active = phải convert.
         // (Điều 20 k.2.b BLLĐ 2019: nếu sau 30 ngày kể từ EffectiveTo mà chưa ký HĐ mới thì
-        // tự động trở thành Indefinite.)
+        // tự động trở thành Indefinite.) — chỉ áp cho các Kind thuộc BLLĐ có khả năng auto-convert.
         var cutoff = nowUtc.AddDays(-LaborLawConstants.ContractDuration.AutoConvertToIndefiniteAfterDays);
+
+        // Kind list precomputed từ metadata registry (SQL Server hiểu Contains via Where in-clause).
+        var autoConvertKinds = ContractKindMetadata.All
+            .Where(m => m.AllowsAutoConvert)
+            .Select(m => m.Kind)
+            .ToList();
 
         var candidates = await _context.Contracts
             .Where(c => c.Status == ContractStatus.Active
+                && autoConvertKinds.Contains(c.Kind)
                 && c.ContractCategory == ContractCategory.Definite
                 && c.EffectiveTo != null
                 && c.EffectiveTo.Value < cutoff
@@ -439,27 +451,51 @@ public class ContractRepository : IContractRepository
 
     public async Task<int> ExpireOverdueContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
     {
-        // HĐ Active có EffectiveTo < nowUtc AND có HĐ con (ParentContractId trỏ về nó)
-        // → expire ngay. Không có HĐ con → để AutoConvertJob xử lý sau 30 ngày.
-        // (Logic này tránh expire HĐ trong "vùng đệm 30 ngày" — Điều 20 k.2 cho phép gia hạn ngầm.)
-        var query = _context.Contracts
+        // 2 nhóm HĐ với logic expire khác nhau theo ContractKindMetadata.AllowsAutoConvert:
+        //  A) AllowsAutoConvert = true (hiện chỉ LaborFullTime): giữ "vùng đệm 30 ngày" theo
+        //     Đ.20 k.2 BLLĐ — nếu có HĐ con (đã ký tiếp) thì expire ngay; nếu chưa có HĐ con
+        //     thì để AutoConvertJob chuyển sang Indefinite sau 30 ngày.
+        //  B) AllowsAutoConvert = false (Probation, LaborPartTime, VocationalTraining,
+        //     PieceWork, Service, Collaborator): hết EffectiveTo là chấm dứt luôn — không có
+        //     khái niệm gia hạn ngầm hay auto-convert cho các Kind này.
+        var candidates = await _context.Contracts
             .Where(c => c.Status == ContractStatus.Active
                 && c.EffectiveTo != null
-                && c.EffectiveTo.Value < nowUtc);
-
-        var candidates = await query.ToListAsync(cancellationToken);
-
-        // Filter: chỉ giữ HĐ có HĐ con (đã ký tiếp).
-        var parentIds = candidates.Select(c => c.Id).ToHashSet();
-        var hasChild = await _context.Contracts
-            .AsNoTracking()
-            .Where(c => c.ParentContractId.HasValue && parentIds.Contains(c.ParentContractId.Value))
-            .Select(c => c.ParentContractId!.Value)
-            .Distinct()
+                && c.EffectiveTo.Value < nowUtc)
             .ToListAsync(cancellationToken);
-        var hasChildSet = hasChild.ToHashSet();
 
-        var toExpire = candidates.Where(c => hasChildSet.Contains(c.Id)).ToList();
+        if (candidates.Count == 0) return 0;
+
+        var autoConvertKinds = ContractKindMetadata.All
+            .Where(m => m.AllowsAutoConvert)
+            .Select(m => m.Kind)
+            .ToHashSet();
+
+        var groupA = candidates.Where(c => autoConvertKinds.Contains(c.Kind)).ToList();
+        var groupB = candidates.Where(c => !autoConvertKinds.Contains(c.Kind)).ToList();
+
+        // Nhóm A: chỉ expire khi có HĐ con.
+        List<Contract> toExpireA;
+        if (groupA.Count == 0)
+        {
+            toExpireA = new List<Contract>();
+        }
+        else
+        {
+            var groupAIds = groupA.Select(c => c.Id).ToHashSet();
+            var hasChild = await _context.Contracts
+                .AsNoTracking()
+                .Where(c => c.ParentContractId.HasValue && groupAIds.Contains(c.ParentContractId.Value))
+                .Select(c => c.ParentContractId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            var hasChildSet = hasChild.ToHashSet();
+            toExpireA = groupA.Where(c => hasChildSet.Contains(c.Id)).ToList();
+        }
+
+        // Nhóm B: expire toàn bộ.
+        var toExpire = toExpireA.Concat(groupB).ToList();
+
         foreach (var contract in toExpire)
         {
             contract.Status = ContractStatus.Expired;

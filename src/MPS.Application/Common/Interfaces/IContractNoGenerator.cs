@@ -4,5 +4,5 @@ namespace MPS.Application.Common.Interfaces;
 
 public interface IContractNoGenerator
 {
-    Task<string> GenerateAsync(ContractCategory category, ContractSubtype subtype, int year, CancellationToken ct);
+    Task<string> GenerateAsync(ContractKind kind, ContractCategory? category, int year, CancellationToken ct);
 }

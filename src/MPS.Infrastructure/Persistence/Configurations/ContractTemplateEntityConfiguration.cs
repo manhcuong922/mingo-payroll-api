@@ -14,11 +14,14 @@ public class ContractTemplateEntityConfiguration : IEntityTypeConfiguration<Cont
         builder.Property(e => e.Id).UseIdentityColumn();
 
         builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
-        builder.Property(e => e.ContractCategory).HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(e => e.ContractSubtype).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.Kind).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(e => e.ContractCategory).HasConversion<string>().HasMaxLength(20);
+        builder.Property(e => e.ContractSubtype).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.Version).IsRequired();
         builder.Property(e => e.IsActive).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
+
+        builder.HasIndex(e => new { e.Kind, e.IsActive });
 
         builder.HasOne(e => e.TemplateFile)
             .WithMany()

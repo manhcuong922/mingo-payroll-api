@@ -3,8 +3,9 @@ namespace MPS.Application.DTOs;
 public sealed record ContractSummaryDto(
     int Id,
     string ContractNo,
-    string ContractCategory,
-    string ContractSubtype,
+    string Kind,
+    string? ContractCategory,
+    string? ContractSubtype,
     string Status,
     int EmployeeInformationId,
     string? EmployeeFullName,

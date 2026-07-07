@@ -8,8 +8,9 @@ public class Contract
 {
     public int Id { get; set; }
     public string ContractNo { get; set; } = string.Empty;
-    public ContractEnums.ContractCategory ContractCategory { get; set; }
-    public ContractEnums.ContractSubtype ContractSubtype { get; set; }
+    public ContractEnums.ContractKind Kind { get; set; } = ContractEnums.ContractKind.LaborFullTime;
+    public ContractEnums.ContractCategory? ContractCategory { get; set; }
+    public ContractEnums.ContractSubtype? ContractSubtype { get; set; }
     public ContractEnums.ContractForm Form { get; set; }
 
     public int EmployeeInformationId { get; set; }
@@ -41,6 +42,7 @@ public class Contract
     public bool SocialInsuranceFlag { get; set; } = true;
     public bool HealthInsuranceFlag { get; set; } = true;
     public bool UnemploymentInsuranceFlag { get; set; } = true;
+    public ContractEnums.TaxPolicy? TaxPolicy { get; set; }
     public string? TrainingPolicy { get; set; }
     public string? ConfidentialityClause { get; set; }
 

@@ -17,6 +17,7 @@ public class ContractTemplateCreateCommandHandler : IRequestHandler<ContractTemp
         var entity = new Domain.Entities.ContractTemplate
         {
             Name = request.Name.Trim(),
+            Kind = request.Kind,
             ContractCategory = request.ContractCategory,
             ContractSubtype = request.ContractSubtype,
             Version = 1,
