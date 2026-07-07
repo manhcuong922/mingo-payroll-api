@@ -134,12 +134,31 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IPermissionResolver, PermissionResolver>();
+        // Email: handler inject IEmailSender = OutboxEmailSender (chỉ ghi outbox, không gửi).
+        // Bên GỬI THẬT là IRealEmailSender (SMTP nếu cấu hình, ngược lại Logging) — worker dùng.
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         var smtpConfigured = !string.IsNullOrWhiteSpace(configuration[$"{SmtpOptions.SectionName}:Host"]);
         if (smtpConfigured)
-            services.AddScoped<IEmailSender, SmtpEmailSender>();
+            services.AddScoped<IRealEmailSender, SmtpEmailSender>();
         else
-            services.AddScoped<IEmailSender, LoggingEmailSender>();
+            services.AddScoped<IRealEmailSender, LoggingEmailSender>();
+
+        services.AddScoped<IEmailSender, OutboxEmailSender>();
+        services.AddScoped<IEmailOutboxRepository, EmailOutboxRepository>();
+
+        // Mã hóa payload nhạy cảm (mật khẩu thô) lúc nằm ở Pending. Có key → AES-256-GCM;
+        // không key (dev) → no-op (plaintext). Key sai định dạng → fail-fast tại startup.
+        var payloadKey = configuration[$"{EmailDispatchOptions.SectionName}:EncryptionKey"];
+        if (!string.IsNullOrWhiteSpace(payloadKey))
+            services.AddSingleton<IOutboxPayloadProtector>(new AesOutboxPayloadProtector(payloadKey));
+        else
+            services.AddSingleton<IOutboxPayloadProtector, NoOpOutboxPayloadProtector>();
+
+        services.Configure<EmailDispatchOptions>(configuration.GetSection(EmailDispatchOptions.SectionName));
+        services.AddSingleton<EmailDispatchJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<EmailDispatchJob>());
+        services.AddSingleton<EmailOutboxCleanupJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<EmailOutboxCleanupJob>());
 
         // Cross-cutting application services
         services.AddScoped<IEmployeeAccountProvisioner, EmployeeAccountProvisioner>();

@@ -13,6 +13,7 @@ services:
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
       API_DOMAIN: ${API_DOMAIN}
+      S3_DOMAIN: ${S3_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -21,6 +22,7 @@ services:
     depends_on:
       - api
       - ui
+      - minio
     networks:
       - mingo
 
