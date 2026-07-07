@@ -20,6 +20,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly ILeaveBalanceRepository _balanceRepository;
     private readonly IContractLookupReader _lookup;
     private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IDayTypeResolver _dayTypeResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -29,6 +30,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         ILeaveBalanceRepository balanceRepository,
         IContractLookupReader lookup,
         IEmployeeInformationRepository employeeRepository,
+        IDayTypeResolver dayTypeResolver,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -37,6 +39,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _balanceRepository = balanceRepository;
         _lookup = lookup;
         _employeeRepository = employeeRepository;
+        _dayTypeResolver = dayTypeResolver;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -62,10 +65,10 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         if (!LeaveTypeAssignmentPolicy.AppliesToEmployee(leaveType, employeeId, employee.DepartmentId))
             throw new DomainValidationException($"Leave type '{leaveType.Code}' is not assigned to this employee.");
 
-        // TotalDays = số ngày trong khoảng trừ Chủ nhật
-        var totalDays = CountWorkingDays(request.StartDate, request.EndDate);
+        // TotalDays = số ngày trong khoảng không phải WeeklyRestDay (theo WeeklyDayOffRule config).
+        var totalDays = await CountWorkingDaysAsync(employeeId, request.StartDate, request.EndDate, cancellationToken);
         if (totalDays <= 0)
-            throw new DomainValidationException("Leave period must contain at least one working day (non-Sunday).");
+            throw new DomainValidationException("Leave period must contain at least one working day (non-weekly-rest-day).");
 
         if (leaveType.MaxDaysPerRequest is decimal max && totalDays > max)
             throw new DomainValidationException(
@@ -118,13 +121,13 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         return await _repository.AddAsync(entity, cancellationToken);
     }
 
-    private static decimal CountWorkingDays(DateOnly start, DateOnly end)
+    private async Task<decimal> CountWorkingDaysAsync(
+        int employeeInformationId,
+        DateOnly start,
+        DateOnly end,
+        CancellationToken cancellationToken)
     {
-        var count = 0;
-        for (var d = start; d <= end; d = d.AddDays(1))
-        {
-            if (d.DayOfWeek != DayOfWeek.Sunday) count++;
-        }
-        return count;
+        var dayTypes = await _dayTypeResolver.ResolveRangeAsync(employeeInformationId, start, end, cancellationToken);
+        return dayTypes.Count(kv => kv.Value != DayType.WeeklyRestDay);
     }
 }

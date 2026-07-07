@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces;
+using MPS.Domain.Interfaces.Attendance;
 using MPS.Infrastructure.Persistence;
 using AttendanceEnums = MPS.Domain.Enums.Attendance;
 
@@ -7,15 +8,17 @@ namespace MPS.Infrastructure.Services;
 
 /// <summary>
 /// BR-23 — Resolve DayType theo thứ tự ưu tiên:
-/// (1) PublicHoliday → (2) PaidLeaveDay (LeaveRequest Approved + IsPaid) → (3) WeeklyRestDay (CN) → (4) Normal.
+/// (1) PublicHoliday → (2) PaidLeaveDay (LeaveRequest Approved + IsPaid) → (3) WeeklyRestDay (theo WeeklyDayOffRule) → (4) Normal.
 /// </summary>
 public class DayTypeResolver : IDayTypeResolver
 {
     private readonly AppDbContext _context;
+    private readonly IWeeklyDayOffRuleRepository _weeklyRuleRepository;
 
-    public DayTypeResolver(AppDbContext context)
+    public DayTypeResolver(AppDbContext context, IWeeklyDayOffRuleRepository weeklyRuleRepository)
     {
         _context = context;
+        _weeklyRuleRepository = weeklyRuleRepository;
     }
 
     public async Task<AttendanceEnums.DayType> ResolveAsync(
@@ -23,9 +26,13 @@ public class DayTypeResolver : IDayTypeResolver
         DateOnly workDate,
         CancellationToken cancellationToken = default)
     {
-        var isHoliday = await _context.PublicHolidays.AsNoTracking()
-            .AnyAsync(h => h.HolidayDate <= workDate && h.HolidayEndDate >= workDate && h.IsActive, cancellationToken);
-        if (isHoliday)
+        var departmentId = await GetEmployeeDepartmentIdAsync(employeeInformationId, cancellationToken);
+        var holidays = await _context.PublicHolidays.AsNoTracking()
+            .Where(h => h.HolidayDate <= workDate && h.HolidayEndDate >= workDate && h.IsActive)
+            .Select(h => new ScopeTarget(h.ApplyScope, h.TargetDepartmentIds, h.TargetEmployeeIds))
+            .ToListAsync(cancellationToken);
+
+        if (holidays.Any(h => AppliesToEmployee(h, employeeInformationId, departmentId)))
             return AttendanceEnums.DayType.PublicHoliday;
 
         var hasPaidLeave = await _context.LeaveRequests.AsNoTracking()
@@ -38,7 +45,7 @@ public class DayTypeResolver : IDayTypeResolver
         if (hasPaidLeave)
             return AttendanceEnums.DayType.PaidLeaveDay;
 
-        if (workDate.DayOfWeek == DayOfWeek.Sunday)
+        if (await IsWeeklyRestDayAsync(workDate, employeeInformationId, departmentId, cancellationToken))
             return AttendanceEnums.DayType.WeeklyRestDay;
 
         return AttendanceEnums.DayType.Normal;
@@ -53,12 +60,21 @@ public class DayTypeResolver : IDayTypeResolver
         if (toDate < fromDate)
             return new Dictionary<DateOnly, AttendanceEnums.DayType>();
 
+        var departmentId = await GetEmployeeDepartmentIdAsync(employeeInformationId, cancellationToken);
         var holidays = await _context.PublicHolidays.AsNoTracking()
             .Where(h => h.IsActive && h.HolidayDate <= toDate && h.HolidayEndDate >= fromDate)
-            .Select(h => new { h.HolidayDate, h.HolidayEndDate })
+            .Select(h => new HolidayTarget(
+                h.HolidayDate,
+                h.HolidayEndDate,
+                h.ApplyScope,
+                h.TargetDepartmentIds,
+                h.TargetEmployeeIds))
             .ToListAsync(cancellationToken);
         var holidaySet = new HashSet<DateOnly>();
-        foreach (var holiday in holidays)
+        foreach (var holiday in holidays.Where(h => AppliesToEmployee(
+            new ScopeTarget(h.ApplyScope, h.TargetDepartmentIds, h.TargetEmployeeIds),
+            employeeInformationId,
+            departmentId)))
         {
             var start = holiday.HolidayDate < fromDate ? fromDate : holiday.HolidayDate;
             var end = holiday.HolidayEndDate > toDate ? toDate : holiday.HolidayEndDate;
@@ -84,6 +100,16 @@ public class DayTypeResolver : IDayTypeResolver
                 paidLeaveDays.Add(d);
         }
 
+        // Prefetch weekly rules for the entire range — avoid N+1.
+        var weeklyRules = await _weeklyRuleRepository.FindActiveInRangeAsync(fromDate, toDate, cancellationToken);
+        var applicableRules = weeklyRules
+            .Where(r => AppliesToEmployee(
+                new ScopeTarget(r.ApplyScope, r.TargetDepartmentIds, r.TargetEmployeeIds),
+                employeeInformationId,
+                departmentId))
+            .Select(r => new WeeklyRestRule(r.EffectiveFrom, r.EffectiveTo, ParseIds(r.DaysOfWeekMask)))
+            .ToList();
+
         var result = new Dictionary<DateOnly, AttendanceEnums.DayType>();
         for (var d = fromDate; d <= toDate; d = d.AddDays(1))
         {
@@ -91,11 +117,100 @@ public class DayTypeResolver : IDayTypeResolver
                 result[d] = AttendanceEnums.DayType.PublicHoliday;
             else if (paidLeaveDays.Contains(d))
                 result[d] = AttendanceEnums.DayType.PaidLeaveDay;
-            else if (d.DayOfWeek == DayOfWeek.Sunday)
+            else if (IsWeeklyRestByPrefetched(applicableRules, d))
                 result[d] = AttendanceEnums.DayType.WeeklyRestDay;
             else
                 result[d] = AttendanceEnums.DayType.Normal;
         }
         return result;
     }
+
+    private async Task<bool> IsWeeklyRestDayAsync(
+        DateOnly workDate,
+        int employeeInformationId,
+        int? departmentId,
+        CancellationToken cancellationToken)
+    {
+        var rules = await _weeklyRuleRepository.FindActiveOnDateAsync(workDate, cancellationToken);
+        var dow = (int)workDate.DayOfWeek;
+        foreach (var rule in rules)
+        {
+            if (!AppliesToEmployee(
+                new ScopeTarget(rule.ApplyScope, rule.TargetDepartmentIds, rule.TargetEmployeeIds),
+                employeeInformationId,
+                departmentId))
+                continue;
+            if (ParseIds(rule.DaysOfWeekMask).Contains(dow))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsWeeklyRestByPrefetched(
+        IReadOnlyCollection<WeeklyRestRule> applicableRules,
+        DateOnly date)
+    {
+        var dow = (int)date.DayOfWeek;
+        foreach (var rule in applicableRules)
+        {
+            if (rule.EffectiveFrom > date) continue;
+            if (rule.EffectiveTo is DateOnly et && et < date) continue;
+            if (rule.Days.Contains(dow)) return true;
+        }
+        return false;
+    }
+
+    private Task<int?> GetEmployeeDepartmentIdAsync(
+        int employeeInformationId,
+        CancellationToken cancellationToken) =>
+        _context.EmployeeInformations.AsNoTracking()
+            .Where(e => e.Id == employeeInformationId)
+            .Select(e => e.DepartmentId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static bool AppliesToEmployee(
+        ScopeTarget target,
+        int employeeInformationId,
+        int? departmentId) =>
+        NormalizeScope(target.ApplyScope) switch
+        {
+            "AllEmployees" => true,
+            "AllDepartments" => departmentId.HasValue,
+            "SpecificEmployees" => ParseIds(target.TargetEmployeeIds).Contains(employeeInformationId),
+            "SpecificDepartments" => departmentId.HasValue
+                && ParseIds(target.TargetDepartmentIds).Contains(departmentId.Value),
+            _ => false
+        };
+
+    private static string NormalizeScope(string? scope) =>
+        string.IsNullOrWhiteSpace(scope) ? "AllEmployees" : scope.Trim();
+
+    private static IReadOnlySet<int> ParseIds(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return new HashSet<int>();
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => int.TryParse(part, out var id) ? id : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToHashSet();
+    }
+
+    private sealed record ScopeTarget(
+        string? ApplyScope,
+        string? TargetDepartmentIds,
+        string? TargetEmployeeIds);
+
+    private sealed record WeeklyRestRule(
+        DateOnly EffectiveFrom,
+        DateOnly? EffectiveTo,
+        IReadOnlySet<int> Days);
+
+    private sealed record HolidayTarget(
+        DateOnly HolidayDate,
+        DateOnly HolidayEndDate,
+        string? ApplyScope,
+        string? TargetDepartmentIds,
+        string? TargetEmployeeIds);
 }

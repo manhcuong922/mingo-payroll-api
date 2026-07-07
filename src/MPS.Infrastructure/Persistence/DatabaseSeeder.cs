@@ -48,6 +48,7 @@ public sealed class DatabaseSeeder
         // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (1/2/3) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
+        await SeedDefaultWeeklyDayOffRuleAsync(cancellationToken);
         // Task/Production demo: quy trình mẫu + đơn hàng + cây task + nhật ký sản lượng.
         await SeedTaskProductionDemoAsync(cancellationToken);
     }
@@ -947,6 +948,7 @@ public sealed class DatabaseSeeder
     // AttendanceRule "Tiêu chuẩn" (1/2/3) = hệ số công mặc định để mọi ShiftTemplate FK vào.
     // Idempotent theo Name (unique index).
     private const string DefaultAttendanceRuleName = "Tiêu chuẩn";
+    private const string DefaultWeeklyDayOffRuleName = "Ngày nghỉ tuần mặc định";
 
     private async Task SeedDefaultAttendanceRuleAsync(CancellationToken ct)
     {
@@ -985,6 +987,47 @@ public sealed class DatabaseSeeder
         await _context.AttendanceRules.AddAsync(rule, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded default AttendanceRule '{Name}' (1/2/3).", DefaultAttendanceRuleName);
+    }
+
+    // Rule ngày nghỉ tuần mặc định — CN toàn công ty. Idempotent theo Name.
+    private async Task SeedDefaultWeeklyDayOffRuleAsync(CancellationToken ct)
+    {
+        var exists = await _context.WeeklyDayOffRules
+            .AsNoTracking()
+            .AnyAsync(r => r.Name == DefaultWeeklyDayOffRuleName, ct);
+        if (exists)
+        {
+            _logger.LogDebug("Default WeeklyDayOffRule '{Name}' already seeded; skipping.", DefaultWeeklyDayOffRuleName);
+            return;
+        }
+
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+        if (adminId == 0)
+        {
+            _logger.LogWarning("No system admin found; skipping default WeeklyDayOffRule seed.");
+            return;
+        }
+
+        var rule = new WeeklyDayOffRule
+        {
+            Name = DefaultWeeklyDayOffRuleName,
+            Description = "Ngày nghỉ tuần mặc định — Thứ 7 và Chủ nhật.",
+            DaysOfWeekMask = "0,6",
+            ApplyScope = "AllEmployees",
+            EffectiveFrom = DateOnly.FromDateTime(DateTime.UtcNow),
+            EffectiveTo = null,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = adminId,
+        };
+
+        await _context.WeeklyDayOffRules.AddAsync(rule, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded default WeeklyDayOffRule '{Name}' (Saturday + Sunday, all employees).", DefaultWeeklyDayOffRuleName);
     }
 
     // 4 ca làm việc mặc định: CA-SANG, CA-CHIEU, CA-DEM, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".

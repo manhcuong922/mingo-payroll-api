@@ -7,6 +7,7 @@ using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
+using AttendanceEnums = MPS.Domain.Enums.Attendance;
 
 namespace MPS.Application.Features.Attendance.EmployeeShift.Commands;
 
@@ -28,6 +29,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IContractRepository _contractRepository;
     private readonly IRegularHoursCapChecker _capChecker;
+    private readonly IDayTypeResolver _dayTypeResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -36,6 +38,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         IShiftTemplateRepository shiftRepository,
         IContractRepository contractRepository,
         IRegularHoursCapChecker capChecker,
+        IDayTypeResolver dayTypeResolver,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -43,6 +46,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         _shiftRepository = shiftRepository;
         _contractRepository = contractRepository;
         _capChecker = capChecker;
+        _dayTypeResolver = dayTypeResolver;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -113,8 +117,53 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         var items = new List<BatchShiftItemResult>(operations.Count);
         var failConflicts = new List<BatchShiftItemResult>();
 
+        // Prefetch DayType (per employee, mỗi employee 1 query range) để chặn phân ca vào
+        // WeeklyRestDay / PublicHoliday khi IncludeRestDaysAndHolidays=false.
+        // Chỉ cần cho op Kind=Add (Remove/Change không tạo mới nên không guard).
+        var dayTypeByEmployee = await PrefetchDayTypeAsync(operations, cancellationToken);
+
         foreach (var op in operations)
         {
+            // Guard rest-day / holiday cho op Add — check trước mọi handler khác để tránh side-effect.
+            if (op.Kind == BatchShiftOperationKind.Add
+                && !request.IncludeRestDaysAndHolidays
+                && dayTypeByEmployee.TryGetValue(op.EmployeeInformationId, out var dayMap)
+                && dayMap.TryGetValue(op.WorkDate, out var dayType))
+            {
+                var isRestDay = dayType == AttendanceEnums.DayType.WeeklyRestDay;
+                var isHoliday = dayType == AttendanceEnums.DayType.PublicHoliday;
+                if (isRestDay || isHoliday)
+                {
+                    // Cleanup: nếu template hiện tại đã tạo assignment cũ trên ngày rest/holiday
+                    // (từ lần apply trước với flag=true, hoặc trước khi có guard), gỡ luôn để
+                    // "Bỏ qua" thực sự có tác dụng. Chỉ gỡ assignment owned bởi TEMPLATE hiện tại
+                    // và không bị attendance-lock — không đụng manual paint / template khác.
+                    if (sourceTemplateId.HasValue && op.ShiftTemplateId.HasValue)
+                    {
+                        existingByKey.TryGetValue((op.EmployeeInformationId, op.WorkDate), out var priorList);
+                        var priorFromThisTemplate = priorList?.FirstOrDefault(a =>
+                            a.ShiftTemplateId == op.ShiftTemplateId.Value
+                            && a.ScheduleTemplateId == sourceTemplateId.Value);
+                        if (priorFromThisTemplate is not null
+                            && !lockedShifts.Contains((priorFromThisTemplate.EmployeeInformationId,
+                                priorFromThisTemplate.WorkDate,
+                                priorFromThisTemplate.ShiftTemplateId)))
+                        {
+                            toRemoveIds.Add(priorFromThisTemplate.Id);
+                        }
+                    }
+
+                    var status = isRestDay
+                        ? BatchShiftItemStatus.SkippedWeeklyRestDay
+                        : BatchShiftItemStatus.SkippedPublicHoliday;
+                    var reasonKind = isRestDay ? "ngày nghỉ tuần" : "ngày lễ";
+                    items.Add(new BatchShiftItemResult(op.Kind, op.EmployeeInformationId, op.WorkDate,
+                        op.ShiftTemplateId, status, ExistingShiftTemplateId: null,
+                        Reason: $"{op.WorkDate:yyyy-MM-dd} là {reasonKind} của NV — bỏ qua (dùng flag include để ép tạo)."));
+                    continue;
+                }
+            }
+
             var key = (op.EmployeeInformationId, op.WorkDate);
             existingByKey.TryGetValue(key, out var existingList);
             existingList ??= new List<EmployeeShiftAssignment>();
@@ -218,6 +267,37 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
             $"Không thể phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+    }
+
+    /// <summary>
+    /// Gom (employeeId → [min WorkDate, max WorkDate]) qua các op Add, gọi
+    /// <see cref="IDayTypeResolver.ResolveRangeAsync"/> 1 lần / NV → trả map
+    /// <c>employeeId → (WorkDate → DayType)</c> để loop batch tra O(1).
+    /// </summary>
+    private async Task<Dictionary<int, IReadOnlyDictionary<DateOnly, AttendanceEnums.DayType>>> PrefetchDayTypeAsync(
+        IReadOnlyList<BatchShiftOperation> operations,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, IReadOnlyDictionary<DateOnly, AttendanceEnums.DayType>>();
+        var addOps = operations.Where(o => o.Kind == BatchShiftOperationKind.Add).ToList();
+        if (addOps.Count == 0) return result;
+
+        var ranges = addOps
+            .GroupBy(o => o.EmployeeInformationId)
+            .Select(g => new
+            {
+                EmployeeId = g.Key,
+                From = g.Min(x => x.WorkDate),
+                To = g.Max(x => x.WorkDate)
+            });
+
+        foreach (var range in ranges)
+        {
+            var map = await _dayTypeResolver.ResolveRangeAsync(range.EmployeeId, range.From, range.To, cancellationToken);
+            result[range.EmployeeId] = map;
+        }
+
+        return result;
     }
 
     private static void ValidateShape(IReadOnlyList<BatchShiftOperation> operations)

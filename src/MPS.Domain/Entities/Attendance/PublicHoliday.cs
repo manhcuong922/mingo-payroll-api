@@ -7,6 +7,9 @@ public class PublicHoliday
     public DateOnly HolidayDate { get; set; }
     public DateOnly HolidayEndDate { get; set; }
     public string? Description { get; set; }
+    public string ApplyScope { get; set; } = "AllEmployees";
+    public string? TargetDepartmentIds { get; set; }
+    public string? TargetEmployeeIds { get; set; }
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }

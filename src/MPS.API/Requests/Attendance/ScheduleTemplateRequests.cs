@@ -16,7 +16,8 @@ public sealed record CreateScheduleTemplateRequest(
     string? Notes,
     bool AcknowledgeWeeklyOvertimeWarnings = false,
     ScheduleApplyTarget? ApplyTarget = null,
-    IReadOnlyList<int>? DepartmentIds = null);
+    IReadOnlyList<int>? DepartmentIds = null,
+    bool IncludeRestDaysAndHolidays = false);
 
 public sealed record UpdateScheduleTemplateRequest(
     string Name,
