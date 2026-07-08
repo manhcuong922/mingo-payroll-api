@@ -243,6 +243,13 @@ public static class Permissions
     public const string CommentReadAll           = "Comment.Read.All";           // GĐ/Phó GĐ — mọi tầng, mọi xưởng
     public const string CommentCreateOwn         = "Comment.Create.Own";        // Employee — CHỈ Task của chính mình
     public const string CommentCreateDepartment  = "Comment.Create.Department"; // Manager/PM — theo scope đang có trên entity gốc
+
+    // ===== ID 213 =====
+    // Tách khỏi ProcessTemplateReadAll: chỉ cho phép ĐỌC quy trình mẫu để chọn khi "Áp quy trình"
+    // (GenerateTasksModal) — KHÔNG cho vào màn quản lý/CRUD quy trình mẫu (đó vẫn cần ProcessTemplateReadAll
+    // hoặc ProcessTemplateCreateAll). PM cần quyền này để sinh task từ quy trình mẫu (Project.GenerateTasks)
+    // nhưng không được tự tạo/sửa/xóa quy trình mẫu dùng chung toàn công ty.
+    public const string ProcessTemplateReadForApply = "ProcessTemplate.ReadForApply.All";
 }
 
 public static class PermissionIds
@@ -484,4 +491,7 @@ public static class PermissionIds
     public const int CommentReadAll             = 210;
     public const int CommentCreateOwn           = 211;
     public const int CommentCreateDepartment    = 212;
+
+    // ===== ID 213 =====
+    public const int ProcessTemplateReadForApply = 213;
 }

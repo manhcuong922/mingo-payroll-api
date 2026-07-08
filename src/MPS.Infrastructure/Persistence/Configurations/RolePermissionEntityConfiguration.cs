@@ -155,9 +155,11 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.PerformanceMetricCreateAll, PermissionIds.PerformanceMetricUpdateAll,
                 PermissionIds.PerformanceMetricDeleteAll,
                 PermissionIds.TypePerformanceMetricReadAll,
-                // Task/Production (v5) — quản lý xưởng: ra kế hoạch + điều phối, scoped theo xưởng trực thuộc.
-                PermissionIds.ProcessTemplateReadAll,
-                PermissionIds.ProjectReadDepartment, PermissionIds.ProjectCreateAll,
+                // Task/Production (v5) — quản lý xưởng: điều phối, scoped theo xưởng trực thuộc. Không tự tạo
+                // đơn hàng hay quản lý quy trình mẫu (đó là việc của GĐ/Phó GĐ) — chỉ đọc quy trình để áp
+                // dụng khi sinh task (ProcessTemplateReadForApply, tách khỏi ProcessTemplateReadAll).
+                PermissionIds.ProcessTemplateReadForApply,
+                PermissionIds.ProjectReadDepartment,
                 PermissionIds.ProjectUpdateAll, PermissionIds.ProjectGenerateTasks,
                 PermissionIds.ProjectCompleteDepartment,
                 PermissionIds.TaskReadDepartment, PermissionIds.TaskCreateDepartment,

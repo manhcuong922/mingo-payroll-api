@@ -19,7 +19,8 @@ public class ProjectTask
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
     public TaskItemType Type { get; set; } = TaskItemType.ProcessTask;
     public ProgressType ProgressType { get; set; } = ProgressType.Quantity;
-    public bool RequiresHandover { get; set; } = false;        // true = task bàn giao: bắt buộc attachment khi Complete
+    // Không còn dùng ở tầng nghiệp vụ (tính năng "task bàn giao" đã bỏ) — giữ cột DB để tương thích dữ liệu cũ.
+    public bool RequiresHandover { get; set; } = false;
     public bool IsConfidential { get; set; } = false;
     public DateTime? Deadline { get; set; }
     public int? Priority { get; set; }                         // 1=Low, 2=Medium, 3=High

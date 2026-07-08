@@ -12,18 +12,15 @@ namespace MPS.Application.Features.ProjectTask.Commands;
 public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, bool>
 {
     private readonly IProjectTaskRepository _tasks;
-    private readonly IProductionAttachmentRepository _attachments;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
 
     public TaskCompleteCommandHandler(
         IProjectTaskRepository tasks,
-        IProductionAttachmentRepository attachments,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
     {
         _tasks = tasks;
-        _attachments = attachments;
         _authorizer = authorizer;
         _currentUser = currentUser;
     }
@@ -47,13 +44,7 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         if (task.Status is TaskItemStatus.Paused or TaskItemStatus.Cancelled)
             throw new DomainValidationException("Task đang bị dừng/hủy, không thể cập nhật.");
 
-        // Task bàn giao: bắt buộc có ít nhất 1 bằng chứng nghiệm thu (TaskCompletion).
-        if (task.RequiresHandover)
-        {
-            var count = await _attachments.CountByOwnerAsync(AttachmentOwnerType.TaskCompletion, task.Id, ct);
-            if (count == 0)
-                throw new DomainValidationException("Task bàn giao phải đính kèm bằng chứng nghiệm thu trước khi hoàn thành.");
-        }
+        // Tài liệu nghiệm thu (TaskCompletion) là tuỳ chọn — đính kèm như tài liệu thường, không chặn hoàn thành.
 
         var now = VietnamClock.Now;
         var expectedRowVersion = DecodeRowVersion(request.RowVersion);
@@ -62,14 +53,21 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         task.CompletedByUserId = userId;
         task.CompletedAt = now;
         task.WasLate = task.Deadline is { } dl && now > dl;
+        // Milestone quy đổi Weight → CompletedQuantity khi Done, y hệt Quantity set CompletedQuantity=PlannedQuantity
+        // — để RecomputeParentCompletedAsync (SUM CompletedQuantity con) cộng đúng dù công đoạn cha trộn cả 2 loại con.
+        task.CompletedQuantity = task.ProgressType == ProgressType.Quantity ? task.PlannedQuantity : task.Weight;
+        task.ProgressUpdatedAt = now;
 
         var ok = await _tasks.UpdateWithConcurrencyAsync(task, expectedRowVersion, ct);
         if (!ok)
             throw new ConflictException("Dữ liệu đã thay đổi ở nơi khác. Vui lòng tải lại rồi thử lại.");
 
-        // Cha tự Done nguyên tử khi con cuối cùng vừa Done.
+        // Cha tự Done nguyên tử khi con cuối cùng vừa Done + đồng bộ lại sản lượng luỹ kế của cha.
         if (task.ParentTaskId is int parentId)
+        {
+            await _tasks.RecomputeParentCompletedAsync(parentId, ct);
             await _tasks.TrySetParentDoneAsync(parentId, now, userId, ct);
+        }
 
         return true;
     }

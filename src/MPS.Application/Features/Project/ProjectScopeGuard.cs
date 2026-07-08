@@ -7,6 +7,9 @@ using ProjectTaskEntity = MPS.Domain.Entities.ProjectTask;
 
 namespace MPS.Application.Features.Project;
 
+// Rely on entity graph fields only (Assignees/DepartmentId/ParentTaskId) so callers only need
+// GetByIdWithGraphAsync — no extra repository roundtrip beyond the optional parent-PM lookup.
+
 /// <summary>
 /// Kiểm scope xưởng cho thao tác ghi đơn/task (v5): GĐ (ProjectReadAll) làm mọi xưởng;
 /// quản lý xưởng chỉ được thao tác đơn/task thuộc xưởng mình trực thuộc (GetDepartmentIdOfUserAsync).
@@ -88,5 +91,63 @@ public static class ProjectScopeGuard
             : null;
         if (parentPm != userId)
             throw new ForbiddenAccessException("Chỉ PM đang phụ trách công đoạn này mới được thao tác task con.");
+    }
+
+    // Cùng scope "ai được xem task" như TaskGetByIdQueryHandler (ReadAll/ReadDepartment+PM scope/ReadAssigned)
+    // — dùng chung để CommentGetByOwnerQueryHandler không lặp lại (và không lệch) logic đọc task.
+    public static async Task EnsureCanReadTaskAsync(
+        ProjectTaskEntity task,
+        IProjectTaskRepository tasks,
+        ICurrentUserService currentUser,
+        IDepartmentManagerAuthorizer authorizer,
+        CancellationToken ct)
+    {
+        var isAssignee = currentUser.UserId is { } uid && task.Assignees.Any(a => a.UserId == uid);
+
+        if (task.IsConfidential
+            && !currentUser.HasPermission(Permissions.TaskReadConfidential)
+            && currentUser.UserId != task.CreatedByUserId
+            && !isAssignee)
+        {
+            throw new ForbiddenAccessException("Bạn không có quyền xem task nhạy cảm này.");
+        }
+
+        if (currentUser.HasPermission(Permissions.TaskReadAll)) return;
+
+        var userId = currentUser.UserId;
+        if (currentUser.HasPermission(Permissions.TaskReadDepartment) && userId is not null
+            && task.DepartmentId is not null
+            && await authorizer.IsManagerOfAsync(userId.Value, task.DepartmentId.Value, ct)
+            && await IsVisibleToPmAsync(task, userId.Value, tasks, ct))
+        {
+            return;
+        }
+
+        if (currentUser.HasPermission(Permissions.TaskReadAssigned) && isAssignee) return;
+
+        throw new ForbiddenAccessException("Bạn không có quyền xem task này.");
+    }
+
+    // Công đoạn/task con đã gán cho PM khác (khác userId hiện tại) → ẩn khỏi PM này.
+    // Chưa gán ai (AssignedPmUserId null) vẫn hiện — không thuộc về ai để giấu.
+    private static async Task<bool> IsVisibleToPmAsync(
+        ProjectTaskEntity task, int userId, IProjectTaskRepository tasks, CancellationToken ct)
+    {
+        int? assignedPm;
+        if (task.IsBatchParent)
+        {
+            assignedPm = task.AssignedPmUserId;
+        }
+        else if (task.ParentTaskId is int parentId)
+        {
+            var parent = await tasks.GetByIdAsync(parentId, ct);
+            assignedPm = parent?.AssignedPmUserId;
+        }
+        else
+        {
+            assignedPm = null;
+        }
+
+        return assignedPm is null || assignedPm == userId;
     }
 }

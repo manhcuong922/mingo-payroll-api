@@ -94,7 +94,7 @@ public class ProjectTaskRepository : IProjectTaskRepository
     public Task<int> SumChildrenPlannedQuantityAsync(int parentTaskId, int? excludeTaskId, CancellationToken ct) =>
         _context.ProjectTasks
             .Where(c => c.ParentTaskId == parentTaskId && c.Id != (excludeTaskId ?? 0))
-            .SumAsync(c => c.PlannedQuantity, ct);
+            .SumAsync(c => c.PlannedQuantity + c.Weight, ct);
 
     public async Task<int> AddAsync(ProjectTask entity, CancellationToken ct)
     {
@@ -150,7 +150,10 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.CompletedQuantity, total), ct);
     }
 
-    // ⭐ Persist cha Done nguyên tử: chỉ set khi mọi con Done và cha chưa Done. Trả true nếu CHÍNH lệnh này chuyển.
+    // ⭐ Persist cha Done nguyên tử: chỉ set khi mọi con Done, cha chưa Done, VÀ (nếu cha đo theo
+    // Quantity) sản lượng luỹ kế của cha đã đạt kế hoạch — tránh trường hợp Manager/PM chỉ chia việc
+    // một phần sản lượng (vd kế hoạch 500 nhưng mới giao 300) rồi các task con đó Done hết làm cha
+    // bị đánh Done sai dù còn thiếu sản lượng. Milestone không có khái niệm sản lượng nên bỏ qua check.
     public async Task<bool> TrySetParentDoneAsync(
         int parentTaskId, DateTime completedAt, int completedByUserId, CancellationToken ct)
     {
@@ -158,7 +161,8 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .Where(p => p.Id == parentTaskId
                 && p.Status != TaskItemStatus.Done
                 && p.Children.Any()
-                && !p.Children.Any(c => c.Status != TaskItemStatus.Done))
+                && !p.Children.Any(c => c.Status != TaskItemStatus.Done)
+                && (p.ProgressType != ProgressType.Quantity || p.CompletedQuantity >= p.PlannedQuantity))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(p => p.Status, TaskItemStatus.Done)
                 .SetProperty(p => p.CompletedAt, completedAt)

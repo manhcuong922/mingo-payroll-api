@@ -11,7 +11,6 @@ public record CreateTaskRequest(
     ProgressType ProgressType,
     int PlannedQuantity,
     int Weight,
-    bool RequiresHandover,
     DateTime? Deadline,
     int? Priority,
     int StepOrder,

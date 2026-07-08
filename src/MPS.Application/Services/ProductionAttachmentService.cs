@@ -106,6 +106,18 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
         catch { /* ignore — object có thể được dọn sau bằng job */ }
     }
 
+    public async Task<(FileDownloadResult Result, string FileName)> DownloadAsync(int attachmentId, CancellationToken ct)
+    {
+        var userId = RequireUser();
+        var entity = await _attachments.GetByIdAsync(attachmentId, ct)
+            ?? throw new NotFoundException($"Không tìm thấy tài liệu #{attachmentId}.");
+
+        await EnsureCanReadAsync(entity.OwnerType, entity.OwnerId, userId, ct);
+
+        var result = await _storage.DownloadAsync(entity.ObjectKey, entity.Bucket, ct);
+        return (result, entity.FileName);
+    }
+
     private int RequireUser() =>
         _currentUser.UserId ?? throw new ForbiddenAccessException("Chưa đăng nhập.");
 
@@ -113,7 +125,7 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
     //   ProcessTemplate → cần ProcessTemplateReadAll (tài liệu dùng chung).
     //   ReadAll toàn cục (GĐ) → xem mọi thứ.
     //   Project → tài liệu CHUNG của đơn: mọi người thuộc xưởng của đơn xem được (kể cả công nhân).
-    //   Task/TaskCompletion → quản lý xưởng đó, HOẶC chính người được giao task (assignee). Người khác → cấm.
+    //   Task → quản lý xưởng đó, HOẶC chính người được giao task (assignee). Người khác → cấm.
     private async Task EnsureCanReadAsync(AttachmentOwnerType ownerType, int ownerId, int userId, CancellationToken ct)
     {
         if (ownerType == AttachmentOwnerType.ProcessTemplate)

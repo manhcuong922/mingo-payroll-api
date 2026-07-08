@@ -85,19 +85,20 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         }
     }
 
-    // Tổng sản lượng các con (kể cả sau khi sửa) không được vượt sản lượng công đoạn cha.
+    // Tổng sản lượng quy đổi các con (kể cả sau khi sửa) không được vượt sản lượng công đoạn cha —
+    // áp dụng cho cả con Quantity (PlannedQuantity) lẫn Milestone (Weight), xem TaskCreateCommandHandler.
     private async Task ValidateQuantityScopeAsync(TaskUpdateCommand request, ProjectTaskEntity task, CancellationToken ct)
     {
-        if (task.IsBatchParent || task.ProgressType != ProgressType.Quantity || task.ParentTaskId is not int parentId)
-            return;
+        if (task.IsBatchParent || task.ParentTaskId is not int parentId) return;
 
         var parent = await _tasks.GetByIdAsync(parentId, ct);
-        if (parent is null) return;
+        if (parent is null || parent.ProgressType != ProgressType.Quantity) return;
 
+        var requestedAmount = task.ProgressType == ProgressType.Quantity ? request.PlannedQuantity : request.Weight;
         var siblingsPlanned = await _tasks.SumChildrenPlannedQuantityAsync(parentId, excludeTaskId: task.Id, ct);
-        if (siblingsPlanned + request.PlannedQuantity > parent.PlannedQuantity)
+        if (siblingsPlanned + requestedAmount > parent.PlannedQuantity)
             throw new DomainValidationException(
-                $"Tổng sản lượng các task con ({siblingsPlanned + request.PlannedQuantity}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
+                $"Tổng sản lượng các task con ({siblingsPlanned + requestedAmount}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
     }
 
     // Đổi assignee (nếu gửi). Validate ≥1 người + thuộc xưởng.

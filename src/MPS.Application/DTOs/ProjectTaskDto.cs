@@ -9,7 +9,6 @@ public record ProjectTaskDto(
     string Status,
     string Type,
     string ProgressType,                // "Quantity" | "Milestone"
-    bool RequiresHandover,
     bool IsConfidential,
     int? Priority,
     int StepOrder,
@@ -34,4 +33,5 @@ public record ProjectTaskDto(
     DateTime? CompletedAt,
     string RowVersion,                  // base64 — gửi lại khi UpdateProgress/Complete (optimistic lock)
     IReadOnlyList<ProductionAttachmentDto> Attachments,
-    List<ProjectTaskDto> Children);
+    List<ProjectTaskDto> Children,
+    int? PausedByCascadeFromId);        // null = Pause/Cancel trực tiếp (tự Resume/Restore được); khác null = bị lan truyền từ cha

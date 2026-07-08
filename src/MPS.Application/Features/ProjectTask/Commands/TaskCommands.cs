@@ -14,7 +14,6 @@ public record TaskCreateCommand(
     ProgressType ProgressType,
     int PlannedQuantity,
     int Weight,
-    bool RequiresHandover,
     DateTime? Deadline,
     int? Priority,
     int StepOrder,
@@ -45,7 +44,7 @@ public record TaskUpdateProgressCommand(
     int CompletedQuantity,
     string RowVersion) : IRequest<bool>;
 
-// ⭐ Bấm hoàn thành. Quá deadline vẫn Done nhưng gắn WasLate. Task bàn giao bắt buộc attachment.
+// ⭐ Bấm hoàn thành. Quá deadline vẫn Done nhưng gắn WasLate.
 public record TaskCompleteCommand(
     int Id,
     string RowVersion) : IRequest<bool>;

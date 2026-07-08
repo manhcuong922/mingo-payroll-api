@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs;
+using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
@@ -29,57 +30,11 @@ public class TaskGetByIdQueryHandler : IRequestHandler<TaskGetByIdQuery, Project
         var task = await _tasks.GetByIdWithGraphAsync(request.Id, ct);
         if (task is null) return null;
 
-        var isAssignee = _currentUser.UserId is { } uid && task.Assignees.Any(a => a.UserId == uid);
+        await ProjectScopeGuard.EnsureCanReadTaskAsync(task, _tasks, _currentUser, _authorizer, ct);
 
-        // Confidential: chỉ người tạo / người được assign / ReadConfidential.
-        if (task.IsConfidential
-            && !_currentUser.HasPermission(Permissions.TaskReadConfidential)
-            && _currentUser.UserId != task.CreatedByUserId
-            && !isAssignee)
-        {
-            throw new ForbiddenAccessException("Bạn không có quyền xem task nhạy cảm này.");
-        }
-
-        // ReadAll → mọi task. ReadDepartment → xưởng mình, trừ Công đoạn/task con PM khác phụ trách
-        // (plan mục 8: "PM chỉ thấy công đoạn của mình"). ReadAssigned → chỉ task của mình.
-        if (_currentUser.HasPermission(Permissions.TaskReadAll))
-            return TaskMapper.ToDto(task, includeChildren: true);
-
-        var userId = _currentUser.UserId;
-        if (_currentUser.HasPermission(Permissions.TaskReadDepartment) && userId is not null
-            && task.DepartmentId is not null
-            && await _authorizer.IsManagerOfAsync(userId.Value, task.DepartmentId.Value, ct)
-            && await IsVisibleToPmAsync(task, userId.Value, ct))
-        {
-            return TaskMapper.ToDto(task, includeChildren: true);
-        }
-
-        if (_currentUser.HasPermission(Permissions.TaskReadAssigned) && isAssignee)
-            return TaskMapper.ToDto(task, includeChildren: false);
-
-        throw new ForbiddenAccessException("Bạn không có quyền xem task này.");
-    }
-
-    // Công đoạn/task con đã gán cho PM khác (khác userId hiện tại) → ẩn khỏi PM này.
-    // Chưa gán ai (AssignedPmUserId null) vẫn hiện — không thuộc về ai để giấu.
-    private async Task<bool> IsVisibleToPmAsync(Domain.Entities.ProjectTask task, int userId, CancellationToken ct)
-    {
-        int? assignedPm;
-        if (task.IsBatchParent)
-        {
-            assignedPm = task.AssignedPmUserId;
-        }
-        else if (task.ParentTaskId is int parentId)
-        {
-            var parent = await _tasks.GetByIdAsync(parentId, ct);
-            assignedPm = parent?.AssignedPmUserId;
-        }
-        else
-        {
-            assignedPm = null;
-        }
-
-        return assignedPm is null || assignedPm == userId;
+        var includeChildren = _currentUser.HasPermission(Permissions.TaskReadAll)
+            || _currentUser.HasPermission(Permissions.TaskReadDepartment);
+        return TaskMapper.ToDto(task, includeChildren: includeChildren);
     }
 }
 

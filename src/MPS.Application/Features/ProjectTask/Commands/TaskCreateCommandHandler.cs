@@ -126,15 +126,18 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             throw new DomainValidationException("Deadline task không được vượt quá deadline đơn.");
     }
 
-    // Tổng sản lượng các con không được vượt sản lượng công đoạn cha.
+    // Tổng sản lượng quy đổi các con (Quantity: PlannedQuantity; Milestone: Weight — quy đổi trực tiếp
+    // thành sản lượng khi Done, xem TaskCompleteCommandHandler) không được vượt sản lượng công đoạn cha.
+    // Cho phép trộn 2 loại con trong cùng công đoạn — cha luôn đo theo Quantity khi có ParentTaskId.
     private async Task ValidateQuantityScopeAsync(TaskCreateCommand request, ProjectTaskEntity? parent, CancellationToken ct)
     {
-        if (request.IsBatchParent || request.ProgressType != ProgressType.Quantity || parent is null) return;
+        if (request.IsBatchParent || parent is null || parent.ProgressType != ProgressType.Quantity) return;
 
+        var requestedAmount = request.ProgressType == ProgressType.Quantity ? request.PlannedQuantity : request.Weight;
         var siblingsPlanned = await _tasks.SumChildrenPlannedQuantityAsync(parent.Id, excludeTaskId: null, ct);
-        if (siblingsPlanned + request.PlannedQuantity > parent.PlannedQuantity)
+        if (siblingsPlanned + requestedAmount > parent.PlannedQuantity)
             throw new DomainValidationException(
-                $"Tổng sản lượng các task con ({siblingsPlanned + request.PlannedQuantity}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
+                $"Tổng sản lượng các task con ({siblingsPlanned + requestedAmount}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
     }
 
     // Mọi assignee phải là công nhân thuộc đúng xưởng.
@@ -173,7 +176,6 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             Type = TaskItemType.AdHoc,
             Status = TaskItemStatus.Todo,
             ProgressType = request.ProgressType,
-            RequiresHandover = request.RequiresHandover,
             IsBatchParent = request.IsBatchParent,
             AssignedPmUserId = request.IsBatchParent ? request.AssignedPmUserId : null,
             Priority = request.Priority,

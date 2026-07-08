@@ -51,7 +51,7 @@ public sealed class TaskCreateCommandHandlerTests
             Title: "Cắt khung", Description: null,
             ProgressType: ProgressType.Quantity,
             PlannedQuantity: 100, Weight: 0,
-            RequiresHandover: false, Deadline: null, Priority: null, StepOrder: 1,
+            Deadline: null, Priority: null, StepOrder: 1,
             AssigneeUserIds: assignees);
 
     [Fact]
@@ -90,6 +90,53 @@ public sealed class TaskCreateCommandHandlerTests
         SetupManagerWithMembers(11, 12);   // 99 không thuộc xưởng
 
         var act = () => CreateSut().Handle(Command(new[] { 11, 99 }), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainValidationException>();
+        _tasks.Verify(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_AllowsMilestoneChild_WhenParentIsQuantity()
+    {
+        // Công đoạn #5 đo theo Quantity, PlannedQuantity=1000 (SetupManagerWithMembers) — task con
+        // Milestone được phép trộn; Weight=50 quy đổi thành "sản lượng" khi tính giới hạn tổng của cha.
+        SetupManagerWithMembers(11, 12, 13);
+        MPS.Domain.Entities.ProjectTask? captured = null;
+        _tasks.Setup(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()))
+            .Callback<MPS.Domain.Entities.ProjectTask, CancellationToken>((t, _) => captured = t)
+            .ReturnsAsync(42);
+        var milestoneCommand = new TaskCreateCommand(
+            ProjectId: 1, DepartmentId: DeptId, ParentTaskId: StageId,
+            Title: "Cắt khung - mốc", Description: null,
+            ProgressType: ProgressType.Milestone,
+            PlannedQuantity: 0, Weight: 50,
+            Deadline: null, Priority: null, StepOrder: 1,
+            AssigneeUserIds: new[] { 11 });
+
+        var id = await CreateSut().Handle(milestoneCommand, CancellationToken.None);
+
+        id.Should().Be(42);
+        captured!.ProgressType.Should().Be(ProgressType.Milestone);
+        captured.Weight.Should().Be(50);
+    }
+
+    [Fact]
+    public async Task Create_Throws_WhenMilestoneWeightExceedsParentRemainingQuantity()
+    {
+        // Công đoạn #5 PlannedQuantity=1000; sibling con Quantity đã chiếm 960 (SumChildrenPlannedQuantityAsync
+        // mock) — thêm Milestone Weight=50 sẽ vượt 1000, phải bị chặn dù khác loại đo với sibling.
+        SetupManagerWithMembers(11, 12, 13);
+        _tasks.Setup(t => t.SumChildrenPlannedQuantityAsync(StageId, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(960);
+        var milestoneCommand = new TaskCreateCommand(
+            ProjectId: 1, DepartmentId: DeptId, ParentTaskId: StageId,
+            Title: "Cắt khung - mốc", Description: null,
+            ProgressType: ProgressType.Milestone,
+            PlannedQuantity: 0, Weight: 50,
+            Deadline: null, Priority: null, StepOrder: 1,
+            AssigneeUserIds: new[] { 11 });
+
+        var act = () => CreateSut().Handle(milestoneCommand, CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainValidationException>();
         _tasks.Verify(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()), Times.Never);

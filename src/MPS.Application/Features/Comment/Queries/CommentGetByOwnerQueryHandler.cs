@@ -10,8 +10,10 @@ using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.Comment.Queries;
 
-// Quyền đọc (plan mục 5): GĐ/Phó GĐ đọc mọi tầng mọi xưởng; còn lại đi theo quyền xem entity gốc
-// (Manager/PM của đúng xưởng, hoặc Employee là assignee của chính Task đó).
+// Quyền đọc: GĐ/Phó GĐ đọc mọi tầng mọi xưởng; còn lại đi theo đúng quyền xem entity gốc —
+// Project dùng scope xưởng (EnsureCanWriteAsync), Task dùng scope đọc task (EnsureCanReadTaskAsync,
+// giống hệt TaskGetByIdQueryHandler) để mọi người xem được task đều xem được toàn bộ bình luận,
+// không chỉ PM phụ trách/assignee của chính task.
 public class CommentGetByOwnerQueryHandler : IRequestHandler<CommentGetByOwnerQuery, IReadOnlyList<CommentDto>>
 {
     private readonly ICommentRepository _comments;
@@ -60,19 +62,9 @@ public class CommentGetByOwnerQueryHandler : IRequestHandler<CommentGetByOwnerQu
         var task = await _tasks.GetByIdWithGraphAsync(request.OwnerId, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.OwnerId}.");
 
-        var userId = _currentUser.UserId
-            ?? throw new ForbiddenAccessException("Không xác định được người dùng hiện tại.");
-
-        if (task.AssignedPmUserId == userId) return;
-        if (task.Assignees.Any(a => a.UserId == userId)) return;
-
-        var parentPm = task.ParentTaskId is int parentId
-            ? (await _tasks.GetByIdAsync(parentId, ct))?.AssignedPmUserId
-            : null;
-        if (parentPm == userId) return;
-
-        // Plan mục 5: Task chỉ đọc được bởi PM phụ trách công đoạn cha / assignee của chính task / GĐ —
-        // KHÔNG mở rộng cho "bất kỳ ai cùng xưởng" (khác Project/Công đoạn, vốn dùng EnsureCanWriteAsync).
-        throw new ForbiddenAccessException("Bạn không có quyền xem bình luận của task này.");
+        // Bình luận task hiển thị cho MỌI người có quyền xem task đó (không chỉ PM phụ trách/assignee) —
+        // dùng chung scope đọc task với TaskGetByIdQueryHandler để nhất quán, tránh 1 nhóm bị chặn xem
+        // toàn bộ thảo luận trong khi các thành viên khác vẫn xem/viết bình thường.
+        await ProjectScopeGuard.EnsureCanReadTaskAsync(task, _tasks, _currentUser, _authorizer, ct);
     }
 }

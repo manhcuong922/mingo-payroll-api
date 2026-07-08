@@ -60,7 +60,7 @@ public class ProjectTaskController : ControllerBase
         var id = await _mediator.Send(new TaskCreateCommand(
             request.ProjectId, request.DepartmentId, request.ParentTaskId, request.Title, request.Description,
             request.ProgressType, request.PlannedQuantity, request.Weight,
-            request.RequiresHandover, request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds,
+            request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds,
             request.IsBatchParent, request.AssignedPmUserId), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
@@ -93,7 +93,7 @@ public class ProjectTaskController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
-    // ⭐ Bấm hoàn thành (quá deadline vẫn Done nhưng gắn WasLate; bàn giao bắt buộc attachment).
+    // ⭐ Bấm hoàn thành (quá deadline vẫn Done nhưng gắn WasLate).
     [HttpPatch("{id:int}/complete")]
     [HasPermission(Permissions.TaskCompleteDepartment)]
     public async Task<IActionResult> Complete(int id, [FromBody] CompleteTaskRequest request, CancellationToken ct)
@@ -164,7 +164,6 @@ public class ProjectTaskController : ControllerBase
         return Ok(await _attachments.ListAsync(ownerType, id, ct));
     }
 
-    // completion=true → bằng chứng nghiệm thu (gắn trước khi Complete task bàn giao).
     [HttpPost("{id:int}/attachments")]
     [HasPermission(Permissions.ProductionAttachmentWriteDepartment)]
     public async Task<IActionResult> UploadAttachment(
@@ -186,5 +185,14 @@ public class ProjectTaskController : ControllerBase
     {
         await _attachments.DeleteAsync(attachmentId, ct);
         return NoContent();
+    }
+
+    // Tải file qua backend (thay vì presigned URL hết hạn 15 phút) — cùng quyền đọc như ListAttachments.
+    [HttpGet("attachments/{attachmentId:int}/download")]
+    [HasAnyPermission(Permissions.ProductionAttachmentReadDepartment, Permissions.ProductionAttachmentReadAll)]
+    public async Task<IActionResult> DownloadAttachment(int attachmentId, CancellationToken ct)
+    {
+        var (result, fileName) = await _attachments.DownloadAsync(attachmentId, ct);
+        return File(result.Content, result.ContentType, fileName);
     }
 }

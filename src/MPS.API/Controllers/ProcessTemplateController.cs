@@ -23,8 +23,10 @@ public class ProcessTemplateController : ControllerBase
         _attachments = attachments;
     }
 
+    // GetAll/GetById: dùng cả khi quản lý quy trình mẫu (ProcessTemplateReadAll) LẪN khi PM chọn quy trình
+    // để "Áp quy trình" cho đơn (ProcessTemplateReadForApply) — 2 quyền tách biệt, xem Permissions.cs.
     [HttpGet]
-    [HasPermission(Permissions.ProcessTemplateReadAll)]
+    [HasAnyPermission(Permissions.ProcessTemplateReadAll, Permissions.ProcessTemplateReadForApply)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => Ok(await _mediator.Send(new ProcessTemplateGetAllQuery(), ct));
 
@@ -38,7 +40,7 @@ public class ProcessTemplateController : ControllerBase
         => Ok(await _mediator.Send(new ProcessTemplateGetPagedQuery(keyword, page, pageSize), ct));
 
     [HttpGet("{id:int}")]
-    [HasPermission(Permissions.ProcessTemplateReadAll)]
+    [HasAnyPermission(Permissions.ProcessTemplateReadAll, Permissions.ProcessTemplateReadForApply)]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var result = await _mediator.Send(new ProcessTemplateGetByIdQuery(id), ct);

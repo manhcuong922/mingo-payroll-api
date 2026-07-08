@@ -28,7 +28,6 @@ internal static class TaskMapper
             t.Status.ToString(),
             t.Type.ToString(),
             t.ProgressType.ToString(),
-            t.RequiresHandover,
             t.IsConfidential,
             t.Priority,
             t.StepOrder,
@@ -53,7 +52,8 @@ internal static class TaskMapper
             t.CompletedAt,
             t.RowVersion is { Length: > 0 } ? Convert.ToBase64String(t.RowVersion) : string.Empty,
             attachments,
-            children);
+            children,
+            t.PausedByCascadeFromId);
     }
 
     private static int ResolveCompletionPercent(MPS.Domain.Entities.ProjectTask t)
