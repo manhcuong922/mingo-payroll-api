@@ -9,36 +9,35 @@ public class TaskCreateCommandValidator : AbstractValidator<TaskCreateCommand>
     public TaskCreateCommandValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.DepartmentId).GreaterThan(0).WithMessage("Task phải gắn xưởng.");
+        RuleFor(x => x.DepartmentId).GreaterThan(0).WithMessage("Task must belong to a department.");
 
-        // Công đoạn (IsBatchParent) không được giao người trực tiếp; task lá cần ≥1 người — khớp
-        // TaskCreateCommandHandler.ValidateAssignment (tránh 2 tầng validation mâu thuẫn nhau).
-        When(x => !x.IsBatchParent, () =>
+        When(x => x.IsBatchParent, () =>
         {
             RuleFor(x => x.AssigneeUserIds)
-                .NotEmpty().WithMessage("Task phải có ít nhất 1 người thực hiện.");
-        }).Otherwise(() =>
-        {
-            RuleFor(x => x.AssigneeUserIds)
-                .Empty().WithMessage("Công đoạn (task cha) không được giao người trực tiếp.");
+                .Empty().WithMessage("Stage cannot be assigned directly.");
+            RuleFor(x => x.PlannedWorkUnits).GreaterThan(0)
+                .WithMessage("Stage must have positive planned work units.");
         });
 
-        // Task Quantity (công đoạn hoặc task lá sản lượng): cần số lượng dương.
+        When(x => !x.IsBatchParent && x.ProgressType == ProgressType.Quantity, () =>
+        {
+            RuleFor(x => x.AssigneeUserIds)
+                .NotEmpty().WithMessage("Quantity task must have at least one assignee.");
+        });
+
         When(x => x.ProgressType == ProgressType.Quantity, () =>
         {
             RuleFor(x => x.PlannedQuantity).GreaterThan(0)
-                .WithMessage("Task theo sản lượng phải có số lượng lớn hơn 0.");
+                .WithMessage("Quantity task must have positive planned quantity.");
         });
 
-        // Công đoạn (IsBatchParent) cần PlannedWorkUnits dương — nếu không sẽ "vô hình" trong tiến độ Đơn
-        // (docs/plans/plan.md mục 6.5: PlannedWorkUnits=0 → công đoạn bị loại khỏi mẫu số ProjectPercent).
-        When(x => x.IsBatchParent, () =>
+        When(x => x.ProgressType == ProgressType.Milestone, () =>
         {
-            RuleFor(x => x.PlannedWorkUnits).GreaterThan(0)
-                .WithMessage("Công đoạn phải có khối lượng công việc lớn hơn 0.");
+            RuleFor(x => x.PlannedQuantity).Equal(0)
+                .WithMessage("Gate/Checklist must not have planned quantity.");
+            RuleFor(x => x.PlannedWorkUnits).Equal(0)
+                .WithMessage("Gate/Checklist must not have planned work units.");
         });
-
-        // Gate/Checklist (Milestone) không cần số liệu — chỉ có Status Done/Todo + IsRequiredGate.
     }
 }
 
@@ -48,7 +47,7 @@ public class TaskCreateConfidentialCommandValidator : AbstractValidator<TaskCrea
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.AssigneeUserIds)
-            .NotEmpty().WithMessage("Task phải có ít nhất 1 người thực hiện.");
+            .NotEmpty().WithMessage("Task must have at least one assignee.");
     }
 }
 
@@ -62,7 +61,7 @@ public class TaskUpdateCommandValidator : AbstractValidator<TaskUpdateCommand>
         RuleFor(x => x.PlannedWorkUnits).GreaterThanOrEqualTo(0);
         RuleFor(x => x.AssigneeUserIds)
             .Must(list => list is null || list.Count > 0)
-            .WithMessage("Nếu gửi danh sách người thực hiện thì phải có ít nhất 1 người.");
+            .WithMessage("Assignee list cannot be empty when provided.");
     }
 }
 
@@ -72,7 +71,7 @@ public class TaskUpdateProgressCommandValidator : AbstractValidator<TaskUpdatePr
     {
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.CompletedQuantity).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("Thiếu RowVersion để kiểm tra đồng thời.");
+        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("RowVersion is required.");
     }
 }
 
@@ -81,7 +80,7 @@ public class TaskCompleteCommandValidator : AbstractValidator<TaskCompleteComman
     public TaskCompleteCommandValidator()
     {
         RuleFor(x => x.Id).GreaterThan(0);
-        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("Thiếu RowVersion để kiểm tra đồng thời.");
+        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("RowVersion is required.");
     }
 }
 

@@ -43,9 +43,11 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
 
         var parent = await LoadAndValidateParentAsync(request, ct);
 
-        // Tạo Công đoạn (IsBatchParent=true) → Manager/GĐ. Tạo Task lá → PM đang phụ trách Công đoạn cha/GĐ.
-        await ProjectScopeGuard.EnsureCanCreateTaskAsync(
-            request.IsBatchParent, request.DepartmentId, parent?.AssignedPmUserId, _currentUser, _authorizer, ct);
+        if (!request.IsBatchParent && request.ProgressType == ProgressType.Milestone && parent is null)
+            await ProjectScopeGuard.EnsureCanWriteAsync(request.DepartmentId, _currentUser, _authorizer, ct);
+        else
+            await ProjectScopeGuard.EnsureCanCreateTaskAsync(
+                request.IsBatchParent, request.DepartmentId, parent?.AssignedPmUserId, _currentUser, _authorizer, ct);
 
         await ValidateDeadlineScopeAsync(request, parent, ct);
         await ValidateQuantityScopeAsync(request, parent, ct);
@@ -89,7 +91,7 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             if (request.ParentTaskId is not null)
                 throw new DomainValidationException("Công đoạn (task cha) không thể có cha khác — cây chỉ 3 tầng.");
         }
-        else if (request.AssigneeUserIds.Count == 0)
+        else if (request.ProgressType == ProgressType.Quantity && request.AssigneeUserIds.Count == 0)
         {
             throw new DomainValidationException("Task phải có ít nhất 1 người thực hiện.");
         }

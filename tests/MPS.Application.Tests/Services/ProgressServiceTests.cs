@@ -159,6 +159,38 @@ public sealed class ProgressServiceTests
     }
 
     [Fact]
+    public void Compute_Spi_UsesStageWorkUnits_NotOnlyExistingLeafTasks()
+    {
+        var project = Project(new DateOnly(2026, 1, 1), new DateTime(2026, 1, 21));
+        var cut = Stage(1, plannedQuantity: 300, plannedWorkUnits: 300);
+        cut.Status = TaskItemStatus.Done;
+        var pausedJoin = Stage(2, plannedQuantity: 300, plannedWorkUnits: 300);
+        pausedJoin.Status = TaskItemStatus.Paused;
+        var paint = Stage(3, plannedQuantity: 300, plannedWorkUnits: 300);
+        var pack = Stage(4, plannedQuantity: 300, plannedWorkUnits: 300);
+        var tasks = new List<ProjectTask>
+        {
+            cut,
+            pausedJoin,
+            paint,
+            pack,
+            Quantity(150, 150, done: true, parentId: 1),
+            Quantity(150, 150, done: true, parentId: 1),
+            Quantity(150, 60, parentId: 2),
+            Quantity(150, 60, parentId: 2),
+        };
+
+        var result = _sut.Compute(project, tasks, new DateTime(2026, 1, 16));
+
+        result.CompletionPercent.Should().Be(33);
+        result.TimeElapsedPercent.Should().Be(75);
+        result.PlannedValue.Should().Be(675);
+        result.EarnedValue.Should().Be(300);
+        result.SchedulePerformanceIndex.Should().BeApproximately(0.44, 0.01);
+        result.ScheduleStatus.Should().Be("AtRisk");
+    }
+
+    [Fact]
     public void Compute_CountsStages_FromBatchParents()
     {
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));

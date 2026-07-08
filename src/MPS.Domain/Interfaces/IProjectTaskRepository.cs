@@ -8,6 +8,7 @@ public interface IProjectTaskRepository
     Task<ProjectTask?> GetByIdWithGraphAsync(int id, CancellationToken ct);       // include Assignees + Children + Attachments
     // includeCancelled=false (mặc định, plan mục 6.5): ẩn task đã Cancelled (DeletedAt != null) khỏi danh sách.
     Task<IReadOnlyList<ProjectTask>> GetByProjectIdAsync(int projectId, CancellationToken ct, bool includeCancelled = false);
+    Task<IReadOnlyList<ProjectTask>> GetByProjectIdsAsync(IReadOnlyCollection<int> projectIds, CancellationToken ct, bool includeCancelled = false);
     Task<IReadOnlyList<ProjectTask>> GetByDepartmentAsync(int departmentId, CancellationToken ct, bool includeCancelled = false);
     Task<IReadOnlyList<ProjectTask>> GetAssignedToUserAsync(int userId, CancellationToken ct, bool includeCancelled = false);  // qua TaskAssignee
 

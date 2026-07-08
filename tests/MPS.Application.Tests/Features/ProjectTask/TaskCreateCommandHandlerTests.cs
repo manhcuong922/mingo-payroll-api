@@ -125,6 +125,37 @@ public sealed class TaskCreateCommandHandlerTests
     }
 
     [Fact]
+    public async Task Create_AllowsProjectLevelGate_WithoutAssignees()
+    {
+        _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
+        _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        MPS.Domain.Entities.ProjectTask? captured = null;
+        _tasks.Setup(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()))
+            .Callback<MPS.Domain.Entities.ProjectTask, CancellationToken>((t, _) => captured = t)
+            .ReturnsAsync(77);
+        var command = new TaskCreateCommand(
+            ProjectId: 1, DepartmentId: DeptId, ParentTaskId: null,
+            Title: "QC khach duyet", Description: null,
+            ProgressType: ProgressType.Milestone,
+            PlannedQuantity: 0, PlannedWorkUnits: 0, IsRequiredGate: true,
+            Deadline: null, Priority: null, StepOrder: 5,
+            AssigneeUserIds: Array.Empty<int>());
+
+        var id = await CreateSut().Handle(command, CancellationToken.None);
+
+        id.Should().Be(77);
+        captured!.ProjectId.Should().Be(1);
+        captured.ParentTaskId.Should().BeNull();
+        captured.ProgressType.Should().Be(ProgressType.Milestone);
+        captured.IsBatchParent.Should().BeFalse();
+        captured.PlannedQuantity.Should().Be(0);
+        captured.PlannedWorkUnits.Should().Be(0);
+        captured.IsRequiredGate.Should().BeTrue();
+        captured.Assignees.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Create_Throws_WhenQuantityChildExceedsParentRemainingQuantity()
     {
         // Công đoạn #5 PlannedQuantity=1000; sibling con Quantity đã chiếm 960 — thêm con Quantity 50

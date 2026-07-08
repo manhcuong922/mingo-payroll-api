@@ -13,21 +13,14 @@ public sealed class ProgressService : IProgressService
     //   Tầng 1 (Đơn hàng)         → ProjectPercent = trung bình có trọng số StagePercent theo Stage.PlannedWorkUnits
     // Gate (ProgressType.Milestone) chỉ là điều kiện chặn Done/đóng đơn (IsRequiredGate) — không đóng góp
     // số liệu vào PlannedQuantity/CompletedQuantity/PlannedWorkUnits ở bất kỳ tầng nào.
-    // EV/PV/SPI/BAC đọc trực tiếp Task con Quantity, nhưng loại Task con của công đoạn Cancelled — nếu
-    // không, SPI có thể cộng cả sản lượng của công đoạn đã huỷ, lệch pha với ScheduleStatus/CompletionPercent
-    // (vốn đã loại Cancelled ở tầng Công đoạn) cho cùng một đơn.
+    // EV/PV/SPI/BAC dùng cùng nền với CompletionPercent: Stage.PlannedWorkUnits và StagePercent.
+    // Không đọc thẳng Task lá để tránh cảnh "33% công việc" nhưng SPI vẫn báo vượt do chỉ nhìn phần đã chia task.
     public ProjectProgress Compute(Project project, IReadOnlyList<ProjectTask> tasks, DateTime asOf)
     {
         var stages = tasks.Where(t => t.IsBatchParent && IsCountable(t.Status)).ToList();
         var leaves = tasks.Where(t => !t.IsBatchParent && IsCountable(t.Status)).ToList();
 
-        var cancelledStageIds = tasks
-            .Where(t => t.IsBatchParent && t.Status == TaskItemStatus.Cancelled)
-            .Select(t => t.Id)
-            .ToHashSet();
-
-        var (completionPercent, stagesWithoutTasks) = ComputeStageWeightedPercent(tasks, leaves);
-        var (bac, ev) = SumQuantityTasks(leaves, cancelledStageIds);
+        var (completionPercent, stagesWithoutTasks, bac, ev) = ComputeStageWeightedProgress(tasks, leaves);
 
         var timeElapsedPercent = ComputeTimeElapsedPercent(project, asOf);
         var pv = bac * timeElapsedPercent / 100.0;
@@ -50,7 +43,7 @@ public sealed class ProgressService : IProgressService
 
     // Tầng 1 ← Tầng 2: ProjectPercent = trung bình có trọng số StagePercent theo PlannedWorkUnits của
     // CHÍNH công đoạn (không phải suy ra từ children) — công thức plan.md mục 3.3.
-    private static (int CompletionPercent, IReadOnlyList<string> StagesWithoutTasks) ComputeStageWeightedPercent(
+    private static (int CompletionPercent, IReadOnlyList<string> StagesWithoutTasks, double Bac, double Ev) ComputeStageWeightedProgress(
         IReadOnlyList<ProjectTask> tasks, IReadOnlyList<ProjectTask> leaves)
     {
         var allStages = tasks.Where(t => t.IsBatchParent).ToList();
@@ -75,7 +68,7 @@ public sealed class ProgressService : IProgressService
         var completionPercent = totalWorkUnits > 0
             ? (int)Math.Round(earnedWorkUnits / totalWorkUnits * 100)
             : 0;
-        return (completionPercent, stagesWithoutTasks);
+        return (completionPercent, stagesWithoutTasks, totalWorkUnits, earnedWorkUnits);
     }
 
     // Tầng 2 ← Tầng 3: StagePercent = SUM(CompletedQuantity con Quantity) / Stage.PlannedQuantity.
@@ -89,22 +82,6 @@ public sealed class ProgressService : IProgressService
             .Sum(child => Math.Min(child.CompletedQuantity, child.PlannedQuantity));
 
         return (int)Math.Round(Math.Min(completed, stage.PlannedQuantity) / (double)stage.PlannedQuantity * 100);
-    }
-
-    // EV/PV/SPI/BAC — đọc trực tiếp Task con Quantity (không qua trọng số Công đoạn, mục 6.3), nhưng bỏ
-    // Task con của công đoạn đã Cancelled, để không cộng sản lượng của công đoạn đã huỷ vào SPI.
-    private static (double Bac, double Ev) SumQuantityTasks(
-        IReadOnlyList<ProjectTask> leaves, IReadOnlySet<int> cancelledStageIds)
-    {
-        double bac = 0, ev = 0;
-        foreach (var t in leaves)
-        {
-            if (t.ProgressType != ProgressType.Quantity) continue;
-            if (t.ParentTaskId is { } parentId && cancelledStageIds.Contains(parentId)) continue;
-            bac += t.PlannedQuantity;
-            ev += Math.Min(t.CompletedQuantity, t.PlannedQuantity);
-        }
-        return (bac, ev);
     }
 
     // Paused/Cancelled bị loại khỏi mẫu số tính tiến độ ở mọi tầng (plan mục 6.5) — coi như không tồn tại.

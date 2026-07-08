@@ -43,6 +43,26 @@ public class ProjectTaskRepository : IProjectTaskRepository
         return await query.OrderBy(t => t.StepOrder).ThenBy(t => t.Id).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<ProjectTask>> GetByProjectIdsAsync(
+        IReadOnlyCollection<int> projectIds, CancellationToken ct, bool includeCancelled = false)
+    {
+        if (projectIds.Count == 0) return Array.Empty<ProjectTask>();
+
+        var query = _context.ProjectTasks
+            .AsNoTracking()
+            .Where(t => t.ProjectId != null && projectIds.Contains(t.ProjectId.Value))
+            .AsQueryable();
+
+        if (!includeCancelled)
+            query = query.Where(t => t.DeletedAt == null);
+
+        return await query
+            .OrderBy(t => t.ProjectId)
+            .ThenBy(t => t.StepOrder)
+            .ThenBy(t => t.Id)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<ProjectTask>> GetByDepartmentAsync(
         int departmentId, CancellationToken ct, bool includeCancelled = false)
     {
