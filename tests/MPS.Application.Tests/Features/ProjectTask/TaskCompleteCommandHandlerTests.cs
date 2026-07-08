@@ -14,7 +14,6 @@ namespace MPS.Application.Tests.Features.ProjectTask;
 public sealed class TaskCompleteCommandHandlerTests
 {
     private readonly Mock<IProjectTaskRepository> _tasks = new();
-    private readonly Mock<IProductionAttachmentRepository> _attachments = new();
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
@@ -22,26 +21,33 @@ public sealed class TaskCompleteCommandHandlerTests
     private const int DeptId = 3;
 
     private TaskCompleteCommandHandler CreateSut() =>
-        new(_tasks.Object, _attachments.Object, _authorizer.Object, _currentUser.Object);
+        new(_tasks.Object, _authorizer.Object, _currentUser.Object);
 
     private static string Rv(byte[] bytes) => Convert.ToBase64String(bytes);
 
+    // Guard mới (v7 mục 8) siết task lá theo đúng PM phụ trách công đoạn cha — các test dưới đây
+    // không nhằm test phân quyền PM nên dùng GĐ (ProjectReadAll) để bypass, giữ tập trung vào business logic.
     private void SetupManager()
     {
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
+        _currentUser.Setup(c => c.HasPermission(MPS.Domain.Constants.Permissions.ProjectReadAll)).Returns(true);
         _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
     }
 
-    private MPS.Domain.Entities.ProjectTask Task(DateTime? deadline, bool requiresHandover, int? parentId = null) =>
+    private MPS.Domain.Entities.ProjectTask Task(
+        DateTime? deadline, int? parentId = null,
+        ProgressType progressType = ProgressType.Quantity, int plannedQuantity = 200, int completedQuantity = 80) =>
         new()
         {
             Id = 10,
             DepartmentId = DeptId,
             Deadline = deadline,
-            RequiresHandover = requiresHandover,
             ParentTaskId = parentId,
             Status = TaskItemStatus.InProgress,
+            ProgressType = progressType,
+            PlannedQuantity = plannedQuantity,
+            CompletedQuantity = completedQuantity,
             RowVersion = new byte[] { 1, 2, 3 },
         };
 
@@ -49,7 +55,7 @@ public sealed class TaskCompleteCommandHandlerTests
     public async Task Complete_SetsDone_AndNotLate_WhenBeforeDeadline()
     {
         SetupManager();
-        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: false);
+        var task = Task(DateTime.UtcNow.AddDays(2));
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
         _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -66,7 +72,7 @@ public sealed class TaskCompleteCommandHandlerTests
     public async Task Complete_SetsWasLate_WhenPastDeadline()
     {
         SetupManager();
-        var task = Task(DateTime.UtcNow.AddDays(-1), requiresHandover: false);
+        var task = Task(DateTime.UtcNow.AddDays(-1));
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
         _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -78,28 +84,44 @@ public sealed class TaskCompleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Complete_Throws_WhenHandoverTaskHasNoAttachment()
+    public async Task Complete_TriesPersistParentDone_WhenTaskHasParent()
     {
         SetupManager();
-        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: true);
+        var task = Task(DateTime.UtcNow.AddDays(2), parentId: 99);
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
-        _attachments.Setup(a => a.CountByOwnerAsync(AttachmentOwnerType.TaskCompletion, 10, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0);
+        _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
-        var act = () => CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
+        await CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
 
-        await act.Should().ThrowAsync<DomainValidationException>();
-        _tasks.Verify(t => t.UpdateWithConcurrencyAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tasks.Verify(t => t.RecomputeParentCompletedAsync(99, It.IsAny<CancellationToken>()), Times.Once);
+        _tasks.Verify(t => t.TrySetParentDoneAsync(99, It.IsAny<DateTime>(), ManagerUserId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Complete_Allows_WhenHandoverTaskHasAttachment()
+    public async Task Complete_SetsCompletedQuantityToPlanned_WhenProgressTypeIsQuantity()
     {
         SetupManager();
-        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: true);
+        var task = Task(DateTime.UtcNow.AddDays(2), plannedQuantity: 200, completedQuantity: 80);
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
-        _attachments.Setup(a => a.CountByOwnerAsync(AttachmentOwnerType.TaskCompletion, 10, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
+        _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
+
+        task.CompletedQuantity.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task Complete_LeavesCompletedQuantityAtZero_WhenProgressTypeIsGate()
+    {
+        // v8 (docs/plans/plan.md mục 4.2): Gate (Milestone) hoàn thành chỉ đổi Status — không có sản lượng
+        // để set, CompletedQuantity giữ nguyên 0 (không quy đổi từ Weight nữa).
+        SetupManager();
+        var task = Task(
+            DateTime.UtcNow.AddDays(2),
+            progressType: ProgressType.Milestone, plannedQuantity: 0, completedQuantity: 0);
+        _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
         _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -107,30 +129,21 @@ public sealed class TaskCompleteCommandHandlerTests
 
         result.Should().BeTrue();
         task.Status.Should().Be(TaskItemStatus.Done);
+        task.CompletedQuantity.Should().Be(0);
     }
 
     [Fact]
-    public async Task Complete_TriesPersistParentDone_WhenTaskHasParent()
+    public async Task Complete_Throws403_WhenNotAssignedPmOfParentStage()
     {
-        SetupManager();
-        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: false, parentId: 99);
-        _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
-        _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        await CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
-
-        _tasks.Verify(t => t.TrySetParentDoneAsync(99, It.IsAny<DateTime>(), ManagerUserId, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Complete_Throws403_WhenNotManagerOfDepartment()
-    {
+        // Task lá thuộc công đoạn #99, PM phụ trách là user #999 — user hiện tại (#7) không phải PM đó.
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
-        _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: false);
+        var task = Task(DateTime.UtcNow.AddDays(2), parentId: 99);
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
+        _tasks.Setup(t => t.GetByIdAsync(99, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MPS.Domain.Entities.ProjectTask
+            {
+                Id = 99, IsBatchParent = true, DepartmentId = DeptId, AssignedPmUserId = 999,
+            });
 
         var act = () => CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
 
@@ -141,7 +154,7 @@ public sealed class TaskCompleteCommandHandlerTests
     public async Task Complete_Throws409_WhenRowVersionStale()
     {
         SetupManager();
-        var task = Task(DateTime.UtcNow.AddDays(2), requiresHandover: false);
+        var task = Task(DateTime.UtcNow.AddDays(2));
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
         _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);

@@ -14,7 +14,9 @@ internal static class ProcessTemplateMapper
                 s.Description,
                 s.StepOrder,
                 s.DefaultProgressType.ToString(),
-                s.DefaultWeight,
+                s.DefaultPlannedQuantity,
+                s.DefaultPlannedWorkUnits,
+                s.DefaultIsRequiredGate,
                 s.Priority))
             .ToList();
 

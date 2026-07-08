@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs;
+using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
@@ -29,33 +30,11 @@ public class TaskGetByIdQueryHandler : IRequestHandler<TaskGetByIdQuery, Project
         var task = await _tasks.GetByIdWithGraphAsync(request.Id, ct);
         if (task is null) return null;
 
-        var isAssignee = _currentUser.UserId is { } uid && task.Assignees.Any(a => a.UserId == uid);
+        await ProjectScopeGuard.EnsureCanReadTaskAsync(task, _tasks, _currentUser, _authorizer, ct);
 
-        // Confidential: chỉ người tạo / người được assign / ReadConfidential.
-        if (task.IsConfidential
-            && !_currentUser.HasPermission(Permissions.TaskReadConfidential)
-            && _currentUser.UserId != task.CreatedByUserId
-            && !isAssignee)
-        {
-            throw new ForbiddenAccessException("Bạn không có quyền xem task nhạy cảm này.");
-        }
-
-        // ReadAll → mọi task. ReadDepartment → xưởng mình. ReadAssigned → chỉ task của mình.
-        if (_currentUser.HasPermission(Permissions.TaskReadAll))
-            return TaskMapper.ToDto(task, includeChildren: true);
-
-        var userId = _currentUser.UserId;
-        if (_currentUser.HasPermission(Permissions.TaskReadDepartment) && userId is not null
-            && task.DepartmentId is not null
-            && await _authorizer.IsManagerOfAsync(userId.Value, task.DepartmentId.Value, ct))
-        {
-            return TaskMapper.ToDto(task, includeChildren: true);
-        }
-
-        if (_currentUser.HasPermission(Permissions.TaskReadAssigned) && isAssignee)
-            return TaskMapper.ToDto(task, includeChildren: false);
-
-        throw new ForbiddenAccessException("Bạn không có quyền xem task này.");
+        var includeChildren = _currentUser.HasPermission(Permissions.TaskReadAll)
+            || _currentUser.HasPermission(Permissions.TaskReadDepartment);
+        return TaskMapper.ToDto(task, includeChildren: includeChildren);
     }
 }
 
@@ -75,7 +54,7 @@ public class TaskGetMyAssignedQueryHandler : IRequestHandler<TaskGetMyAssignedQu
         var userId = _currentUser.UserId;
         if (userId is null) return Array.Empty<ProjectTaskDto>();
 
-        var items = await _tasks.GetAssignedToUserAsync(userId.Value, ct);
+        var items = await _tasks.GetAssignedToUserAsync(userId.Value, ct, request.IncludeCancelled);
         return items.Select(t => TaskMapper.ToDto(t)).ToList();
     }
 }
@@ -106,10 +85,30 @@ public class TaskGetByDepartmentQueryHandler
                 throw new ForbiddenAccessException("Bạn không phải tổ trưởng của xưởng này.");
         }
 
-        var items = await _tasks.GetByDepartmentAsync(request.DepartmentId, ct);
+        var items = await _tasks.GetByDepartmentAsync(request.DepartmentId, ct, request.IncludeCancelled);
+        items = FilterByAssignedPm(items, _currentUser);
+
         return items
             .Where(t => !t.IsConfidential || _currentUser.HasPermission(Permissions.TaskReadConfidential))
             .Select(t => TaskMapper.ToDto(t))
+            .ToList();
+    }
+
+    // Plan mục 8 ràng buộc "PM chỉ thấy công đoạn của mình": ẩn Công đoạn ĐÃ gán cho PM khác
+    // (AssignedPmUserId khác userId hiện tại). Công đoạn CHƯA gán ai vẫn hiện — không thuộc về ai để giấu.
+    // GĐ/Phó GĐ (TaskReadAll) không bị lọc, xem toàn bộ xưởng.
+    internal static IReadOnlyList<Domain.Entities.ProjectTask> FilterByAssignedPm(
+        IReadOnlyList<Domain.Entities.ProjectTask> items, ICurrentUserService currentUser)
+    {
+        if (currentUser.HasPermission(Permissions.TaskReadAll)) return items;
+
+        var userId = currentUser.UserId;
+        var hiddenStageIds = items
+            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
+            .Select(t => t.Id)
+            .ToHashSet();
+        return items
+            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
             .ToList();
     }
 }
@@ -149,7 +148,9 @@ public class TaskGetByProjectQueryHandler
             }
         }
 
-        var items = await _tasks.GetByProjectIdAsync(request.ProjectId, ct);
+        var items = await _tasks.GetByProjectIdAsync(request.ProjectId, ct, request.IncludeCancelled);
+        items = TaskGetByDepartmentQueryHandler.FilterByAssignedPm(items, _currentUser);
+
         return items
             .Where(t => !t.IsConfidential || _currentUser.HasPermission(Permissions.TaskReadConfidential))
             .Select(t => TaskMapper.ToDto(t))

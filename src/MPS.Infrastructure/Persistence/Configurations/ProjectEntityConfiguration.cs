@@ -14,6 +14,7 @@ public class ProjectEntityConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(e => e.Title).HasMaxLength(200).IsRequired();
         builder.Property(e => e.Description).HasColumnType("nvarchar(max)");
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(e => e.StatusBeforePause).HasConversion<string>().HasMaxLength(20);
         builder.Property(p => p.StartDate).IsRequired();
 
         builder.Property(e => e.CompletionNote).HasColumnType("nvarchar(max)");
@@ -36,5 +37,6 @@ public class ProjectEntityConfiguration : IEntityTypeConfiguration<Project>
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(p => p.DepartmentId);
+        builder.HasIndex(p => p.DeletedAt);
     }
 }

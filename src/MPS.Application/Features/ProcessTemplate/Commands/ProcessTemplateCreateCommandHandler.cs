@@ -37,7 +37,9 @@ public class ProcessTemplateCreateCommandHandler : IRequestHandler<ProcessTempla
                 Description = string.IsNullOrWhiteSpace(s.Description) ? null : s.Description.Trim(),
                 StepOrder = s.StepOrder,
                 DefaultProgressType = s.DefaultProgressType,
-                DefaultWeight = s.DefaultWeight,
+                DefaultPlannedQuantity = s.DefaultPlannedQuantity,
+                DefaultPlannedWorkUnits = s.DefaultPlannedWorkUnits,
+                DefaultIsRequiredGate = s.DefaultIsRequiredGate,
                 Priority = s.Priority,
             });
         }

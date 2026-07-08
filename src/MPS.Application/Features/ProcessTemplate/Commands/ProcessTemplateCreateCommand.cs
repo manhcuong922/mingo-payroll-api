@@ -8,7 +8,9 @@ public record ProcessStepInput(
     string? Description,
     int StepOrder,
     ProgressType DefaultProgressType,
-    int DefaultWeight,
+    int DefaultPlannedQuantity,
+    int DefaultPlannedWorkUnits,
+    bool DefaultIsRequiredGate,
     int? Priority);
 
 public record ProcessTemplateCreateCommand(

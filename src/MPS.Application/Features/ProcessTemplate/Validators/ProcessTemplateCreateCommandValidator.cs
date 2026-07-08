@@ -1,5 +1,6 @@
 using FluentValidation;
 using MPS.Application.Features.ProcessTemplate.Commands;
+using MPS.Domain.Enums;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.ProcessTemplate.Validators;
@@ -22,10 +23,26 @@ public class ProcessTemplateCreateCommandValidator : AbstractValidator<ProcessTe
         RuleFor(x => x.Steps)
             .NotEmpty().WithMessage("At least one step is required.");
 
+        // Step Quantity sinh công đoạn — cần cả sản lượng kế hoạch lẫn khối lượng công việc (tỷ trọng lên
+        // đơn) dương, nếu không công đoạn sinh ra sẽ "vô hình" trong tiến độ đơn.
+        // Step Milestone/Gate sinh gate — KHÔNG có sản lượng/khối lượng công việc (plan.md mục 5.3/8.4).
         RuleForEach(x => x.Steps).ChildRules(step =>
         {
             step.RuleFor(s => s.Name).NotEmpty().MaximumLength(150);
-            step.RuleFor(s => s.DefaultWeight).GreaterThanOrEqualTo(0);
+
+            step.When(s => s.DefaultProgressType == ProgressType.Quantity, () =>
+            {
+                step.RuleFor(s => s.DefaultPlannedQuantity).GreaterThan(0)
+                    .WithMessage("Sản lượng kế hoạch mặc định phải lớn hơn 0.");
+                step.RuleFor(s => s.DefaultPlannedWorkUnits).GreaterThan(0)
+                    .WithMessage("Khối lượng công việc mặc định phải lớn hơn 0.");
+            }).Otherwise(() =>
+            {
+                step.RuleFor(s => s.DefaultPlannedQuantity).Equal(0)
+                    .WithMessage("Gate không có sản lượng kế hoạch.");
+                step.RuleFor(s => s.DefaultPlannedWorkUnits).Equal(0)
+                    .WithMessage("Gate không có khối lượng công việc.");
+            });
         });
     }
 }

@@ -41,4 +41,7 @@ public interface IDepartmentRepository
 
     // USER là công nhân của xưởng (EmployeeInformation.DepartmentId, chỉ những bản ghi có UserId != null).
     Task<IReadOnlyList<int>> GetMemberUserIdsAsync(int departmentId, CancellationToken ct);
+
+    // v7 mục 3.2: validate AssignedPmUserId khi gán PM cho Công đoạn — phải role roleId, cùng xưởng departmentId.
+    Task<bool> IsUserInDepartmentWithRoleAsync(int userId, int departmentId, int roleId, CancellationToken ct);
 }

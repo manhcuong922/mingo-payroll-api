@@ -28,14 +28,14 @@ internal static class TaskMapper
             t.Status.ToString(),
             t.Type.ToString(),
             t.ProgressType.ToString(),
-            t.RequiresHandover,
             t.IsConfidential,
             t.Priority,
             t.StepOrder,
             t.Deadline,
             t.PlannedQuantity,
             t.CompletedQuantity,
-            t.Weight,
+            t.PlannedWorkUnits,
+            t.IsRequiredGate,
             t.ProjectId,
             t.Project?.Title,
             t.DepartmentId,
@@ -46,15 +46,19 @@ internal static class TaskMapper
             t.CreatedByUserId,
             t.CreatedBy?.Username,
             t.IsBatchParent,
+            t.AssignedPmUserId,
             taskPercent,
             t.WasLate,
             t.CompletedBy?.Username,
             t.CompletedAt,
             t.RowVersion is { Length: > 0 } ? Convert.ToBase64String(t.RowVersion) : string.Empty,
             attachments,
-            children);
+            children,
+            t.PausedByCascadeFromId);
     }
 
+    // % hiển thị CỦA CHÍNH task này (không phải đóng góp vào tiến độ cha — xem ProgressService cho công thức
+    // tổng hợp). Gate (Milestone) chỉ có Done/Todo nên percent nhị phân 100/0.
     private static int ResolveCompletionPercent(MPS.Domain.Entities.ProjectTask t)
     {
         if (t.ProgressType == ProgressType.Milestone)

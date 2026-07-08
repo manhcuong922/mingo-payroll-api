@@ -2,6 +2,7 @@ using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
+using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 
@@ -12,6 +13,7 @@ public class ProjectGenerateTasksCommandHandler : IRequestHandler<ProjectGenerat
     private readonly IProjectRepository _projects;
     private readonly IProcessTemplateRepository _templates;
     private readonly IProjectTaskRepository _tasks;
+    private readonly IDepartmentRepository _departments;
     private readonly ITaskGenerator _generator;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
@@ -20,6 +22,7 @@ public class ProjectGenerateTasksCommandHandler : IRequestHandler<ProjectGenerat
         IProjectRepository projects,
         IProcessTemplateRepository templates,
         IProjectTaskRepository tasks,
+        IDepartmentRepository departments,
         ITaskGenerator generator,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
@@ -27,6 +30,7 @@ public class ProjectGenerateTasksCommandHandler : IRequestHandler<ProjectGenerat
         _projects = projects;
         _templates = templates;
         _tasks = tasks;
+        _departments = departments;
         _generator = generator;
         _authorizer = authorizer;
         _currentUser = currentUser;
@@ -46,9 +50,29 @@ public class ProjectGenerateTasksCommandHandler : IRequestHandler<ProjectGenerat
         var template = await _templates.GetByIdWithStepsAsync(request.ProcessTemplateId, cancellationToken)
             ?? throw new NotFoundException($"Không tìm thấy quy trình mẫu #{request.ProcessTemplateId}.");
 
+        var departmentId = project.DepartmentId ?? template.DefaultDepartmentId;
+        await ValidateAssignedPmsAsync(request.Overrides, departmentId, cancellationToken);
+
         var stages = _generator.BuildStages(project, template, userId, request.Overrides);
 
         await _tasks.AddRangeAsync(stages, cancellationToken);
         return stages.Count;
+    }
+
+    // Plan mục 3.2b: assignedPmUserId (nếu có) phải role ProjectManager, cùng xưởng với Đơn.
+    private async Task ValidateAssignedPmsAsync(
+        IReadOnlyList<GenerateStepOverride>? overrides, int? departmentId, CancellationToken ct)
+    {
+        if (overrides is null) return;
+
+        foreach (var pmUserId in overrides.Select(o => o.AssignedPmUserId).Where(id => id is not null).Distinct())
+        {
+            var isValidPm = departmentId is int deptId
+                && await _departments.IsUserInDepartmentWithRoleAsync(
+                    pmUserId!.Value, deptId, SystemRoles.ProjectManagerId, ct);
+            if (!isValidPm)
+                throw new DomainValidationException(
+                    $"PM #{pmUserId} được gán phải có role ProjectManager và cùng xưởng với đơn.");
+        }
     }
 }

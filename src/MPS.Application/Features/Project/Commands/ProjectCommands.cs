@@ -8,7 +8,6 @@ public record ProjectCreateCommand(
     string? Description,
     DateOnly? StartDate,
     DateTime? Deadline,
-    int Quantity,
     int? DepartmentId) : IRequest<int>;
 
 public record ProjectUpdateCommand(
@@ -16,8 +15,7 @@ public record ProjectUpdateCommand(
     string Title,
     string? Description,
     DateTime? Deadline,
-    string? Status,
-    int Quantity) : IRequest<bool>;
+    string? Status) : IRequest<bool>;
 
 public record ProjectDeleteCommand(int Id) : IRequest<bool>;
 
@@ -30,3 +28,9 @@ public record ProjectGenerateTasksCommand(
 public record ProjectCompleteCommand(
     int Id,
     string? CompletionNote) : IRequest<bool>;
+
+// ⭐ Pause/Resume/Cancel/Restore (plan mục 6.5) — lan truyền xuống TOÀN BỘ Công đoạn + Task con của Đơn.
+public record ProjectPauseCommand(int Id) : IRequest<bool>;
+public record ProjectResumeCommand(int Id) : IRequest<bool>;
+public record ProjectCancelCommand(int Id) : IRequest<bool>;
+public record ProjectRestoreCommand(int Id) : IRequest<bool>;

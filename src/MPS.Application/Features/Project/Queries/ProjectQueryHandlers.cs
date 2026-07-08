@@ -3,6 +3,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models;
 using MPS.Application.DTOs;
 using MPS.Application.Services;
+using MPS.Domain.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -12,15 +13,21 @@ namespace MPS.Application.Features.Project.Queries;
 public class ProjectGetAllQueryHandler : IRequestHandler<ProjectGetAllQuery, IReadOnlyList<ProjectDto>>
 {
     private readonly IProjectRepository _projects;
+    private readonly IProjectTaskRepository _tasks;
+    private readonly IProgressService _progress;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
 
     public ProjectGetAllQueryHandler(
         IProjectRepository projects,
+        IProjectTaskRepository tasks,
+        IProgressService progress,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
     {
         _projects = projects;
+        _tasks = tasks;
+        _progress = progress;
         _authorizer = authorizer;
         _currentUser = currentUser;
     }
@@ -29,8 +36,8 @@ public class ProjectGetAllQueryHandler : IRequestHandler<ProjectGetAllQuery, IRe
     {
         if (_currentUser.HasPermission(Permissions.ProjectReadAll))
         {
-            var all = await _projects.GetAllAsync(ct);
-            return all.Select(ProjectMapper.ToDto).ToList();
+            var all = await _projects.GetAllAsync(ct, request.IncludeCancelled, request.Status);
+            return await MapProjectsWithProgressAsync(all, request.IncludeCancelled, ct);
         }
 
         // ReadDepartment: tổ trưởng chỉ thấy đơn của xưởng mình.
@@ -40,23 +47,68 @@ public class ProjectGetAllQueryHandler : IRequestHandler<ProjectGetAllQuery, IRe
         var deptId = await _authorizer.GetManagedDepartmentIdAsync(userId.Value, ct);
         if (deptId is null) return Array.Empty<ProjectDto>();
 
-        var items = await _projects.GetByDepartmentAsync(deptId.Value, ct);
-        return items.Select(ProjectMapper.ToDto).ToList();
+        var items = await _projects.GetByDepartmentAsync(deptId.Value, ct, request.IncludeCancelled, request.Status);
+        return await MapProjectsWithProgressAsync(items, request.IncludeCancelled, ct);
+    }
+
+    private async Task<IReadOnlyList<ProjectDto>> MapProjectsWithProgressAsync(
+        IReadOnlyList<Domain.Entities.Project> projects,
+        bool includeCancelled,
+        CancellationToken ct)
+    {
+        if (projects.Count == 0) return Array.Empty<ProjectDto>();
+
+        var projectIds = projects.Select(p => p.Id).ToArray();
+        var tasks = await _tasks.GetByProjectIdsAsync(projectIds, ct, includeCancelled);
+        var tasksByProject = tasks
+            .Where(t => t.ProjectId.HasValue)
+            .GroupBy(t => t.ProjectId!.Value)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Entities.ProjectTask>)FilterTasksForProgress(g.ToList()));
+
+        return projects
+            .Select(p => ProjectMapper.ToDtoWithProgress(
+                p,
+                tasksByProject.TryGetValue(p.Id, out var projectTasks) ? projectTasks : Array.Empty<Domain.Entities.ProjectTask>(),
+                _progress,
+                VietnamClock.Now))
+            .ToList();
+    }
+
+    private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
+        IReadOnlyList<Domain.Entities.ProjectTask> tasks)
+    {
+        if (_currentUser.HasPermission(Permissions.ProjectReadAll)) return tasks;
+
+        var userId = _currentUser.UserId;
+        var hiddenStageIds = tasks
+            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
+            .Select(t => t.Id)
+            .ToHashSet();
+
+        return tasks
+            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
+            .ToList();
     }
 }
 
 public class ProjectGetPagedQueryHandler : IRequestHandler<ProjectGetPagedQuery, PagedResult<ProjectDto>>
 {
     private readonly IProjectRepository _projects;
+    private readonly IProjectTaskRepository _tasks;
+    private readonly IProgressService _progress;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
 
     public ProjectGetPagedQueryHandler(
         IProjectRepository projects,
+        IProjectTaskRepository tasks,
+        IProgressService progress,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
     {
         _projects = projects;
+        _tasks = tasks;
+        _progress = progress;
         _authorizer = authorizer;
         _currentUser = currentUser;
     }
@@ -76,10 +128,51 @@ public class ProjectGetPagedQueryHandler : IRequestHandler<ProjectGetPagedQuery,
         }
 
         var (items, total) = await _projects.GetPagedAsync(
-            request.Keyword, departmentFilter, request.Page, request.PageSize, ct);
+            request.Keyword, departmentFilter, request.Page, request.PageSize, ct, request.IncludeCancelled, request.Status);
+
+        var mapped = await MapProjectsWithProgressAsync(items, request.IncludeCancelled, ct);
 
         return new PagedResult<ProjectDto>(
-            items.Select(ProjectMapper.ToDto).ToList(), total, request.Page, request.PageSize);
+            mapped, total, request.Page, request.PageSize);
+    }
+
+    private async Task<IReadOnlyList<ProjectDto>> MapProjectsWithProgressAsync(
+        IReadOnlyList<Domain.Entities.Project> projects,
+        bool includeCancelled,
+        CancellationToken ct)
+    {
+        if (projects.Count == 0) return Array.Empty<ProjectDto>();
+
+        var projectIds = projects.Select(p => p.Id).ToArray();
+        var tasks = await _tasks.GetByProjectIdsAsync(projectIds, ct, includeCancelled);
+        var tasksByProject = tasks
+            .Where(t => t.ProjectId.HasValue)
+            .GroupBy(t => t.ProjectId!.Value)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Entities.ProjectTask>)FilterTasksForProgress(g.ToList()));
+
+        return projects
+            .Select(p => ProjectMapper.ToDtoWithProgress(
+                p,
+                tasksByProject.TryGetValue(p.Id, out var projectTasks) ? projectTasks : Array.Empty<Domain.Entities.ProjectTask>(),
+                _progress,
+                VietnamClock.Now))
+            .ToList();
+    }
+
+    private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
+        IReadOnlyList<Domain.Entities.ProjectTask> tasks)
+    {
+        if (_currentUser.HasPermission(Permissions.ProjectReadAll)) return tasks;
+
+        var userId = _currentUser.UserId;
+        var hiddenStageIds = tasks
+            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
+            .Select(t => t.Id)
+            .ToHashSet();
+
+        return tasks
+            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
+            .ToList();
     }
 }
 
@@ -122,6 +215,25 @@ public class ProjectGetByIdQueryHandler : IRequestHandler<ProjectGetByIdQuery, P
         }
 
         var tasks = await _tasks.GetByProjectIdAsync(request.Id, ct);
-        return ProjectMapper.ToDtoWithProgress(project, tasks, _progress, DateTime.UtcNow);
+        tasks = FilterTasksForProgress(tasks);
+        return ProjectMapper.ToDtoWithProgress(project, tasks, _progress, VietnamClock.Now);
+    }
+
+    // Plan mục 10 câu 1 (chốt): PM chỉ xem tiến độ tính từ Công đoạn mình phụ trách, không thấy
+    // số tổng hợp gộp cả Công đoạn của PM khác. GĐ/Phó GĐ (ProjectReadAll) xem trọn vẹn, không lọc.
+    private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
+        IReadOnlyList<Domain.Entities.ProjectTask> tasks)
+    {
+        if (_currentUser.HasPermission(Permissions.ProjectReadAll)) return tasks;
+
+        var userId = _currentUser.UserId;
+        var hiddenStageIds = tasks
+            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
+            .Select(t => t.Id)
+            .ToHashSet();
+
+        return tasks
+            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
+            .ToList();
     }
 }

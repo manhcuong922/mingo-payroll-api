@@ -14,6 +14,7 @@ namespace MPS.Application.Tests.Features.Project;
 public sealed class ProjectCompleteAndScopeTests
 {
     private readonly Mock<IProjectRepository> _projects = new();
+    private readonly Mock<IProjectTaskRepository> _tasks = new();
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
@@ -23,7 +24,7 @@ public sealed class ProjectCompleteAndScopeTests
     // ===== ProjectComplete =====
 
     private ProjectCompleteCommandHandler CompleteSut() =>
-        new(_projects.Object, _authorizer.Object, _currentUser.Object);
+        new(_projects.Object, _tasks.Object, _authorizer.Object, _currentUser.Object);
 
     [Fact]
     public async Task Complete_SetsCompleted_WithNote_WhenManager()
@@ -33,6 +34,8 @@ public sealed class ProjectCompleteAndScopeTests
         var project = new MPS.Domain.Entities.Project { Id = 1, DepartmentId = DeptId, Status = ProjectStatus.Active };
         _projects.Setup(p => p.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(project);
         _projects.Setup(p => p.UpdateAsync(project, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _tasks.Setup(t => t.GetByProjectIdAsync(1, It.IsAny<CancellationToken>(), false))
+            .ReturnsAsync(Array.Empty<MPS.Domain.Entities.ProjectTask>());
 
         var result = await CompleteSut().Handle(new ProjectCompleteCommand(1, "Rút kinh nghiệm: máy hỏng 1 buổi."), CancellationToken.None);
 
@@ -55,13 +58,57 @@ public sealed class ProjectCompleteAndScopeTests
         await act.Should().ThrowAsync<ForbiddenAccessException>();
     }
 
+    [Fact]
+    public async Task Complete_Throws_WhenRequiredStageNotDone()
+    {
+        _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
+        _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var project = new MPS.Domain.Entities.Project { Id = 1, DepartmentId = DeptId, Status = ProjectStatus.Active };
+        _projects.Setup(p => p.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(project);
+        _tasks.Setup(t => t.GetByProjectIdAsync(1, It.IsAny<CancellationToken>(), false))
+            .ReturnsAsync(new[]
+            {
+                new MPS.Domain.Entities.ProjectTask
+                {
+                    Id = 10, IsBatchParent = true, Title = "Cắt khung", Status = TaskItemStatus.InProgress,
+                },
+            });
+
+        var act = () => CompleteSut().Handle(new ProjectCompleteCommand(1, null), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainValidationException>();
+        _projects.Verify(p => p.UpdateAsync(It.IsAny<MPS.Domain.Entities.Project>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Complete_Throws_WhenRequiredGateNotDone()
+    {
+        _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
+        _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var project = new MPS.Domain.Entities.Project { Id = 1, DepartmentId = DeptId, Status = ProjectStatus.Active };
+        _projects.Setup(p => p.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(project);
+        _tasks.Setup(t => t.GetByProjectIdAsync(1, It.IsAny<CancellationToken>(), false))
+            .ReturnsAsync(new[]
+            {
+                new MPS.Domain.Entities.ProjectTask
+                {
+                    Id = 11, IsBatchParent = false, ProgressType = ProgressType.Milestone,
+                    IsRequiredGate = true, Title = "QC mẫu sơn", Status = TaskItemStatus.Todo,
+                },
+            });
+
+        var act = () => CompleteSut().Handle(new ProjectCompleteCommand(1, null), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainValidationException>();
+    }
+
     // ===== ProjectScopeGuard qua ProjectCreate =====
 
     private ProjectCreateCommandHandler CreateSut() =>
         new(_projects.Object, _authorizer.Object, _currentUser.Object);
 
     private static ProjectCreateCommand CreateCmd() =>
-        new("Đơn 500 khung", null, null, null, 500, DeptId);
+        new("Đơn 500 khung", null, null, null, DeptId);
 
     [Fact]
     public async Task Create_Allowed_WhenDirectorHasReadAll()

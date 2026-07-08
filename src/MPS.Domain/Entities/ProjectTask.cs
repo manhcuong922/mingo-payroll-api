@@ -5,9 +5,11 @@ using MPS.Domain.Enums;
 namespace MPS.Domain.Entities;
 
 /// <summary>
-/// Task sản xuất (v5). Cây drill-down 3 tầng: Đơn → công đoạn (task cha IsBatchParent) → task thực thi (con).
+/// Task sản xuất (v8). Cây drill-down 3 tầng: Đơn → công đoạn (task cha IsBatchParent) → task thực thi (con).
 /// Task con giao 1 người HOẶC nhiều người (multi-assignee qua <see cref="Assignees"/>), chung 1 Done.
-/// Đo tiến độ LAI: ProgressType.Quantity → EV/PV theo SỐ LƯỢNG (không giờ công); Milestone → Weight nhập tay + đúng/chậm deadline.
+/// ProgressType.Quantity = task/công đoạn sản lượng, tham gia tính % tiến độ (EV/PV theo số lượng).
+/// ProgressType.Milestone = Gate/Checklist (điều kiện bắt buộc/tuỳ chọn), KHÔNG tham gia tính % —
+/// chỉ có Status Done/Todo, dùng để chặn hoàn thành công đoạn/đóng đơn khi IsRequiredGate=true.
 /// Hoàn thành = quản lý xưởng bấm Complete (không duyệt); quá deadline vẫn Done nhưng gắn WasLate.
 /// </summary>
 [Auditable]
@@ -19,17 +21,30 @@ public class ProjectTask
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
     public TaskItemType Type { get; set; } = TaskItemType.ProcessTask;
     public ProgressType ProgressType { get; set; } = ProgressType.Quantity;
-    public bool RequiresHandover { get; set; } = false;        // true = task bàn giao: bắt buộc attachment khi Complete
+    // Không còn dùng ở tầng nghiệp vụ (tính năng "task bàn giao" đã bỏ) — giữ cột DB để tương thích dữ liệu cũ.
+    public bool RequiresHandover { get; set; } = false;
     public bool IsConfidential { get; set; } = false;
     public DateTime? Deadline { get; set; }
     public int? Priority { get; set; }                         // 1=Low, 2=Medium, 3=High
     public int StepOrder { get; set; }                         // thứ tự công đoạn (copy từ ProcessStep khi generate)
 
     // --- Đo tiến độ (KHÔNG dùng giờ công) ---
-    public int PlannedQuantity { get; set; }                   // Quantity: SP mục tiêu (cha = tổng con). Milestone: 0
-    public int CompletedQuantity { get; set; }                 // Quantity: SP thực đạt (cha = SUM con). Milestone: 0
-    public int Weight { get; set; }                            // Milestone: trọng số nhập tay (đóng góp vào tiến độ đơn)
+    public int PlannedQuantity { get; set; }                   // Quantity: SP mục tiêu (cha = của chính cha, không phải SUM con). Gate: 0
+    public int CompletedQuantity { get; set; }                 // Quantity: SP thực đạt (cha = SUM con Quantity). Gate: luôn 0
+    // Legacy — không còn dùng cho tính % (Gate không có "trọng số quy đổi sản lượng"). Giữ cột DB tương thích dữ liệu cũ.
+    public int Weight { get; set; }
     public DateTime? ProgressUpdatedAt { get; set; }           // lần cuối cập nhật CompletedQuantity
+
+    // Khối lượng công việc chuẩn của CÔNG ĐOẠN (chỉ có ý nghĩa khi IsBatchParent=true, ProgressType=Quantity) —
+    // dùng để tính tỷ trọng đóng góp vào tiến độ Đơn (SUM StagePercent*PlannedWorkUnits / SUM PlannedWorkUnits),
+    // độc lập với PlannedQuantity (sản lượng thực tế của chính công đoạn đó).
+    public int PlannedWorkUnits { get; set; }
+
+    // Gate/Checklist bắt buộc (chỉ có ý nghĩa khi ProgressType=Milestone). Gate có thể là task lá dưới 1
+    // công đoạn (ParentTaskId != null, chặn công đoạn cha tự Done) hoặc sinh trực tiếp dưới Project từ
+    // ProcessStep Milestone (ParentTaskId = null, IsBatchParent = false, chỉ chặn đóng đơn) —
+    // true = phải Done mới cho công đoạn cha tự Done / đóng đơn chặn nếu còn gate bắt buộc chưa Done.
+    public bool IsRequiredGate { get; set; } = true;
 
     // --- Hoàn thành (bấm tay, không duyệt) ---
     public int? CompletedByUserId { get; set; }
@@ -54,6 +69,11 @@ public class ProjectTask
     // loại khỏi "task của tôi" của nhân viên.
     public bool IsBatchParent { get; set; } = false;
 
+    // PM chịu trách nhiệm 1 Công đoạn (chỉ có ý nghĩa khi IsBatchParent=true). Đổi PM giữa chừng →
+    // PM mới thừa kế toàn bộ Công đoạn + task con hiện có (plan mục 3.3/4.9) — không cần field lịch sử riêng.
+    public int? AssignedPmUserId { get; set; }
+    public User? AssignedPmUser { get; set; }
+
     // ⭐ Multi-assignee: 1 task giao 1 HOẶC nhiều người (bảng nối). Task cha (IsBatchParent) để rỗng.
     public List<TaskAssignee> Assignees { get; set; } = new();
 
@@ -65,4 +85,15 @@ public class ProjectTask
     // Optimistic concurrency — chống đua khi 2 lần cập nhật sản lượng / complete đồng thời.
     [Timestamp]
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    // --- Pause/Cancel lan truyền theo tầng (plan mục 6.5) ---
+    // null = Pause trực tiếp (được Resume độc lập); khác null = Pause do lan truyền từ cha
+    // (trỏ tới Id của bản ghi cha đã ra lệnh) → chỉ Resume được khi cha Resume trước.
+    public int? PausedByCascadeFromId { get; set; }
+
+    // Status trước khi Pause/Cancel — Resume/Restore trả lại đúng giá trị này (Todo/InProgress/Done).
+    public TaskItemStatus? StatusBeforePause { get; set; }
+
+    // Soft-delete cho Cancel — bản ghi vẫn tồn tại trong DB, ẩn khỏi danh sách mặc định.
+    public DateTime? DeletedAt { get; set; }
 }

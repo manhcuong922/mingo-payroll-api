@@ -7,15 +7,18 @@ namespace MPS.Application.Services;
 public record GenerateStepOverride(
     int StepId,
     int? PlannedQuantityOverride,
-    int? WeightOverride,
+    int? PlannedWorkUnitsOverride,
     DateTime? DeadlineOverride,
-    ProgressType? ProgressTypeOverride);
+    ProgressType? ProgressTypeOverride,
+    int? AssignedPmUserId = null);
 
 public interface ITaskGenerator
 {
     /// <summary>
-    /// Sinh các task CHA (công đoạn, IsBatchParent) từ ProcessTemplate cho một đơn.
-    /// KHÔNG auto-chia con, KHÔNG auto-assign — quản lý xưởng chia sau bằng CreateTask(ParentTaskId=cha).
+    /// Sinh task từ ProcessTemplate cho một đơn: step Quantity → công đoạn (IsBatchParent=true);
+    /// step Milestone/Gate → gate trực tiếp dưới Project (IsBatchParent=false, ParentTaskId=null).
+    /// KHÔNG auto-chia con cho công đoạn, KHÔNG auto-assign — quản lý xưởng chia sau bằng
+    /// CreateTask(ParentTaskId=cha).
     /// </summary>
     IReadOnlyList<ProjectTask> BuildStages(
         Project project,

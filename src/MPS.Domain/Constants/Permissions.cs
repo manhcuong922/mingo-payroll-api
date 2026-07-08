@@ -220,7 +220,8 @@ public static class Permissions
     public const string TaskReadConfidential = "Task.Read.Confidential";
 
     // Task — thao tác (PM xưởng; nhân viên KHÔNG có quyền ghi task nào)
-    public const string TaskCreateDepartment      = "Task.Create.Department";        // ⭐ tạo task 1 người / nhóm
+    public const string TaskCreateDepartment      = "Task.Create.Department";        // ⭐ tạo task lá 1 người / nhóm (PM)
+    public const string TaskCreateStageDepartment = "Task.CreateStage.Department";   // ⭐ tạo Công đoạn (Manager/GĐ)
     public const string TaskCreateConfidential    = "Task.Create.Confidential";
     public const string TaskUpdateDepartment      = "Task.Update.Department";
     public const string TaskUpdateProgressDepartment = "Task.UpdateProgress.Department"; // ⭐ cập nhật CompletedQuantity
@@ -242,6 +243,20 @@ public static class Permissions
     public const string WeeklyDayOffCreateAll = "WeeklyDayOff.Create.All";
     public const string WeeklyDayOffUpdateAll = "WeeklyDayOff.Update.All";
     public const string WeeklyDayOffDeleteAll = "WeeklyDayOff.Delete.All";
+
+    // ===== Task v7 (tách Create theo IsBatchParent) + Comment module - IDs 209-212 =====
+    // Quyền xem/viết đi theo đúng quyền của entity gốc (Project/Task) — CHỈ Employee cần permission riêng
+    // vì đây là ngoại lệ duy nhất phá vỡ "Employee không có quyền ghi" (plan ràng buộc 6).
+    public const string CommentReadAll           = "Comment.Read.All";           // GĐ/Phó GĐ — mọi tầng, mọi xưởng
+    public const string CommentCreateOwn         = "Comment.Create.Own";        // Employee — CHỈ Task của chính mình
+    public const string CommentCreateDepartment  = "Comment.Create.Department"; // Manager/PM — theo scope đang có trên entity gốc
+
+    // ===== ID 213 =====
+    // Tách khỏi ProcessTemplateReadAll: chỉ cho phép ĐỌC quy trình mẫu để chọn khi "Áp quy trình"
+    // (GenerateTasksModal) — KHÔNG cho vào màn quản lý/CRUD quy trình mẫu (đó vẫn cần ProcessTemplateReadAll
+    // hoặc ProcessTemplateCreateAll). PM cần quyền này để sinh task từ quy trình mẫu (Project.GenerateTasks)
+    // nhưng không được tự tạo/sửa/xóa quy trình mẫu dùng chung toàn công ty.
+    public const string ProcessTemplateReadForApply = "ProcessTemplate.ReadForApply.All";
 }
 
 public static class PermissionIds
@@ -444,7 +459,8 @@ public static class PermissionIds
 
     public const int EmployeeInformationReadDepartment = 147;
 
-    // ===== Task/Production module (v5) - IDs 148-173 =====
+    // ===== Task/Production module (v5) - IDs 148-169, 205-208 =====
+    // (170-204 dùng bởi AttendanceModule/ShiftTemplate/PublicHoliday/LeaveType — xem migration đã áp dụng cho DB)
     public const int ProcessTemplateReadAll     = 148;
     public const int ProcessTemplateCreateAll   = 149;
     public const int ProcessTemplateUpdateAll   = 150;
@@ -471,15 +487,24 @@ public static class PermissionIds
     public const int TaskDeleteDepartment          = 168;
 
     public const int ProductionAttachmentReadDepartment  = 169;
-    public const int ProductionAttachmentWriteDepartment = 170;
-    public const int ProductionAttachmentReadAll         = 171;
-
-    public const int TaskAuditReadAll           = 172;
-    public const int TaskAuditReadDepartment    = 173;
+    public const int ProductionAttachmentWriteDepartment = 205;
+    public const int ProductionAttachmentReadAll         = 206;
 
     // ===== WeeklyDayOff module — IDs 174–177 =====
     public const int WeeklyDayOffReadAll   = 174;
     public const int WeeklyDayOffCreateAll = 175;
     public const int WeeklyDayOffUpdateAll = 176;
     public const int WeeklyDayOffDeleteAll = 177;
+
+    public const int TaskAuditReadAll           = 207;
+    public const int TaskAuditReadDepartment    = 208;
+
+    // ===== Task v7 (tách Create theo IsBatchParent) + Comment module - IDs 209-212 =====
+    public const int TaskCreateStageDepartment  = 209;
+    public const int CommentReadAll             = 210;
+    public const int CommentCreateOwn           = 211;
+    public const int CommentCreateDepartment    = 212;
+
+    // ===== ID 213 =====
+    public const int ProcessTemplateReadForApply = 213;
 }

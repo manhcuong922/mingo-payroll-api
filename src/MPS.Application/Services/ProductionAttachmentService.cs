@@ -2,6 +2,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models.Storage;
 using MPS.Application.DTOs;
 using MPS.Application.Features.ProjectTask;
+using MPS.Domain.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums;
@@ -64,7 +65,7 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
             Sha256Hex = stored.Sha256Hex,
             Note = note,
             UploadedByUserId = userId,
-            UploadedAt = DateTime.UtcNow,
+            UploadedAt = VietnamClock.Now,
         };
 
         var id = await _attachments.AddAsync(entity, ct);
@@ -105,6 +106,18 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
         catch { /* ignore — object có thể được dọn sau bằng job */ }
     }
 
+    public async Task<(FileDownloadResult Result, string FileName)> DownloadAsync(int attachmentId, CancellationToken ct)
+    {
+        var userId = RequireUser();
+        var entity = await _attachments.GetByIdAsync(attachmentId, ct)
+            ?? throw new NotFoundException($"Không tìm thấy tài liệu #{attachmentId}.");
+
+        await EnsureCanReadAsync(entity.OwnerType, entity.OwnerId, userId, ct);
+
+        var result = await _storage.DownloadAsync(entity.ObjectKey, entity.Bucket, ct);
+        return (result, entity.FileName);
+    }
+
     private int RequireUser() =>
         _currentUser.UserId ?? throw new ForbiddenAccessException("Chưa đăng nhập.");
 
@@ -112,7 +125,7 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
     //   ProcessTemplate → cần ProcessTemplateReadAll (tài liệu dùng chung).
     //   ReadAll toàn cục (GĐ) → xem mọi thứ.
     //   Project → tài liệu CHUNG của đơn: mọi người thuộc xưởng của đơn xem được (kể cả công nhân).
-    //   Task/TaskCompletion → quản lý xưởng đó, HOẶC chính người được giao task (assignee). Người khác → cấm.
+    //   Task → quản lý xưởng đó, HOẶC chính người được giao task (assignee). Người khác → cấm.
     private async Task EnsureCanReadAsync(AttachmentOwnerType ownerType, int ownerId, int userId, CancellationToken ct)
     {
         if (ownerType == AttachmentOwnerType.ProcessTemplate)
@@ -152,6 +165,9 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
                 throw new ForbiddenAccessException("Bạn không có quyền sửa tài liệu quy trình mẫu.");
             return;
         }
+
+        // GĐ / Phó GĐ có quyền toàn cục — bypass giống ProjectScopeGuard.EnsureCanWriteAsync.
+        if (_currentUser.HasPermission(Permissions.ProductionAttachmentReadAll)) return;
 
         var departmentId = await ResolveOwnerDepartmentAsync(ownerType, ownerId, ct);
         if (departmentId is null || !await _authorizer.IsManagerOfAsync(userId, departmentId.Value, ct))
