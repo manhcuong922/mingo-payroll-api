@@ -42,7 +42,7 @@ public class ProjectCompleteCommandHandler : IRequestHandler<ProjectCompleteComm
 
         project.Status = ProjectStatus.Completed;
         project.CompletedByUserId = userId;
-        project.CompletedAt = VietnamClock.Now;
+        project.CompletedAt = request.CompletedAt ?? VietnamClock.Now;
         project.CompletionNote = string.IsNullOrWhiteSpace(request.CompletionNote)
             ? null : request.CompletionNote.Trim();
 

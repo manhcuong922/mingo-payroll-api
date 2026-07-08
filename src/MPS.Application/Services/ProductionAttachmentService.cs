@@ -18,7 +18,6 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
     private readonly IProductionAttachmentRepository _attachments;
     private readonly IProjectTaskRepository _tasks;
     private readonly IProjectRepository _projects;
-    private readonly IDepartmentRepository _departments;
     private readonly IFileStorageService _storage;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
@@ -27,7 +26,6 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
         IProductionAttachmentRepository attachments,
         IProjectTaskRepository tasks,
         IProjectRepository projects,
-        IDepartmentRepository departments,
         IFileStorageService storage,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
@@ -35,7 +33,6 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
         _attachments = attachments;
         _tasks = tasks;
         _projects = projects;
-        _departments = departments;
         _storage = storage;
         _authorizer = authorizer;
         _currentUser = currentUser;
@@ -121,11 +118,13 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
     private int RequireUser() =>
         _currentUser.UserId ?? throw new ForbiddenAccessException("Chưa đăng nhập.");
 
-    // ĐỌC — theo phân tầng "tầng dưới không nhìn task tầng trên/của người khác":
+    // ĐỌC — tách theo tầng (plan mới):
     //   ProcessTemplate → cần ProcessTemplateReadAll (tài liệu dùng chung).
-    //   ReadAll toàn cục (GĐ) → xem mọi thứ.
-    //   Project → tài liệu CHUNG của đơn: mọi người thuộc xưởng của đơn xem được (kể cả công nhân).
-    //   Task → quản lý xưởng đó, HOẶC chính người được giao task (assignee). Người khác → cấm.
+    //   ReadAll toàn cục (GĐ/Phó GĐ) → xem mọi thứ.
+    //   Project (tầng 1, Đơn hàng) → cần ProductionAttachmentReadProject VÀ là Director/Manager của xưởng
+    //     đơn đó — PM/Employee KHÔNG được xem tài liệu cấp đơn, kể cả khi thuộc xưởng.
+    //   Task/TaskCompletion (tầng 2 Công đoạn + tầng 3 Task lá, quyền giống nhau) → cần
+    //     ProductionAttachmentReadStage VÀ (là quản lý xưởng đó HOẶC chính assignee của task).
     private async Task EnsureCanReadAsync(AttachmentOwnerType ownerType, int ownerId, int userId, CancellationToken ct)
     {
         if (ownerType == AttachmentOwnerType.ProcessTemplate)
@@ -139,14 +138,20 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
 
         if (ownerType == AttachmentOwnerType.Project)
         {
+            if (!_currentUser.HasPermission(Permissions.ProductionAttachmentReadProject))
+                throw new ForbiddenAccessException("Bạn không có quyền xem tài liệu của đơn hàng.");
+
             var project = await _projects.GetByIdAsync(ownerId, ct)
                 ?? throw new NotFoundException($"Không tìm thấy đơn #{ownerId}.");
-            if (project.DepartmentId is null || !await IsUserInDepartmentAsync(userId, project.DepartmentId.Value, ct))
+            if (project.DepartmentId is null || !await _authorizer.IsManagerOfAsync(userId, project.DepartmentId.Value, ct))
                 throw new ForbiddenAccessException("Bạn không có quyền xem tài liệu của đơn này.");
             return;
         }
 
         // Task | TaskCompletion
+        if (!_currentUser.HasPermission(Permissions.ProductionAttachmentReadStage))
+            throw new ForbiddenAccessException("Bạn không có quyền xem tài liệu của công đoạn/task.");
+
         var task = await _tasks.GetByIdWithGraphAsync(ownerId, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{ownerId}.");
 
@@ -156,7 +161,12 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
             throw new ForbiddenAccessException("Bạn chỉ xem được tài liệu của task mình được giao.");
     }
 
-    // GHI (upload/xóa): ProcessTemplate → cần ProcessTemplateCreateAll (GĐ/quản lý). Project/Task → quản lý xưởng đó.
+    // GHI (upload/xóa) — tách theo tầng:
+    //   ProcessTemplate → cần ProcessTemplateCreateAll (GĐ/quản lý).
+    //   Project (tầng 1) → cần ProductionAttachmentWriteProject VÀ là Director/Manager của xưởng đơn đó.
+    //     PM KHÔNG được đăng tài liệu cấp đơn — dù họ có phụ trách công đoạn trong đơn đó.
+    //   Task/TaskCompletion (tầng 2+3) → cần ProductionAttachmentWriteStage VÀ là quản lý xưởng đó
+    //     (Manager toàn xưởng HOẶC PM đang phụ trách đúng Công đoạn/task đó).
     private async Task EnsureCanWriteAsync(AttachmentOwnerType ownerType, int ownerId, int userId, CancellationToken ct)
     {
         if (ownerType == AttachmentOwnerType.ProcessTemplate)
@@ -169,16 +179,15 @@ public sealed class ProductionAttachmentService : IProductionAttachmentService
         // GĐ / Phó GĐ có quyền toàn cục — bypass giống ProjectScopeGuard.EnsureCanWriteAsync.
         if (_currentUser.HasPermission(Permissions.ProductionAttachmentReadAll)) return;
 
+        var requiredPermission = ownerType == AttachmentOwnerType.Project
+            ? Permissions.ProductionAttachmentWriteProject
+            : Permissions.ProductionAttachmentWriteStage;
+        if (!_currentUser.HasPermission(requiredPermission))
+            throw new ForbiddenAccessException("Bạn không có quyền đăng tải tài liệu ở tầng này.");
+
         var departmentId = await ResolveOwnerDepartmentAsync(ownerType, ownerId, ct);
         if (departmentId is null || !await _authorizer.IsManagerOfAsync(userId, departmentId.Value, ct))
             throw new ForbiddenAccessException("Bạn không có quyền sửa tài liệu của xưởng này.");
-    }
-
-    // Công nhân trực thuộc xưởng HOẶC quản lý xưởng đều được XEM.
-    private async Task<bool> IsUserInDepartmentAsync(int userId, int departmentId, CancellationToken ct)
-    {
-        var userDept = await _departments.GetDepartmentIdOfUserAsync(userId, ct);
-        return userDept == departmentId;
     }
 
     private async Task<int?> ResolveOwnerDepartmentAsync(AttachmentOwnerType ownerType, int ownerId, CancellationToken ct)

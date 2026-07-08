@@ -77,7 +77,7 @@ public class ProjectGetAllQueryHandler : IRequestHandler<ProjectGetAllQuery, IRe
     private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
         IReadOnlyList<Domain.Entities.ProjectTask> tasks)
     {
-        if (_currentUser.HasPermission(Permissions.ProjectReadAll)) return tasks;
+        if (ProjectScopeGuard.CanSeeFullDepartmentProjects(_currentUser)) return tasks;
 
         var userId = _currentUser.UserId;
         var hiddenStageIds = tasks
@@ -162,7 +162,7 @@ public class ProjectGetPagedQueryHandler : IRequestHandler<ProjectGetPagedQuery,
     private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
         IReadOnlyList<Domain.Entities.ProjectTask> tasks)
     {
-        if (_currentUser.HasPermission(Permissions.ProjectReadAll)) return tasks;
+        if (ProjectScopeGuard.CanSeeFullDepartmentProjects(_currentUser)) return tasks;
 
         var userId = _currentUser.UserId;
         var hiddenStageIds = tasks
@@ -224,7 +224,7 @@ public class ProjectGetByIdQueryHandler : IRequestHandler<ProjectGetByIdQuery, P
     private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
         IReadOnlyList<Domain.Entities.ProjectTask> tasks)
     {
-        if (_currentUser.HasPermission(Permissions.ProjectReadAll)) return tasks;
+        if (ProjectScopeGuard.CanSeeFullDepartmentProjects(_currentUser)) return tasks;
 
         var userId = _currentUser.UserId;
         var hiddenStageIds = tasks

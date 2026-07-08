@@ -48,9 +48,12 @@ public record TaskUpdateProgressCommand(
     string RowVersion) : IRequest<bool>;
 
 // ⭐ Bấm hoàn thành. Quá deadline vẫn Done nhưng gắn WasLate.
+// CompletedAt: tuỳ chọn — cho phép chỉnh ngày hoàn thành thủ công (vd ghi nhận ngày thực tế đã xong trước đó).
+// Không truyền → mặc định thời điểm hiện tại (VietnamClock.Now).
 public record TaskCompleteCommand(
     int Id,
-    string RowVersion) : IRequest<bool>;
+    string RowVersion,
+    DateTime? CompletedAt = null) : IRequest<bool>;
 
 public record TaskDeleteCommand(int Id) : IRequest<bool>;
 

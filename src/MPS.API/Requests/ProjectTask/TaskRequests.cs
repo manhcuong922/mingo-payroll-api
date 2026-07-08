@@ -42,4 +42,4 @@ public record UpdateTaskProgressRequest(
     int CompletedQuantity,
     string RowVersion);
 
-public record CompleteTaskRequest(string RowVersion);
+public record CompleteTaskRequest(string RowVersion, DateTime? CompletedAt = null);

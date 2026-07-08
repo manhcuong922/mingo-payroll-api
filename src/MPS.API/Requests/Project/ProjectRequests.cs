@@ -19,4 +19,4 @@ public record GenerateTasksRequest(
     int ProcessTemplateId,
     IReadOnlyList<GenerateStepOverride>? Overrides);
 
-public record CompleteProjectRequest(string? CompletionNote);
+public record CompleteProjectRequest(string? CompletionNote, DateTime? CompletedAt = null);

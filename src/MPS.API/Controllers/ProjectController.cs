@@ -24,13 +24,13 @@ public class ProjectController : ControllerBase
     }
 
     [HttpGet]
-    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
+    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment, Permissions.ProjectReadFullDepartment)]
     public async Task<IActionResult> GetAll(
         [FromQuery] bool includeCancelled, [FromQuery] ProjectStatus? status, CancellationToken ct)
         => Ok(await _mediator.Send(new ProjectGetAllQuery(includeCancelled, status), ct));
 
     [HttpGet("paged")]
-    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
+    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment, Permissions.ProjectReadFullDepartment)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? keyword,
         [FromQuery] int? departmentId,
@@ -42,7 +42,7 @@ public class ProjectController : ControllerBase
         => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize, includeCancelled, status), ct));
 
     [HttpGet("{id:int}")]
-    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
+    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment, Permissions.ProjectReadFullDepartment)]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var result = await _mediator.Send(new ProjectGetByIdQuery(id), ct);
@@ -94,7 +94,7 @@ public class ProjectController : ControllerBase
     [HasPermission(Permissions.ProjectCompleteDepartment)]
     public async Task<IActionResult> Complete(int id, [FromBody] CompleteProjectRequest request, CancellationToken ct)
     {
-        var ok = await _mediator.Send(new ProjectCompleteCommand(id, request.CompletionNote), ct);
+        var ok = await _mediator.Send(new ProjectCompleteCommand(id, request.CompletionNote, request.CompletedAt), ct);
         return ok ? NoContent() : NotFound();
     }
 
@@ -135,12 +135,12 @@ public class ProjectController : ControllerBase
     // ===== Attachment (tài liệu/ảnh của đơn) =====
 
     [HttpGet("{id:int}/attachments")]
-    [HasAnyPermission(Permissions.ProductionAttachmentReadDepartment, Permissions.ProductionAttachmentReadAll)]
+    [HasAnyPermission(Permissions.ProductionAttachmentReadProject, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> ListAttachments(int id, CancellationToken ct)
         => Ok(await _attachments.ListAsync(AttachmentOwnerType.Project, id, ct));
 
     [HttpPost("{id:int}/attachments")]
-    [HasPermission(Permissions.ProductionAttachmentWriteDepartment)]
+    [HasAnyPermission(Permissions.ProductionAttachmentWriteProject, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> UploadAttachment(
         int id, IFormFile file, [FromForm] string? note, CancellationToken ct)
     {

@@ -33,7 +33,8 @@ public class TaskGetByIdQueryHandler : IRequestHandler<TaskGetByIdQuery, Project
         await ProjectScopeGuard.EnsureCanReadTaskAsync(task, _tasks, _currentUser, _authorizer, ct);
 
         var includeChildren = _currentUser.HasPermission(Permissions.TaskReadAll)
-            || _currentUser.HasPermission(Permissions.TaskReadDepartment);
+            || _currentUser.HasPermission(Permissions.TaskReadDepartment)
+            || _currentUser.HasPermission(Permissions.TaskReadFullDepartment);
         return TaskMapper.ToDto(task, includeChildren: includeChildren);
     }
 }
@@ -96,11 +97,12 @@ public class TaskGetByDepartmentQueryHandler
 
     // Plan mục 8 ràng buộc "PM chỉ thấy công đoạn của mình": ẩn Công đoạn ĐÃ gán cho PM khác
     // (AssignedPmUserId khác userId hiện tại). Công đoạn CHƯA gán ai vẫn hiện — không thuộc về ai để giấu.
-    // GĐ/Phó GĐ (TaskReadAll) không bị lọc, xem toàn bộ xưởng.
+    // GĐ/Phó GĐ (TaskReadAll) hoặc quản lý xưởng full-scope (TaskReadFullDepartment, vd. DepartmentManager)
+    // không bị lọc, xem toàn bộ xưởng — permission-based, không hardcode role.
     internal static IReadOnlyList<Domain.Entities.ProjectTask> FilterByAssignedPm(
         IReadOnlyList<Domain.Entities.ProjectTask> items, ICurrentUserService currentUser)
     {
-        if (currentUser.HasPermission(Permissions.TaskReadAll)) return items;
+        if (ProjectScopeGuard.CanSeeFullDepartmentTasks(currentUser)) return items;
 
         var userId = currentUser.UserId;
         var hiddenStageIds = items
