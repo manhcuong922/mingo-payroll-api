@@ -1,5 +1,6 @@
 using FluentValidation;
 using MPS.Application.Features.ProjectTask.Commands;
+using MPS.Domain.Common;
 using MPS.Domain.Enums;
 
 namespace MPS.Application.Features.ProjectTask.Validators;
@@ -81,6 +82,10 @@ public class TaskCompleteCommandValidator : AbstractValidator<TaskCompleteComman
     {
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.RowVersion).NotEmpty().WithMessage("RowVersion is required.");
+        RuleFor(x => x.CompletedAt)
+            .LessThanOrEqualTo(_ => VietnamClock.Now)
+            .When(x => x.CompletedAt.HasValue)
+            .WithMessage("Ngày hoàn thành không được ở tương lai.");
     }
 }
 

@@ -17,6 +17,17 @@ namespace MPS.Application.Features.Project;
 /// </summary>
 public static class ProjectScopeGuard
 {
+    // Permission-based, không hardcode role: bất kỳ role nào được gán ProjectReadFullDepartment/
+    // TaskReadFullDepartment (vd. DepartmentManager) đều xem trọn 3 tầng của xưởng mình, bỏ qua bộ lọc
+    // theo AssignedPmUserId — giống ProjectReadAll/TaskReadAll nhưng giới hạn trong 1 xưởng thay vì toàn công ty.
+    public static bool CanSeeFullDepartmentProjects(ICurrentUserService currentUser) =>
+        currentUser.HasPermission(Permissions.ProjectReadAll)
+        || currentUser.HasPermission(Permissions.ProjectReadFullDepartment);
+
+    public static bool CanSeeFullDepartmentTasks(ICurrentUserService currentUser) =>
+        currentUser.HasPermission(Permissions.TaskReadAll)
+        || currentUser.HasPermission(Permissions.TaskReadFullDepartment);
+
     public static async Task EnsureCanWriteAsync(
         int? projectDepartmentId,
         ICurrentUserService currentUser,
@@ -115,10 +126,15 @@ public static class ProjectScopeGuard
         if (currentUser.HasPermission(Permissions.TaskReadAll)) return;
 
         var userId = currentUser.UserId;
-        if (currentUser.HasPermission(Permissions.TaskReadDepartment) && userId is not null
-            && task.DepartmentId is not null
-            && await authorizer.IsManagerOfAsync(userId.Value, task.DepartmentId.Value, ct)
-            && await IsVisibleToPmAsync(task, userId.Value, tasks, ct))
+        var isManagerOfTaskDepartment = userId is not null && task.DepartmentId is not null
+            && await authorizer.IsManagerOfAsync(userId.Value, task.DepartmentId.Value, ct);
+
+        // TaskReadFullDepartment (vd. DepartmentManager): xem trọn 3 tầng của xưởng mình, bỏ qua lọc PM.
+        if (currentUser.HasPermission(Permissions.TaskReadFullDepartment) && isManagerOfTaskDepartment) return;
+
+        // TaskReadDepartment (PM tổ): chỉ Công đoạn/task con được gán cho chính mình.
+        if (currentUser.HasPermission(Permissions.TaskReadDepartment) && isManagerOfTaskDepartment
+            && userId is not null && await IsVisibleToPmAsync(task, userId.Value, tasks, ct))
         {
             return;
         }

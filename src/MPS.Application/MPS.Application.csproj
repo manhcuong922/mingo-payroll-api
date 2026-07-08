@@ -17,4 +17,8 @@
     <ProjectReference Include="..\MPS.Shared\MPS.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="MPS.Application.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -24,22 +24,22 @@ public class ProjectTaskController : ControllerBase
     }
 
     [HttpGet("my")]
-    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadAll)]
+    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment, Permissions.TaskReadAll)]
     public async Task<IActionResult> GetMyAssigned([FromQuery] bool includeCancelled, CancellationToken ct)
         => Ok(await _mediator.Send(new TaskGetMyAssignedQuery(includeCancelled), ct));
 
     [HttpGet("department/{id:int}")]
-    [HasAnyPermission(Permissions.TaskReadDepartment, Permissions.TaskReadAll)]
+    [HasAnyPermission(Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment, Permissions.TaskReadAll)]
     public async Task<IActionResult> GetByDepartment(int id, [FromQuery] bool includeCancelled, CancellationToken ct)
         => Ok(await _mediator.Send(new TaskGetByDepartmentQuery(id, includeCancelled), ct));
 
     [HttpGet("project/{id:int}")]
-    [HasAnyPermission(Permissions.TaskReadAll, Permissions.TaskReadDepartment)]
+    [HasAnyPermission(Permissions.TaskReadAll, Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment)]
     public async Task<IActionResult> GetByProject(int id, [FromQuery] bool includeCancelled, CancellationToken ct)
         => Ok(await _mediator.Send(new TaskGetByProjectQuery(id, includeCancelled), ct));
 
     [HttpGet("{id:int}")]
-    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadAll)]
+    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment, Permissions.TaskReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var result = await _mediator.Send(new TaskGetByIdQuery(id), ct);
@@ -98,7 +98,7 @@ public class ProjectTaskController : ControllerBase
     [HasPermission(Permissions.TaskCompleteDepartment)]
     public async Task<IActionResult> Complete(int id, [FromBody] CompleteTaskRequest request, CancellationToken ct)
     {
-        var ok = await _mediator.Send(new TaskCompleteCommand(id, request.RowVersion), ct);
+        var ok = await _mediator.Send(new TaskCompleteCommand(id, request.RowVersion, request.CompletedAt), ct);
         return ok ? NoContent() : NotFound();
     }
 
@@ -157,7 +157,7 @@ public class ProjectTaskController : ControllerBase
     // ===== Attachment (tài liệu/ảnh) =====
 
     [HttpGet("{id:int}/attachments")]
-    [HasAnyPermission(Permissions.ProductionAttachmentReadDepartment, Permissions.ProductionAttachmentReadAll)]
+    [HasAnyPermission(Permissions.ProductionAttachmentReadStage, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> ListAttachments(int id, [FromQuery] bool completion, CancellationToken ct)
     {
         var ownerType = completion ? AttachmentOwnerType.TaskCompletion : AttachmentOwnerType.Task;
@@ -165,7 +165,7 @@ public class ProjectTaskController : ControllerBase
     }
 
     [HttpPost("{id:int}/attachments")]
-    [HasPermission(Permissions.ProductionAttachmentWriteDepartment)]
+    [HasAnyPermission(Permissions.ProductionAttachmentWriteStage, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> UploadAttachment(
         int id, IFormFile file, [FromForm] string? note, [FromForm] bool completion, CancellationToken ct)
     {
@@ -180,7 +180,7 @@ public class ProjectTaskController : ControllerBase
     }
 
     [HttpDelete("attachments/{attachmentId:int}")]
-    [HasPermission(Permissions.ProductionAttachmentWriteDepartment)]
+    [HasAnyPermission(Permissions.ProductionAttachmentWriteStage, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> DeleteAttachment(int attachmentId, CancellationToken ct)
     {
         await _attachments.DeleteAsync(attachmentId, ct);
@@ -189,7 +189,7 @@ public class ProjectTaskController : ControllerBase
 
     // Tải file qua backend (thay vì presigned URL hết hạn 15 phút) — cùng quyền đọc như ListAttachments.
     [HttpGet("attachments/{attachmentId:int}/download")]
-    [HasAnyPermission(Permissions.ProductionAttachmentReadDepartment, Permissions.ProductionAttachmentReadAll)]
+    [HasAnyPermission(Permissions.ProductionAttachmentReadStage, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> DownloadAttachment(int attachmentId, CancellationToken ct)
     {
         var (result, fileName) = await _attachments.DownloadAsync(attachmentId, ct);

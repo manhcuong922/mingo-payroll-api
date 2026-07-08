@@ -47,12 +47,13 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         // Tài liệu nghiệm thu (TaskCompletion) là tuỳ chọn — đính kèm như tài liệu thường, không chặn hoàn thành.
 
         var now = VietnamClock.Now;
+        var completedAt = request.CompletedAt ?? now;
         var expectedRowVersion = DecodeRowVersion(request.RowVersion);
 
         task.Status = TaskItemStatus.Done;
         task.CompletedByUserId = userId;
-        task.CompletedAt = now;
-        task.WasLate = task.Deadline is { } dl && now > dl;
+        task.CompletedAt = completedAt;
+        task.WasLate = task.Deadline is { } dl && completedAt > dl;
         if (task.ProgressType == ProgressType.Quantity)
         {
             task.CompletedQuantity = task.PlannedQuantity;
@@ -69,7 +70,7 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         if (task.ParentTaskId is int parentId)
         {
             await _tasks.RecomputeParentCompletedAsync(parentId, ct);
-            await _tasks.TrySetParentDoneAsync(parentId, now, userId, ct);
+            await _tasks.TrySetParentDoneAsync(parentId, completedAt, userId, ct);
         }
 
         return true;
