@@ -3,13 +3,20 @@ using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Validators;
 
-public class CreateOvertimeRequestCommandValidator : AbstractValidator<CreateOvertimeRequestCommand>
+/// <summary>
+/// Validator cho batch OT (luồng mới).
+/// </summary>
+public class CreateBatchOvertimeRequestCommandValidator : AbstractValidator<CreateBatchOvertimeRequestCommand>
 {
-    public CreateOvertimeRequestCommandValidator()
+    public CreateBatchOvertimeRequestCommandValidator()
     {
+        RuleFor(x => x.ProjectId).GreaterThan(0);
         RuleFor(x => x)
             .Must(x => x.OtStartTime != x.OtEndTime)
-            .WithMessage("OtEndTime must be different from OtStartTime.");
+            .WithMessage("Giờ kết thúc phải khác giờ bắt đầu.");
+        RuleFor(x => x.EmployeeInformationIds)
+            .NotEmpty().WithMessage("Phải chọn ít nhất 1 nhân viên.");
+        RuleFor(x => x.ApproverRoute).IsInEnum();
         RuleFor(x => x.Reason).MaximumLength(500);
     }
 }

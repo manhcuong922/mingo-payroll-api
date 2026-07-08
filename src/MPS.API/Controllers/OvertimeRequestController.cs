@@ -59,15 +59,47 @@ public class OvertimeRequestController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPost]
-    [HasPermission(Permissions.OvertimeRequestCreateSelf)]
-    public async Task<IActionResult> Create(
-        [FromBody] CreateOvertimeRequest request,
+    /// <summary>
+    /// PM tạo batch OT request cho N nhân viên cùng project. Partial success —
+    /// 1 NV fail (vượt trần OT hoặc scope không match) sẽ bỏ NV đó, các NV còn
+    /// lại vẫn tạo. Kết quả chi tiết ở response.
+    /// </summary>
+    [HttpPost("batch")]
+    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    public async Task<IActionResult> CreateBatch(
+        [FromBody] CreateBatchOvertimeRequest request,
         CancellationToken cancellationToken)
     {
-        var id = await _mediator.Send(new CreateOvertimeRequestCommand(
-            request.WorkDate, request.OtStartTime, request.OtEndTime, request.Reason), cancellationToken);
-        return Created($"/api/overtime-requests/{id}", new { id });
+        var result = await _mediator.Send(new CreateBatchOvertimeRequestCommand(
+            request.ProjectId,
+            request.WorkDate,
+            request.OtStartTime,
+            request.OtEndTime,
+            request.EmployeeInformationIds,
+            request.ApproverRoute,
+            request.Reason), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>List Project thuộc Department của PM — populate dropdown ở form batch.</summary>
+    [HttpGet("pm-projects")]
+    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    public async Task<IActionResult> GetPmProjects(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPmProjectsQuery(), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>List NV thuộc Department của Project — populate picker ở form batch.</summary>
+    [HttpGet("eligible-employees")]
+    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    public async Task<IActionResult> GetEligibleEmployees(
+        [FromQuery] int projectId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new GetEligibleEmployeesForOvertimeQuery(projectId), cancellationToken);
+        return Ok(result);
     }
 
     [HttpPut("{id:int}/approve")]

@@ -29,6 +29,10 @@ internal static class OvertimeRequestMapper
             r.ReviewNote,
             r.ReviewedByUserId,
             r.ReviewedAt,
-            r.CreatedAt);
+            r.CreatedAt,
+            r.ProjectId,
+            r.Project?.Title,
+            r.ApproverRoute,
+            r.BatchId);
     }
 }

@@ -3,6 +3,7 @@ using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -10,10 +11,17 @@ using AttendanceRecordEntity = MPS.Domain.Entities.Attendance.AttendanceRecord;
 
 namespace MPS.Application.Features.Attendance.Attendance.Commands;
 
+/// <summary>
+/// 2 mode chấm công:
+///  • ShiftMode: shift assignment thông thường, ShiftTemplateId set
+///  • OvertimeMode: OT đã Approved, OvertimeRequestId set, ShiftTemplateId null
+/// Handler enforce exactly-one-of, validate active, chống chấm trùng.
+/// </summary>
 public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCommand, int>
 {
     private readonly IAttendanceRecordRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IOvertimeRequestRepository _overtimeRepository;
     private readonly IContractRepository _contractRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
@@ -24,6 +32,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     public RecordAttendanceCommandHandler(
         IAttendanceRecordRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IOvertimeRequestRepository overtimeRepository,
         IContractRepository contractRepository,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
@@ -33,6 +42,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _overtimeRepository = overtimeRepository;
         _contractRepository = contractRepository;
         _currentUser = currentUser;
         _splitter = splitter;
@@ -46,6 +56,13 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
 
+        // Exactly-one-of: ShiftTemplateId XOR OvertimeRequestId
+        var hasShift = request.ShiftTemplateId is not null;
+        var hasOt = request.OvertimeRequestId is not null;
+        if (hasShift == hasOt)
+            throw new DomainValidationException(
+                "Phải cung cấp CHÍNH XÁC 1 trong 2: ShiftTemplateId (chấm ca chính) hoặc OvertimeRequestId (chấm OT).");
+
         await _lockChecker.EnsureCanModifyAsync(
             request.WorkDate, request.OverrideReason, cancellationToken);
 
@@ -53,39 +70,120 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
             throw new DomainValidationException(
                 $"Employee {request.EmployeeInformationId} has no active contract; cannot record attendance.");
 
-        var shift = await _shiftRepository.GetByIdAsync(request.ShiftTemplateId, cancellationToken)
-            ?? throw new DomainValidationException(
-                $"ShiftTemplate {request.ShiftTemplateId} not found or inactive.");
-        if (!shift.IsActive)
-            throw new DomainValidationException(
-                $"ShiftTemplate '{shift.Code}' is inactive; cannot record attendance.");
-
-        var existing = await _repository.GetByKeyAsync(
-            request.EmployeeInformationId, request.WorkDate, request.ShiftTemplateId, cancellationToken);
-        if (existing is not null)
-            throw new ConflictException(
-                $"Attendance record already exists for employee {request.EmployeeInformationId} on {request.WorkDate:yyyy-MM-dd} shift {shift.Code}.");
-
-        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
         var checkInAt = request.CheckInAt;
         var checkOutAt = request.CheckOutAt;
         if (!AttendanceTimeRules.HasValidObservedRange(checkInAt, checkOutAt))
             throw new DomainValidationException("CheckOutAt must be later than CheckInAt.");
 
-        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
-            _splitter,
-            request.Status,
-            checkInAt,
-            checkOutAt,
-            laborLaw.NightStartTime,
-            laborLaw.NightEndTime,
-            shift);
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
 
-        var entity = new AttendanceRecordEntity
+        return hasShift
+            ? await CreateShiftRecordAsync(request, userId, checkInAt, checkOutAt, laborLaw, cancellationToken)
+            : await CreateOvertimeRecordAsync(request, userId, checkInAt, checkOutAt, laborLaw, cancellationToken);
+    }
+
+    private async Task<int> CreateShiftRecordAsync(
+        RecordAttendanceCommand request,
+        int userId,
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
+        MPS.Application.Common.Models.Compliance.LaborLawConstantsSnapshot laborLaw,
+        CancellationToken ct)
+    {
+        var shiftId = request.ShiftTemplateId!.Value;
+        var shift = await _shiftRepository.GetByIdAsync(shiftId, ct)
+            ?? throw new DomainValidationException($"ShiftTemplate {shiftId} not found or inactive.");
+        if (!shift.IsActive)
+            throw new DomainValidationException($"ShiftTemplate '{shift.Code}' is inactive; cannot record attendance.");
+
+        var existing = await _repository.GetByKeyAsync(
+            request.EmployeeInformationId, request.WorkDate, shiftId, ct);
+        if (existing is not null)
+            throw new ConflictException(
+                $"Attendance record already exists for employee {request.EmployeeInformationId} on {request.WorkDate:yyyy-MM-dd} shift {shift.Code}.");
+
+        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+            _splitter, request.Status, checkInAt, checkOutAt,
+            laborLaw.NightStartTime, laborLaw.NightEndTime, shift);
+
+        var entity = BuildEntity(request, userId, checkInAt, checkOutAt, dayHours, nightHours);
+        entity.ShiftTemplateId = shiftId;
+        entity.OvertimeRequestId = null;
+        return await _repository.AddAsync(entity, ct);
+    }
+
+    private async Task<int> CreateOvertimeRecordAsync(
+        RecordAttendanceCommand request,
+        int userId,
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
+        MPS.Application.Common.Models.Compliance.LaborLawConstantsSnapshot laborLaw,
+        CancellationToken ct)
+    {
+        var otId = request.OvertimeRequestId!.Value;
+        var ot = await _overtimeRepository.GetByIdAsync(otId, ct)
+            ?? throw new DomainValidationException($"OvertimeRequest {otId} not found.");
+
+        if (ot.EmployeeInformationId != request.EmployeeInformationId)
+            throw new DomainValidationException(
+                $"OvertimeRequest {otId} thuộc NV khác (empId={ot.EmployeeInformationId}), không khớp {request.EmployeeInformationId}.");
+
+        if (ot.Status != OtRequestStatus.Approved)
+            throw new DomainValidationException(
+                $"OvertimeRequest {otId} chưa được duyệt (Status={ot.Status}). Chỉ chấm được OT đã Approved.");
+
+        if (ot.WorkDate != request.WorkDate)
+            throw new DomainValidationException(
+                $"OvertimeRequest {otId} có WorkDate={ot.WorkDate:yyyy-MM-dd}, không khớp {request.WorkDate:yyyy-MM-dd}.");
+
+        // OvertimeRequestId unique (index filter) → BE sẽ throw nếu chấm trùng.
+        // Explicit check trước để trả error message rõ ràng.
+        var existing = await _repository.GetByOvertimeRequestIdAsync(otId, ct);
+        if (existing is not null)
+            throw new ConflictException(
+                $"OvertimeRequest {otId} đã được chấm công (record {existing.Id}).");
+
+        // Split hours không cần shift (không có break) — pass null cho break.
+        var (dayHours, nightHours) = SplitHoursWithoutShift(
+            request.Status, checkInAt, checkOutAt, laborLaw.NightStartTime, laborLaw.NightEndTime);
+
+        var entity = BuildEntity(request, userId, checkInAt, checkOutAt, dayHours, nightHours);
+        entity.ShiftTemplateId = null;
+        entity.OvertimeRequestId = otId;
+        return await _repository.AddAsync(entity, ct);
+    }
+
+    private (decimal DayHours, decimal NightHours) SplitHoursWithoutShift(
+        AttendanceStatus status,
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
+        TimeOnly nightStart,
+        TimeOnly nightEnd)
+    {
+        if (status is AttendanceStatus.OnLeave or AttendanceStatus.Absent) return (0m, 0m);
+        if (checkInAt is null || checkOutAt is null) return (0m, 0m);
+
+        var breakdown = _splitter.Split(new WorkHourDateTimeSplitInput(
+            CheckInAt: checkInAt.Value,
+            CheckOutAt: checkOutAt.Value,
+            BreakStart: null,
+            BreakEnd: null,
+            NightStart: nightStart,
+            NightEnd: nightEnd));
+        return (breakdown.DayHours, breakdown.NightHours);
+    }
+
+    private AttendanceRecordEntity BuildEntity(
+        RecordAttendanceCommand request,
+        int userId,
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
+        decimal dayHours,
+        decimal nightHours) =>
+        new()
         {
             EmployeeInformationId = request.EmployeeInformationId,
             WorkDate = request.WorkDate,
-            ShiftTemplateId = request.ShiftTemplateId,
             CheckInAt = checkInAt,
             CheckOutAt = checkOutAt,
             DayHours = dayHours,
@@ -96,9 +194,6 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
                 ? request.OverrideReason.Trim()
                 : null,
             CreatedAt = _clock.UtcNow,
-            CreatedByUserId = userId
+            CreatedByUserId = userId,
         };
-
-        return await _repository.AddAsync(entity, cancellationToken);
-    }
 }

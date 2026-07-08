@@ -42,6 +42,18 @@ public class EmployeeShiftController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>NV xem lịch phân ca kế hoạch của chính mình trong khoảng ngày.</summary>
+    [HttpGet("me")]
+    [HasPermission(Permissions.EmployeeShiftReadSelf)]
+    public async Task<IActionResult> GetMyRoster(
+        [FromQuery] DateOnly fromDate,
+        [FromQuery] DateOnly toDate,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetMyShiftRosterQuery(fromDate, toDate), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("batch")]
     [HasPermission(Permissions.EmployeeShiftCreateAll)]
     public async Task<IActionResult> BatchUpdate(

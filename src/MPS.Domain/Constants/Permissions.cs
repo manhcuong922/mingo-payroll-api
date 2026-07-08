@@ -132,6 +132,7 @@ public static class Permissions
     public const string ShiftTemplateDeleteAll = "ShiftTemplate.Delete.All";
 
     public const string EmployeeShiftReadAll = "EmployeeShift.Read.All";
+    public const string EmployeeShiftReadSelf = "EmployeeShift.Read.Self";
     public const string EmployeeShiftCreateAll = "EmployeeShift.Create.All";
     public const string EmployeeShiftDeleteAll = "EmployeeShift.Delete.All";
 
@@ -149,8 +150,14 @@ public static class Permissions
 
     public const string OvertimeRequestReadAll = "OvertimeRequest.Read.All";
     public const string OvertimeRequestReadSelf = "OvertimeRequest.Read.Self";
+    /// <summary>
+    /// DEPRECATED — luồng OT giờ do PM tạo batch, NV không tự xin.
+    /// Constant giữ lại để migration cũ không vỡ, KHÔNG cấp cho role nào.
+    /// </summary>
     public const string OvertimeRequestCreateSelf = "OvertimeRequest.Create.Self";
     public const string OvertimeRequestApproveAll = "OvertimeRequest.Approve.All";
+    /// <summary>PM tạo batch OT request cho NV cùng phòng ban (project scope).</summary>
+    public const string OvertimeRequestCreateBatchDepartment = "OvertimeRequest.CreateBatch.Department";
 
     public const string OvertimeSlotTemplateReadAll = "OvertimeSlotTemplate.Read.All";
     public const string OvertimeSlotTemplateCreateAll = "OvertimeSlotTemplate.Create.All";
@@ -482,4 +489,10 @@ public static class PermissionIds
     public const int WeeklyDayOffCreateAll = 175;
     public const int WeeklyDayOffUpdateAll = 176;
     public const int WeeklyDayOffDeleteAll = 177;
+
+    // ===== OvertimeRequest batch workflow — ID 178 =====
+    public const int OvertimeRequestCreateBatchDepartment = 178;
+
+    // ===== EmployeeShift self-read — ID 179 =====
+    public const int EmployeeShiftReadSelf = 179;
 }

@@ -5,7 +5,8 @@ namespace MPS.API.Requests.Attendance;
 public sealed record RecordAttendanceRequest(
     int EmployeeInformationId,
     DateOnly WorkDate,
-    int ShiftTemplateId,
+    int? ShiftTemplateId,
+    int? OvertimeRequestId,
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
     AttendanceStatus Status,

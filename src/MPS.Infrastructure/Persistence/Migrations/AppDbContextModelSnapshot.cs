@@ -206,7 +206,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<int>("ShiftTemplateId")
+                    b.Property<int?>("OvertimeRequestId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShiftTemplateId")
                         .HasColumnType("int");
 
                     b.Property<byte>("Status")
@@ -225,6 +228,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedByUserId");
 
+                    b.HasIndex("OvertimeRequestId")
+                        .IsUnique()
+                        .HasFilter("[OvertimeRequestId] IS NOT NULL");
+
                     b.HasIndex("ShiftTemplateId");
 
                     b.HasIndex("UpdatedByUserId");
@@ -232,7 +239,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("WorkDate");
 
                     b.HasIndex("EmployeeInformationId", "WorkDate", "ShiftTemplateId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[ShiftTemplateId] IS NOT NULL");
 
                     b.ToTable("AttendanceRecords", (string)null);
                 });
@@ -681,6 +689,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("EmployeeInformationId")
                         .HasColumnType("int");
 
+                    b.Property<byte?>("ApproverRoute")
+                        .HasColumnType("tinyint");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("OtDayHours")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(4,2)")
@@ -731,15 +748,21 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BatchId");
+
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("OvertimeSlotTemplateId");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("ReviewedByUserId");
 
                     b.HasIndex("UpdatedByUserId");
 
                     b.HasIndex("EmployeeInformationId", "WorkDate", "Status");
+
+                    b.HasIndex("Status", "ApproverRoute");
 
                     b.ToTable("OvertimeRequests", (string)null);
                 });
@@ -6112,11 +6135,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("MPS.Domain.Entities.Attendance.OvertimeRequest", "OvertimeRequest")
+                        .WithMany()
+                        .HasForeignKey("OvertimeRequestId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
                         .WithMany("AttendanceRecords")
                         .HasForeignKey("ShiftTemplateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
                         .WithMany()
@@ -6126,6 +6153,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("EmployeeInformation");
+
+                    b.Navigation("OvertimeRequest");
 
                     b.Navigation("ShiftTemplate");
 
@@ -6331,6 +6360,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OvertimeSlotTemplateId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("MPS.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
                         .WithMany()
                         .HasForeignKey("ReviewedByUserId")
@@ -6346,6 +6380,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("EmployeeInformation");
 
                     b.Navigation("OvertimeSlotTemplate");
+
+                    b.Navigation("Project");
 
                     b.Navigation("ReviewedByUser");
 

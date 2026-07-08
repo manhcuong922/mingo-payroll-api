@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
+using MPS.Domain.Constants;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
@@ -54,6 +55,10 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         if (existing.CreatedByUserId == userId)
             throw new DomainValidationException("BR-10: Self-approval is forbidden.");
 
+        // Batch workflow gate — approver role phải khớp ApproverRoute (nếu request có route).
+        // Legacy record (ApproverRoute = null) giữ hành vi cũ: ai có Approve.All đều duyệt được.
+        EnsureApproverRouteMatches(existing.ApproverRoute, _currentUser.RoleId);
+
         // Re-check caps for race-condition safety
         await _capChecker.CheckAsync(
             existing.EmployeeInformationId,
@@ -86,5 +91,19 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
 
         await _repository.UpdateAsync(existing, cancellationToken);
         return true;
+    }
+
+    internal static void EnsureApproverRouteMatches(OvertimeApproverRoute? route, int? currentRoleId)
+    {
+        if (route is null) return; // legacy record — không gate
+        var expected = route switch
+        {
+            OvertimeApproverRoute.Hr => SystemRoles.HrId,
+            OvertimeApproverRoute.DepartmentManager => SystemRoles.DepartmentManagerId,
+            _ => throw new DomainValidationException($"Unknown approver route: {route}."),
+        };
+        if (currentRoleId != expected)
+            throw new ForbiddenAccessException(
+                $"Request này chỉ định route duyệt = {route}. Role hiện tại không có quyền duyệt.");
     }
 }

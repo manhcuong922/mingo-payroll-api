@@ -25,7 +25,15 @@ public class OvertimeRequestEntityConfiguration : IEntityTypeConfiguration<Overt
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.Property(e => e.ReviewedAt);
 
+        // Batch workflow — PM tạo cho N NV
+        builder.Property(e => e.ProjectId);
+        builder.Property(e => e.ApproverRoute).HasConversion<byte>();
+        builder.Property(e => e.BatchId);
+
         builder.HasIndex(e => new { e.EmployeeInformationId, e.WorkDate, e.Status });
+        builder.HasIndex(e => e.ProjectId);
+        builder.HasIndex(e => e.BatchId);
+        builder.HasIndex(e => new { e.Status, e.ApproverRoute });
 
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt);
@@ -57,6 +65,12 @@ public class OvertimeRequestEntityConfiguration : IEntityTypeConfiguration<Overt
         builder.HasOne(e => e.OvertimeSlotTemplate)
             .WithMany(s => s.OvertimeRequests)
             .HasForeignKey(e => e.OvertimeSlotTemplateId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(e => e.Project)
+            .WithMany()
+            .HasForeignKey(e => e.ProjectId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
     }

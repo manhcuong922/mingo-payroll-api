@@ -53,7 +53,7 @@ public class EmployeeInformationGetPagedQueryHandler
             request.HasActiveContract,
             request.Page,
             request.PageSize,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         var dtos = _mapper.Map<IReadOnlyList<EmployeeInformationDto>>(items);
         return new PagedResult<EmployeeInformationDto>(dtos, total, request.Page, request.PageSize);

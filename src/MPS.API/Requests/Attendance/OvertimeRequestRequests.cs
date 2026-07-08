@@ -1,9 +1,14 @@
+using MPS.Domain.Enums.Attendance;
+
 namespace MPS.API.Requests.Attendance;
 
-public sealed record CreateOvertimeRequest(
+public sealed record CreateBatchOvertimeRequest(
+    int ProjectId,
     DateOnly WorkDate,
     TimeOnly OtStartTime,
     TimeOnly OtEndTime,
+    IReadOnlyList<int> EmployeeInformationIds,
+    OvertimeApproverRoute ApproverRoute,
     string? Reason);
 
 public sealed record ReviewOvertimeRequest(string? ReviewNote);
