@@ -25,19 +25,21 @@ public class ProjectController : ControllerBase
 
     [HttpGet]
     [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
-    public async Task<IActionResult> GetAll([FromQuery] bool includeCancelled, CancellationToken ct)
-        => Ok(await _mediator.Send(new ProjectGetAllQuery(includeCancelled), ct));
+    public async Task<IActionResult> GetAll(
+        [FromQuery] bool includeCancelled, [FromQuery] ProjectStatus? status, CancellationToken ct)
+        => Ok(await _mediator.Send(new ProjectGetAllQuery(includeCancelled, status), ct));
 
     [HttpGet("paged")]
     [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? keyword,
         [FromQuery] int? departmentId,
+        [FromQuery] ProjectStatus? status,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] bool includeCancelled = false,
         CancellationToken ct = default)
-        => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize, includeCancelled), ct));
+        => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize, includeCancelled, status), ct));
 
     [HttpGet("{id:int}")]
     [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
@@ -57,7 +59,7 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateProjectRequest request, CancellationToken ct)
     {
         var id = await _mediator.Send(new ProjectCreateCommand(
-            request.Title, request.Description, request.StartDate, request.Deadline, request.Quantity, request.DepartmentId), ct);
+            request.Title, request.Description, request.StartDate, request.Deadline, request.DepartmentId), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -75,7 +77,7 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] UpdateProjectRequest request, CancellationToken ct)
     {
         var ok = await _mediator.Send(new ProjectUpdateCommand(
-            id, request.Title, request.Description, request.Deadline, request.Status, request.Quantity), ct);
+            id, request.Title, request.Description, request.Deadline, request.Status), ct);
         return ok ? NoContent() : NotFound();
     }
 

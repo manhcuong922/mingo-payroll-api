@@ -50,7 +50,7 @@ public sealed class TaskCreateCommandHandlerTests
             ProjectId: 1, DepartmentId: DeptId, ParentTaskId: StageId,
             Title: "Cắt khung", Description: null,
             ProgressType: ProgressType.Quantity,
-            PlannedQuantity: 100, Weight: 0,
+            PlannedQuantity: 100, PlannedWorkUnits: 0, IsRequiredGate: false,
             Deadline: null, Priority: null, StepOrder: 1,
             AssigneeUserIds: assignees);
 
@@ -96,47 +96,51 @@ public sealed class TaskCreateCommandHandlerTests
     }
 
     [Fact]
-    public async Task Create_AllowsMilestoneChild_WhenParentIsQuantity()
+    public async Task Create_AllowsGateChild_WithoutConsumingParentQuantityBudget()
     {
-        // Công đoạn #5 đo theo Quantity, PlannedQuantity=1000 (SetupManagerWithMembers) — task con
-        // Milestone được phép trộn; Weight=50 quy đổi thành "sản lượng" khi tính giới hạn tổng của cha.
+        // Công đoạn #5 đo theo Quantity, PlannedQuantity=1000, sibling con Quantity đã chiếm 960
+        // (SumChildrenPlannedQuantityAsync mock) — Gate (Milestone) không có sản lượng nên KHÔNG bị
+        // chặn bởi ngân sách PlannedQuantity còn lại, dù chỉ còn dư 40.
         SetupManagerWithMembers(11, 12, 13);
+        _tasks.Setup(t => t.SumChildrenPlannedQuantityAsync(StageId, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(960);
         MPS.Domain.Entities.ProjectTask? captured = null;
         _tasks.Setup(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()))
             .Callback<MPS.Domain.Entities.ProjectTask, CancellationToken>((t, _) => captured = t)
             .ReturnsAsync(42);
-        var milestoneCommand = new TaskCreateCommand(
+        var gateCommand = new TaskCreateCommand(
             ProjectId: 1, DepartmentId: DeptId, ParentTaskId: StageId,
-            Title: "Cắt khung - mốc", Description: null,
+            Title: "QC mẫu sơn", Description: null,
             ProgressType: ProgressType.Milestone,
-            PlannedQuantity: 0, Weight: 50,
+            PlannedQuantity: 0, PlannedWorkUnits: 0, IsRequiredGate: true,
             Deadline: null, Priority: null, StepOrder: 1,
             AssigneeUserIds: new[] { 11 });
 
-        var id = await CreateSut().Handle(milestoneCommand, CancellationToken.None);
+        var id = await CreateSut().Handle(gateCommand, CancellationToken.None);
 
         id.Should().Be(42);
         captured!.ProgressType.Should().Be(ProgressType.Milestone);
-        captured.Weight.Should().Be(50);
+        captured.PlannedQuantity.Should().Be(0);
+        captured.IsRequiredGate.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Create_Throws_WhenMilestoneWeightExceedsParentRemainingQuantity()
+    public async Task Create_Throws_WhenQuantityChildExceedsParentRemainingQuantity()
     {
-        // Công đoạn #5 PlannedQuantity=1000; sibling con Quantity đã chiếm 960 (SumChildrenPlannedQuantityAsync
-        // mock) — thêm Milestone Weight=50 sẽ vượt 1000, phải bị chặn dù khác loại đo với sibling.
+        // Công đoạn #5 PlannedQuantity=1000; sibling con Quantity đã chiếm 960 — thêm con Quantity 50
+        // nữa sẽ vượt 1000, phải bị chặn.
         SetupManagerWithMembers(11, 12, 13);
         _tasks.Setup(t => t.SumChildrenPlannedQuantityAsync(StageId, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(960);
-        var milestoneCommand = new TaskCreateCommand(
+        var overflowCommand = new TaskCreateCommand(
             ProjectId: 1, DepartmentId: DeptId, ParentTaskId: StageId,
-            Title: "Cắt khung - mốc", Description: null,
-            ProgressType: ProgressType.Milestone,
-            PlannedQuantity: 0, Weight: 50,
+            Title: "Cắt khung - thêm", Description: null,
+            ProgressType: ProgressType.Quantity,
+            PlannedQuantity: 50, PlannedWorkUnits: 0, IsRequiredGate: false,
             Deadline: null, Priority: null, StepOrder: 1,
             AssigneeUserIds: new[] { 11 });
 
-        var act = () => CreateSut().Handle(milestoneCommand, CancellationToken.None);
+        var act = () => CreateSut().Handle(overflowCommand, CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainValidationException>();
         _tasks.Verify(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()), Times.Never);

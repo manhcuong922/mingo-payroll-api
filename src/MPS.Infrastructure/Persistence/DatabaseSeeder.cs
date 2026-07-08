@@ -1119,7 +1119,7 @@ public sealed class DatabaseSeeder
             return;
         }
 
-        // Cần vài công nhân IT có tài khoản để chia task. 'employee' đã seed; thêm 2 công nhân demo nữa.
+        // Cần vài công nhân IT có tài khoản để chia task. 'employee' đã seed; thêm 5 công nhân demo nữa.
         var workerUserIds = await EnsureDemoWorkersAsync(itDept.Id, ct);
         if (workerUserIds.Count < 2)
         {
@@ -1148,6 +1148,9 @@ public sealed class DatabaseSeeder
             (Username: "employee",  Code: "EMP001", Email: "employee@mingo.local",  FullName: "Employee User"),
             (Username: "worker2",   Code: "EMP002", Email: "worker2@mingo.local",   FullName: "Công nhân 2"),
             (Username: "worker3",   Code: "EMP003", Email: "worker3@mingo.local",   FullName: "Công nhân 3"),
+            (Username: "worker4",   Code: "EMP004", Email: "worker4@mingo.local",   FullName: "Công nhân 4"),
+            (Username: "worker5",   Code: "EMP005", Email: "worker5@mingo.local",   FullName: "Công nhân 5"),
+            (Username: "worker6",   Code: "EMP006", Email: "worker6@mingo.local",   FullName: "Công nhân 6"),
         };
 
         var resultUserIds = new List<int>();
@@ -1230,31 +1233,89 @@ public sealed class DatabaseSeeder
             DefaultDepartmentId = itDepartmentId,
         };
 
-        template.Steps.Add(new ProcessStep { Name = "Cắt khung", StepOrder = 1, DefaultProgressType = ProgressType.Quantity, Priority = 2 });
-        template.Steps.Add(new ProcessStep { Name = "Ghép góc",  StepOrder = 2, DefaultProgressType = ProgressType.Quantity, Priority = 2 });
-        template.Steps.Add(new ProcessStep { Name = "Sơn",       StepOrder = 3, DefaultProgressType = ProgressType.Quantity, Priority = 2 });
-        template.Steps.Add(new ProcessStep { Name = "Đóng gói",  StepOrder = 4, DefaultProgressType = ProgressType.Quantity, Priority = 1 });
+        template.Steps.Add(new ProcessStep
+        {
+            Name = "Cắt khung", StepOrder = 1, DefaultProgressType = ProgressType.Quantity,
+            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 500, Priority = 2,
+        });
+        template.Steps.Add(new ProcessStep
+        {
+            Name = "Ghép góc", StepOrder = 2, DefaultProgressType = ProgressType.Quantity,
+            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 500, Priority = 2,
+        });
+        template.Steps.Add(new ProcessStep
+        {
+            Name = "Sơn", StepOrder = 3, DefaultProgressType = ProgressType.Quantity,
+            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 500, Priority = 2,
+        });
+        template.Steps.Add(new ProcessStep
+        {
+            Name = "Đóng gói", StepOrder = 4, DefaultProgressType = ProgressType.Quantity,
+            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 400, Priority = 1,
+        });
+        template.Steps.Add(new ProcessStep
+        {
+            Name = "Nghiệm thu khách hàng", StepOrder = 5, DefaultProgressType = ProgressType.Milestone,
+            DefaultIsRequiredGate = true, Priority = 2,
+        });
 
         await _context.ProcessTemplates.AddAsync(template, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded demo ProcessTemplate KHUNG-A4 (4 steps).");
     }
 
+    private const string Project1Title = "[DEMO] Đơn 500 khung tranh A4 - Công ty X";
+    private const string Project2Title = "[DEMO] Đơn 200 khung tranh A4 - Công ty Y";
+    private const string Project3Title = "[DEMO] Đơn 300 khung tranh A4 - Công ty Z";
+
+    // Idempotent theo TỪNG project (theo Title) — không skip toàn hàm, vì lần seed sau có thể
+    // thêm project demo mới mà không đụng tới các project demo đã seed trước đó.
     private async Task SeedProjectsDemoAsync(
         int itDepartmentId, int managerUserId, IReadOnlyList<int> workerUserIds, CancellationToken ct)
     {
-        if (await _context.Projects.AnyAsync(p => p.Title.StartsWith("[DEMO]"), ct))
-        {
-            _logger.LogDebug("Demo projects already seeded; skipping.");
-            return;
-        }
+        var existingTitles = await _context.Projects
+            .Where(p => p.Title.StartsWith("[DEMO]"))
+            .Select(p => p.Title)
+            .ToListAsync(ct);
+        var existing = existingTitles.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
+        if (existing.Contains(Project1Title))
+        {
+            _logger.LogDebug("Demo project '{Title}' already seeded; skipping.", Project1Title);
+        }
+        else
+        {
+            await SeedProject1Async(itDepartmentId, managerUserId, workerUserIds, today, ct);
+        }
+
+        if (existing.Contains(Project2Title))
+        {
+            _logger.LogDebug("Demo project '{Title}' already seeded; skipping.", Project2Title);
+        }
+        else
+        {
+            await SeedProject2Async(itDepartmentId, managerUserId, today, ct);
+        }
+
+        if (existing.Contains(Project3Title))
+        {
+            _logger.LogDebug("Demo project '{Title}' already seeded; skipping.", Project3Title);
+        }
+        else
+        {
+            await SeedProject3Async(itDepartmentId, managerUserId, workerUserIds, today, ct);
+        }
+    }
+
+    private async Task SeedProject1Async(
+        int itDepartmentId, int managerUserId, IReadOnlyList<int> workerUserIds, DateOnly today, CancellationToken ct)
+    {
         // ---- Đơn 1: đang sản xuất, có cây task 3 tầng + nhật ký sản lượng ----
         var project1 = new Project
         {
-            Title = "[DEMO] Đơn 500 khung tranh A4 - Công ty X",
+            Title = Project1Title,
             Description = "Đơn demo đang sản xuất giữa chừng — có đủ cây task + daily log.",
             Status = ProjectStatus.Active,
             StartDate = today.AddDays(-5),
@@ -1307,10 +1368,15 @@ public sealed class DatabaseSeeder
         await _context.ProjectTasks.AddAsync(packParent, ct);
         await _context.SaveChangesAsync(ct);
 
+        _logger.LogInformation("Seeded demo Project '{Title}' (in-progress with task tree).", Project1Title);
+    }
+
+    private async Task SeedProject2Async(int itDepartmentId, int managerUserId, DateOnly today, CancellationToken ct)
+    {
         // ---- Đơn 2: vừa tạo, chưa có task (để FE test luồng tạo/generate) ----
         var project2 = new Project
         {
-            Title = "[DEMO] Đơn 200 khung tranh A4 - Công ty Y",
+            Title = Project2Title,
             Description = "Đơn demo mới tạo, chưa sinh task — để test generate/bulk-create.",
             Status = ProjectStatus.Active,
             StartDate = today,
@@ -1322,7 +1388,80 @@ public sealed class DatabaseSeeder
         await _context.Projects.AddAsync(project2, ct);
         await _context.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Seeded 2 demo Projects (1 in-progress with task tree, 1 empty).");
+        _logger.LogInformation("Seeded demo Project '{Title}' (empty, no tasks yet).", Project2Title);
+    }
+
+    private async Task SeedProject3Async(
+        int itDepartmentId, int managerUserId, IReadOnlyList<int> workerUserIds, DateOnly today, CancellationToken ct)
+    {
+        // ---- Đơn 3: đã hoàn tất 1 công đoạn (Done) + 1 công đoạn đang tạm dừng (Paused) ----
+        // Đa dạng trạng thái để FE test hiển thị Done/Paused, không chỉ Todo/InProgress.
+        var project3 = new Project
+        {
+            Title = Project3Title,
+            Description = "Đơn demo có công đoạn Done và công đoạn Paused — test các trạng thái task đa dạng.",
+            Status = ProjectStatus.Active,
+            StartDate = today.AddDays(-15),
+            Deadline = DateTime.UtcNow.AddDays(5),
+            Quantity = 300,
+            DepartmentId = itDepartmentId,
+            CreatedByUserId = managerUserId,
+        };
+        await _context.Projects.AddAsync(project3, ct);
+        await _context.SaveChangesAsync(ct);
+
+        // Công đoạn 1: Cắt khung (300) — cha + 2 con, ĐÃ HOÀN THÀNH.
+        var p3CutParent = NewStage("Cắt khung", 1, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Done);
+        p3CutParent.CompletedQuantity = 300;
+        p3CutParent.CompletedByUserId = managerUserId;
+        p3CutParent.CompletedAt = DateTime.UtcNow.AddDays(-8);
+        await _context.ProjectTasks.AddAsync(p3CutParent, ct);
+        await _context.SaveChangesAsync(ct);
+
+        var p3CutChildren = new[]
+        {
+            NewChild(p3CutParent, workerUserIds[3 % workerUserIds.Count], 150, managerUserId, TaskItemStatus.Done),
+            NewChild(p3CutParent, workerUserIds[4 % workerUserIds.Count], 150, managerUserId, TaskItemStatus.Done),
+        };
+        foreach (var child in p3CutChildren)
+        {
+            child.CompletedQuantity = child.PlannedQuantity;
+            child.CompletedByUserId = managerUserId;
+            child.CompletedAt = DateTime.UtcNow.AddDays(-8);
+        }
+        await _context.ProjectTasks.AddRangeAsync(p3CutChildren, ct);
+        await _context.SaveChangesAsync(ct);
+
+        // Công đoạn 2: Ghép góc (300) — cha + 2 con, ĐANG TẠM DỪNG (Paused).
+        var p3JoinParent = NewStage("Ghép góc", 2, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Paused);
+        p3JoinParent.StatusBeforePause = TaskItemStatus.InProgress;
+        await _context.ProjectTasks.AddAsync(p3JoinParent, ct);
+        await _context.SaveChangesAsync(ct);
+
+        var p3JoinChildren = new[]
+        {
+            NewChild(p3JoinParent, workerUserIds[5 % workerUserIds.Count], 150, managerUserId, TaskItemStatus.Paused),
+            NewChild(p3JoinParent, workerUserIds[0], 150, managerUserId, TaskItemStatus.Paused),
+        };
+        foreach (var child in p3JoinChildren)
+        {
+            child.CompletedQuantity = 60;
+            child.StatusBeforePause = TaskItemStatus.InProgress;
+            child.PausedByCascadeFromId = p3JoinParent.Id;
+        }
+        await _context.ProjectTasks.AddRangeAsync(p3JoinChildren, ct);
+        await _context.SaveChangesAsync(ct);
+
+        p3JoinParent.CompletedQuantity = p3JoinChildren.Sum(c => c.CompletedQuantity);
+        await _context.SaveChangesAsync(ct);
+
+        // Công đoạn 3+4: Sơn / Đóng gói (300) — chưa bắt đầu.
+        var p3PaintParent = NewStage("Sơn", 3, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Todo);
+        var p3PackParent = NewStage("Đóng gói", 4, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Todo);
+        await _context.ProjectTasks.AddRangeAsync(new[] { p3PaintParent, p3PackParent }, ct);
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Seeded demo Project '{Title}' (1 Done stage, 1 Paused stage).", Project3Title);
     }
 
     private static ProjectTask NewStage(
@@ -1337,6 +1476,7 @@ public sealed class DatabaseSeeder
             ProgressType = ProgressType.Quantity,
             StepOrder = stepOrder,
             PlannedQuantity = planned,
+            PlannedWorkUnits = planned,   // demo: khối lượng công việc = sản lượng kế hoạch (tỷ trọng đều nhau)
             ProjectId = projectId,
             DepartmentId = departmentId,
             CreatedByUserId = createdByUserId,

@@ -30,7 +30,7 @@ public class ProjectGetAllQueryHandler : IRequestHandler<ProjectGetAllQuery, IRe
     {
         if (_currentUser.HasPermission(Permissions.ProjectReadAll))
         {
-            var all = await _projects.GetAllAsync(ct, request.IncludeCancelled);
+            var all = await _projects.GetAllAsync(ct, request.IncludeCancelled, request.Status);
             return all.Select(ProjectMapper.ToDto).ToList();
         }
 
@@ -41,7 +41,7 @@ public class ProjectGetAllQueryHandler : IRequestHandler<ProjectGetAllQuery, IRe
         var deptId = await _authorizer.GetManagedDepartmentIdAsync(userId.Value, ct);
         if (deptId is null) return Array.Empty<ProjectDto>();
 
-        var items = await _projects.GetByDepartmentAsync(deptId.Value, ct, request.IncludeCancelled);
+        var items = await _projects.GetByDepartmentAsync(deptId.Value, ct, request.IncludeCancelled, request.Status);
         return items.Select(ProjectMapper.ToDto).ToList();
     }
 }
@@ -77,7 +77,7 @@ public class ProjectGetPagedQueryHandler : IRequestHandler<ProjectGetPagedQuery,
         }
 
         var (items, total) = await _projects.GetPagedAsync(
-            request.Keyword, departmentFilter, request.Page, request.PageSize, ct, request.IncludeCancelled);
+            request.Keyword, departmentFilter, request.Page, request.PageSize, ct, request.IncludeCancelled, request.Status);
 
         return new PagedResult<ProjectDto>(
             items.Select(ProjectMapper.ToDto).ToList(), total, request.Page, request.PageSize);

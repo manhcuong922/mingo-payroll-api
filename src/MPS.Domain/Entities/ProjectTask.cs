@@ -5,9 +5,11 @@ using MPS.Domain.Enums;
 namespace MPS.Domain.Entities;
 
 /// <summary>
-/// Task sản xuất (v5). Cây drill-down 3 tầng: Đơn → công đoạn (task cha IsBatchParent) → task thực thi (con).
+/// Task sản xuất (v8). Cây drill-down 3 tầng: Đơn → công đoạn (task cha IsBatchParent) → task thực thi (con).
 /// Task con giao 1 người HOẶC nhiều người (multi-assignee qua <see cref="Assignees"/>), chung 1 Done.
-/// Đo tiến độ LAI: ProgressType.Quantity → EV/PV theo SỐ LƯỢNG (không giờ công); Milestone → Weight nhập tay + đúng/chậm deadline.
+/// ProgressType.Quantity = task/công đoạn sản lượng, tham gia tính % tiến độ (EV/PV theo số lượng).
+/// ProgressType.Milestone = Gate/Checklist (điều kiện bắt buộc/tuỳ chọn), KHÔNG tham gia tính % —
+/// chỉ có Status Done/Todo, dùng để chặn hoàn thành công đoạn/đóng đơn khi IsRequiredGate=true.
 /// Hoàn thành = quản lý xưởng bấm Complete (không duyệt); quá deadline vẫn Done nhưng gắn WasLate.
 /// </summary>
 [Auditable]
@@ -27,10 +29,22 @@ public class ProjectTask
     public int StepOrder { get; set; }                         // thứ tự công đoạn (copy từ ProcessStep khi generate)
 
     // --- Đo tiến độ (KHÔNG dùng giờ công) ---
-    public int PlannedQuantity { get; set; }                   // Quantity: SP mục tiêu (cha = tổng con). Milestone: 0
-    public int CompletedQuantity { get; set; }                 // Quantity: SP thực đạt (cha = SUM con). Milestone: 0
-    public int Weight { get; set; }                            // Milestone: trọng số nhập tay (đóng góp vào tiến độ đơn)
+    public int PlannedQuantity { get; set; }                   // Quantity: SP mục tiêu (cha = của chính cha, không phải SUM con). Gate: 0
+    public int CompletedQuantity { get; set; }                 // Quantity: SP thực đạt (cha = SUM con Quantity). Gate: luôn 0
+    // Legacy — không còn dùng cho tính % (Gate không có "trọng số quy đổi sản lượng"). Giữ cột DB tương thích dữ liệu cũ.
+    public int Weight { get; set; }
     public DateTime? ProgressUpdatedAt { get; set; }           // lần cuối cập nhật CompletedQuantity
+
+    // Khối lượng công việc chuẩn của CÔNG ĐOẠN (chỉ có ý nghĩa khi IsBatchParent=true, ProgressType=Quantity) —
+    // dùng để tính tỷ trọng đóng góp vào tiến độ Đơn (SUM StagePercent*PlannedWorkUnits / SUM PlannedWorkUnits),
+    // độc lập với PlannedQuantity (sản lượng thực tế của chính công đoạn đó).
+    public int PlannedWorkUnits { get; set; }
+
+    // Gate/Checklist bắt buộc (chỉ có ý nghĩa khi ProgressType=Milestone). Gate có thể là task lá dưới 1
+    // công đoạn (ParentTaskId != null, chặn công đoạn cha tự Done) hoặc sinh trực tiếp dưới Project từ
+    // ProcessStep Milestone (ParentTaskId = null, IsBatchParent = false, chỉ chặn đóng đơn) —
+    // true = phải Done mới cho công đoạn cha tự Done / đóng đơn chặn nếu còn gate bắt buộc chưa Done.
+    public bool IsRequiredGate { get; set; } = true;
 
     // --- Hoàn thành (bấm tay, không duyệt) ---
     public int? CompletedByUserId { get; set; }

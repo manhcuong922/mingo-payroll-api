@@ -39,7 +39,6 @@ public class ProjectCreateCommandHandler : IRequestHandler<ProjectCreateCommand,
             Status = ProjectStatus.Active,
             StartDate = request.StartDate ?? DateOnly.FromDateTime(VietnamClock.Now),
             Deadline = request.Deadline,
-            Quantity = request.Quantity,
             DepartmentId = request.DepartmentId,
             CreatedByUserId = userId,
         };

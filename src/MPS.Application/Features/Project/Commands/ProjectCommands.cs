@@ -8,7 +8,6 @@ public record ProjectCreateCommand(
     string? Description,
     DateOnly? StartDate,
     DateTime? Deadline,
-    int Quantity,
     int? DepartmentId) : IRequest<int>;
 
 public record ProjectUpdateCommand(
@@ -16,8 +15,7 @@ public record ProjectUpdateCommand(
     string Title,
     string? Description,
     DateTime? Deadline,
-    string? Status,
-    int Quantity) : IRequest<bool>;
+    string? Status) : IRequest<bool>;
 
 public record ProjectDeleteCommand(int Id) : IRequest<bool>;
 

@@ -17,33 +17,33 @@ public sealed class TaskGenerator : ITaskGenerator
 
         var overrideMap = overrides?.ToDictionary(o => o.StepId) ?? new();
 
-        // Mỗi bước → 1 task cha (công đoạn), theo StepOrder. Đều Todo, không assignee, không con.
+        // Mỗi bước → 1 task theo StepOrder, đều Todo, không con. Step Quantity → công đoạn
+        // (IsBatchParent=true, chưa chia assignee). Step Milestone/Gate → gate trực tiếp dưới Project
+        // (IsBatchParent=false, ParentTaskId=null, không có sản lượng/khối lượng công việc).
         var stages = new List<ProjectTask>();
         foreach (var step in template.Steps.OrderBy(s => s.StepOrder))
         {
             overrideMap.TryGetValue(step.Id, out var ovr);
             var progressType = ovr?.ProgressTypeOverride ?? step.DefaultProgressType;
+            var isGate = progressType == ProgressType.Milestone;
 
             stages.Add(new ProjectTask
             {
                 Title = step.Name,
                 StepOrder = step.StepOrder,
                 Priority = step.Priority,
-                IsBatchParent = true,
+                IsBatchParent = !isGate,
                 Type = TaskItemType.ProcessTask,
                 Status = TaskItemStatus.Todo,
                 ProgressType = progressType,
-                PlannedQuantity = progressType == ProgressType.Quantity
-                    ? (ovr?.PlannedQuantityOverride ?? project.Quantity)
-                    : 0,
-                Weight = progressType == ProgressType.Milestone
-                    ? (ovr?.WeightOverride ?? step.DefaultWeight)
-                    : 0,
+                PlannedQuantity = isGate ? 0 : ovr?.PlannedQuantityOverride ?? step.DefaultPlannedQuantity,
+                PlannedWorkUnits = isGate ? 0 : ovr?.PlannedWorkUnitsOverride ?? step.DefaultPlannedWorkUnits,
+                IsRequiredGate = isGate && step.DefaultIsRequiredGate,
                 Deadline = ovr?.DeadlineOverride,
                 DepartmentId = departmentId,
                 ProjectId = project.Id,
                 CreatedByUserId = createdByUserId,
-                AssignedPmUserId = ovr?.AssignedPmUserId,
+                AssignedPmUserId = isGate ? null : ovr?.AssignedPmUserId,
             });
         }
 

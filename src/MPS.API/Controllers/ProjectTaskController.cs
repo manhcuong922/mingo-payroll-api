@@ -59,7 +59,7 @@ public class ProjectTaskController : ControllerBase
     {
         var id = await _mediator.Send(new TaskCreateCommand(
             request.ProjectId, request.DepartmentId, request.ParentTaskId, request.Title, request.Description,
-            request.ProgressType, request.PlannedQuantity, request.Weight,
+            request.ProgressType, request.PlannedQuantity, request.PlannedWorkUnits, request.IsRequiredGate,
             request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds,
             request.IsBatchParent, request.AssignedPmUserId), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
@@ -80,7 +80,7 @@ public class ProjectTaskController : ControllerBase
     {
         var ok = await _mediator.Send(new TaskUpdateCommand(
             id, request.Title, request.Description, request.Deadline, request.Priority,
-            request.PlannedQuantity, request.Weight, request.AssigneeUserIds), ct);
+            request.PlannedQuantity, request.PlannedWorkUnits, request.IsRequiredGate, request.AssigneeUserIds), ct);
         return ok ? NoContent() : NotFound();
     }
 

@@ -53,10 +53,13 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         task.CompletedByUserId = userId;
         task.CompletedAt = now;
         task.WasLate = task.Deadline is { } dl && now > dl;
-        // Milestone quy đổi Weight → CompletedQuantity khi Done, y hệt Quantity set CompletedQuantity=PlannedQuantity
-        // — để RecomputeParentCompletedAsync (SUM CompletedQuantity con) cộng đúng dù công đoạn cha trộn cả 2 loại con.
-        task.CompletedQuantity = task.ProgressType == ProgressType.Quantity ? task.PlannedQuantity : task.Weight;
-        task.ProgressUpdatedAt = now;
+        if (task.ProgressType == ProgressType.Quantity)
+        {
+            task.CompletedQuantity = task.PlannedQuantity;
+            task.ProgressUpdatedAt = now;
+        }
+        // Gate (Milestone) hoàn thành chỉ đổi Status/CompletedAt/CompletedByUserId — không có sản lượng
+        // để set (docs/plans/plan.md mục 4.2), CompletedQuantity giữ nguyên 0.
 
         var ok = await _tasks.UpdateWithConcurrencyAsync(task, expectedRowVersion, ct);
         if (!ok)

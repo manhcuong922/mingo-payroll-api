@@ -9,7 +9,6 @@ public class ProjectUpdateCommandValidator : AbstractValidator<ProjectUpdateComm
     {
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Quantity).GreaterThan(0).WithMessage("Số lượng phải lớn hơn 0.");
     }
 }
 

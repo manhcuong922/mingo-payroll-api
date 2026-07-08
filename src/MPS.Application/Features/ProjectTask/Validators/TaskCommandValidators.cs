@@ -10,22 +10,35 @@ public class TaskCreateCommandValidator : AbstractValidator<TaskCreateCommand>
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.DepartmentId).GreaterThan(0).WithMessage("Task phải gắn xưởng.");
-        RuleFor(x => x.AssigneeUserIds)
-            .NotEmpty().WithMessage("Task phải có ít nhất 1 người thực hiện.");
 
-        // Task Quantity: cần số lượng dương. Milestone: cần trọng số hợp lệ.
+        // Công đoạn (IsBatchParent) không được giao người trực tiếp; task lá cần ≥1 người — khớp
+        // TaskCreateCommandHandler.ValidateAssignment (tránh 2 tầng validation mâu thuẫn nhau).
+        When(x => !x.IsBatchParent, () =>
+        {
+            RuleFor(x => x.AssigneeUserIds)
+                .NotEmpty().WithMessage("Task phải có ít nhất 1 người thực hiện.");
+        }).Otherwise(() =>
+        {
+            RuleFor(x => x.AssigneeUserIds)
+                .Empty().WithMessage("Công đoạn (task cha) không được giao người trực tiếp.");
+        });
+
+        // Task Quantity (công đoạn hoặc task lá sản lượng): cần số lượng dương.
         When(x => x.ProgressType == ProgressType.Quantity, () =>
         {
             RuleFor(x => x.PlannedQuantity).GreaterThan(0)
                 .WithMessage("Task theo sản lượng phải có số lượng lớn hơn 0.");
         });
 
-        // Plan mục 6.3: Weight <= 0 khiến Task Milestone không bao giờ ảnh hưởng %, dễ gây hiểu nhầm "Done rồi mà % không tăng".
-        When(x => x.ProgressType == ProgressType.Milestone, () =>
+        // Công đoạn (IsBatchParent) cần PlannedWorkUnits dương — nếu không sẽ "vô hình" trong tiến độ Đơn
+        // (docs/plans/plan.md mục 6.5: PlannedWorkUnits=0 → công đoạn bị loại khỏi mẫu số ProjectPercent).
+        When(x => x.IsBatchParent, () =>
         {
-            RuleFor(x => x.Weight).GreaterThan(0)
-                .WithMessage("Task theo mốc phải có trọng số lớn hơn 0.");
+            RuleFor(x => x.PlannedWorkUnits).GreaterThan(0)
+                .WithMessage("Công đoạn phải có khối lượng công việc lớn hơn 0.");
         });
+
+        // Gate/Checklist (Milestone) không cần số liệu — chỉ có Status Done/Todo + IsRequiredGate.
     }
 }
 
@@ -46,7 +59,7 @@ public class TaskUpdateCommandValidator : AbstractValidator<TaskUpdateCommand>
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.PlannedQuantity).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.Weight).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.PlannedWorkUnits).GreaterThanOrEqualTo(0);
         RuleFor(x => x.AssigneeUserIds)
             .Must(list => list is null || list.Count > 0)
             .WithMessage("Nếu gửi danh sách người thực hiện thì phải có ít nhất 1 người.");

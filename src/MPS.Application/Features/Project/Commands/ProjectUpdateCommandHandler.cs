@@ -34,7 +34,6 @@ public class ProjectUpdateCommandHandler : IRequestHandler<ProjectUpdateCommand,
         entity.Title = request.Title.Trim();
         entity.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
         entity.Deadline = request.Deadline;
-        entity.Quantity = request.Quantity;
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {

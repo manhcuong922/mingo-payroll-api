@@ -37,8 +37,7 @@ public sealed class TaskCompleteCommandHandlerTests
 
     private MPS.Domain.Entities.ProjectTask Task(
         DateTime? deadline, int? parentId = null,
-        ProgressType progressType = ProgressType.Quantity, int plannedQuantity = 200, int completedQuantity = 80,
-        int weight = 0) =>
+        ProgressType progressType = ProgressType.Quantity, int plannedQuantity = 200, int completedQuantity = 80) =>
         new()
         {
             Id = 10,
@@ -49,7 +48,6 @@ public sealed class TaskCompleteCommandHandlerTests
             ProgressType = progressType,
             PlannedQuantity = plannedQuantity,
             CompletedQuantity = completedQuantity,
-            Weight = weight,
             RowVersion = new byte[] { 1, 2, 3 },
         };
 
@@ -115,21 +113,23 @@ public sealed class TaskCompleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Complete_SetsCompletedQuantityToWeight_WhenProgressTypeIsMilestone()
+    public async Task Complete_LeavesCompletedQuantityAtZero_WhenProgressTypeIsGate()
     {
-        // Milestone quy đổi Weight → CompletedQuantity khi Done, để cộng đúng vào SUM sản lượng của
-        // công đoạn cha (RecomputeParentCompletedAsync) khi công đoạn trộn con Quantity + Milestone.
+        // v8 (docs/plans/plan.md mục 4.2): Gate (Milestone) hoàn thành chỉ đổi Status — không có sản lượng
+        // để set, CompletedQuantity giữ nguyên 0 (không quy đổi từ Weight nữa).
         SetupManager();
         var task = Task(
             DateTime.UtcNow.AddDays(2),
-            progressType: ProgressType.Milestone, plannedQuantity: 0, completedQuantity: 0, weight: 50);
+            progressType: ProgressType.Milestone, plannedQuantity: 0, completedQuantity: 0);
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
         _tasks.Setup(t => t.UpdateWithConcurrencyAsync(task, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        await CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
+        var result = await CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
 
-        task.CompletedQuantity.Should().Be(50);
+        result.Should().BeTrue();
+        task.Status.Should().Be(TaskItemStatus.Done);
+        task.CompletedQuantity.Should().Be(0);
     }
 
     [Fact]

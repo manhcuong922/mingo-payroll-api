@@ -48,16 +48,19 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         task.Deadline = request.Deadline;
         task.Priority = request.Priority;
 
-        if (task.ProgressType == ProgressType.Quantity)
+        if (task.IsBatchParent)
+        {
+            task.PlannedQuantity = request.PlannedQuantity;
+            task.PlannedWorkUnits = request.PlannedWorkUnits;
+        }
+        else if (task.ProgressType == ProgressType.Quantity)
         {
             task.PlannedQuantity = request.PlannedQuantity;
         }
         else
         {
-            // Plan mục 6.3: Weight <= 0 khiến Task Milestone không bao giờ ảnh hưởng % — không cho lưu.
-            if (request.Weight <= 0)
-                throw new DomainValidationException("Task theo mốc phải có trọng số lớn hơn 0.");
-            task.Weight = request.Weight;
+            // Gate (Milestone) — không có sản lượng để sửa, chỉ đổi tính bắt buộc.
+            task.IsRequiredGate = request.IsRequiredGate;
         }
 
         await ApplyAssigneesAsync(request, task, ct);
@@ -85,20 +88,19 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         }
     }
 
-    // Tổng sản lượng quy đổi các con (kể cả sau khi sửa) không được vượt sản lượng công đoạn cha —
-    // áp dụng cho cả con Quantity (PlannedQuantity) lẫn Milestone (Weight), xem TaskCreateCommandHandler.
+    // Tổng sản lượng các task con Quantity (kể cả sau khi sửa) không được vượt sản lượng công đoạn cha —
+    // Gate (Milestone) không có sản lượng nên bỏ qua, xem TaskCreateCommandHandler.
     private async Task ValidateQuantityScopeAsync(TaskUpdateCommand request, ProjectTaskEntity task, CancellationToken ct)
     {
-        if (task.IsBatchParent || task.ParentTaskId is not int parentId) return;
+        if (task.IsBatchParent || task.ProgressType != ProgressType.Quantity || task.ParentTaskId is not int parentId) return;
 
         var parent = await _tasks.GetByIdAsync(parentId, ct);
         if (parent is null || parent.ProgressType != ProgressType.Quantity) return;
 
-        var requestedAmount = task.ProgressType == ProgressType.Quantity ? request.PlannedQuantity : request.Weight;
         var siblingsPlanned = await _tasks.SumChildrenPlannedQuantityAsync(parentId, excludeTaskId: task.Id, ct);
-        if (siblingsPlanned + requestedAmount > parent.PlannedQuantity)
+        if (siblingsPlanned + request.PlannedQuantity > parent.PlannedQuantity)
             throw new DomainValidationException(
-                $"Tổng sản lượng các task con ({siblingsPlanned + requestedAmount}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
+                $"Tổng sản lượng các task con ({siblingsPlanned + request.PlannedQuantity}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
     }
 
     // Đổi assignee (nếu gửi). Validate ≥1 người + thuộc xưởng.

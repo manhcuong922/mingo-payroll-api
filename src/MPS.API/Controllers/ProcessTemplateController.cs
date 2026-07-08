@@ -53,7 +53,8 @@ public class ProcessTemplateController : ControllerBase
     {
         var steps = request.Steps
             .Select(s => new ProcessStepInput(
-                s.Name, s.Description, s.StepOrder, s.DefaultProgressType, s.DefaultWeight, s.Priority))
+                s.Name, s.Description, s.StepOrder, s.DefaultProgressType,
+                s.DefaultPlannedQuantity, s.DefaultPlannedWorkUnits, s.DefaultIsRequiredGate, s.Priority))
             .ToList();
 
         var id = await _mediator.Send(
@@ -67,7 +68,8 @@ public class ProcessTemplateController : ControllerBase
     {
         var steps = request.Steps
             .Select(s => new ProcessStepInput(
-                s.Name, s.Description, s.StepOrder, s.DefaultProgressType, s.DefaultWeight, s.Priority))
+                s.Name, s.Description, s.StepOrder, s.DefaultProgressType,
+                s.DefaultPlannedQuantity, s.DefaultPlannedWorkUnits, s.DefaultIsRequiredGate, s.Priority))
             .ToList();
 
         var ok = await _mediator.Send(

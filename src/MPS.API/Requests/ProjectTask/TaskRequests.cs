@@ -10,7 +10,8 @@ public record CreateTaskRequest(
     string? Description,
     ProgressType ProgressType,
     int PlannedQuantity,
-    int Weight,
+    int PlannedWorkUnits,
+    bool IsRequiredGate,
     DateTime? Deadline,
     int? Priority,
     int StepOrder,
@@ -33,7 +34,8 @@ public record UpdateTaskRequest(
     DateTime? Deadline,
     int? Priority,
     int PlannedQuantity,
-    int Weight,
+    int PlannedWorkUnits,
+    bool IsRequiredGate,
     IReadOnlyList<int>? AssigneeUserIds);
 
 public record UpdateTaskProgressRequest(

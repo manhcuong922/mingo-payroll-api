@@ -91,10 +91,12 @@ public class ProjectTaskRepository : IProjectTaskRepository
                 && t.Status != TaskItemStatus.Done
                 && t.Assignees.Any(a => a.UserId == userId), ct);
 
+    // Chỉ tính con Quantity — Gate (Milestone) không có sản lượng, không tham gia giới hạn PlannedQuantity cha.
     public Task<int> SumChildrenPlannedQuantityAsync(int parentTaskId, int? excludeTaskId, CancellationToken ct) =>
         _context.ProjectTasks
-            .Where(c => c.ParentTaskId == parentTaskId && c.Id != (excludeTaskId ?? 0))
-            .SumAsync(c => c.PlannedQuantity + c.Weight, ct);
+            .Where(c => c.ParentTaskId == parentTaskId && c.Id != (excludeTaskId ?? 0)
+                && c.ProgressType == ProgressType.Quantity)
+            .SumAsync(c => c.PlannedQuantity, ct);
 
     public async Task<int> AddAsync(ProjectTask entity, CancellationToken ct)
     {
@@ -138,11 +140,12 @@ public class ProjectTaskRepository : IProjectTaskRepository
         return await _context.SaveChangesAsync(ct) > 0;
     }
 
-    // ⭐ Cha tự cộng: CompletedQuantity của cha = SUM(CompletedQuantity các con).
+    // ⭐ Cha tự cộng: CompletedQuantity của cha = SUM(CompletedQuantity các con Quantity). Gate (Milestone)
+    // không đóng góp — luôn giữ CompletedQuantity=0 (xem TaskCompleteCommandHandler).
     public async Task RecomputeParentCompletedAsync(int parentTaskId, CancellationToken ct)
     {
         var total = await _context.ProjectTasks
-            .Where(c => c.ParentTaskId == parentTaskId)
+            .Where(c => c.ParentTaskId == parentTaskId && c.ProgressType == ProgressType.Quantity)
             .SumAsync(c => c.CompletedQuantity, ct);
 
         await _context.ProjectTasks
@@ -150,19 +153,22 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.CompletedQuantity, total), ct);
     }
 
-    // ⭐ Persist cha Done nguyên tử: chỉ set khi mọi con Done, cha chưa Done, VÀ (nếu cha đo theo
-    // Quantity) sản lượng luỹ kế của cha đã đạt kế hoạch — tránh trường hợp Manager/PM chỉ chia việc
-    // một phần sản lượng (vd kế hoạch 500 nhưng mới giao 300) rồi các task con đó Done hết làm cha
-    // bị đánh Done sai dù còn thiếu sản lượng. Milestone không có khái niệm sản lượng nên bỏ qua check.
+    // ⭐ Persist cha Done nguyên tử — điều kiện đúng docs/plans/plan.md mục 4.3, cả 3 phải thoả:
+    //   1) Sản lượng luỹ kế đã đạt kế hoạch (tránh PM chỉ chia việc một phần sản lượng — vd kế hoạch 500
+    //      nhưng mới giao 300 — rồi các task con đó Done hết làm cha bị đánh Done sai dù còn thiếu sản lượng).
+    //   2) MỌI task con Quantity đã Done (không chỉ đủ tổng số — task Quantity lẻ tẻ còn dang dở vẫn chặn).
+    //   3) MỌI Gate BẮT BUỘC (Milestone, IsRequiredGate=true) đã Done — Gate tuỳ chọn chưa Done không chặn.
     public async Task<bool> TrySetParentDoneAsync(
         int parentTaskId, DateTime completedAt, int completedByUserId, CancellationToken ct)
     {
         var affected = await _context.ProjectTasks
             .Where(p => p.Id == parentTaskId
                 && p.Status != TaskItemStatus.Done
-                && p.Children.Any()
-                && !p.Children.Any(c => c.Status != TaskItemStatus.Done)
-                && (p.ProgressType != ProgressType.Quantity || p.CompletedQuantity >= p.PlannedQuantity))
+                && p.PlannedQuantity > 0
+                && p.CompletedQuantity >= p.PlannedQuantity
+                && !p.Children.Any(c => c.ProgressType == ProgressType.Quantity && c.Status != TaskItemStatus.Done)
+                && !p.Children.Any(c => c.ProgressType == ProgressType.Milestone
+                    && c.IsRequiredGate && c.Status != TaskItemStatus.Done))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(p => p.Status, TaskItemStatus.Done)
                 .SetProperty(p => p.CompletedAt, completedAt)

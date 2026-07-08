@@ -126,18 +126,17 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             throw new DomainValidationException("Deadline task không được vượt quá deadline đơn.");
     }
 
-    // Tổng sản lượng quy đổi các con (Quantity: PlannedQuantity; Milestone: Weight — quy đổi trực tiếp
-    // thành sản lượng khi Done, xem TaskCompleteCommandHandler) không được vượt sản lượng công đoạn cha.
-    // Cho phép trộn 2 loại con trong cùng công đoạn — cha luôn đo theo Quantity khi có ParentTaskId.
+    // Tổng sản lượng các task con Quantity không được vượt sản lượng công đoạn cha. Gate (Milestone)
+    // không có sản lượng nên không tham gia — có thể tạo tự do dưới công đoạn miễn còn dư ngân sách con Quantity.
     private async Task ValidateQuantityScopeAsync(TaskCreateCommand request, ProjectTaskEntity? parent, CancellationToken ct)
     {
-        if (request.IsBatchParent || parent is null || parent.ProgressType != ProgressType.Quantity) return;
+        if (request.IsBatchParent || parent is null || parent.ProgressType != ProgressType.Quantity
+            || request.ProgressType != ProgressType.Quantity) return;
 
-        var requestedAmount = request.ProgressType == ProgressType.Quantity ? request.PlannedQuantity : request.Weight;
         var siblingsPlanned = await _tasks.SumChildrenPlannedQuantityAsync(parent.Id, excludeTaskId: null, ct);
-        if (siblingsPlanned + requestedAmount > parent.PlannedQuantity)
+        if (siblingsPlanned + request.PlannedQuantity > parent.PlannedQuantity)
             throw new DomainValidationException(
-                $"Tổng sản lượng các task con ({siblingsPlanned + requestedAmount}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
+                $"Tổng sản lượng các task con ({siblingsPlanned + request.PlannedQuantity}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
     }
 
     // Mọi assignee phải là công nhân thuộc đúng xưởng.
@@ -181,8 +180,12 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             Priority = request.Priority,
             Deadline = request.Deadline,
             StepOrder = request.StepOrder,
+            // Gate (Milestone) không có sản lượng — PlannedQuantity/CompletedQuantity luôn 0.
             PlannedQuantity = request.ProgressType == ProgressType.Quantity ? request.PlannedQuantity : 0,
-            Weight = request.ProgressType == ProgressType.Milestone ? request.Weight : 0,
+            // PlannedWorkUnits chỉ có ý nghĩa cho công đoạn (tỷ trọng lên đơn).
+            PlannedWorkUnits = request.IsBatchParent ? request.PlannedWorkUnits : 0,
+            // IsRequiredGate chỉ có ý nghĩa cho Gate (Milestone) — task Quantity mặc định entity (true) vô nghĩa, không đọc.
+            IsRequiredGate = request.ProgressType == ProgressType.Milestone && request.IsRequiredGate,
             ProjectId = request.ProjectId,
             DepartmentId = request.DepartmentId,
             ParentTaskId = request.ParentTaskId,

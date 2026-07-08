@@ -8,14 +8,15 @@ public record ProjectTaskDto(
     string? Description,
     string Status,
     string Type,
-    string ProgressType,                // "Quantity" | "Milestone"
+    string ProgressType,                // "Quantity" (sản lượng) | "Milestone" (Gate/Checklist)
     bool IsConfidential,
     int? Priority,
     int StepOrder,
     DateTime? Deadline,
-    int PlannedQuantity,
-    int CompletedQuantity,
-    int Weight,
+    int PlannedQuantity,                // Gate: luôn 0
+    int CompletedQuantity,              // Gate: luôn 0
+    int PlannedWorkUnits,               // chỉ có ý nghĩa khi IsBatchParent=true — tỷ trọng công đoạn lên đơn
+    bool IsRequiredGate,                // chỉ có ý nghĩa khi ProgressType=Milestone (Gate)
     int? ProjectId,
     string? ProjectTitle,
     int? DepartmentId,

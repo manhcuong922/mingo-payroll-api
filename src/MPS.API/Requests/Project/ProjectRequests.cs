@@ -7,15 +7,13 @@ public record CreateProjectRequest(
     string? Description,
     DateOnly? StartDate,
     DateTime? Deadline,
-    int Quantity,
     int? DepartmentId);
 
 public record UpdateProjectRequest(
     string Title,
     string? Description,
     DateTime? Deadline,
-    string? Status,
-    int Quantity);
+    string? Status);
 
 public record GenerateTasksRequest(
     int ProcessTemplateId,

@@ -3,7 +3,8 @@ using MPS.Domain.Enums;
 
 namespace MPS.Application.Features.ProjectTask.Commands;
 
-// ⭐ Tạo 1 task (1 người / nhóm). AssigneeUserIds nhiều phần tử = task nhóm (chung 1 Done).
+// ⭐ Tạo 1 task (1 người / nhóm) HOẶC 1 Gate/Checklist (ProgressType=Milestone, task lá không giao sản lượng).
+// AssigneeUserIds nhiều phần tử = task nhóm (chung 1 Done).
 // IsBatchParent=true → tạo công đoạn (tầng 2) thủ công, không qua ProcessTemplate: AssigneeUserIds phải rỗng.
 public record TaskCreateCommand(
     int? ProjectId,
@@ -13,7 +14,8 @@ public record TaskCreateCommand(
     string? Description,
     ProgressType ProgressType,
     int PlannedQuantity,
-    int Weight,
+    int PlannedWorkUnits,          // chỉ có ý nghĩa khi IsBatchParent=true — tỷ trọng công đoạn lên đơn
+    bool IsRequiredGate,           // chỉ có ý nghĩa khi ProgressType=Milestone (Gate) — mặc định true khi tạo qua UI
     DateTime? Deadline,
     int? Priority,
     int StepOrder,
@@ -35,7 +37,8 @@ public record TaskUpdateCommand(
     DateTime? Deadline,
     int? Priority,
     int PlannedQuantity,
-    int Weight,
+    int PlannedWorkUnits,          // chỉ có ý nghĩa khi task là công đoạn (IsBatchParent=true)
+    bool IsRequiredGate,           // chỉ có ý nghĩa khi task là Gate (ProgressType=Milestone)
     IReadOnlyList<int>? AssigneeUserIds) : IRequest<bool>;   // null = giữ nguyên assignee
 
 // ⭐ Cập nhật sản lượng (chỉ task Quantity). RowVersion base64 để optimistic-lock.
