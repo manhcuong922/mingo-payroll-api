@@ -23,4 +23,5 @@ public record ProjectDto(
     double EarnedValue,
     double SchedulePerformanceIndex,
     int TotalStages,
-    int CompletedStages);
+    int CompletedStages,
+    IReadOnlyList<string> StagesWithoutTasks);  // Công đoạn chưa có task con — "vô hình" trong CompletionPercent (mục 6.3)

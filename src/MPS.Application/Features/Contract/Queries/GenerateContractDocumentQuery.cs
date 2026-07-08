@@ -70,7 +70,8 @@ public sealed class GenerateContractDocumentQueryHandler : IRequestHandler<Gener
 
         return new PlaceholderContext(
             ContractNo: c.ContractNo,
-            ContractCategory: MapCategory(c.ContractCategory),
+            ContractKind: MPS.Domain.Constants.ContractKindMetadata.Get(c.Kind).DisplayNameVi,
+            ContractCategory: MapCategoryOrKind(c.Kind, c.ContractCategory),
             EffectiveFrom: c.EffectiveFrom.ToString("dd/MM/yyyy"),
             EffectiveTo: c.EffectiveTo?.ToString("dd/MM/yyyy") ?? "Không xác định",
             SignedDate: signedDate,
@@ -110,12 +111,26 @@ public sealed class GenerateContractDocumentQueryHandler : IRequestHandler<Gener
         return segment.Trim();
     }
 
-    private static string MapCategory(ContractCategory category) => category switch
+    /// <summary>
+    /// For LaborFullTime, keep the classic "Xác định thời hạn / Không xác định thời hạn" label.
+    /// For other kinds, fall back to the kind's Vietnamese display name from
+    /// <see cref="MPS.Domain.Constants.ContractKindMetadata"/>.
+    /// </summary>
+    private static string MapCategoryOrKind(ContractKind kind, ContractCategory? category)
     {
-        ContractCategory.Definite => "Xác định thời hạn",
-        ContractCategory.Indefinite => "Không xác định thời hạn",
-        _ => category.ToString()
-    };
+        if (kind == ContractKind.LaborFullTime)
+        {
+            return category switch
+            {
+                ContractCategory.Definite => "Xác định thời hạn",
+                ContractCategory.Indefinite => "Không xác định thời hạn",
+                null => "Hợp đồng lao động",
+                _ => category.ToString() ?? "Hợp đồng lao động"
+            };
+        }
+
+        return MPS.Domain.Constants.ContractKindMetadata.Get(kind).DisplayNameVi;
+    }
 
     private static string MapGender(Gender gender) => gender switch
     {

@@ -7,6 +7,7 @@ namespace MPS.Application.Common.Models.Document;
 public sealed record PlaceholderContext(
     // Hợp đồng
     string ContractNo,
+    string ContractKind,
     string ContractCategory,
     string EffectiveFrom,
     string EffectiveTo,
@@ -47,6 +48,7 @@ public sealed record PlaceholderContext(
     public IReadOnlyDictionary<string, string> ToDictionary() => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["contractNo"]                 = ContractNo,
+        ["contractKind"]               = ContractKind,
         ["contractCategory"]           = ContractCategory,
         ["effectiveFrom"]              = EffectiveFrom,
         ["effectiveTo"]                = EffectiveTo,

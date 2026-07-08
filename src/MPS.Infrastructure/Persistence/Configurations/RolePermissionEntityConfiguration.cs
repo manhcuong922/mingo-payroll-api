@@ -105,7 +105,9 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.TaskCreateDepartment, PermissionIds.TaskUpdateDepartment,
                 PermissionIds.TaskUpdateProgressDepartment, PermissionIds.TaskCompleteDepartment,
                 PermissionIds.TaskDeleteDepartment,
-                PermissionIds.ProductionAttachmentReadAll, PermissionIds.ProductionAttachmentWriteDepartment,
+                PermissionIds.ProductionAttachmentReadAll,
+                PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
+                PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
                 PermissionIds.TaskAuditReadAll,
             }),
 
@@ -124,14 +126,17 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.TaskCreateDepartment, PermissionIds.TaskUpdateDepartment,
                 PermissionIds.TaskUpdateProgressDepartment, PermissionIds.TaskCompleteDepartment,
                 PermissionIds.TaskDeleteDepartment,
-                PermissionIds.ProductionAttachmentReadAll, PermissionIds.ProductionAttachmentWriteDepartment,
+                PermissionIds.ProductionAttachmentReadAll,
+                PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
+                PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
                 PermissionIds.TaskAuditReadAll,
             }),
 
-            // DepartmentManager (v4 — GỘP VAI): KHÔNG còn tham gia luồng sản xuất.
-            // Không cấp quyền ProcessTemplate/Project/Task, cũng không EmployeeInformationReadAll
-            // (việc xuyên xưởng + xem nhân sự đa xưởng chuyển hẳn về Director/DeputyDirector).
-            // Giữ role trong seed để không phá dữ liệu cũ; chỉ còn quyền cơ bản.
+            // DepartmentManager = quản lý 1 xưởng cụ thể (trực thuộc qua EmployeeInformation.DepartmentId,
+            // xem SystemRoles.DepartmentMemberRoleIds). Xem TOÀN BỘ 3 tầng (đơn/công đoạn/task) của xưởng
+            // mình, không bị giới hạn theo AssignedPmUserId như ProjectManager — dùng
+            // Project.Read.FullDepartment/Task.Read.FullDepartment (permission-based, không hardcode role,
+            // xem ProjectScopeGuard.CanSeeFullDepartmentProjects/Tasks). Không có quyền ghi (chỉ quan sát).
             (SystemRoles.DepartmentManagerId, new[]
             {
                 PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
@@ -141,6 +146,12 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.DepartmentReadAll,
                 PermissionIds.PerformanceMetricReadSelf,
                 PermissionIds.TypePerformanceMetricReadAll,
+                PermissionIds.ProjectReadFullDepartment,
+                PermissionIds.TaskReadFullDepartment,
+                // Tài liệu/ảnh: xem + đăng tải cả tầng 1 (Đơn hàng) và tầng 2+3 (Công đoạn/Task lá) của
+                // xưởng mình quản lý.
+                PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
+                PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
             }),
 
             // ProjectManager = tổ trưởng xưởng (Department.ManagerId) → chỉ xem nhân viên xưởng mình (Read.Department).
@@ -155,15 +166,17 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.PerformanceMetricCreateAll, PermissionIds.PerformanceMetricUpdateAll,
                 PermissionIds.PerformanceMetricDeleteAll,
                 PermissionIds.TypePerformanceMetricReadAll,
-                // Task/Production (v5) — quản lý xưởng: ra kế hoạch + điều phối, scoped theo xưởng trực thuộc.
-                PermissionIds.ProcessTemplateReadAll,
-                PermissionIds.ProjectReadDepartment, PermissionIds.ProjectCreateAll,
-                PermissionIds.ProjectUpdateAll, PermissionIds.ProjectGenerateTasks,
-                PermissionIds.ProjectCompleteDepartment,
+                // Task/Production (v5) — quản lý xưởng: điều phối, scoped theo xưởng trực thuộc. PM KHÔNG
+                // chạm vào cấp Đơn hàng ở bất kỳ thao tác nào (không tự tạo đơn, không áp quy trình sinh
+                // task, không sửa/hoàn thành/đóng đơn) — chỉ xem đơn (ReadDepartment, đã bị FilterByAssignedPm
+                // giới hạn còn công đoạn của mình) và thao tác ở cấp Công đoạn/Task. Việc sinh task ban đầu
+                // và quản lý đơn là của GĐ/Phó GĐ.
+                PermissionIds.ProjectReadDepartment,
                 PermissionIds.TaskReadDepartment, PermissionIds.TaskCreateDepartment,
                 PermissionIds.TaskUpdateDepartment, PermissionIds.TaskUpdateProgressDepartment,
                 PermissionIds.TaskCompleteDepartment, PermissionIds.TaskDeleteDepartment,
-                PermissionIds.ProductionAttachmentReadDepartment, PermissionIds.ProductionAttachmentWriteDepartment,
+                // Tài liệu/ảnh: chỉ tầng 2+3 (Công đoạn/Task lá) — PM KHÔNG xem/đăng tài liệu cấp Đơn hàng.
+                PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
                 PermissionIds.TaskAuditReadDepartment,
             }),
 
@@ -180,9 +193,10 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.ContractAppendixReadSelf,
                 PermissionIds.ContractTerminationReadSelf,
                 PermissionIds.ContractFileReadSelf,
-                // Task/Production — công nhân chỉ XEM task của mình + tài liệu xưởng.
+                // Task/Production — công nhân chỉ XEM task của mình + tài liệu tầng 2+3 (không đăng tải,
+                // không xem tài liệu cấp Đơn hàng).
                 PermissionIds.TaskReadAssigned,
-                PermissionIds.ProductionAttachmentReadDepartment,
+                PermissionIds.ProductionAttachmentReadStage,
             }),
         };
 
@@ -241,6 +255,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
         PermissionIds.TaskCompleteDepartment, PermissionIds.TaskDeleteDepartment,
         PermissionIds.ProductionAttachmentReadDepartment, PermissionIds.ProductionAttachmentWriteDepartment,
         PermissionIds.ProductionAttachmentReadAll,
+        PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
+        PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
         PermissionIds.TaskAuditReadAll, PermissionIds.TaskAuditReadDepartment,
     };
 }

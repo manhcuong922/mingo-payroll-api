@@ -40,6 +40,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
                 PositionId: request.PositionId,
                 SalaryGradeId: request.SalaryGradeId,
                 EffectiveFrom: request.EffectiveFrom,
+                Kind: request.Kind,
                 ContractCategory: request.ContractCategory,
                 ContractSubtype: request.ContractSubtype,
                 HasProbation: request.HasProbation,
@@ -60,7 +61,7 @@ public class CreateContractCommandHandler : IRequestHandler<CreateContractComman
                 await Task.Delay(RetryDelaysMs[attempt - 1], cancellationToken);
 
             var contractNo = await _noGenerator.GenerateAsync(
-                request.ContractCategory, request.ContractSubtype, year, cancellationToken);
+                request.Kind, request.ContractCategory, year, cancellationToken);
             lastAttemptedNo = contractNo;
 
             var entity = ContractBuilder.FromCreate(request, contractNo, snapshotAmount, snapshotCurrency, userId, nowUtc);

@@ -23,7 +23,7 @@ public class ContractTemplateGetPagedQueryHandler
         CancellationToken cancellationToken)
     {
         var (items, total) = await _repository.GetPagedAsync(
-            request.Category, request.Subtype, request.IsActive, request.Page, request.PageSize, cancellationToken);
+            request.Kind, request.Category, request.Subtype, request.IsActive, request.Page, request.PageSize, cancellationToken);
 
         var dtos = _mapper.Map<IReadOnlyList<ContractTemplateDto>>(items);
         return new PagedResult<ContractTemplateDto>(dtos, total, request.Page, request.PageSize);

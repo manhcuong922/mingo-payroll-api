@@ -4,7 +4,7 @@ using MPS.Domain.Enums;
 namespace MPS.Domain.Entities;
 
 /// <summary>
-/// Tài liệu / ảnh gắn cho Đơn, Task, hoặc bằng chứng nghiệm thu khi Complete task bàn giao (v5).
+/// Tài liệu / ảnh gắn cho Đơn hoặc Task (v5).
 /// Polymorphic qua OwnerType + OwnerId (không FK cứng tới Project/Task) — xóa owner phải dọn ở handler
 /// (cả bản ghi DB lẫn object trên MinIO). File vật lý lưu MinIO qua IFileStorageService.
 /// </summary>

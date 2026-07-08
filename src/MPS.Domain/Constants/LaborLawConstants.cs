@@ -49,6 +49,17 @@ public static class LaborLawConstants
         public const int EmployerNoticeWorkingDaysDefiniteUnder12M = 3;
     }
 
+    public static class PartTime
+    {
+        public const int MaxHoursPerWeek = 48;
+    }
+
+    public static class VocationalTraining
+    {
+        public const int MinCommitmentMonths = 1;
+        public const int MaxCommitmentMonths = 60;
+    }
+
     public static class Retention
     {
         public const int ContractRetentionYearsAfterTermination = 10;

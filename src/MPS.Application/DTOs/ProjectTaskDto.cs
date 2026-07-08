@@ -8,15 +8,15 @@ public record ProjectTaskDto(
     string? Description,
     string Status,
     string Type,
-    string ProgressType,                // "Quantity" | "Milestone"
-    bool RequiresHandover,
+    string ProgressType,                // "Quantity" (sản lượng) | "Milestone" (Gate/Checklist)
     bool IsConfidential,
     int? Priority,
     int StepOrder,
     DateTime? Deadline,
-    int PlannedQuantity,
-    int CompletedQuantity,
-    int Weight,
+    int PlannedQuantity,                // Gate: luôn 0
+    int CompletedQuantity,              // Gate: luôn 0
+    int PlannedWorkUnits,               // chỉ có ý nghĩa khi IsBatchParent=true — tỷ trọng công đoạn lên đơn
+    bool IsRequiredGate,                // chỉ có ý nghĩa khi ProgressType=Milestone (Gate)
     int? ProjectId,
     string? ProjectTitle,
     int? DepartmentId,
@@ -27,10 +27,12 @@ public record ProjectTaskDto(
     int CreatedByUserId,
     string? CreatedByName,
     bool IsBatchParent,
+    int? AssignedPmUserId,               // chỉ có ý nghĩa khi IsBatchParent=true — PM đang phụ trách Công đoạn
     int TaskCompletionPercent,          // Quantity: Completed/Planned×100; Milestone: Done?100:0
     bool WasLate,                       // Done sau deadline
     string? CompletedByName,
     DateTime? CompletedAt,
     string RowVersion,                  // base64 — gửi lại khi UpdateProgress/Complete (optimistic lock)
     IReadOnlyList<ProductionAttachmentDto> Attachments,
-    List<ProjectTaskDto> Children);
+    List<ProjectTaskDto> Children,
+    int? PausedByCascadeFromId);        // null = Pause/Cancel trực tiếp (tự Resume/Restore được); khác null = bị lan truyền từ cha

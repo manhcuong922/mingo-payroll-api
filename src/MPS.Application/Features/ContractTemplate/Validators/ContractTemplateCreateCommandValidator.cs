@@ -12,8 +12,11 @@ public class ContractTemplateCreateCommandValidator : AbstractValidator<Contract
             .NotEmpty().WithMessage("Name is required.")
             .MaximumLength(200).WithMessage("Name must not exceed 200 characters.");
 
+        // LaborFullTime templates require Category (Definite / Indefinite). Other kinds don't
+        // carry the duration concept, so their Category/Subtype should be null.
         RuleFor(x => x)
-            .Must(cmd => !(cmd.ContractCategory == ContractCategory.Indefinite && cmd.ContractSubtype == ContractSubtype.Probation))
-            .WithMessage("Combination Category=Indefinite + Subtype=Probation is not allowed (Điều 25 BLLĐ 2019).");
+            .Must(cmd => cmd.Kind != ContractKind.LaborFullTime || cmd.ContractCategory is not null)
+            .WithMessage("LaborFullTime template requires ContractCategory (Definite or Indefinite).")
+            .OverridePropertyName("ContractCategory");
     }
 }

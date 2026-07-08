@@ -34,7 +34,8 @@ public sealed class CreateContractCommandValidatorTests
 
         var result = _sut.Validate(cmd);
 
-        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Definite contracts must have EffectiveTo"));
+        result.Errors.Should().Contain(e =>
+            e.ErrorMessage.Contains("Definite") && e.ErrorMessage.Contains("must have EffectiveTo"));
     }
 
     // Case BLLĐ Điều 20 1b: HĐ XĐ thời hạn ≤ 36 tháng. Set 37 tháng → reject.
@@ -62,15 +63,17 @@ public sealed class CreateContractCommandValidatorTests
 
         var result = _sut.Validate(cmd);
 
-        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Indefinite contracts must NOT have EffectiveTo"));
+        result.Errors.Should().Contain(e =>
+            e.ErrorMessage.Contains("Indefinite") && e.ErrorMessage.Contains("must NOT have EffectiveTo"));
     }
 
-    // Case BLLĐ Điều 25: Thử việc luôn có thời hạn xác định → tổ hợp Indefinite + Probation vô nghĩa, cấm.
+    // Case BLLĐ Điều 25: Thử việc luôn có thời hạn xác định. Với Kind=Probation, EffectiveTo bắt buộc.
     [Fact]
-    public void Fails_When_Indefinite_Combined_With_Probation()
+    public void Fails_When_Probation_Kind_Missing_EffectiveTo()
     {
         var cmd = ContractCommandFactory.ValidCreate(
-            category: ContractCategory.Indefinite,
+            kind: ContractKind.Probation,
+            category: null,
             subtype: ContractSubtype.Probation) with
         {
             EffectiveTo = null,
@@ -79,7 +82,7 @@ public sealed class CreateContractCommandValidatorTests
         var result = _sut.Validate(cmd);
 
         result.Errors.Should().Contain(e =>
-            e.ErrorMessage.Contains("Indefinite") && e.ErrorMessage.Contains("Probation"));
+            e.ErrorMessage.Contains("thử việc") && e.ErrorMessage.Contains("EffectiveTo"));
     }
 
     // Case: HasProbation=true bắt buộc 4 trường ProbationStartDate/EndDate/Salary/ResultStatus.

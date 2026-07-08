@@ -5,8 +5,10 @@ public record ProcessStepDto(
     string Name,
     string? Description,
     int StepOrder,
-    string DefaultProgressType,   // "Quantity" | "Milestone"
-    int DefaultWeight,
+    string DefaultProgressType,   // "Quantity" → sinh công đoạn; "Milestone" → sinh gate
+    int DefaultPlannedQuantity,
+    int DefaultPlannedWorkUnits,
+    bool DefaultIsRequiredGate,   // chỉ có ý nghĩa khi DefaultProgressType="Milestone"
     int? Priority);
 
 public record ProcessTemplateDto(

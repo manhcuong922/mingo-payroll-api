@@ -7,12 +7,14 @@ public interface IContractTemplateRepository
 {
     Task<ContractTemplate?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ContractTemplate>> GetAllAsync(
+        ContractKind? kind,
         ContractCategory? category,
         ContractSubtype? subtype,
         bool? isActive,
         CancellationToken cancellationToken = default);
 
     Task<(IReadOnlyList<ContractTemplate> Items, int TotalCount)> GetPagedAsync(
+        ContractKind? kind,
         ContractCategory? category,
         ContractSubtype? subtype,
         bool? isActive,

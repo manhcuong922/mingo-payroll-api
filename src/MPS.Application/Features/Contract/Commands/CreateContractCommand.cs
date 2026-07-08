@@ -4,8 +4,9 @@ using MPS.Domain.Enums.Contract;
 namespace MPS.Application.Features.Contract.Commands;
 
 public sealed record CreateContractCommand(
-    ContractCategory ContractCategory,
-    ContractSubtype ContractSubtype,
+    ContractKind Kind,
+    ContractCategory? ContractCategory,
+    ContractSubtype? ContractSubtype,
     int EmployeeInformationId,
     int EmployerPartyId,
     int? EmployerSignerUserId,
@@ -19,9 +20,10 @@ public sealed record CreateContractCommand(
     string? PromotionPolicy,
     string WorkingTimeJson,
     string? PpePolicy,
-    bool SocialInsuranceFlag,
-    bool HealthInsuranceFlag,
-    bool UnemploymentInsuranceFlag,
+    bool? SocialInsuranceFlag,
+    bool? HealthInsuranceFlag,
+    bool? UnemploymentInsuranceFlag,
+    TaxPolicy? TaxPolicy,
     string? TrainingPolicy,
     string? ConfidentialityClause,
     int? TemplateId,

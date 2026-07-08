@@ -19,6 +19,7 @@ public sealed class DocxMergeServiceTests
     {
         return new PlaceholderContext(
             ContractNo: contractNo,
+            ContractKind: "HĐLĐ",
             ContractCategory: "Xác định thời hạn",
             EffectiveFrom: "01/01/2026",
             EffectiveTo: "31/12/2027",

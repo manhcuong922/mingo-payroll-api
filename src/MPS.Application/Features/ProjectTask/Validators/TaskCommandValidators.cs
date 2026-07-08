@@ -1,5 +1,6 @@
 using FluentValidation;
 using MPS.Application.Features.ProjectTask.Commands;
+using MPS.Domain.Common;
 using MPS.Domain.Enums;
 
 namespace MPS.Application.Features.ProjectTask.Validators;
@@ -9,20 +10,34 @@ public class TaskCreateCommandValidator : AbstractValidator<TaskCreateCommand>
     public TaskCreateCommandValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.DepartmentId).GreaterThan(0).WithMessage("Task phải gắn xưởng.");
-        RuleFor(x => x.AssigneeUserIds)
-            .NotEmpty().WithMessage("Task phải có ít nhất 1 người thực hiện.");
+        RuleFor(x => x.DepartmentId).GreaterThan(0).WithMessage("Task must belong to a department.");
 
-        // Task Quantity: cần số lượng dương. Milestone: cần trọng số hợp lệ.
+        When(x => x.IsBatchParent, () =>
+        {
+            RuleFor(x => x.AssigneeUserIds)
+                .Empty().WithMessage("Stage cannot be assigned directly.");
+            RuleFor(x => x.PlannedWorkUnits).GreaterThan(0)
+                .WithMessage("Stage must have positive planned work units.");
+        });
+
+        When(x => !x.IsBatchParent && x.ProgressType == ProgressType.Quantity, () =>
+        {
+            RuleFor(x => x.AssigneeUserIds)
+                .NotEmpty().WithMessage("Quantity task must have at least one assignee.");
+        });
+
         When(x => x.ProgressType == ProgressType.Quantity, () =>
         {
             RuleFor(x => x.PlannedQuantity).GreaterThan(0)
-                .WithMessage("Task theo sản lượng phải có số lượng lớn hơn 0.");
+                .WithMessage("Quantity task must have positive planned quantity.");
         });
 
         When(x => x.ProgressType == ProgressType.Milestone, () =>
         {
-            RuleFor(x => x.Weight).GreaterThanOrEqualTo(0);
+            RuleFor(x => x.PlannedQuantity).Equal(0)
+                .WithMessage("Gate/Checklist must not have planned quantity.");
+            RuleFor(x => x.PlannedWorkUnits).Equal(0)
+                .WithMessage("Gate/Checklist must not have planned work units.");
         });
     }
 }
@@ -33,7 +48,7 @@ public class TaskCreateConfidentialCommandValidator : AbstractValidator<TaskCrea
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.AssigneeUserIds)
-            .NotEmpty().WithMessage("Task phải có ít nhất 1 người thực hiện.");
+            .NotEmpty().WithMessage("Task must have at least one assignee.");
     }
 }
 
@@ -44,10 +59,10 @@ public class TaskUpdateCommandValidator : AbstractValidator<TaskUpdateCommand>
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.PlannedQuantity).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.Weight).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.PlannedWorkUnits).GreaterThanOrEqualTo(0);
         RuleFor(x => x.AssigneeUserIds)
             .Must(list => list is null || list.Count > 0)
-            .WithMessage("Nếu gửi danh sách người thực hiện thì phải có ít nhất 1 người.");
+            .WithMessage("Assignee list cannot be empty when provided.");
     }
 }
 
@@ -57,7 +72,7 @@ public class TaskUpdateProgressCommandValidator : AbstractValidator<TaskUpdatePr
     {
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.CompletedQuantity).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("Thiếu RowVersion để kiểm tra đồng thời.");
+        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("RowVersion is required.");
     }
 }
 
@@ -66,7 +81,11 @@ public class TaskCompleteCommandValidator : AbstractValidator<TaskCompleteComman
     public TaskCompleteCommandValidator()
     {
         RuleFor(x => x.Id).GreaterThan(0);
-        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("Thiếu RowVersion để kiểm tra đồng thời.");
+        RuleFor(x => x.RowVersion).NotEmpty().WithMessage("RowVersion is required.");
+        RuleFor(x => x.CompletedAt)
+            .LessThanOrEqualTo(_ => VietnamClock.Now)
+            .When(x => x.CompletedAt.HasValue)
+            .WithMessage("Ngày hoàn thành không được ở tương lai.");
     }
 }
 

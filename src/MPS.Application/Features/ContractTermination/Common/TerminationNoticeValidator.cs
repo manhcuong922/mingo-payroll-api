@@ -28,6 +28,12 @@ public static class TerminationNoticeValidator
         if (input.Party is TerminationParty.Mutual or TerminationParty.AutoExpiry or TerminationParty.ByLaw)
             return TerminationNoticeCheckResult.Ok();
 
+        // Notice-period rules Điều 35/36 chỉ áp cho HĐ thuộc BLLĐ. Các HĐ dân sự (Service,
+        // PieceWork, Collaborator) và HĐ đào tạo dùng notice-period thoả thuận trong HĐ,
+        // không áp rule 45/30/3 ngày.
+        if (ContractKindMetadata.Get(input.Kind).LegalFramework != ContractLegalFramework.LaborCode)
+            return TerminationNoticeCheckResult.Ok();
+
         // Đối với đơn phương: nếu NLĐ/NSDLĐ rơi vào trường hợp ngoại lệ thì có thể bỏ báo trước
         // (Điều 35 k.2 cho NLĐ, Điều 36 k.3 cho NSDLĐ). Trust flag từ caller — handler set theo
         // ReasonRef hoặc HR khai báo cụ thể; ở đây chỉ verify "khi cờ bật thì pass".
@@ -102,7 +108,8 @@ public static class TerminationNoticeValidator
 
 public sealed record TerminationNoticeCheckInput(
     TerminationParty Party,
-    ContractCategory Category,
+    ContractKind Kind,
+    ContractCategory? Category,
     DateTime EffectiveFrom,
     DateTime? EffectiveTo,
     DateTime NoticeSentAt,

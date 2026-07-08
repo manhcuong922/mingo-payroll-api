@@ -29,7 +29,8 @@ internal static class ProjectMapper
             EarnedValue: 0,
             SchedulePerformanceIndex: 0,
             TotalStages: 0,
-            CompletedStages: 0);
+            CompletedStages: 0,
+            StagesWithoutTasks: Array.Empty<string>());
 
     // Bản đầy đủ (GetById) — có cây task + tiến độ LAI.
     public static ProjectDto ToDtoWithProgress(
@@ -62,6 +63,7 @@ internal static class ProjectMapper
             pr.EarnedValue,
             pr.SchedulePerformanceIndex,
             pr.TotalStages,
-            pr.CompletedStages);
+            pr.CompletedStages,
+            pr.StagesWithoutTasks);
     }
 }

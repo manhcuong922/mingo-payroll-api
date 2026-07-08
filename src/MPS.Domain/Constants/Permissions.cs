@@ -207,6 +207,10 @@ public static class Permissions
     // Project/Order (đơn hàng)
     public const string ProjectReadAll          = "Project.Read.All";
     public const string ProjectReadDepartment   = "Project.Read.Department";
+    // Xem TOÀN BỘ đơn/công đoạn/task của 1 xưởng (3 tầng, bỏ qua lọc theo AssignedPmUserId) — khác
+    // ProjectReadDepartment (PM: chỉ công đoạn được gán + task con, xem FilterByAssignedPm). Dành cho
+    // vai trò quản lý cấp xưởng không trực tiếp phụ trách công đoạn nào (vd. DepartmentManager).
+    public const string ProjectReadFullDepartment = "Project.Read.FullDepartment";
     public const string ProjectCreateAll        = "Project.Create.All";
     public const string ProjectUpdateAll        = "Project.Update.All";
     public const string ProjectDeleteAll        = "Project.Delete.All";
@@ -216,21 +220,35 @@ public static class Permissions
     // Task — xem theo scope
     public const string TaskReadAll          = "Task.Read.All";
     public const string TaskReadDepartment   = "Task.Read.Department";
+    // Song song ProjectReadFullDepartment: xem mọi Công đoạn + task con trong xưởng, không bị ẩn theo
+    // AssignedPmUserId (khác TaskReadDepartment, vốn bị FilterByAssignedPm giới hạn cho PM).
+    public const string TaskReadFullDepartment = "Task.Read.FullDepartment";
     public const string TaskReadAssigned     = "Task.Read.Assigned";
     public const string TaskReadConfidential = "Task.Read.Confidential";
 
     // Task — thao tác (PM xưởng; nhân viên KHÔNG có quyền ghi task nào)
-    public const string TaskCreateDepartment      = "Task.Create.Department";        // ⭐ tạo task 1 người / nhóm
+    public const string TaskCreateDepartment      = "Task.Create.Department";        // ⭐ tạo task lá 1 người / nhóm (PM)
+    public const string TaskCreateStageDepartment = "Task.CreateStage.Department";   // ⭐ tạo Công đoạn (Manager/GĐ)
     public const string TaskCreateConfidential    = "Task.Create.Confidential";
     public const string TaskUpdateDepartment      = "Task.Update.Department";
     public const string TaskUpdateProgressDepartment = "Task.UpdateProgress.Department"; // ⭐ cập nhật CompletedQuantity
     public const string TaskCompleteDepartment    = "Task.Complete.Department";      // ⭐ bấm hoàn thành (+ WasLate)
     public const string TaskDeleteDepartment      = "Task.Delete.Department";
 
-    // Attachment (tài liệu/ảnh)
+    // Attachment (tài liệu/ảnh) — cũ, giữ để tương thích ngược, không seed cho role nào nữa (xem
+    // Read/Write.Project và Read/Write.Stage thay thế, tách theo tầng: Project = Đơn hàng (tầng 1,
+    // Director+Manager); Stage = Công đoạn/Task lá gộp chung (tầng 2+3, quyền xem/ghi giống nhau).
     public const string ProductionAttachmentReadDepartment  = "ProductionAttachment.Read.Department";
     public const string ProductionAttachmentWriteDepartment = "ProductionAttachment.Write.Department";
     public const string ProductionAttachmentReadAll         = "ProductionAttachment.Read.All";
+
+    // Tầng 1 (Đơn hàng) — chỉ Director/DeputyDirector/DepartmentManager.
+    public const string ProductionAttachmentReadProject  = "ProductionAttachment.Read.Project";
+    public const string ProductionAttachmentWriteProject = "ProductionAttachment.Write.Project";
+    // Tầng 2+3 (Công đoạn/Task lá) — Director/DeputyDirector/DepartmentManager/ProjectManager ghi được;
+    // Employee chỉ có Read (xem tài liệu mẫu của Công đoạn/task được giao, không đăng tải).
+    public const string ProductionAttachmentReadStage  = "ProductionAttachment.Read.Stage";
+    public const string ProductionAttachmentWriteStage = "ProductionAttachment.Write.Stage";
 
     // Audit — xem lịch sử chỉnh sửa task/đơn (scoped theo xưởng)
     public const string TaskAuditReadAll        = "Task.Audit.Read.All";
@@ -242,6 +260,20 @@ public static class Permissions
     public const string WeeklyDayOffCreateAll = "WeeklyDayOff.Create.All";
     public const string WeeklyDayOffUpdateAll = "WeeklyDayOff.Update.All";
     public const string WeeklyDayOffDeleteAll = "WeeklyDayOff.Delete.All";
+
+    // ===== Task v7 (tách Create theo IsBatchParent) + Comment module - IDs 209-212 =====
+    // Quyền xem/viết đi theo đúng quyền của entity gốc (Project/Task) — CHỈ Employee cần permission riêng
+    // vì đây là ngoại lệ duy nhất phá vỡ "Employee không có quyền ghi" (plan ràng buộc 6).
+    public const string CommentReadAll           = "Comment.Read.All";           // GĐ/Phó GĐ — mọi tầng, mọi xưởng
+    public const string CommentCreateOwn         = "Comment.Create.Own";        // Employee — CHỈ Task của chính mình
+    public const string CommentCreateDepartment  = "Comment.Create.Department"; // Manager/PM — theo scope đang có trên entity gốc
+
+    // ===== ID 213 =====
+    // Tách khỏi ProcessTemplateReadAll: chỉ cho phép ĐỌC quy trình mẫu để chọn khi "Áp quy trình"
+    // (GenerateTasksModal) — KHÔNG cho vào màn quản lý/CRUD quy trình mẫu (đó vẫn cần ProcessTemplateReadAll
+    // hoặc ProcessTemplateCreateAll). PM cần quyền này để sinh task từ quy trình mẫu (Project.GenerateTasks)
+    // nhưng không được tự tạo/sửa/xóa quy trình mẫu dùng chung toàn công ty.
+    public const string ProcessTemplateReadForApply = "ProcessTemplate.ReadForApply.All";
 }
 
 public static class PermissionIds
@@ -444,7 +476,8 @@ public static class PermissionIds
 
     public const int EmployeeInformationReadDepartment = 147;
 
-    // ===== Task/Production module (v5) - IDs 148-173 =====
+    // ===== Task/Production module (v5) - IDs 148-169, 205-208 =====
+    // (170-204 dùng bởi AttendanceModule/ShiftTemplate/PublicHoliday/LeaveType — xem migration đã áp dụng cho DB)
     public const int ProcessTemplateReadAll     = 148;
     public const int ProcessTemplateCreateAll   = 149;
     public const int ProcessTemplateUpdateAll   = 150;
@@ -471,15 +504,36 @@ public static class PermissionIds
     public const int TaskDeleteDepartment          = 168;
 
     public const int ProductionAttachmentReadDepartment  = 169;
-    public const int ProductionAttachmentWriteDepartment = 170;
-    public const int ProductionAttachmentReadAll         = 171;
-
-    public const int TaskAuditReadAll           = 172;
-    public const int TaskAuditReadDepartment    = 173;
+    public const int ProductionAttachmentWriteDepartment = 205;
+    public const int ProductionAttachmentReadAll         = 206;
 
     // ===== WeeklyDayOff module — IDs 174–177 =====
     public const int WeeklyDayOffReadAll   = 174;
     public const int WeeklyDayOffCreateAll = 175;
     public const int WeeklyDayOffUpdateAll = 176;
     public const int WeeklyDayOffDeleteAll = 177;
+
+    public const int TaskAuditReadAll           = 207;
+    public const int TaskAuditReadDepartment    = 208;
+
+    // ===== Task v7 (tách Create theo IsBatchParent) + Comment module - IDs 209-212 =====
+    public const int TaskCreateStageDepartment  = 209;
+    public const int CommentReadAll             = 210;
+    public const int CommentCreateOwn           = 211;
+    public const int CommentCreateDepartment    = 212;
+
+    // ===== ID 213 =====
+    public const int ProcessTemplateReadForApply = 213;
+
+    // Chú ý: IDs 214-217 đã bị chiếm bởi WeeklyDayOff module (migration 20260707110000_AddWeeklyDayOffRules,
+    // seed qua raw SQL — không xuất hiện trong file này). Dùng 218-219 để tránh trùng khóa chính.
+    // ===== IDs 218-219: xem toàn bộ 1 xưởng (3 tầng), không giới hạn theo AssignedPmUserId =====
+    public const int ProjectReadFullDepartment = 218;
+    public const int TaskReadFullDepartment    = 219;
+
+    // ===== IDs 220-223: tài liệu/ảnh tách theo tầng (Project = tầng 1, Stage = tầng 2+3) =====
+    public const int ProductionAttachmentReadProject   = 220;
+    public const int ProductionAttachmentWriteProject  = 221;
+    public const int ProductionAttachmentReadStage     = 222;
+    public const int ProductionAttachmentWriteStage    = 223;
 }

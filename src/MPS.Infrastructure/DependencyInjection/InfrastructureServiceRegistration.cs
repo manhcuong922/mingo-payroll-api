@@ -50,6 +50,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<IProjectTaskRepository, ProjectTaskRepository>();
         services.AddScoped<IProductionAttachmentRepository, ProductionAttachmentRepository>();
+        services.AddScoped<ICommentRepository, CommentRepository>();
         services.AddScoped<MPS.Application.Services.ITaskGenerator, MPS.Application.Services.TaskGenerator>();
         services.AddScoped<MPS.Application.Services.IProgressService, MPS.Application.Services.ProgressService>();
         services.AddScoped<MPS.Application.Services.IProductionAttachmentService, MPS.Application.Services.ProductionAttachmentService>();

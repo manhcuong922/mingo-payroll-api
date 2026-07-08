@@ -3,17 +3,18 @@ using MPS.Domain.Entities;
 namespace MPS.Application.Services;
 
 public record ProjectProgress(
-    int CompletionPercent,      // theo trọng số công việc (task Done)
-    int TimeElapsedPercent,     // % thời gian đã trôi
+    int CompletionPercent,      // Task leaf -> Stage -> Project, weighted by Stage.PlannedWorkUnits
+    int TimeElapsedPercent,     // elapsed time percent from StartDate to Deadline
     string ScheduleStatus,      // OnTrack | AtRisk | Late
-    double PlannedValue,        // EV/PV — chỉ trên task Quantity
-    double EarnedValue,
+    double PlannedValue,        // PV: expected work units by elapsed time
+    double EarnedValue,         // EV: earned Stage.PlannedWorkUnits from StagePercent
     double SchedulePerformanceIndex,
     int TotalStages,
-    int CompletedStages);
+    int CompletedStages,
+    IReadOnlyList<string> StagesWithoutTasks);
 
 public interface IProgressService
 {
-    /// <summary>Đo tiến độ LAI cho 1 đơn: trọng số công việc + % thời gian + EV/PV (subset task Quantity).</summary>
+    /// <summary>Computes project progress from leaf tasks through stages, with EV/PV/SPI on the same stage work-unit basis.</summary>
     ProjectProgress Compute(Project project, IReadOnlyList<ProjectTask> tasks, DateTime asOf);
 }

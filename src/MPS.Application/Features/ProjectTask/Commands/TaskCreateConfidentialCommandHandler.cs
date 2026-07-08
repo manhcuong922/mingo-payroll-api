@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Domain.Common;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
@@ -26,7 +27,7 @@ public class TaskCreateConfidentialCommandHandler : IRequestHandler<TaskCreateCo
         if (request.AssigneeUserIds.Count == 0)
             throw new DomainValidationException("Task phải có ít nhất 1 người thực hiện.");
 
-        var now = DateTime.UtcNow;
+        var now = VietnamClock.Now;
         // Confidential: không gắn đơn/xưởng. Milestone (không sản lượng).
         var task = new MPS.Domain.Entities.ProjectTask
         {

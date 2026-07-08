@@ -24,22 +24,22 @@ public class ProjectTaskController : ControllerBase
     }
 
     [HttpGet("my")]
-    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadAll)]
-    public async Task<IActionResult> GetMyAssigned(CancellationToken ct)
-        => Ok(await _mediator.Send(new TaskGetMyAssignedQuery(), ct));
+    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment, Permissions.TaskReadAll)]
+    public async Task<IActionResult> GetMyAssigned([FromQuery] bool includeCancelled, CancellationToken ct)
+        => Ok(await _mediator.Send(new TaskGetMyAssignedQuery(includeCancelled), ct));
 
     [HttpGet("department/{id:int}")]
-    [HasAnyPermission(Permissions.TaskReadDepartment, Permissions.TaskReadAll)]
-    public async Task<IActionResult> GetByDepartment(int id, CancellationToken ct)
-        => Ok(await _mediator.Send(new TaskGetByDepartmentQuery(id), ct));
+    [HasAnyPermission(Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment, Permissions.TaskReadAll)]
+    public async Task<IActionResult> GetByDepartment(int id, [FromQuery] bool includeCancelled, CancellationToken ct)
+        => Ok(await _mediator.Send(new TaskGetByDepartmentQuery(id, includeCancelled), ct));
 
     [HttpGet("project/{id:int}")]
-    [HasAnyPermission(Permissions.TaskReadAll, Permissions.TaskReadDepartment)]
-    public async Task<IActionResult> GetByProject(int id, CancellationToken ct)
-        => Ok(await _mediator.Send(new TaskGetByProjectQuery(id), ct));
+    [HasAnyPermission(Permissions.TaskReadAll, Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment)]
+    public async Task<IActionResult> GetByProject(int id, [FromQuery] bool includeCancelled, CancellationToken ct)
+        => Ok(await _mediator.Send(new TaskGetByProjectQuery(id, includeCancelled), ct));
 
     [HttpGet("{id:int}")]
-    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadAll)]
+    [HasAnyPermission(Permissions.TaskReadAssigned, Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment, Permissions.TaskReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var result = await _mediator.Send(new TaskGetByIdQuery(id), ct);
@@ -51,16 +51,17 @@ public class ProjectTaskController : ControllerBase
     public async Task<IActionResult> GetAuditHistory(int id, CancellationToken ct)
         => Ok(await _mediator.Send(new TaskAuditHistoryQuery(id), ct));
 
-    // ⭐ Tạo task 1 người / nhóm (AssigneeUserIds nhiều phần tử = nhóm).
+    // ⭐ Tạo Công đoạn (IsBatchParent=true, cần TaskCreateStageDepartment) HOẶC Task lá 1 người/nhóm
+    // (IsBatchParent=false, cần TaskCreateDepartment) — handler tự soi request.IsBatchParent để check đúng quyền chi tiết.
     [HttpPost]
-    [HasPermission(Permissions.TaskCreateDepartment)]
+    [HasAnyPermission(Permissions.TaskCreateDepartment, Permissions.TaskCreateStageDepartment)]
     public async Task<IActionResult> Create([FromBody] CreateTaskRequest request, CancellationToken ct)
     {
         var id = await _mediator.Send(new TaskCreateCommand(
             request.ProjectId, request.DepartmentId, request.ParentTaskId, request.Title, request.Description,
-            request.ProgressType, request.PlannedQuantity, request.Weight,
-            request.RequiresHandover, request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds,
-            request.IsBatchParent), ct);
+            request.ProgressType, request.PlannedQuantity, request.PlannedWorkUnits, request.IsRequiredGate,
+            request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds,
+            request.IsBatchParent, request.AssignedPmUserId), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -79,7 +80,7 @@ public class ProjectTaskController : ControllerBase
     {
         var ok = await _mediator.Send(new TaskUpdateCommand(
             id, request.Title, request.Description, request.Deadline, request.Priority,
-            request.PlannedQuantity, request.Weight, request.AssigneeUserIds), ct);
+            request.PlannedQuantity, request.PlannedWorkUnits, request.IsRequiredGate, request.AssigneeUserIds), ct);
         return ok ? NoContent() : NotFound();
     }
 
@@ -92,12 +93,12 @@ public class ProjectTaskController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
-    // ⭐ Bấm hoàn thành (quá deadline vẫn Done nhưng gắn WasLate; bàn giao bắt buộc attachment).
+    // ⭐ Bấm hoàn thành (quá deadline vẫn Done nhưng gắn WasLate).
     [HttpPatch("{id:int}/complete")]
     [HasPermission(Permissions.TaskCompleteDepartment)]
     public async Task<IActionResult> Complete(int id, [FromBody] CompleteTaskRequest request, CancellationToken ct)
     {
-        var ok = await _mediator.Send(new TaskCompleteCommand(id, request.RowVersion), ct);
+        var ok = await _mediator.Send(new TaskCompleteCommand(id, request.RowVersion, request.CompletedAt), ct);
         return ok ? NoContent() : NotFound();
     }
 
@@ -109,19 +110,62 @@ public class ProjectTaskController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
+    // ⭐ Gán/đổi PM chịu trách nhiệm 1 Công đoạn — dùng khi tạo để trống, hoặc đổi PM giữa chừng
+    // (PM mới thừa kế toàn bộ công đoạn + task con hiện có, plan mục 4.9/10.2).
+    [HttpPatch("{id:int}/assign-pm")]
+    [HasPermission(Permissions.TaskCreateStageDepartment)]
+    public async Task<IActionResult> AssignPm(int id, [FromBody] AssignPmRequest request, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new TaskAssignPmCommand(id, request.PmUserId), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    // ===== Pause/Resume/Cancel/Restore (plan mục 6.5) — quyền chi tiết (Manager vs PM) check trong handler =====
+
+    [HttpPatch("{id:int}/pause")]
+    [HasAnyPermission(Permissions.TaskCreateStageDepartment, Permissions.TaskCompleteDepartment)]
+    public async Task<IActionResult> Pause(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new TaskPauseCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/resume")]
+    [HasAnyPermission(Permissions.TaskCreateStageDepartment, Permissions.TaskCompleteDepartment)]
+    public async Task<IActionResult> Resume(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new TaskResumeCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/cancel")]
+    [HasAnyPermission(Permissions.TaskCreateStageDepartment, Permissions.TaskCompleteDepartment)]
+    public async Task<IActionResult> Cancel(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new TaskCancelCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/restore")]
+    [HasAnyPermission(Permissions.TaskCreateStageDepartment, Permissions.TaskCompleteDepartment)]
+    public async Task<IActionResult> Restore(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new TaskRestoreCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
     // ===== Attachment (tài liệu/ảnh) =====
 
     [HttpGet("{id:int}/attachments")]
-    [HasAnyPermission(Permissions.ProductionAttachmentReadDepartment, Permissions.ProductionAttachmentReadAll)]
+    [HasAnyPermission(Permissions.ProductionAttachmentReadStage, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> ListAttachments(int id, [FromQuery] bool completion, CancellationToken ct)
     {
         var ownerType = completion ? AttachmentOwnerType.TaskCompletion : AttachmentOwnerType.Task;
         return Ok(await _attachments.ListAsync(ownerType, id, ct));
     }
 
-    // completion=true → bằng chứng nghiệm thu (gắn trước khi Complete task bàn giao).
     [HttpPost("{id:int}/attachments")]
-    [HasPermission(Permissions.ProductionAttachmentWriteDepartment)]
+    [HasAnyPermission(Permissions.ProductionAttachmentWriteStage, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> UploadAttachment(
         int id, IFormFile file, [FromForm] string? note, [FromForm] bool completion, CancellationToken ct)
     {
@@ -136,10 +180,19 @@ public class ProjectTaskController : ControllerBase
     }
 
     [HttpDelete("attachments/{attachmentId:int}")]
-    [HasPermission(Permissions.ProductionAttachmentWriteDepartment)]
+    [HasAnyPermission(Permissions.ProductionAttachmentWriteStage, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> DeleteAttachment(int attachmentId, CancellationToken ct)
     {
         await _attachments.DeleteAsync(attachmentId, ct);
         return NoContent();
+    }
+
+    // Tải file qua backend (thay vì presigned URL hết hạn 15 phút) — cùng quyền đọc như ListAttachments.
+    [HttpGet("attachments/{attachmentId:int}/download")]
+    [HasAnyPermission(Permissions.ProductionAttachmentReadStage, Permissions.ProductionAttachmentReadAll)]
+    public async Task<IActionResult> DownloadAttachment(int attachmentId, CancellationToken ct)
+    {
+        var (result, fileName) = await _attachments.DownloadAsync(attachmentId, ct);
+        return File(result.Content, result.ContentType, fileName);
     }
 }

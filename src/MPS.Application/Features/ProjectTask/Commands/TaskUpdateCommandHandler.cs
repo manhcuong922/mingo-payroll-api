@@ -2,6 +2,7 @@ using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
+using MPS.Domain.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -37,7 +38,7 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         var task = await _tasks.GetByIdWithGraphAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskAsync(task.DepartmentId, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
 
         await ValidateDeadlineScopeAsync(request, task, ct);
         await ValidateQuantityScopeAsync(request, task, ct);
@@ -47,10 +48,20 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         task.Deadline = request.Deadline;
         task.Priority = request.Priority;
 
-        if (task.ProgressType == ProgressType.Quantity)
+        if (task.IsBatchParent)
+        {
             task.PlannedQuantity = request.PlannedQuantity;
+            task.PlannedWorkUnits = request.PlannedWorkUnits;
+        }
+        else if (task.ProgressType == ProgressType.Quantity)
+        {
+            task.PlannedQuantity = request.PlannedQuantity;
+        }
         else
-            task.Weight = request.Weight;
+        {
+            // Gate (Milestone) — không có sản lượng để sửa, chỉ đổi tính bắt buộc.
+            task.IsRequiredGate = request.IsRequiredGate;
+        }
 
         await ApplyAssigneesAsync(request, task, ct);
 
@@ -77,14 +88,14 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         }
     }
 
-    // Tổng sản lượng các con (kể cả sau khi sửa) không được vượt sản lượng công đoạn cha.
+    // Tổng sản lượng các task con Quantity (kể cả sau khi sửa) không được vượt sản lượng công đoạn cha —
+    // Gate (Milestone) không có sản lượng nên bỏ qua, xem TaskCreateCommandHandler.
     private async Task ValidateQuantityScopeAsync(TaskUpdateCommand request, ProjectTaskEntity task, CancellationToken ct)
     {
-        if (task.IsBatchParent || task.ProgressType != ProgressType.Quantity || task.ParentTaskId is not int parentId)
-            return;
+        if (task.IsBatchParent || task.ProgressType != ProgressType.Quantity || task.ParentTaskId is not int parentId) return;
 
         var parent = await _tasks.GetByIdAsync(parentId, ct);
-        if (parent is null) return;
+        if (parent is null || parent.ProgressType != ProgressType.Quantity) return;
 
         var siblingsPlanned = await _tasks.SumChildrenPlannedQuantityAsync(parentId, excludeTaskId: task.Id, ct);
         if (siblingsPlanned + request.PlannedQuantity > parent.PlannedQuantity)
@@ -104,7 +115,20 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         if (newAssignees.Any(id => !members.Contains(id)))
             throw new DomainValidationException("Có người được giao không thuộc xưởng của task.");
 
-        var now = DateTime.UtcNow;
+        if (!task.IsBatchParent)
+        {
+            var currentAssigneeIds = task.Assignees.Select(a => a.UserId).ToHashSet();
+            var addedUserIds = newAssignees.Distinct().Where(id => !currentAssigneeIds.Contains(id));
+            foreach (var userId in addedUserIds)
+            {
+                var openCount = await _tasks.CountActiveByUserAsync(userId, ct);
+                if (openCount > 0)
+                    throw new DomainValidationException(
+                        $"Nhân viên #{userId} đang có task chưa hoàn thành, không thể giao thêm task mới.");
+            }
+        }
+
+        var now = VietnamClock.Now;
         task.Assignees = newAssignees.Distinct()
             .Select(id => new TaskAssignee { TaskId = task.Id, UserId = id, AssignedAt = now })
             .ToList();

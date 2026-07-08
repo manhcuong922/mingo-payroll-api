@@ -24,22 +24,25 @@ public class ProjectController : ControllerBase
     }
 
     [HttpGet]
-    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-        => Ok(await _mediator.Send(new ProjectGetAllQuery(), ct));
+    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment, Permissions.ProjectReadFullDepartment)]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] bool includeCancelled, [FromQuery] ProjectStatus? status, CancellationToken ct)
+        => Ok(await _mediator.Send(new ProjectGetAllQuery(includeCancelled, status), ct));
 
     [HttpGet("paged")]
-    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
+    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment, Permissions.ProjectReadFullDepartment)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? keyword,
         [FromQuery] int? departmentId,
+        [FromQuery] ProjectStatus? status,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] bool includeCancelled = false,
         CancellationToken ct = default)
-        => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize), ct));
+        => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize, includeCancelled, status), ct));
 
     [HttpGet("{id:int}")]
-    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment)]
+    [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment, Permissions.ProjectReadFullDepartment)]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var result = await _mediator.Send(new ProjectGetByIdQuery(id), ct);
@@ -56,7 +59,7 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateProjectRequest request, CancellationToken ct)
     {
         var id = await _mediator.Send(new ProjectCreateCommand(
-            request.Title, request.Description, request.StartDate, request.Deadline, request.Quantity, request.DepartmentId), ct);
+            request.Title, request.Description, request.StartDate, request.Deadline, request.DepartmentId), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -74,7 +77,7 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] UpdateProjectRequest request, CancellationToken ct)
     {
         var ok = await _mediator.Send(new ProjectUpdateCommand(
-            id, request.Title, request.Description, request.Deadline, request.Status, request.Quantity), ct);
+            id, request.Title, request.Description, request.Deadline, request.Status), ct);
         return ok ? NoContent() : NotFound();
     }
 
@@ -91,19 +94,53 @@ public class ProjectController : ControllerBase
     [HasPermission(Permissions.ProjectCompleteDepartment)]
     public async Task<IActionResult> Complete(int id, [FromBody] CompleteProjectRequest request, CancellationToken ct)
     {
-        var ok = await _mediator.Send(new ProjectCompleteCommand(id, request.CompletionNote), ct);
+        var ok = await _mediator.Send(new ProjectCompleteCommand(id, request.CompletionNote, request.CompletedAt), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    // ===== Pause/Resume/Cancel/Restore (plan mục 6.5) — lan truyền xuống toàn bộ Công đoạn + Task con =====
+
+    [HttpPatch("{id:int}/pause")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Pause(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectPauseCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/resume")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Resume(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectResumeCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/cancel")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Cancel(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectCancelCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPatch("{id:int}/restore")]
+    [HasPermission(Permissions.ProjectCompleteDepartment)]
+    public async Task<IActionResult> Restore(int id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectRestoreCommand(id), ct);
         return ok ? NoContent() : NotFound();
     }
 
     // ===== Attachment (tài liệu/ảnh của đơn) =====
 
     [HttpGet("{id:int}/attachments")]
-    [HasAnyPermission(Permissions.ProductionAttachmentReadDepartment, Permissions.ProductionAttachmentReadAll)]
+    [HasAnyPermission(Permissions.ProductionAttachmentReadProject, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> ListAttachments(int id, CancellationToken ct)
         => Ok(await _attachments.ListAsync(AttachmentOwnerType.Project, id, ct));
 
     [HttpPost("{id:int}/attachments")]
-    [HasPermission(Permissions.ProductionAttachmentWriteDepartment)]
+    [HasAnyPermission(Permissions.ProductionAttachmentWriteProject, Permissions.ProductionAttachmentReadAll)]
     public async Task<IActionResult> UploadAttachment(
         int id, IFormFile file, [FromForm] string? note, CancellationToken ct)
     {

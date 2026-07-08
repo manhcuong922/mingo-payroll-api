@@ -181,4 +181,11 @@ public class DepartmentRepository : IDepartmentRepository
             .Where(e => e.DepartmentId == departmentId && e.UserId != null)
             .Select(e => e.UserId!.Value)
             .ToListAsync(ct);
+
+    public async Task<bool> IsUserInDepartmentWithRoleAsync(
+        int userId, int departmentId, int roleId, CancellationToken ct) =>
+        await _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.UserId == userId && e.DepartmentId == departmentId
+                && e.User != null && e.User.RoleId == roleId, ct);
 }

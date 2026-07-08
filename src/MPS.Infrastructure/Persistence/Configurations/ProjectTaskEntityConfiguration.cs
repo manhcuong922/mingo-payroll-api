@@ -16,6 +16,7 @@ public class ProjectTaskEntityConfiguration : IEntityTypeConfiguration<ProjectTa
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.Type).HasConversion<string>().HasMaxLength(30);
         builder.Property(e => e.ProgressType).HasConversion<string>().HasMaxLength(20);
+        builder.Property(e => e.StatusBeforePause).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.RowVersion).IsRowVersion();
 
         // Self-referencing (cây task)
@@ -48,9 +49,17 @@ public class ProjectTaskEntityConfiguration : IEntityTypeConfiguration<ProjectTa
             .HasForeignKey(t => t.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // AssignedPmUserId — PM chịu trách nhiệm 1 Công đoạn (mục 4.9 plan)
+        builder.HasOne(t => t.AssignedPmUser)
+            .WithMany()
+            .HasForeignKey(t => t.AssignedPmUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(t => t.ProjectId);
         builder.HasIndex(t => t.DepartmentId);
         builder.HasIndex(t => t.ParentTaskId);
         builder.HasIndex(t => t.Status);
+        builder.HasIndex(t => t.AssignedPmUserId);
+        builder.HasIndex(t => t.DeletedAt);
     }
 }

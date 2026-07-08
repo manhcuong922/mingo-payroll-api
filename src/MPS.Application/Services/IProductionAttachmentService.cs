@@ -1,3 +1,4 @@
+using MPS.Application.Common.Models.Storage;
 using MPS.Application.DTOs;
 using MPS.Domain.Enums;
 
@@ -14,4 +15,7 @@ public interface IProductionAttachmentService
         AttachmentOwnerType ownerType, int ownerId, CancellationToken ct);
 
     Task DeleteAsync(int attachmentId, CancellationToken ct);
+
+    /// <summary>Tải nội dung file qua backend (thay vì presigned URL) — trả kèm tên file gốc để set Content-Disposition.</summary>
+    Task<(FileDownloadResult Result, string FileName)> DownloadAsync(int attachmentId, CancellationToken ct);
 }

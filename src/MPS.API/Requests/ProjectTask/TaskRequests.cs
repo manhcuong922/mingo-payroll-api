@@ -10,13 +10,16 @@ public record CreateTaskRequest(
     string? Description,
     ProgressType ProgressType,
     int PlannedQuantity,
-    int Weight,
-    bool RequiresHandover,
+    int PlannedWorkUnits,
+    bool IsRequiredGate,
     DateTime? Deadline,
     int? Priority,
     int StepOrder,
     IReadOnlyList<int> AssigneeUserIds,
-    bool IsBatchParent = false);
+    bool IsBatchParent = false,
+    int? AssignedPmUserId = null);
+
+public record AssignPmRequest(int PmUserId);
 
 public record CreateConfidentialTaskRequest(
     string Title,
@@ -31,11 +34,12 @@ public record UpdateTaskRequest(
     DateTime? Deadline,
     int? Priority,
     int PlannedQuantity,
-    int Weight,
+    int PlannedWorkUnits,
+    bool IsRequiredGate,
     IReadOnlyList<int>? AssigneeUserIds);
 
 public record UpdateTaskProgressRequest(
     int CompletedQuantity,
     string RowVersion);
 
-public record CompleteTaskRequest(string RowVersion);
+public record CompleteTaskRequest(string RowVersion, DateTime? CompletedAt = null);

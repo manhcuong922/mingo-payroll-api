@@ -18,7 +18,7 @@ public class ContractTemplateGetAllQueryHandler : IRequestHandler<ContractTempla
 
     public async Task<IReadOnlyList<ContractTemplateDto>> Handle(ContractTemplateGetAllQuery request, CancellationToken cancellationToken)
     {
-        var entities = await _repository.GetAllAsync(request.Category, request.Subtype, request.IsActive, cancellationToken);
+        var entities = await _repository.GetAllAsync(request.Kind, request.Category, request.Subtype, request.IsActive, cancellationToken);
         return _mapper.Map<IReadOnlyList<ContractTemplateDto>>(entities);
     }
 }

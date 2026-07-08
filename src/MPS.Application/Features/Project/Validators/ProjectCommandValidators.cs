@@ -1,5 +1,6 @@
 using FluentValidation;
 using MPS.Application.Features.Project.Commands;
+using MPS.Domain.Common;
 
 namespace MPS.Application.Features.Project.Validators;
 
@@ -9,7 +10,6 @@ public class ProjectUpdateCommandValidator : AbstractValidator<ProjectUpdateComm
     {
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.Quantity).GreaterThan(0).WithMessage("Số lượng phải lớn hơn 0.");
     }
 }
 
@@ -20,6 +20,10 @@ public class ProjectCompleteCommandValidator : AbstractValidator<ProjectComplete
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.CompletionNote).MaximumLength(4000)
             .When(x => !string.IsNullOrWhiteSpace(x.CompletionNote));
+        RuleFor(x => x.CompletedAt)
+            .LessThanOrEqualTo(_ => VietnamClock.Now)
+            .When(x => x.CompletedAt.HasValue)
+            .WithMessage("Ngày hoàn thành không được ở tương lai.");
     }
 }
 

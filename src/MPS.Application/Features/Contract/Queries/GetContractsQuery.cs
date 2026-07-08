@@ -9,5 +9,6 @@ public sealed record GetContractsQuery(
     int? EmployeeInformationId,
     ContractStatus? Status,
     ContractCategory? Category,
+    ContractKind? Kind,
     int Page,
     int Size) : IRequest<PagedResult<ContractSummaryDto>>;

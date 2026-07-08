@@ -60,6 +60,7 @@ public class CreateContractTerminationCommandHandler : IRequestHandler<CreateCon
         // Notice-day rules (Điều 35/36) — pure validator, no I/O.
         var checkResult = TerminationNoticeValidator.Validate(new TerminationNoticeCheckInput(
             Party: request.TerminationParty,
+            Kind: contract.Kind,
             Category: contract.ContractCategory,
             EffectiveFrom: contract.EffectiveFrom,
             EffectiveTo: contract.EffectiveTo,
