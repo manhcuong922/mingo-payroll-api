@@ -161,18 +161,61 @@ public sealed record AttendanceRecordDto(
     string? Notes,
     string? OverrideReason,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    // OT metadata — null cho record ca chính
+    int? OvertimeRequestId = null,
+    TimeOnly? OtStartTime = null,
+    TimeOnly? OtEndTime = null,
+    string? OvertimeProjectTitle = null);
 
-public sealed record EmployeeAttendanceSummaryDto(
+/// <summary>
+/// OT Approved chưa được chấm công cho 1 ngày — FE hiển thị row riêng trong daily
+/// roster để HR click chấm. Sau khi chấm → AttendanceRecord tạo với OvertimeRequestId.
+/// </summary>
+public sealed record PendingOvertimeAttendanceDto(
+    int OvertimeRequestId,
     int EmployeeInformationId,
     string EmployeeFullName,
+    DateOnly WorkDate,
+    TimeOnly OtStartTime,
+    TimeOnly OtEndTime,
+    decimal OtHours,
+    int? ProjectId,
+    string? ProjectTitle);
+
+public sealed record EmployeeAttendanceSummaryDto(
+    // Định danh
+    int EmployeeInformationId,
+    string EmployeeFullName,
+    string? EmployeeCode,
+    int? DepartmentId,
+    string? DepartmentName,
+    string? PositionName,
+
+    // Status-based counts — reused bởi Báo cáo cũ (AttendanceReportPanel)
     int PresentDays,
     int AbsentDays,
     int LateDays,
     int HalfDays,
     int OnLeaveDays,
     int EarlyLeaveDays,
-    int TotalRecords);
+    int TotalRecords,
+
+    // DayType-based aggregations — cho Bảng chấm công tháng.
+    // Halfday cộng 0.5 vào DayType tương ứng của ngày đó.
+    decimal NormalDays,
+    decimal WeeklyRestDays,
+    decimal HolidayDays,
+    decimal PaidLeaveDays,
+
+    // Giờ công (từ AttendanceRecord.DayHours/NightHours).
+    decimal DayHours,
+    decimal NightHours,
+    decimal TotalHours,
+
+    // Quy đổi × hệ số (WorkRateNormal/WeeklyRest/Holiday × hours + NightHours × 1.3).
+    // Trả decimal giờ; FE chia StandardHours nếu muốn hiển thị "công".
+    decimal EquivalentHours);
 
 public sealed record AttendanceSettingDto(
     int Id,
@@ -211,7 +254,25 @@ public sealed record OvertimeRequestDto(
     string? ReviewNote,
     int? ReviewedByUserId,
     DateTime? ReviewedAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    // Batch workflow — nullable cho legacy records
+    int? ProjectId,
+    string? ProjectTitle,
+    OvertimeApproverRoute? ApproverRoute,
+    Guid? BatchId);
+
+public sealed record PmProjectDto(
+    int Id,
+    string Title,
+    int? DepartmentId,
+    string? DepartmentName,
+    string Status);
+
+public sealed record EligibleEmployeeForOvertimeDto(
+    int Id,
+    string FullName,
+    string? EmployeeCode,
+    string? PositionName);
 
 public sealed record OvertimeSlotSummaryDto(
     int Id,

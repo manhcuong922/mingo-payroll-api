@@ -9,6 +9,25 @@ public class OvertimeRequest
     public int EmployeeInformationId { get; set; }
     public EmployeeInformation EmployeeInformation { get; set; } = null!;
 
+    /// <summary>
+    /// FK tới Project (đơn hàng SX). Nullable cho legacy records (self-created cũ)
+    /// không vỡ; NEW records luôn required (batch handler enforce).
+    /// </summary>
+    public int? ProjectId { get; set; }
+    public Project? Project { get; set; }
+
+    /// <summary>
+    /// PM chọn route duyệt khi tạo — HR hoặc DepartmentManager. Handler duyệt
+    /// gate bằng field này. Nullable cho legacy records.
+    /// </summary>
+    public AttendanceEnums.OvertimeApproverRoute? ApproverRoute { get; set; }
+
+    /// <summary>
+    /// Nhóm N request cùng batch. PM tạo cho 5 NV → 5 record cùng BatchId để
+    /// UI group hiển thị "1 batch của PM X — 5 NV, project Y".
+    /// </summary>
+    public Guid? BatchId { get; set; }
+
     public DateOnly WorkDate { get; set; }
     public TimeOnly OtStartTime { get; set; }
     public TimeOnly OtEndTime { get; set; }

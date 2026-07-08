@@ -11,8 +11,20 @@ public class AttendanceRecord
 
     public DateOnly WorkDate { get; set; }
 
-    public int ShiftTemplateId { get; set; }
-    public ShiftTemplate ShiftTemplate { get; set; } = null!;
+    /// <summary>
+    /// FK tới ShiftTemplate — NULL khi record này chấm cho OT (dùng OvertimeRequestId).
+    /// Invariant: exactly-one-of (ShiftTemplateId, OvertimeRequestId) phải non-null.
+    /// </summary>
+    public int? ShiftTemplateId { get; set; }
+    public ShiftTemplate? ShiftTemplate { get; set; }
+
+    /// <summary>
+    /// FK tới OvertimeRequest — set khi HR chấm công cho OT đã được duyệt.
+    /// Payroll composer join theo field này để tra multiplier từ slot khớp giờ.
+    /// NULL cho record ca chính (dùng ShiftTemplateId).
+    /// </summary>
+    public int? OvertimeRequestId { get; set; }
+    public OvertimeRequest? OvertimeRequest { get; set; }
 
     public DateTime? CheckInAt { get; set; }
     public DateTime? CheckOutAt { get; set; }

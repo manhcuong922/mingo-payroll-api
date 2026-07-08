@@ -37,6 +37,9 @@ public class RejectOvertimeRequestCommandHandler : IRequestHandler<RejectOvertim
         if (existing.CreatedByUserId == userId)
             throw new DomainValidationException("BR-10: Self-review is forbidden.");
 
+        // Reject cũng phải gate route giống Approve.
+        ApproveOvertimeRequestCommandHandler.EnsureApproverRouteMatches(existing.ApproverRoute, _currentUser.RoleId);
+
         var now = _clock.UtcNow;
         existing.Status = OtRequestStatus.Rejected;
         existing.ReviewedByUserId = userId;

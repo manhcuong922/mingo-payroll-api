@@ -20,6 +20,7 @@ public interface IEmployeeInformationRepository
         bool? hasActiveContract,
         int page,
         int pageSize,
+        int? departmentId = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default);

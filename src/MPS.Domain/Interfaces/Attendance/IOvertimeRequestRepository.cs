@@ -23,4 +23,12 @@ public interface IOvertimeRequestRepository
     Task<int> AddAsync(OvertimeRequest entity, CancellationToken cancellationToken = default);
 
     Task<bool> UpdateAsync(OvertimeRequest entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// OT Approved trên ngày X mà chưa có AttendanceRecord tương ứng — HR chấm cho các OT này.
+    /// Include EmployeeInformation + Project.
+    /// </summary>
+    Task<IReadOnlyList<OvertimeRequest>> GetApprovedWithoutAttendanceOnDateAsync(
+        DateOnly workDate,
+        CancellationToken cancellationToken = default);
 }

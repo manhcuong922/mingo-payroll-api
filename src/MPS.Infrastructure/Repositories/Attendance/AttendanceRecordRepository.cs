@@ -56,11 +56,13 @@ public class AttendanceRecordRepository : IAttendanceRecordRepository
         return await _context.AttendanceRecords
             .AsNoTracking()
             .Include(r => r.ShiftTemplate)
+            .Include(r => r.OvertimeRequest)
+                .ThenInclude(o => o!.Project)
             .Where(r => r.EmployeeInformationId == employeeInformationId
                 && r.WorkDate >= fromDate
                 && r.WorkDate <= toDate)
             .OrderBy(r => r.WorkDate)
-            .ThenBy(r => r.ShiftTemplate.StartTime)
+            .ThenBy(r => r.ShiftTemplate != null ? r.ShiftTemplate.StartTime : r.OvertimeRequest!.OtStartTime)
             .ToListAsync(cancellationToken);
     }
 
@@ -91,15 +93,48 @@ public class AttendanceRecordRepository : IAttendanceRecordRepository
         return (items, total);
     }
 
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<AttendanceRecord>>> GetForSummaryByEmployeesAsync(
+        IReadOnlyList<int> employeeInformationIds,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (employeeInformationIds.Count == 0)
+            return new Dictionary<int, IReadOnlyList<AttendanceRecord>>();
+
+        var records = await _context.AttendanceRecords
+            .AsNoTracking()
+            .Include(r => r.ShiftTemplate)
+                .ThenInclude(s => s.AppliedAttendanceRule)
+            .Where(r => employeeInformationIds.Contains(r.EmployeeInformationId)
+                     && r.WorkDate >= fromDate
+                     && r.WorkDate <= toDate)
+            .ToListAsync(cancellationToken);
+
+        return records
+            .GroupBy(r => r.EmployeeInformationId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<AttendanceRecord>)g.ToList());
+    }
+
+    public Task<AttendanceRecord?> GetByOvertimeRequestIdAsync(
+        int overtimeRequestId, CancellationToken cancellationToken = default) =>
+        _context.AttendanceRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.OvertimeRequestId == overtimeRequestId, cancellationToken);
+
     public async Task<IReadOnlyList<AttendanceRecord>> GetByDateAsync(DateOnly workDate, CancellationToken cancellationToken = default)
     {
         return await _context.AttendanceRecords
             .AsNoTracking()
             .Include(r => r.EmployeeInformation)
             .Include(r => r.ShiftTemplate)
+            .Include(r => r.OvertimeRequest)
+                .ThenInclude(o => o!.Project)
             .Where(r => r.WorkDate == workDate)
             .OrderBy(r => r.EmployeeInformation.FullName)
-            .ThenBy(r => r.ShiftTemplate.StartTime)
+            .ThenBy(r => r.ShiftTemplate != null ? r.ShiftTemplate.StartTime : r.OvertimeRequest!.OtStartTime)
             .ToListAsync(cancellationToken);
     }
 

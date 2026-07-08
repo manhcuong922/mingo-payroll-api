@@ -65,6 +65,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         bool? hasActiveContract,
         int page,
         int pageSize,
+        int? departmentId = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.EmployeeInformations
@@ -85,6 +86,9 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
 
         if (positionId.HasValue)
             query = query.Where(e => e.PositionId == positionId.Value);
+
+        if (departmentId.HasValue)
+            query = query.Where(e => e.DepartmentId == departmentId.Value);
 
         if (hasAccount.HasValue)
             query = hasAccount.Value

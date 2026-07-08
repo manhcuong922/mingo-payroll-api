@@ -38,6 +38,23 @@ public interface IAttendanceRecordRepository
 
     Task<IReadOnlyList<AttendanceRecord>> GetByDateAsync(DateOnly workDate, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Lookup record đã chấm cho 1 OvertimeRequest. Unique index nên trả tối đa 1.
+    /// Null → chưa chấm.
+    /// </summary>
+    Task<AttendanceRecord?> GetByOvertimeRequestIdAsync(int overtimeRequestId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Batch load records cho danh sách NV trong range — Include ShiftTemplate.AppliedAttendanceRule
+    /// để aggregate hệ số công không N+1. Return dictionary theo EmployeeInformationId.
+    /// Dùng bởi Bảng chấm công tháng (GetAttendanceSummaryQueryHandler).
+    /// </summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<AttendanceRecord>>> GetForSummaryByEmployeesAsync(
+        IReadOnlyList<int> employeeInformationIds,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default);
+
     Task<int> AddAsync(AttendanceRecord entity, CancellationToken cancellationToken = default);
 
     Task<bool> UpdateAsync(AttendanceRecord entity, CancellationToken cancellationToken = default);

@@ -86,15 +86,17 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
             return Array.Empty<(int, DateOnly, int)>();
         }
 
+        // Filter ShiftTemplateId != null — record OT (ShiftTemplateId=null) không tính vào lock shift.
         var rows = await _context.AttendanceRecords
             .AsNoTracking()
             .Where(r => employeeInformationIds.Contains(r.EmployeeInformationId)
                 && r.WorkDate >= fromDate
-                && r.WorkDate <= toDate)
+                && r.WorkDate <= toDate
+                && r.ShiftTemplateId != null)
             .Select(r => new { r.EmployeeInformationId, r.WorkDate, r.ShiftTemplateId })
             .ToListAsync(cancellationToken);
 
-        return rows.Select(r => (r.EmployeeInformationId, r.WorkDate, r.ShiftTemplateId)).ToList();
+        return rows.Select(r => (r.EmployeeInformationId, r.WorkDate, r.ShiftTemplateId!.Value)).ToList();
     }
 
     public async Task ApplyBatchAsync(

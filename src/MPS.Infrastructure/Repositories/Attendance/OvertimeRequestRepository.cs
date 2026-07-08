@@ -107,4 +107,24 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         await _context.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    public async Task<IReadOnlyList<OvertimeRequest>> GetApprovedWithoutAttendanceOnDateAsync(
+        DateOnly workDate, CancellationToken cancellationToken = default)
+    {
+        // LEFT JOIN AttendanceRecords via OvertimeRequestId, filter WHERE record IS NULL.
+        var query =
+            from ot in _context.OvertimeRequests.AsNoTracking()
+                .Include(o => o.EmployeeInformation)
+                .Include(o => o.Project)
+            where ot.WorkDate == workDate
+               && ot.Status == OtRequestStatus.Approved
+            join rec in _context.AttendanceRecords.AsNoTracking()
+                on ot.Id equals rec.OvertimeRequestId into recs
+            from rec in recs.DefaultIfEmpty()
+            where rec == null
+            orderby ot.EmployeeInformation.FullName, ot.OtStartTime
+            select ot;
+
+        return await query.ToListAsync(cancellationToken);
+    }
 }
