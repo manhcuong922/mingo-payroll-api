@@ -48,6 +48,7 @@ public sealed class ProjectQueryProgressTests
             ProgressType = ProgressType.Quantity,
             PlannedQuantity = 100,
             CompletedQuantity = 50,
+            PlannedWorkUnits = 100,
             Status = TaskItemStatus.InProgress,
         };
         var child2 = new MPS.Domain.Entities.ProjectTask
@@ -58,6 +59,7 @@ public sealed class ProjectQueryProgressTests
             ProgressType = ProgressType.Quantity,
             PlannedQuantity = 100,
             CompletedQuantity = 100,
+            PlannedWorkUnits = 100,
             Status = TaskItemStatus.Done,
         };
 

@@ -6,6 +6,13 @@ using Xunit;
 
 namespace MPS.Application.Tests.Services;
 
+// Refactor task-full-generation: tiến độ đệ quy N tầng theo WBS.
+//   - Work-leaf (Quantity): min(Completed,Planned)/Planned.
+//   - Container: Σ(child.PlannedWorkUnits × childPct) / Σ(child.PlannedWorkUnits) (cap 1.0)
+//       ⇒ mọi con xong 100% thì nhóm = 100% (trọng số con soạn tổng = 100, không under-allocation).
+//   - Gate (Milestone): KHÔNG tham gia %.
+//   - Paused/Cancelled: loại khỏi tử & mẫu ở mọi tầng (tự chuẩn hoá theo phần còn hiệu lực).
+//   - BAC = Σ PlannedWorkUnits node top-level; EV = earned; PV = BAC × time; SPI = EV/PV.
 public sealed class ProgressServiceTests
 {
     private readonly ProgressService _sut = new();
@@ -13,47 +20,47 @@ public sealed class ProgressServiceTests
     private static Project Project(DateOnly start, DateTime? deadline) =>
         new() { Id = 1, StartDate = start, Deadline = deadline, Quantity = 100 };
 
-    private static ProjectTask Quantity(int planned, int completed, bool done = false, int? parentId = null) =>
+    // Container = node có con (nhận diện theo cấu trúc). PlannedWorkUnits = trọng số của node khi rollup lên cha.
+    private static ProjectTask Container(int id, int plannedWorkUnits, int? parentId = null,
+        TaskItemStatus status = TaskItemStatus.InProgress) =>
         new()
         {
-            ProgressType = ProgressType.Quantity,
-            IsBatchParent = false,
-            PlannedQuantity = planned,
-            CompletedQuantity = completed,
-            Status = done ? TaskItemStatus.Done : TaskItemStatus.InProgress,
+            Id = id, ProgressType = ProgressType.Quantity, IsBatchParent = true,
+            PlannedQuantity = 0, PlannedWorkUnits = plannedWorkUnits,
+            Status = status, ParentTaskId = parentId,
+        };
+
+    // Work-leaf Quantity: PlannedQuantity là mẫu số %, PlannedWorkUnits là trọng số khi rollup lên cha.
+    private static ProjectTask Leaf(int id, int planned, int completed, int workUnits,
+        int? parentId = null, bool done = false, TaskItemStatus? status = null) =>
+        new()
+        {
+            Id = id, ProgressType = ProgressType.Quantity, IsBatchParent = false,
+            PlannedQuantity = planned, CompletedQuantity = completed, PlannedWorkUnits = workUnits,
+            Status = status ?? (done ? TaskItemStatus.Done : TaskItemStatus.InProgress),
             ParentTaskId = parentId,
         };
 
-    private static ProjectTask Gate(bool done, bool isRequired = true, int? parentId = null) =>
+    private static ProjectTask Gate(int id, bool done, int? parentId = null) =>
         new()
         {
-            ProgressType = ProgressType.Milestone,
-            IsBatchParent = false,
-            IsRequiredGate = isRequired,
-            Status = done ? TaskItemStatus.Done : TaskItemStatus.Todo,
-            ParentTaskId = parentId,
-        };
-
-    // plannedQuantity = sản lượng kế hoạch của CHÍNH công đoạn (mẫu số StagePercent).
-    // plannedWorkUnits = khối lượng công việc — trọng số của công đoạn khi tổng hợp lên Đơn.
-    private static ProjectTask Stage(int id, int plannedQuantity = 0, int plannedWorkUnits = 0) =>
-        new()
-        {
-            Id = id, IsBatchParent = true, Status = TaskItemStatus.InProgress,
-            ProgressType = ProgressType.Quantity,
-            PlannedQuantity = plannedQuantity, PlannedWorkUnits = plannedWorkUnits,
+            Id = id, ProgressType = ProgressType.Milestone, IsRequiredGate = true,
+            Status = done ? TaskItemStatus.Done : TaskItemStatus.Todo, ParentTaskId = parentId,
         };
 
     [Fact]
-    public void Compute_CompletionByWeight_QuantityTasks()
+    public void Compute_Container_WeightsChildrenByWorkUnits()
     {
         var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-5));
         var project = Project(start, DateTime.UtcNow.AddDays(5));
-        // v8 (docs/plans/plan.md): StagePercent = SUM(CompletedQuantity con Quantity) / Stage.PlannedQuantity.
-        // Stage kế hoạch 200 (100+100), 2 con lần lượt Done 50 và 100 → earned 150/200 = 75%.
-        // 1 công đoạn duy nhất, PlannedWorkUnits=200 (bất kỳ giá trị dương nào) → ProjectPercent = StagePercent = 75%.
-        var stage = Stage(1, plannedQuantity: 200, plannedWorkUnits: 200);
-        var tasks = new List<ProjectTask> { stage, Quantity(100, 50, parentId: 1), Quantity(100, 100, parentId: 1) };
+        // Container capacity 200; 2 con lấp đầy (100+100). Con A 50% (50/100), con B 100% (100/100).
+        // earned = 100×0.5 + 100×1.0 = 150 ; denom = 200 ⇒ 75%.
+        var tasks = new List<ProjectTask>
+        {
+            Container(1, plannedWorkUnits: 200),
+            Leaf(2, planned: 100, completed: 50, workUnits: 100, parentId: 1),
+            Leaf(3, planned: 100, completed: 100, workUnits: 100, parentId: 1, done: true),
+        };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
@@ -61,42 +68,82 @@ public sealed class ProgressServiceTests
     }
 
     [Fact]
-    public void Compute_ExcludesBatchParents_ToAvoidDoubleCount()
+    public void Compute_Container_NormalizesByChildrenSum_NoUnderAllocation()
     {
+        // Mẫu số = TỔNG trọng số con hiện có (không phải capacity riêng của container).
+        // Container "khai" 500 nhưng con duy nhất (trọng số 300) xong 100% ⇒ 300/300 = 100%
+        // (mọi con xong = nhóm 100%, không còn under-allocation khoá trần).
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
-        var stage = Stage(1, plannedQuantity: 100, plannedWorkUnits: 100);
-        var child = Quantity(100, 50, parentId: 1);
-        var tasks = new List<ProjectTask> { stage, child };
+        var tasks = new List<ProjectTask>
+        {
+            Container(1, plannedWorkUnits: 500),
+            Leaf(2, planned: 300, completed: 300, workUnits: 300, parentId: 1, done: true),
+        };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
-        // StagePercent = 50/100 = 50% → ProjectPercent (1 stage) = 50%
+        result.CompletionPercent.Should().Be(100);
+    }
+
+    [Fact]
+    public void Compute_Container_NotDoubleCounted()
+    {
+        var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
+        // Chỉ con Quantity đóng góp; container không tự cộng thêm capacity của chính nó.
+        var tasks = new List<ProjectTask>
+        {
+            Container(1, plannedWorkUnits: 100),
+            Leaf(2, planned: 100, completed: 50, workUnits: 100, parentId: 1),
+        };
+
+        var result = _sut.Compute(project, tasks, DateTime.UtcNow);
+
         result.CompletionPercent.Should().Be(50);
     }
 
     [Fact]
     public void Compute_Gate_DoesNotAffectCompletionPercent()
     {
-        // v8: Gate/Checklist (Milestone) KHÔNG tham gia % dù Done hay chưa — chỉ chặn TrySetParentDoneAsync,
-        // không đóng góp số liệu vào StagePercent/ProjectPercent.
+        // Gate (Milestone) không tham gia % dù Done hay chưa — chỉ chặn Done container.
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
-        var stage = Stage(1, plannedQuantity: 100, plannedWorkUnits: 100);
         var tasks = new List<ProjectTask>
         {
-            stage, Quantity(100, 50, parentId: 1), Gate(done: false, parentId: 1), Gate(done: true, parentId: 1),
+            Container(1, plannedWorkUnits: 100),
+            Leaf(2, planned: 100, completed: 50, workUnits: 100, parentId: 1),
+            Gate(3, done: false, parentId: 1),
+            Gate(4, done: true, parentId: 1),
         };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
-        // Chỉ con Quantity tham gia: 50/100 = 50%, bất kể Gate Done hay chưa.
         result.CompletionPercent.Should().Be(50);
+    }
+
+    [Fact]
+    public void Compute_Recurses_MultiTier()
+    {
+        var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
+        // Gốc(200) → [Nhánh A(100) → leaf 100% , Nhánh B(100) → leaf 50%]. A=1.0, B=0.5.
+        // Gốc = (100×1 + 100×0.5)/200 = 0.75.
+        var tasks = new List<ProjectTask>
+        {
+            Container(1, plannedWorkUnits: 200),
+            Container(2, plannedWorkUnits: 100, parentId: 1),
+            Container(3, plannedWorkUnits: 100, parentId: 1),
+            Leaf(4, planned: 100, completed: 100, workUnits: 100, parentId: 2, done: true),
+            Leaf(5, planned: 100, completed: 50, workUnits: 100, parentId: 3),
+        };
+
+        var result = _sut.Compute(project, tasks, DateTime.UtcNow);
+
+        result.CompletionPercent.Should().Be(75);
     }
 
     [Fact]
     public void Compute_ScheduleStatus_Late_WhenPastDeadlineAndNotDone()
     {
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-10)), DateTime.UtcNow.AddDays(-1));
-        var tasks = new List<ProjectTask> { Quantity(100, 50) };
+        var tasks = new List<ProjectTask> { Leaf(1, planned: 100, completed: 50, workUnits: 100) };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
@@ -106,10 +153,9 @@ public sealed class ProgressServiceTests
     [Fact]
     public void Compute_ScheduleStatus_AtRisk_WhenWorkLagsTime()
     {
-        // Đã trôi ~90% thời gian nhưng chỉ xong 10% việc → AtRisk.
         var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-9));
         var project = Project(start, DateTime.UtcNow.AddDays(1));
-        var tasks = new List<ProjectTask> { Quantity(100, 10) };
+        var tasks = new List<ProjectTask> { Leaf(1, planned: 100, completed: 10, workUnits: 100) };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
@@ -120,7 +166,7 @@ public sealed class ProgressServiceTests
     public void Compute_ReturnsZeroPv_WhenNoDeadline()
     {
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), deadline: null);
-        var tasks = new List<ProjectTask> { Quantity(100, 50) };
+        var tasks = new List<ProjectTask> { Leaf(1, planned: 100, completed: 50, workUnits: 100) };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
@@ -130,54 +176,44 @@ public sealed class ProgressServiceTests
     }
 
     [Fact]
-    public void Compute_Spi_ExcludesQuantityTasks_OfCancelledStage()
+    public void Compute_ExcludesCancelledTopLevel_FromBacAndEv()
     {
-        // Bug thực tế: 1 đơn có Stage A (Cancelled, đã hoàn thành 100/100 trước khi huỷ) và Stage B
-        // (InProgress, ì ạch 10/100). Nếu SPI cộng cả Stage A đã huỷ, BAC/EV bị đẩy lên sai và SPI
-        // có thể báo "Vượt tiến độ" trong khi ScheduleStatus báo "AtRisk" cho cùng một đơn — mâu thuẫn
-        // hiển thị trên UI. Sau fix: Task con của Stage Cancelled không được tính vào BAC/EV.
+        // Node Cancelled (đã xong 100/100 trước khi huỷ) không được kéo BAC/EV lên gây SPI ảo.
         var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-9));
         var project = Project(start, DateTime.UtcNow.AddDays(1)); // ~90% thời gian đã trôi
-        var cancelledStage = new ProjectTask
-        {
-            Id = 1, IsBatchParent = true, Status = TaskItemStatus.Cancelled,
-            ProgressType = ProgressType.Quantity, PlannedQuantity = 100, PlannedWorkUnits = 100,
-        };
-        var activeStage = Stage(2, plannedQuantity: 100, plannedWorkUnits: 100);
         var tasks = new List<ProjectTask>
         {
-            cancelledStage, activeStage,
-            Quantity(100, 100, parentId: 1), // con của Stage đã huỷ — không được tính vào SPI
-            Quantity(100, 10, parentId: 2),  // Stage còn hiệu lực, ì ạch
+            Leaf(1, planned: 100, completed: 100, workUnits: 100, status: TaskItemStatus.Cancelled),
+            Leaf(2, planned: 100, completed: 10, workUnits: 100),
         };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
-        // BAC/EV chỉ tính trên Stage 2: BAC=100, EV=10 → SPI thấp, khớp với ScheduleStatus AtRisk.
+        // Chỉ node còn hiệu lực: BAC=100, EV=10 ⇒ SPI thấp, khớp AtRisk.
+        result.EarnedValue.Should().Be(10);
         result.SchedulePerformanceIndex.Should().BeLessThan(1);
         result.ScheduleStatus.Should().Be("AtRisk");
     }
 
     [Fact]
-    public void Compute_Spi_UsesStageWorkUnits_NotOnlyExistingLeafTasks()
+    public void Compute_Spi_UsesWorkUnits_AndExcludesPausedBranch()
     {
         var project = Project(new DateOnly(2026, 1, 1), new DateTime(2026, 1, 21));
-        var cut = Stage(1, plannedQuantity: 300, plannedWorkUnits: 300);
-        cut.Status = TaskItemStatus.Done;
-        var pausedJoin = Stage(2, plannedQuantity: 300, plannedWorkUnits: 300);
-        pausedJoin.Status = TaskItemStatus.Paused;
-        var paint = Stage(3, plannedQuantity: 300, plannedWorkUnits: 300);
-        var pack = Stage(4, plannedQuantity: 300, plannedWorkUnits: 300);
+        // 4 công đoạn top-level, capacity 300 mỗi cái.
+        //  - cut: container Done, 2 leaf 150+150 xong ⇒ 100% (earned 300).
+        //  - pausedJoin: Paused ⇒ loại khỏi BAC (cả con của nó).
+        //  - paint, pack: leaf trống ⇒ 0%.
+        // BAC = 300×3 = 900 (loại paused); EV = 300; time = 75% ⇒ PV=675, SPI≈0.44, completion 33%.
         var tasks = new List<ProjectTask>
         {
-            cut,
-            pausedJoin,
-            paint,
-            pack,
-            Quantity(150, 150, done: true, parentId: 1),
-            Quantity(150, 150, done: true, parentId: 1),
-            Quantity(150, 60, parentId: 2),
-            Quantity(150, 60, parentId: 2),
+            Container(1, plannedWorkUnits: 300, status: TaskItemStatus.Done),
+            Container(2, plannedWorkUnits: 300, status: TaskItemStatus.Paused),
+            Leaf(3, planned: 300, completed: 0, workUnits: 300),
+            Leaf(4, planned: 300, completed: 0, workUnits: 300),
+            Leaf(5, planned: 150, completed: 150, workUnits: 150, parentId: 1, done: true),
+            Leaf(6, planned: 150, completed: 150, workUnits: 150, parentId: 1, done: true),
+            Leaf(7, planned: 150, completed: 60, workUnits: 150, parentId: 2),
+            Leaf(8, planned: 150, completed: 60, workUnits: 150, parentId: 2),
         };
 
         var result = _sut.Compute(project, tasks, new DateTime(2026, 1, 16));
@@ -191,14 +227,14 @@ public sealed class ProgressServiceTests
     }
 
     [Fact]
-    public void Compute_CountsStages_FromBatchParents()
+    public void Compute_CountsTopLevelNodes_AsStages()
     {
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
-        var stageDone = Quantity(100, 100, done: true);
-        stageDone.IsBatchParent = true;
-        var stageOpen = Quantity(100, 0);
-        stageOpen.IsBatchParent = true;
-        var tasks = new List<ProjectTask> { stageDone, stageOpen, Quantity(100, 50) };
+        var tasks = new List<ProjectTask>
+        {
+            Leaf(1, planned: 100, completed: 100, workUnits: 100, done: true),
+            Leaf(2, planned: 100, completed: 0, workUnits: 100),
+        };
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 

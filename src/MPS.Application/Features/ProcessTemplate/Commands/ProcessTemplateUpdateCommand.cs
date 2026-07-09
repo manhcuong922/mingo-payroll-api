@@ -7,5 +7,6 @@ public record ProcessTemplateUpdateCommand(
     string Name,
     string? Description,
     bool IsActive,
+    int BaseQuantity,
     int? DefaultDepartmentId,
     IReadOnlyList<ProcessStepInput> Steps) : IRequest<bool>;

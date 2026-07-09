@@ -15,8 +15,13 @@ public record ProjectTaskDto(
     DateTime? Deadline,
     int PlannedQuantity,                // Gate: luôn 0
     int CompletedQuantity,              // Gate: luôn 0
-    int PlannedWorkUnits,               // chỉ có ý nghĩa khi IsBatchParent=true — tỷ trọng công đoạn lên đơn
+    int PlannedWorkUnits,               // trọng số/capacity ở MỌI node (container: mẫu số rollup; leaf: đóng góp)
     bool IsRequiredGate,                // chỉ có ý nghĩa khi ProgressType=Milestone (Gate)
+    int PlannedHeadcount,               // số người kế hoạch của vị trí lá
+    int AssignedHeadcount,              // số người đã gán (Assignees.Count)
+    int? RequiredPositionId,            // chức danh bắt buộc để gán vào vị trí lá
+    string? RequiredPositionName,
+    double? DeadlineOffsetRatio,        // vị trí tương đối trong timeline đơn (0..1)
     int? ProjectId,
     string? ProjectTitle,
     int? DepartmentId,
@@ -26,8 +31,7 @@ public record ProjectTaskDto(
     IReadOnlyList<TaskAssigneeDto> Assignees,   // 1 người / nhóm
     int CreatedByUserId,
     string? CreatedByName,
-    bool IsBatchParent,
-    int? AssignedPmUserId,               // chỉ có ý nghĩa khi IsBatchParent=true — PM đang phụ trách Công đoạn
+    bool IsBatchParent,                  // node container (gộp con) ở bất kỳ tầng nào
     int TaskCompletionPercent,          // Quantity: Completed/Planned×100; Milestone: Done?100:0
     bool WasLate,                       // Done sau deadline
     string? CompletedByName,

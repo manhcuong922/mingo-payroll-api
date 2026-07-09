@@ -22,6 +22,11 @@ public class Project
     public int? DepartmentId { get; set; }
     public Department? Department { get; set; }
 
+    // ⭐ Tổ trưởng sản xuất (Production Team Leader, role 6) chịu trách nhiệm + cập nhật tiến độ đơn (refactor R/S).
+    // 1 người/đơn. Đặt khi tạo đơn; đổi qua PATCH /Project/{id}/responsible. Đơn cũ (trước refactor) = null.
+    public int? ResponsibleUserId { get; set; }
+    public User? ResponsibleUser { get; set; }
+
     // --- Đóng đơn thủ công (v5) ---
     public int? CompletedByUserId { get; set; }
     public User? CompletedBy { get; set; }

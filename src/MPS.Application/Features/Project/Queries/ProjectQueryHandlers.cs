@@ -77,17 +77,8 @@ public class ProjectGetAllQueryHandler : IRequestHandler<ProjectGetAllQuery, IRe
     private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
         IReadOnlyList<Domain.Entities.ProjectTask> tasks)
     {
-        if (ProjectScopeGuard.CanSeeFullDepartmentProjects(_currentUser)) return tasks;
-
-        var userId = _currentUser.UserId;
-        var hiddenStageIds = tasks
-            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
-            .Select(t => t.Id)
-            .ToHashSet();
-
-        return tasks
-            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
-            .ToList();
+        // refactor R/S: bỏ per-stage PM — tiến độ tính trọn cây đơn cho mọi vai trò được phép đọc.
+        return tasks;
     }
 }
 
@@ -162,17 +153,8 @@ public class ProjectGetPagedQueryHandler : IRequestHandler<ProjectGetPagedQuery,
     private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
         IReadOnlyList<Domain.Entities.ProjectTask> tasks)
     {
-        if (ProjectScopeGuard.CanSeeFullDepartmentProjects(_currentUser)) return tasks;
-
-        var userId = _currentUser.UserId;
-        var hiddenStageIds = tasks
-            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
-            .Select(t => t.Id)
-            .ToHashSet();
-
-        return tasks
-            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
-            .ToList();
+        // refactor R/S: bỏ per-stage PM — tiến độ tính trọn cây đơn cho mọi vai trò được phép đọc.
+        return tasks;
     }
 }
 
@@ -224,16 +206,7 @@ public class ProjectGetByIdQueryHandler : IRequestHandler<ProjectGetByIdQuery, P
     private IReadOnlyList<Domain.Entities.ProjectTask> FilterTasksForProgress(
         IReadOnlyList<Domain.Entities.ProjectTask> tasks)
     {
-        if (ProjectScopeGuard.CanSeeFullDepartmentProjects(_currentUser)) return tasks;
-
-        var userId = _currentUser.UserId;
-        var hiddenStageIds = tasks
-            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
-            .Select(t => t.Id)
-            .ToHashSet();
-
-        return tasks
-            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
-            .ToList();
+        // refactor R/S: bỏ per-stage PM — tiến độ tính trọn cây đơn cho mọi vai trò được phép đọc.
+        return tasks;
     }
 }

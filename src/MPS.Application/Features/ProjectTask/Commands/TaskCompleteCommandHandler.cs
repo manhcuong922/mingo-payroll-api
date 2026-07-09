@@ -12,15 +12,18 @@ namespace MPS.Application.Features.ProjectTask.Commands;
 public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, bool>
 {
     private readonly IProjectTaskRepository _tasks;
+    private readonly IProjectRepository _projects;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
 
     public TaskCompleteCommandHandler(
         IProjectTaskRepository tasks,
+        IProjectRepository projects,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
     {
         _tasks = tasks;
+        _projects = projects;
         _authorizer = authorizer;
         _currentUser = currentUser;
     }
@@ -33,10 +36,10 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         var task = await _tasks.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanUpdateProgressAsync(task, _projects, _currentUser, _authorizer, ct);
 
         if (task.IsBatchParent)
-            throw new DomainValidationException("Không hoàn thành trực tiếp công đoạn (task cha) — cha tự Done khi mọi con Done.");
+            throw new DomainValidationException("Không hoàn thành trực tiếp node gộp (container) — cha tự Done khi mọi con Done.");
 
         if (task.Status == TaskItemStatus.Done)
             return true;
@@ -66,12 +69,9 @@ public class TaskCompleteCommandHandler : IRequestHandler<TaskCompleteCommand, b
         if (!ok)
             throw new ConflictException("Dữ liệu đã thay đổi ở nơi khác. Vui lòng tải lại rồi thử lại.");
 
-        // Cha tự Done nguyên tử khi con cuối cùng vừa Done + đồng bộ lại sản lượng luỹ kế của cha.
-        if (task.ParentTaskId is int parentId)
-        {
-            await _tasks.RecomputeParentCompletedAsync(parentId, ct);
-            await _tasks.TrySetParentDoneAsync(parentId, completedAt, userId, ct);
-        }
+        // Rollup đệ quy lên tổ tiên: mỗi container tự cộng sản lượng + tự Done khi đủ điều kiện (refactor).
+        if (task.ParentTaskId is not null)
+            await _tasks.RollupAncestorsAsync(task.Id, completedAt, userId, ct);
 
         return true;
     }

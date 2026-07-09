@@ -15,6 +15,9 @@ public class ProcessTemplate
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
 
+    // Quy mô cơ sở của cây node lá (sản lượng). Áp cho đơn: factor = Project.Quantity / BaseQuantity.
+    public int BaseQuantity { get; set; } = 1;
+
     // Xưởng mặc định áp dụng quy trình này (nullable — có thể chọn lúc phát đơn)
     public int? DefaultDepartmentId { get; set; }
     public Department? DefaultDepartment { get; set; }

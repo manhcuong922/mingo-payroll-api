@@ -4,6 +4,15 @@ using MPS.Domain.Common;
 
 namespace MPS.Application.Features.Project.Validators;
 
+public class ProjectSetResponsibleCommandValidator : AbstractValidator<ProjectSetResponsibleCommand>
+{
+    public ProjectSetResponsibleCommandValidator()
+    {
+        RuleFor(x => x.ProjectId).GreaterThan(0);
+        RuleFor(x => x.ResponsibleUserId).GreaterThan(0);
+    }
+}
+
 public class ProjectUpdateCommandValidator : AbstractValidator<ProjectUpdateCommand>
 {
     public ProjectUpdateCommandValidator()

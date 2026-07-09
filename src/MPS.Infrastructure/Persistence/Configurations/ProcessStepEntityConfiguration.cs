@@ -20,6 +20,21 @@ public class ProcessStepEntityConfiguration : IEntityTypeConfiguration<ProcessSt
             .HasForeignKey(s => s.ProcessTemplateId)
             .OnDelete(DeleteBehavior.Cascade);   // xóa template → xóa các bước mẫu
 
+        // Cây N tầng trong template (self-ref). Restrict để tránh multiple-cascade-path; xóa cả cây qua
+        // cascade từ ProcessTemplate (đã cấu hình ở trên) hoặc dọn thủ công ở tầng repo khi update.
+        builder.HasOne(s => s.Parent)
+            .WithMany(s => s.Children)
+            .HasForeignKey(s => s.ParentProcessStepId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(s => s.RequiredPosition)
+            .WithMany()
+            .HasForeignKey(s => s.RequiredPositionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Property(s => s.ScalesWithQuantity).HasDefaultValue(true);
+
         builder.HasIndex(s => new { s.ProcessTemplateId, s.StepOrder });
+        builder.HasIndex(s => new { s.ParentProcessStepId, s.StepOrder });
     }
 }

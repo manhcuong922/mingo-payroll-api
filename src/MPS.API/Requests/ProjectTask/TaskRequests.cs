@@ -17,9 +17,8 @@ public record CreateTaskRequest(
     int StepOrder,
     IReadOnlyList<int> AssigneeUserIds,
     bool IsBatchParent = false,
-    int? AssignedPmUserId = null);
-
-public record AssignPmRequest(int PmUserId);
+    int PlannedHeadcount = 0,
+    int? RequiredPositionId = null);
 
 public record CreateConfidentialTaskRequest(
     string Title,

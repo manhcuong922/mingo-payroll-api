@@ -34,7 +34,7 @@ public class TaskRestoreCommandHandler : IRequestHandler<TaskRestoreCommand, boo
         if (task.PausedByCascadeFromId is not null)
             throw new DomainValidationException("Task đang bị hủy bởi công đoạn cha — phải Restore công đoạn cha trước.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanPlanTaskAsync(task, _currentUser, _authorizer, ct);
 
         task.Status = task.StatusBeforePause ?? TaskItemStatus.Todo;
         task.StatusBeforePause = null;

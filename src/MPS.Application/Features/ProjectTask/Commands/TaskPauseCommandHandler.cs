@@ -29,7 +29,7 @@ public class TaskPauseCommandHandler : IRequestHandler<TaskPauseCommand, bool>
         var task = await _tasks.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanPlanTaskAsync(task, _currentUser, _authorizer, ct);
 
         task.StatusBeforePause = task.Status;
         task.Status = Domain.Enums.TaskItemStatus.Paused;
