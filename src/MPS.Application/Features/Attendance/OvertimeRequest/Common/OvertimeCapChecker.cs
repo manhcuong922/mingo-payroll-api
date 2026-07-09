@@ -43,7 +43,7 @@ public sealed class OvertimeCapChecker
             new[] { employeeInformationId },
             workDate.AddDays(-1),
             workDate.AddDays(1),
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         // BR-6 still uses the shifts assigned to the OT business date.
         var assignments = overlapAssignments

@@ -14,7 +14,9 @@ public class ScheduleTemplateEntityConfiguration : IEntityTypeConfiguration<Sche
         builder.Property(e => e.Id).UseIdentityColumn();
 
         builder.Property(e => e.Name).HasMaxLength(150).IsRequired();
-        builder.HasIndex(e => e.Name).IsUnique();
+        builder.HasIndex(e => e.Name)
+            .IsUnique()
+            .HasFilter("[IsActive] = 1");
 
         builder.Property(e => e.EffectiveFrom).IsRequired();
         builder.Property(e => e.EffectiveTo).IsRequired();

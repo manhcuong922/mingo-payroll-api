@@ -20,6 +20,8 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         OtRequestStatus? status,
         DateOnly? fromDate,
         DateOnly? toDate,
+        int? createdByUserId,
+        int? projectId,
         int page,
         int size,
         CancellationToken cancellationToken = default)
@@ -28,6 +30,7 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
             .AsNoTracking()
             .Include(r => r.EmployeeInformation)
             .Include(r => r.OvertimeSlotTemplate)
+            .Include(r => r.Project)
             .AsQueryable();
 
         if (employeeInformationId.HasValue)
@@ -38,6 +41,10 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
             query = query.Where(r => r.WorkDate >= fromDate.Value);
         if (toDate.HasValue)
             query = query.Where(r => r.WorkDate <= toDate.Value);
+        if (createdByUserId.HasValue)
+            query = query.Where(r => r.CreatedByUserId == createdByUserId.Value);
+        if (projectId.HasValue)
+            query = query.Where(r => r.ProjectId == projectId.Value);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
@@ -95,6 +102,14 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         var tracked = await _context.OvertimeRequests.FirstOrDefaultAsync(r => r.Id == entity.Id, cancellationToken);
         if (tracked is null) return false;
 
+        // PM sửa đơn Pending có thể đổi: WorkDate/OtStartTime/OtEndTime/OtHours/Reason/ApproverRoute.
+        // Approve/Reject/Cancel không mutate các field này → entity.X == DB.X → no-op an toàn.
+        tracked.WorkDate = entity.WorkDate;
+        tracked.OtStartTime = entity.OtStartTime;
+        tracked.OtEndTime = entity.OtEndTime;
+        tracked.OtHours = entity.OtHours;
+        tracked.Reason = entity.Reason;
+        tracked.ApproverRoute = entity.ApproverRoute;
         tracked.Status = entity.Status;
         tracked.OtDayHours = entity.OtDayHours;
         tracked.OtNightHours = entity.OtNightHours;
@@ -106,6 +121,24 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
 
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<IReadOnlyList<OvertimeRequest>> GetActiveOnDateForEmployeeAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        int? excludeId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.OvertimeRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                     && r.WorkDate == workDate
+                     && (r.Status == OtRequestStatus.Pending || r.Status == OtRequestStatus.Approved));
+
+        if (excludeId.HasValue)
+            query = query.Where(r => r.Id != excludeId.Value);
+
+        return await query.ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<OvertimeRequest>> GetApprovedWithoutAttendanceOnDateAsync(

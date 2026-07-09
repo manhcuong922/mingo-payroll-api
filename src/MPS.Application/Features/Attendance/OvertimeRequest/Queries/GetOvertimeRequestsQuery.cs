@@ -11,4 +11,6 @@ public sealed record GetOvertimeRequestsQuery(
     DateOnly? FromDate,
     DateOnly? ToDate,
     int Page,
-    int Size) : IRequest<PagedResult<OvertimeRequestDto>>;
+    int Size,
+    int? CreatedByUserId = null,
+    int? ProjectId = null) : IRequest<PagedResult<OvertimeRequestDto>>;

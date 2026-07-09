@@ -27,6 +27,19 @@ public interface IOvertimeSlotTemplateRepository
     Task<bool> DeactivateAsync(int id, int updatedByUserId, DateTime nowUtc, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Tìm và inactive tất cả slot ACTIVE có khung giờ giao thoa với [startTime, endTime].
+    /// excludeId để bỏ qua chính slot đang update (không tự inactive mình).
+    /// Trả về Code của các slot bị inactive để handler báo cho user biết.
+    /// </summary>
+    Task<IReadOnlyList<string>> DeactivateOverlappingActiveAsync(
+        TimeOnly startTime,
+        TimeOnly endTime,
+        int? excludeId,
+        int updatedByUserId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Có bất kỳ OvertimeRequest nào (bất kể status) đang reference slot này không?
     /// Dùng cho hard-delete vs soft-deactivate decision.
     /// </summary>

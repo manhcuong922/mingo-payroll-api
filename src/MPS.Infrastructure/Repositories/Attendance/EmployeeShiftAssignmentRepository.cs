@@ -41,11 +41,19 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
 
     public async Task<IReadOnlyList<EmployeeShiftAssignment>> GetByDateAsync(DateOnly workDate, CancellationToken cancellationToken = default)
     {
+        // Display filter (§13 + §16): ẩn assignment thuộc template inactive TRỪ khi assignment đó
+        // đã có AttendanceRecord (locked) — attendance history phải luôn hiển thị được trên roster.
         return await _context.EmployeeShiftAssignments
             .AsNoTracking()
             .Include(a => a.ShiftTemplate)
             .Include(a => a.EmployeeInformation)
-            .Where(a => a.WorkDate == workDate)
+            .Where(a => a.WorkDate == workDate
+                && (a.ScheduleTemplateId == null
+                    || a.ScheduleTemplate!.IsActive
+                    || _context.AttendanceRecords.Any(r =>
+                        r.EmployeeInformationId == a.EmployeeInformationId
+                        && r.WorkDate == a.WorkDate
+                        && r.ShiftTemplateId == a.ShiftTemplateId)))
             .OrderBy(a => a.EmployeeInformation.FullName)
             .ThenBy(a => a.ShiftTemplate.StartTime)
             .ToListAsync(cancellationToken);
@@ -55,6 +63,7 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
         IReadOnlyCollection<int> employeeInformationIds,
         DateOnly fromDate,
         DateOnly toDate,
+        bool includeInactiveTemplates = true,
         CancellationToken cancellationToken = default)
     {
         if (employeeInformationIds.Count == 0)
@@ -62,13 +71,28 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
             return Array.Empty<EmployeeShiftAssignment>();
         }
 
-        return await _context.EmployeeShiftAssignments
+        var query = _context.EmployeeShiftAssignments
             .AsNoTracking()
             .Include(a => a.ShiftTemplate)
             .Include(a => a.EmployeeInformation)
             .Where(a => employeeInformationIds.Contains(a.EmployeeInformationId)
                 && a.WorkDate >= fromDate
-                && a.WorkDate <= toDate)
+                && a.WorkDate <= toDate);
+
+        if (!includeInactiveTemplates)
+        {
+            // Display filter (§13 + §16): assignment thuộc template inactive vẫn hiển thị nếu có
+            // AttendanceRecord match — giữ attendance history nhìn thấy được trên roster.
+            query = query.Where(a =>
+                a.ScheduleTemplateId == null
+                || a.ScheduleTemplate!.IsActive
+                || _context.AttendanceRecords.Any(r =>
+                    r.EmployeeInformationId == a.EmployeeInformationId
+                    && r.WorkDate == a.WorkDate
+                    && r.ShiftTemplateId == a.ShiftTemplateId));
+        }
+
+        return await query
             .OrderBy(a => a.EmployeeInformationId)
             .ThenBy(a => a.WorkDate)
             .ThenBy(a => a.ShiftTemplate.StartTime)
@@ -170,9 +194,12 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
         var queryToDate = maxDate.AddDays(1);
 
         // (1) Assignments được sở hữu bởi template khác — include ShiftTemplate để compare giờ.
+        // Bỏ qua assignment do template INACTIVE sở hữu: batch step sau (ReplaceIfNoAttendance) sẽ
+        // giữ ca cũ nếu locked (có attendance), replace nếu chưa locked — xem §14.
         var ownedRows = await _context.EmployeeShiftAssignments
             .AsNoTracking()
             .Where(a => a.ScheduleTemplateId != null
+                && a.ScheduleTemplate!.IsActive
                 && (excludeScheduleTemplateId == null || a.ScheduleTemplateId != excludeScheduleTemplateId)
                 && employeeIds.Contains(a.EmployeeInformationId)
                 && a.WorkDate >= queryFromDate

@@ -12,3 +12,10 @@ public sealed record CreateBatchOvertimeRequest(
     string? Reason);
 
 public sealed record ReviewOvertimeRequest(string? ReviewNote);
+
+public sealed record UpdatePendingOvertimeRequest(
+    DateOnly WorkDate,
+    TimeOnly OtStartTime,
+    TimeOnly OtEndTime,
+    OvertimeApproverRoute ApproverRoute,
+    string? Reason);

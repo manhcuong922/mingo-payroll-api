@@ -10,6 +10,8 @@ public interface IOvertimeRequestRepository
         OtRequestStatus? status,
         DateOnly? fromDate,
         DateOnly? toDate,
+        int? createdByUserId,
+        int? projectId,
         int page,
         int size,
         CancellationToken cancellationToken = default);
@@ -30,5 +32,16 @@ public interface IOvertimeRequestRepository
     /// </summary>
     Task<IReadOnlyList<OvertimeRequest>> GetApprovedWithoutAttendanceOnDateAsync(
         DateOnly workDate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Load các OT ACTIVE (Pending + Approved, KHÔNG bao gồm Rejected/Cancelled) của 1 NV
+    /// trên 1 workDate — để check trùng khung giờ khi PM tạo/sửa đơn mới. excludeId để
+    /// exclude chính đơn đang sửa (bỏ qua conflict với chính mình).
+    /// </summary>
+    Task<IReadOnlyList<OvertimeRequest>> GetActiveOnDateForEmployeeAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        int? excludeId,
         CancellationToken cancellationToken = default);
 }

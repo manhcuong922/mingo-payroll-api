@@ -110,6 +110,19 @@ public class CreateBatchOvertimeRequestCommandHandler
 
             try
             {
+                // Guard trùng OT: NV đã có Pending/Approved giao thoa khung giờ trên ngày này thì skip.
+                // Bảo vệ khỏi PM bấm "Giao OT" nhiều lần cho cùng 1 NV/ngày/khung giờ.
+                var existingSameDay = await _repository.GetActiveOnDateForEmployeeAsync(
+                    emp.Id, request.WorkDate, excludeId: null, cancellationToken);
+                var conflict = existingSameDay.FirstOrDefault(e => OvertimeTimeOverlap.Overlaps(
+                    request.WorkDate, request.OtStartTime, request.OtEndTime,
+                    e.WorkDate, e.OtStartTime, e.OtEndTime));
+                if (conflict is not null)
+                {
+                    throw new DomainValidationException(
+                        $"NV đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) trên ngày này giao thoa khung giờ mới.");
+                }
+
                 await _capChecker.CheckAsync(
                     emp.Id, request.WorkDate, request.OtStartTime, request.OtEndTime, otHours, cancellationToken);
 

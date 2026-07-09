@@ -103,4 +103,66 @@ public class OvertimeSlotTemplateRepository : IOvertimeSlotTemplateRepository
 
     public Task<bool> IsReferencedAsync(int id, CancellationToken cancellationToken = default) =>
         _context.OvertimeRequests.AsNoTracking().AnyAsync(r => r.OvertimeSlotTemplateId == id, cancellationToken);
+
+    public async Task<IReadOnlyList<string>> DeactivateOverlappingActiveAsync(
+        TimeOnly startTime,
+        TimeOnly endTime,
+        int? excludeId,
+        int updatedByUserId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        // Load candidate = active slot (trừ chính mình nếu là update). Overlap check phải làm
+        // in-memory vì logic cross-midnight khó biểu diễn trong SQL sạch. Slot ít (<20 rows) nên OK.
+        var query = _context.OvertimeSlotTemplates.Where(t => t.IsActive);
+        if (excludeId.HasValue) query = query.Where(t => t.Id != excludeId.Value);
+        var candidates = await query.ToListAsync(cancellationToken);
+
+        var overlapping = candidates
+            .Where(c => TimeOfDayOverlap.Overlaps(startTime, endTime, c.StartTime, c.EndTime))
+            .ToList();
+        if (overlapping.Count == 0) return Array.Empty<string>();
+
+        foreach (var slot in overlapping)
+        {
+            slot.IsActive = false;
+            slot.UpdatedAt = nowUtc;
+            slot.UpdatedByUserId = updatedByUserId;
+        }
+        await _context.SaveChangesAsync(cancellationToken);
+        return overlapping.Select(s => s.Code).ToList();
+    }
+}
+
+/// <summary>
+/// Overlap check cho slot template (khung giờ recurring daily). Xử lý cross-midnight
+/// bằng cách phân slot thành 1-2 interval trong [0, 24h) rồi so pairwise.
+/// </summary>
+internal static class TimeOfDayOverlap
+{
+    public static bool Overlaps(TimeOnly aStart, TimeOnly aEnd, TimeOnly bStart, TimeOnly bEnd)
+    {
+        var aIntervals = ToIntervals(aStart, aEnd);
+        var bIntervals = ToIntervals(bStart, bEnd);
+        foreach (var (aS, aE) in aIntervals)
+        {
+            foreach (var (bS, bE) in bIntervals)
+            {
+                if (aS < bE && bS < aE) return true;
+            }
+        }
+        return false;
+    }
+
+    private static IReadOnlyList<(long Start, long End)> ToIntervals(TimeOnly start, TimeOnly end)
+    {
+        // Non-crossing: [start, end)
+        if (end > start) return new[] { (start.Ticks, end.Ticks) };
+        // Cross-midnight: [start, 24h) ∪ [0, end)
+        return new[]
+        {
+            (start.Ticks, TimeSpan.TicksPerDay),
+            (0L, end.Ticks),
+        };
+    }
 }

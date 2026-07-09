@@ -24,10 +24,16 @@ public interface IEmployeeShiftAssignmentRepository
         DateOnly workDate,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// <paramref name="includeInactiveTemplates"/>: mặc định <c>true</c> — trả về TẤT CẢ assignments
+    /// (dùng cho write-path: batch conflict check, cap checker). Pass <c>false</c> ở display query để
+    /// ẩn assignment do template inactive sở hữu (xem §13).
+    /// </summary>
     Task<IReadOnlyList<EmployeeShiftAssignment>> GetByEmployeesAndDateRangeAsync(
         IReadOnlyCollection<int> employeeInformationIds,
         DateOnly fromDate,
         DateOnly toDate,
+        bool includeInactiveTemplates = true,
         CancellationToken cancellationToken = default);
 
     /// <summary>

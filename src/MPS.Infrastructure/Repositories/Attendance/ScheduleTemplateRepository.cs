@@ -65,7 +65,9 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
     public Task<bool> ExistsByNameAsync(string name, int? excludeId, CancellationToken cancellationToken = default) =>
         _context.ScheduleTemplates
             .AsNoTracking()
-            .AnyAsync(t => t.Name == name && (excludeId == null || t.Id != excludeId), cancellationToken);
+            .AnyAsync(t => t.IsActive
+                        && t.Name == name
+                        && (excludeId == null || t.Id != excludeId), cancellationToken);
 
     public async Task<int> AddAsync(
         ScheduleTemplate entity,

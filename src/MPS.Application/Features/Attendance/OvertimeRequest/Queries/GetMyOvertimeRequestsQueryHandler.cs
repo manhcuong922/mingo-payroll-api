@@ -36,7 +36,7 @@ public class GetMyOvertimeRequestsQueryHandler : IRequestHandler<GetMyOvertimeRe
         var size = request.Size <= 0 ? 20 : Math.Min(request.Size, 100);
 
         var (items, total) = await _repository.GetPagedAsync(
-            employeeId, request.Status, null, null, page, size, cancellationToken);
+            employeeId, request.Status, null, null, null, null, page, size, cancellationToken);
 
         var dtos = items.Select(OvertimeRequestMapper.ToDto).ToList();
 

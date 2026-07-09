@@ -48,7 +48,8 @@ public class GetShiftRosterQueryHandler : IRequestHandler<GetShiftRosterQuery, S
         }
 
         var assignments = await _repository.GetByEmployeesAndDateRangeAsync(
-            employeeIds, request.FromDate, request.ToDate, cancellationToken);
+            employeeIds, request.FromDate, request.ToDate,
+            includeInactiveTemplates: false, cancellationToken);
         var lockedRows = await _repository.GetLockedShiftsAsync(
             employeeIds, request.FromDate, request.ToDate, cancellationToken);
 

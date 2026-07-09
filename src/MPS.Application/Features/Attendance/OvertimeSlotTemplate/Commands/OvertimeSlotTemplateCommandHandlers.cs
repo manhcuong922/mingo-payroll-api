@@ -31,6 +31,13 @@ public sealed class CreateOvertimeSlotTemplateCommandHandler : IRequestHandler<C
         var code = await OvertimeSlotCodeGenerator.GenerateUniqueAsync(
             request.StartTime, request.EndTime, _repository, excludeId: null, cancellationToken);
 
+        var now = _clock.UtcNow;
+
+        // Auto-inactive các slot active khác có khung giờ giao thoa — tránh 2 slot cùng cover
+        // 1 khoảng thời gian gây ambiguity cho payroll composer.
+        await _repository.DeactivateOverlappingActiveAsync(
+            request.StartTime, request.EndTime, excludeId: null, userId, now, cancellationToken);
+
         var entity = new OvertimeSlotTemplateEntity
         {
             Code = code,
@@ -47,7 +54,7 @@ public sealed class CreateOvertimeSlotTemplateCommandHandler : IRequestHandler<C
             MultiplierHolidayNight           = request.IsNightSlot ? request.MultiplierHolidayNight           : null,
             Description = request.Description,
             IsActive = true,
-            CreatedAt = _clock.UtcNow,
+            CreatedAt = now,
             CreatedByUserId = userId,
         };
 
@@ -82,6 +89,16 @@ public sealed class UpdateOvertimeSlotTemplateCommandHandler : IRequestHandler<U
         var code = await OvertimeSlotCodeGenerator.GenerateUniqueAsync(
             request.StartTime, request.EndTime, _repository, excludeId: request.Id, cancellationToken);
 
+        var now = _clock.UtcNow;
+
+        // Auto-inactive slot khác giao thoa — chỉ khi entity đang được set active. Nếu user
+        // update sang inactive thì không cần đụng slot khác.
+        if (request.IsActive)
+        {
+            await _repository.DeactivateOverlappingActiveAsync(
+                request.StartTime, request.EndTime, excludeId: request.Id, userId, now, cancellationToken);
+        }
+
         var entity = new OvertimeSlotTemplateEntity
         {
             Id = request.Id,
@@ -98,7 +115,7 @@ public sealed class UpdateOvertimeSlotTemplateCommandHandler : IRequestHandler<U
             MultiplierHolidayNight           = request.IsNightSlot ? request.MultiplierHolidayNight           : null,
             Description = request.Description,
             IsActive = request.IsActive,
-            UpdatedAt = _clock.UtcNow,
+            UpdatedAt = now,
             UpdatedByUserId = userId,
         };
 

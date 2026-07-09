@@ -50,6 +50,27 @@ public class OvertimeRequestController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// PM xem OT do chính PM đã gửi. Không cần ReadAll — reuse permission CreateBatchDepartment
+    /// vì ai giao được OT thì phải xem được đơn của mình gửi.
+    /// </summary>
+    [HttpGet("created-by-me")]
+    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    public async Task<IActionResult> GetCreatedByMe(
+        [FromQuery] OtRequestStatus? status,
+        [FromQuery] DateOnly? fromDate,
+        [FromQuery] DateOnly? toDate,
+        [FromQuery] int? projectId,
+        [FromQuery] int page = 1,
+        [FromQuery] int size = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(
+            new GetOvertimeRequestsCreatedByMeQuery(status, fromDate, toDate, projectId, page, size),
+            cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [HasPermission(Permissions.OvertimeRequestReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
@@ -100,6 +121,37 @@ public class OvertimeRequestController : ControllerBase
         var result = await _mediator.Send(
             new GetEligibleEmployeesForOvertimeQuery(projectId), cancellationToken);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// PM huỷ đơn OT của chính mình khi còn Pending. Handler enforce CreatedByUserId=current
+    /// nên endpoint chỉ cần permission tạo batch (PM đã có sẵn).
+    /// </summary>
+    [HttpPut("{id:int}/cancel")]
+    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    public async Task<IActionResult> Cancel(int id, CancellationToken cancellationToken)
+    {
+        var ok = await _mediator.Send(new CancelOvertimeRequestCommand(id), cancellationToken);
+        if (!ok) return NotFound();
+        return NoContent();
+    }
+
+    /// <summary>
+    /// PM sửa đơn OT của chính mình khi còn Pending. Đổi được workDate/otStart/otEnd/reason/approverRoute.
+    /// Không đổi được nhân viên hay project (huỷ + tạo mới nếu cần).
+    /// </summary>
+    [HttpPut("{id:int}")]
+    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    public async Task<IActionResult> Update(
+        int id,
+        [FromBody] UpdatePendingOvertimeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ok = await _mediator.Send(new UpdatePendingOvertimeRequestCommand(
+            id, request.WorkDate, request.OtStartTime, request.OtEndTime,
+            request.ApproverRoute, request.Reason), cancellationToken);
+        if (!ok) return NotFound();
+        return NoContent();
     }
 
     [HttpPut("{id:int}/approve")]

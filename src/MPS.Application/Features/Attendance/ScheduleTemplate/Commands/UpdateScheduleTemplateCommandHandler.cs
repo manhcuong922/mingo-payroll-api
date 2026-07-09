@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Application.Features.Attendance.ShiftTemplate.Common;
 using MPS.Domain.Exceptions;
@@ -19,6 +20,7 @@ public class UpdateScheduleTemplateCommandHandler
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IContractRepository _contractRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IMediator _mediator;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -29,6 +31,7 @@ public class UpdateScheduleTemplateCommandHandler
         IEmployeeShiftAssignmentRepository assignmentRepository,
         IContractRepository contractRepository,
         IEmployeeInformationRepository employeeRepository,
+        IMediator mediator,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -38,6 +41,7 @@ public class UpdateScheduleTemplateCommandHandler
         _assignmentRepository = assignmentRepository;
         _contractRepository = contractRepository;
         _employeeRepository = employeeRepository;
+        _mediator = mediator;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -74,7 +78,10 @@ public class UpdateScheduleTemplateCommandHandler
             employeeIds,
             requireEmployees: false);
 
-        if (await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
+        // Chỉ check trùng tên khi request muốn activate. Nếu giữ inactive → DB filtered unique
+        // index (§12) không enforce trên inactive rows, không cần chặn ở app layer. Xem §12.7.
+        if (request.IsActive
+            && await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
         {
             throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
         }
@@ -116,7 +123,33 @@ public class UpdateScheduleTemplateCommandHandler
         existing.UpdatedAt = _clock.UtcNow;
         existing.UpdatedByUserId = userId;
 
-        await _repository.UpdateAsync(existing, employeeIds, shifts.Select(s => s.Id).ToList(), cancellationToken);
+        var shiftIds = shifts.Select(s => s.Id).ToList();
+        await _repository.UpdateAsync(existing, employeeIds, shiftIds, cancellationToken);
+
+        // §15: Sync assignments với pattern mới. Sweep stale (giữ locked) + re-expand nếu active.
+        // Update = Save + Sync (không cần user bấm Reapply riêng).
+        var dates = _expander.ExpandDates(existing);
+        await _assignmentRepository.DeleteStaleByScheduleTemplateAsync(
+            existing.Id, dates, shiftIds, employeeIds, cancellationToken);
+
+        if (request.IsActive && dates.Count > 0 && employeeIds.Count > 0 && shiftIds.Count > 0)
+        {
+            var operations = new List<BatchShiftOperation>(dates.Count * employeeIds.Count * shiftIds.Count);
+            foreach (var empId in employeeIds)
+            foreach (var date in dates)
+            foreach (var shiftId in shiftIds)
+                operations.Add(new BatchShiftOperation(
+                    BatchShiftOperationKind.Add, empId, date, shiftId));
+
+            await _mediator.Send(
+                new BatchUpdateShiftAssignmentsCommand(
+                    operations,
+                    BatchShiftConflictPolicy.ReplaceIfNoAttendance,
+                    SourceScheduleTemplateId: existing.Id,
+                    AcknowledgeWeeklyOvertimeWarnings: true,
+                    IncludeRestDaysAndHolidays: false),
+                cancellationToken);
+        }
 
         return Unit.Value;
     }

@@ -77,7 +77,8 @@ public class BatchUpdateShiftAssignmentsCommandHandler
 
         // Existing assignments — lấy rộng ±1 ngày để check overlap cross-date cho ca qua đêm.
         var existingAssignments = await _repository.GetByEmployeesAndDateRangeAsync(
-            employeeIds, fromDate.AddDays(-1), toDate.AddDays(1), cancellationToken);
+            employeeIds, fromDate.AddDays(-1), toDate.AddDays(1),
+            cancellationToken: cancellationToken);
         var existingInRequestedRange = existingAssignments
             .Where(a => a.WorkDate >= fromDate && a.WorkDate <= toDate)
             .ToList();
