@@ -1273,6 +1273,7 @@ public sealed class DatabaseSeeder
             Name = "Gia công khung tranh A4",
             Description = "Quy trình mẫu gia công khung tranh khổ A4.",
             IsActive = true,
+            BaseQuantity = 500,   // factor = Project.Quantity / 500 khi generate
             DefaultDepartmentId = itDepartmentId,
         };
 
@@ -1365,6 +1366,7 @@ public sealed class DatabaseSeeder
             Deadline = DateTime.UtcNow.AddDays(10),
             Quantity = 500,
             DepartmentId = itDepartmentId,
+            ResponsibleUserId = managerUserId,
             CreatedByUserId = managerUserId,
         };
         await _context.Projects.AddAsync(project1, ct);
@@ -1426,6 +1428,7 @@ public sealed class DatabaseSeeder
             Deadline = DateTime.UtcNow.AddDays(20),
             Quantity = 200,
             DepartmentId = itDepartmentId,
+            ResponsibleUserId = managerUserId,
             CreatedByUserId = managerUserId,
         };
         await _context.Projects.AddAsync(project2, ct);
@@ -1448,6 +1451,7 @@ public sealed class DatabaseSeeder
             Deadline = DateTime.UtcNow.AddDays(5),
             Quantity = 300,
             DepartmentId = itDepartmentId,
+            ResponsibleUserId = managerUserId,
             CreatedByUserId = managerUserId,
         };
         await _context.Projects.AddAsync(project3, ct);

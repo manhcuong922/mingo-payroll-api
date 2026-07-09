@@ -38,7 +38,7 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         var task = await _tasks.GetByIdWithGraphAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanPlanTaskAsync(task, _currentUser, _authorizer, ct);
 
         await ValidateDeadlineScopeAsync(request, task, ct);
         await ValidateQuantityScopeAsync(request, task, ct);
@@ -103,30 +103,23 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
                 $"Tổng sản lượng các task con ({siblingsPlanned + request.PlannedQuantity}) vượt quá sản lượng công đoạn cha ({parent.PlannedQuantity}).");
     }
 
-    // Đổi assignee (nếu gửi). Validate ≥1 người + thuộc xưởng.
+    // Đổi assignee (nếu gửi). Validate thuộc xưởng + đúng chức danh + không InProgress (refactor I/P/D).
     private async Task ApplyAssigneesAsync(TaskUpdateCommand request, ProjectTaskEntity task, CancellationToken ct)
     {
         if (request.AssigneeUserIds is not { } newAssignees) return;
 
-        if (newAssignees.Count == 0)
-            throw new DomainValidationException("Task phải có ít nhất 1 người thực hiện.");
-
-        var members = (await _departments.GetMemberUserIdsAsync(task.DepartmentId!.Value, ct)).ToHashSet();
-        if (newAssignees.Any(id => !members.Contains(id)))
-            throw new DomainValidationException("Có người được giao không thuộc xưởng của task.");
-
-        if (!task.IsBatchParent)
+        if (task.IsBatchParent)
         {
-            var currentAssigneeIds = task.Assignees.Select(a => a.UserId).ToHashSet();
-            var addedUserIds = newAssignees.Distinct().Where(id => !currentAssigneeIds.Contains(id));
-            foreach (var userId in addedUserIds)
-            {
-                var openCount = await _tasks.CountActiveByUserAsync(userId, ct);
-                if (openCount > 0)
-                    throw new DomainValidationException(
-                        $"Nhân viên #{userId} đang có task chưa hoàn thành, không thể giao thêm task mới.");
-            }
+            if (newAssignees.Count > 0)
+                throw new DomainValidationException("Node gộp (container) không được giao người trực tiếp.");
+            task.Assignees = new List<TaskAssignee>();
+            return;
         }
+
+        var currentAssigneeIds = task.Assignees.Select(a => a.UserId).ToHashSet();
+        await TaskAssigneeGuard.ValidateAsync(
+            newAssignees, task.DepartmentId!.Value, task.RequiredPositionId,
+            currentAssigneeIds, _departments, _tasks, ct);
 
         var now = VietnamClock.Now;
         task.Assignees = newAssignees.Distinct()

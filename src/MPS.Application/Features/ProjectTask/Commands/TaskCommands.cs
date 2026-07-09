@@ -14,14 +14,16 @@ public record TaskCreateCommand(
     string? Description,
     ProgressType ProgressType,
     int PlannedQuantity,
-    int PlannedWorkUnits,          // chỉ có ý nghĩa khi IsBatchParent=true — tỷ trọng công đoạn lên đơn
+    int PlannedWorkUnits,          // trọng số/capacity ở mọi node
     bool IsRequiredGate,           // chỉ có ý nghĩa khi ProgressType=Milestone (Gate) — mặc định true khi tạo qua UI
     DateTime? Deadline,
     int? Priority,
     int StepOrder,
     IReadOnlyList<int> AssigneeUserIds,
     bool IsBatchParent = false,
-    int? AssignedPmUserId = null) : IRequest<int>;  // chỉ có ý nghĩa khi IsBatchParent=true (gán PM ngay lúc tạo Công đoạn)
+    int PlannedHeadcount = 0,      // số người kế hoạch của vị trí lá
+    int? RequiredPositionId = null // chức danh bắt buộc để gán vào vị trí lá
+    ) : IRequest<int>;
 
 public record TaskCreateConfidentialCommand(
     string Title,
@@ -56,10 +58,6 @@ public record TaskCompleteCommand(
     DateTime? CompletedAt = null) : IRequest<bool>;
 
 public record TaskDeleteCommand(int Id) : IRequest<bool>;
-
-// ⭐ Gán/đổi PM chịu trách nhiệm 1 Công đoạn (IsBatchParent=true). PM mới thừa kế toàn bộ Công đoạn +
-// mọi task con hiện có ngay lập tức — quyền đi theo AssignedPmUserId hiện tại, không theo người tạo (plan mục 4.9).
-public record TaskAssignPmCommand(int StageId, int PmUserId) : IRequest<bool>;
 
 // ⭐ Pause/Resume/Cancel/Restore (plan mục 6.5). Với Công đoạn (IsBatchParent=true) lan truyền xuống
 // mọi Task con của CHÍNH NÓ; với Task lá không lan truyền gì (không có tầng dưới).

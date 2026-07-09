@@ -1,10 +1,11 @@
 using FluentValidation;
 using MPS.Application.Features.ProcessTemplate.Commands;
-using MPS.Domain.Enums;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.ProcessTemplate.Validators;
 
+// Validate cấp đơn (Code/Name/BaseQuantity/Steps rỗng). Bất biến cây N tầng (container/leaf/gate, ratio nesting,
+// cap độ sâu, headcount/position) validate trong ProcessTemplateTreeBuilder (đệ quy).
 public class ProcessTemplateCreateCommandValidator : AbstractValidator<ProcessTemplateCreateCommand>
 {
     public ProcessTemplateCreateCommandValidator(IProcessTemplateRepository repository)
@@ -20,29 +21,21 @@ public class ProcessTemplateCreateCommandValidator : AbstractValidator<ProcessTe
             .NotEmpty().WithMessage("Name is required.")
             .MaximumLength(150).WithMessage("Name must not exceed 150 characters.");
 
-        RuleFor(x => x.Steps)
-            .NotEmpty().WithMessage("At least one step is required.");
+        RuleFor(x => x.BaseQuantity).GreaterThan(0).WithMessage("BaseQuantity phải lớn hơn 0.");
 
-        // Step Quantity sinh công đoạn — cần cả sản lượng kế hoạch lẫn khối lượng công việc (tỷ trọng lên
-        // đơn) dương, nếu không công đoạn sinh ra sẽ "vô hình" trong tiến độ đơn.
-        // Step Milestone/Gate sinh gate — KHÔNG có sản lượng/khối lượng công việc (plan.md mục 5.3/8.4).
-        RuleForEach(x => x.Steps).ChildRules(step =>
-        {
-            step.RuleFor(s => s.Name).NotEmpty().MaximumLength(150);
+        RuleFor(x => x.Steps).NotEmpty().WithMessage("At least one node is required.");
+    }
+}
 
-            step.When(s => s.DefaultProgressType == ProgressType.Quantity, () =>
-            {
-                step.RuleFor(s => s.DefaultPlannedQuantity).GreaterThan(0)
-                    .WithMessage("Sản lượng kế hoạch mặc định phải lớn hơn 0.");
-                step.RuleFor(s => s.DefaultPlannedWorkUnits).GreaterThan(0)
-                    .WithMessage("Khối lượng công việc mặc định phải lớn hơn 0.");
-            }).Otherwise(() =>
-            {
-                step.RuleFor(s => s.DefaultPlannedQuantity).Equal(0)
-                    .WithMessage("Gate không có sản lượng kế hoạch.");
-                step.RuleFor(s => s.DefaultPlannedWorkUnits).Equal(0)
-                    .WithMessage("Gate không có khối lượng công việc.");
-            });
-        });
+public class ProcessTemplateUpdateCommandValidator : AbstractValidator<ProcessTemplateUpdateCommand>
+{
+    public ProcessTemplateUpdateCommandValidator()
+    {
+        RuleFor(x => x.Id).GreaterThan(0);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Name is required.")
+            .MaximumLength(150).WithMessage("Name must not exceed 150 characters.");
+        RuleFor(x => x.BaseQuantity).GreaterThan(0).WithMessage("BaseQuantity phải lớn hơn 0.");
+        RuleFor(x => x.Steps).NotEmpty().WithMessage("At least one node is required.");
     }
 }

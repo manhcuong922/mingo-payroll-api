@@ -51,14 +51,9 @@ public class ProcessTemplateController : ControllerBase
     [HasPermission(Permissions.ProcessTemplateCreateAll)]
     public async Task<IActionResult> Create([FromBody] CreateProcessTemplateRequest request, CancellationToken ct)
     {
-        var steps = request.Steps
-            .Select(s => new ProcessStepInput(
-                s.Name, s.Description, s.StepOrder, s.DefaultProgressType,
-                s.DefaultPlannedQuantity, s.DefaultPlannedWorkUnits, s.DefaultIsRequiredGate, s.Priority))
-            .ToList();
-
-        var id = await _mediator.Send(
-            new ProcessTemplateCreateCommand(request.Code, request.Name, request.Description, request.DefaultDepartmentId, steps), ct);
+        var steps = request.Steps.Select(MapStep).ToList();
+        var id = await _mediator.Send(new ProcessTemplateCreateCommand(
+            request.Code, request.Name, request.Description, request.BaseQuantity, request.DefaultDepartmentId, steps), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -66,16 +61,18 @@ public class ProcessTemplateController : ControllerBase
     [HasPermission(Permissions.ProcessTemplateUpdateAll)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateProcessTemplateRequest request, CancellationToken ct)
     {
-        var steps = request.Steps
-            .Select(s => new ProcessStepInput(
-                s.Name, s.Description, s.StepOrder, s.DefaultProgressType,
-                s.DefaultPlannedQuantity, s.DefaultPlannedWorkUnits, s.DefaultIsRequiredGate, s.Priority))
-            .ToList();
-
-        var ok = await _mediator.Send(
-            new ProcessTemplateUpdateCommand(id, request.Name, request.Description, request.IsActive, request.DefaultDepartmentId, steps), ct);
+        var steps = request.Steps.Select(MapStep).ToList();
+        var ok = await _mediator.Send(new ProcessTemplateUpdateCommand(
+            id, request.Name, request.Description, request.IsActive, request.BaseQuantity, request.DefaultDepartmentId, steps), ct);
         return ok ? NoContent() : NotFound();
     }
+
+    private static ProcessStepInput MapStep(ProcessStepRequest s) => new(
+        s.Name, s.Description, s.StepOrder, s.DefaultProgressType,
+        s.DefaultPlannedQuantity, s.DefaultPlannedWorkUnits, s.DefaultIsRequiredGate,
+        s.PlannedHeadcount, s.RequiredPositionId, s.ScalesWithQuantity,
+        s.DefaultDeadlineOffsetRatio, s.Priority,
+        (s.Children ?? Array.Empty<ProcessStepRequest>()).Select(MapStep).ToList());
 
     [HttpDelete("{id:int}")]
     [HasPermission(Permissions.ProcessTemplateDeleteAll)]

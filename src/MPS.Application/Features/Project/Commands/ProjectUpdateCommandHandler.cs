@@ -10,15 +10,18 @@ namespace MPS.Application.Features.Project.Commands;
 public class ProjectUpdateCommandHandler : IRequestHandler<ProjectUpdateCommand, bool>
 {
     private readonly IProjectRepository _repository;
+    private readonly IProjectTaskRepository _tasks;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
 
     public ProjectUpdateCommandHandler(
         IProjectRepository repository,
+        IProjectTaskRepository tasks,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
     {
         _repository = repository;
+        _tasks = tasks;
         _authorizer = authorizer;
         _currentUser = currentUser;
     }
@@ -28,11 +31,15 @@ public class ProjectUpdateCommandHandler : IRequestHandler<ProjectUpdateCommand,
         var entity = await _repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException($"Không tìm thấy đơn #{request.Id}.");
 
-        // Scope v5: PM chỉ sửa đơn xưởng mình; GĐ mọi xưởng.
+        // Lập kế hoạch: Planning Manager chỉ sửa đơn xưởng mình; GĐ mọi xưởng.
         await ProjectScopeGuard.EnsureCanWriteAsync(entity.DepartmentId, _currentUser, _authorizer, cancellationToken);
+
+        var oldStart = entity.StartDate;
+        var oldDeadline = entity.Deadline;
 
         entity.Title = request.Title.Trim();
         entity.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        if (request.StartDate is { } start) entity.StartDate = start;
         entity.Deadline = request.Deadline;
 
         if (!string.IsNullOrWhiteSpace(request.Status))
@@ -42,6 +49,15 @@ public class ProjectUpdateCommandHandler : IRequestHandler<ProjectUpdateCommand,
             entity.Status = status;
         }
 
-        return await _repository.UpdateAsync(entity, cancellationToken);
+        if (entity.Deadline is { } dl && dl < entity.StartDate.ToDateTime(TimeOnly.MinValue))
+            throw new DomainValidationException("Deadline đơn không được trước StartDate.");
+
+        var ok = await _repository.UpdateAsync(entity, cancellationToken);
+
+        // Cascade co giãn deadline mọi task theo ratio khi timeline đơn đổi (refactor TM).
+        if (ok && (entity.StartDate != oldStart || entity.Deadline != oldDeadline))
+            await _tasks.RecomputeDeadlinesFromRatioAsync(entity.Id, entity.StartDate, entity.Deadline, cancellationToken);
+
+        return ok;
     }
 }

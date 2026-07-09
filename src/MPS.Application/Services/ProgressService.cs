@@ -3,31 +3,62 @@ using MPS.Domain.Enums;
 
 namespace MPS.Application.Services;
 
+/// <summary>
+/// Tiến độ đệ quy N tầng theo chuẩn WBS (refactor task-full-generation, mục 2).
+/// NodePercent(node), bỏ qua con Paused/Cancelled:
+///   - Work-leaf (Quantity, không con): PlannedQuantity&gt;0 ? min(Completed,Planned)/Planned : (Done?1:0)
+///   - Container (có con): Σ(child.PlannedWorkUnits × NodePercent(child)) / node.PlannedWorkUnits, cap 1.0
+///       → mẫu số = capacity RIÊNG của node ⇒ chưa chia hết capacity thì % &lt; 100 (under-allocation mọi tầng).
+///   - Gate (Milestone): KHÔNG tham gia % (chỉ chặn Done).
+/// ProjectPercent = earned/BAC ở gốc ảo bọc node top-level, weight theo PlannedWorkUnits.
+/// EV = earned gốc; BAC = Σ PlannedWorkUnits node top-level; PV = BAC × timeElapsed; SPI = EV/PV.
+/// </summary>
 public sealed class ProgressService : IProgressService
 {
-    private const int AtRiskThresholdPercent = 10;   // công việc chậm hơn lịch quá ngưỡng này → AtRisk
+    private const int AtRiskThresholdPercent = 10;
 
-    // v8 (docs/plans/plan.md): kiến trúc bottom-up qua 3 tầng, Gate/Checklist KHÔNG tham gia % ở tầng nào.
-    //   Tầng 3 (Task lá Quantity) → CompletionPercent riêng, input thật (PM nhập) — BASE
-    //   Tầng 2 (Công đoạn)        → StagePercent = SUM(CompletedQuantity con Quantity) / Stage.PlannedQuantity
-    //   Tầng 1 (Đơn hàng)         → ProjectPercent = trung bình có trọng số StagePercent theo Stage.PlannedWorkUnits
-    // Gate (ProgressType.Milestone) chỉ là điều kiện chặn Done/đóng đơn (IsRequiredGate) — không đóng góp
-    // số liệu vào PlannedQuantity/CompletedQuantity/PlannedWorkUnits ở bất kỳ tầng nào.
-    // EV/PV/SPI/BAC dùng cùng nền với CompletionPercent: Stage.PlannedWorkUnits và StagePercent.
-    // Không đọc thẳng Task lá để tránh cảnh "33% công việc" nhưng SPI vẫn báo vượt do chỉ nhìn phần đã chia task.
     public ProjectProgress Compute(Project project, IReadOnlyList<ProjectTask> tasks, DateTime asOf)
     {
-        var stages = tasks.Where(t => t.IsBatchParent && IsCountable(t.Status)).ToList();
-        var leaves = tasks.Where(t => !t.IsBatchParent && IsCountable(t.Status)).ToList();
+        // 0 = sentinel cho "root" (ProjectTask.Id luôn > 0) — Dictionary<int?,_> ném lỗi với key null.
+        var childrenByParent = tasks
+            .GroupBy(t => t.ParentTaskId ?? 0)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        var (completionPercent, stagesWithoutTasks, bac, ev) = ComputeStageWeightedProgress(tasks, leaves);
+        // Node top-level = task không có cha TRONG tập đang xét (ParentTaskId null hoặc cha ngoài tập).
+        var ids = tasks.Select(t => t.Id).ToHashSet();
+        var topLevel = tasks
+            .Where(t => t.ParentTaskId is null || !ids.Contains(t.ParentTaskId.Value))
+            .Where(t => IsCountable(t.Status) && !IsGate(t))
+            .ToList();
+
+        double earned = 0, bac = 0;
+        var stagesWithoutTasks = new List<string>();
+        var memo = new Dictionary<int, double>();
+
+        foreach (var node in topLevel)
+        {
+            var capacity = node.PlannedWorkUnits;
+            if (capacity <= 0)
+            {
+                stagesWithoutTasks.Add($"{node.Title} (id: {node.Id})");
+                continue; // PlannedWorkUnits=0 → "vô hình" trong mẫu số gốc, chỉ cảnh báo.
+            }
+
+            earned += capacity * NodePercent(node, childrenByParent, memo);
+            bac += capacity;
+        }
+
+        var completionPercent = bac > 0 ? (int)Math.Round(earned / bac * 100) : 0;
 
         var timeElapsedPercent = ComputeTimeElapsedPercent(project, asOf);
         var pv = bac * timeElapsedPercent / 100.0;
+        var ev = earned;
         var spi = pv > 0 ? ev / pv : 0;
 
         var scheduleStatus = ResolveScheduleStatus(project, asOf, completionPercent, timeElapsedPercent);
-        var completedStages = stages.Count(s => s.Status == TaskItemStatus.Done);
+
+        var totalStages = topLevel.Count;
+        var completedStages = topLevel.Count(n => n.Status == TaskItemStatus.Done);
 
         return new ProjectProgress(
             completionPercent,
@@ -36,55 +67,58 @@ public sealed class ProgressService : IProgressService
             Math.Round(pv, 2),
             Math.Round(ev, 2),
             Math.Round(spi, 2),
-            stages.Count,
+            totalStages,
             completedStages,
             stagesWithoutTasks);
     }
 
-    // Tầng 1 ← Tầng 2: ProjectPercent = trung bình có trọng số StagePercent theo PlannedWorkUnits của
-    // CHÍNH công đoạn (không phải suy ra từ children) — công thức plan.md mục 3.3.
-    private static (int CompletionPercent, IReadOnlyList<string> StagesWithoutTasks, double Bac, double Ev) ComputeStageWeightedProgress(
-        IReadOnlyList<ProjectTask> tasks, IReadOnlyList<ProjectTask> leaves)
+    // Tỷ lệ hoàn thành 0..1 của 1 node. Memo hoá theo Id chống tính lại + chống trùng đếm.
+    private static double NodePercent(
+        ProjectTask node,
+        IReadOnlyDictionary<int, List<ProjectTask>> childrenByParent,
+        IDictionary<int, double> memo)
     {
-        var allStages = tasks.Where(t => t.IsBatchParent).ToList();
-        var stagesWithoutTasks = new List<string>();
-        double totalWorkUnits = 0, earnedWorkUnits = 0;
+        if (memo.TryGetValue(node.Id, out var cached)) return cached;
 
-        foreach (var stage in allStages)
+        double result;
+        var children = childrenByParent.TryGetValue(node.Id, out var cs)
+            ? cs.Where(c => IsCountable(c.Status)).ToList()
+            : new List<ProjectTask>();
+
+        var effectiveChildren = children.Where(c => !IsGate(c)).ToList();
+
+        if (effectiveChildren.Count > 0)
         {
-            if (stage.PlannedWorkUnits <= 0)
+            // Container: Σ(child.workunits × childPercent) / capacity riêng node (cap 1.0).
+            double childEarned = 0, childWorkUnits = 0;
+            foreach (var child in effectiveChildren)
             {
-                stagesWithoutTasks.Add($"{stage.Title} (id: {stage.Id})");
-                continue; // PlannedWorkUnits=0 → "vô hình" trong mẫu số Tầng 1, chỉ cảnh báo, không cộng vào Σ
+                childEarned += child.PlannedWorkUnits * NodePercent(child, childrenByParent, memo);
+                childWorkUnits += child.PlannedWorkUnits;
             }
 
-            if (!IsCountable(stage.Status)) continue; // Paused/Cancelled — loại khỏi mẫu số Tầng 1
-
-            var percent = ComputeStagePercent(stage, leaves);
-            totalWorkUnits += stage.PlannedWorkUnits;
-            earnedWorkUnits += stage.PlannedWorkUnits * percent / 100.0;
+            var denom = node.PlannedWorkUnits > 0 ? node.PlannedWorkUnits : childWorkUnits;
+            result = denom > 0 ? Math.Min(childEarned / denom, 1.0) : 0;
+        }
+        else if (IsGate(node))
+        {
+            result = 0; // Gate không tính % (đề phòng gọi trực tiếp).
+        }
+        else
+        {
+            // Work-leaf Quantity.
+            result = node.PlannedQuantity > 0
+                ? Math.Min(node.CompletedQuantity, node.PlannedQuantity) / (double)node.PlannedQuantity
+                : (node.Status == TaskItemStatus.Done ? 1.0 : 0.0);
         }
 
-        var completionPercent = totalWorkUnits > 0
-            ? (int)Math.Round(earnedWorkUnits / totalWorkUnits * 100)
-            : 0;
-        return (completionPercent, stagesWithoutTasks, totalWorkUnits, earnedWorkUnits);
+        memo[node.Id] = result;
+        return result;
     }
 
-    // Tầng 2 ← Tầng 3: StagePercent = SUM(CompletedQuantity con Quantity) / Stage.PlannedQuantity.
-    // Gate (Milestone) con KHÔNG tham gia — chỉ chặn Done qua TrySetParentDoneAsync, không tính vào %.
-    private static int ComputeStagePercent(ProjectTask stage, IReadOnlyList<ProjectTask> leaves)
-    {
-        if (stage.PlannedQuantity <= 0) return 0;
+    private static bool IsGate(ProjectTask t) => t.ProgressType == ProgressType.Milestone;
 
-        var completed = leaves
-            .Where(child => child.ParentTaskId == stage.Id && child.ProgressType == ProgressType.Quantity)
-            .Sum(child => Math.Min(child.CompletedQuantity, child.PlannedQuantity));
-
-        return (int)Math.Round(Math.Min(completed, stage.PlannedQuantity) / (double)stage.PlannedQuantity * 100);
-    }
-
-    // Paused/Cancelled bị loại khỏi mẫu số tính tiến độ ở mọi tầng (plan mục 6.5) — coi như không tồn tại.
+    // Paused/Cancelled bị loại khỏi mẫu số mọi tầng (coi như không tồn tại).
     private static bool IsCountable(TaskItemStatus status) =>
         status is not (TaskItemStatus.Paused or TaskItemStatus.Cancelled);
 
@@ -93,11 +127,11 @@ public sealed class ProgressService : IProgressService
         if (project.Deadline is not { } deadline) return 0;
 
         var start = project.StartDate.ToDateTime(TimeOnly.MinValue);
-        var totalTicks = (deadline - start).TotalMinutes;
-        if (totalTicks <= 0) return 100;
+        var totalMinutes = (deadline - start).TotalMinutes;
+        if (totalMinutes <= 0) return 100;
 
         var elapsed = (asOf - start).TotalMinutes;
-        var pct = elapsed / totalTicks * 100;
+        var pct = elapsed / totalMinutes * 100;
         return (int)Math.Round(Math.Clamp(pct, 0, 100));
     }
 

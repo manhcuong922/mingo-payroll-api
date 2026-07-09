@@ -26,8 +26,7 @@ public sealed class TaskCreateCommandHandlerTests
 
     private const int StageId = 5;
 
-    // Task lá (IsBatchParent=false) chỉ tạo được bởi đúng PM phụ trách công đoạn cha (v7 mục 8) —
-    // set ManagerUserId làm AssignedPmUserId của công đoạn #5 để các test tạo task lá qua được guard.
+    // refactor R/S: lập kế hoạch (tạo task) = Planning Manager của xưởng / GĐ — không còn per-stage PM.
     private void SetupManagerWithMembers(params int[] memberUserIds)
     {
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
@@ -38,7 +37,7 @@ public sealed class TaskCreateCommandHandlerTests
         _tasks.Setup(t => t.GetByIdAsync(StageId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MPS.Domain.Entities.ProjectTask
             {
-                Id = StageId, IsBatchParent = true, DepartmentId = DeptId, AssignedPmUserId = ManagerUserId,
+                Id = StageId, IsBatchParent = true, DepartmentId = DeptId,
                 ProgressType = ProgressType.Quantity, PlannedQuantity = 1000,
             });
         _tasks.Setup(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()))
@@ -178,14 +177,14 @@ public sealed class TaskCreateCommandHandlerTests
     }
 
     [Fact]
-    public async Task Create_Throws403_WhenNotAssignedPmOfParentStage()
+    public async Task Create_Throws403_WhenNotPlanningManagerOfDepartment()
     {
-        // Công đoạn #5 do PM khác (#999) phụ trách — user hiện tại (#7) không được tạo task con trong đó.
+        // refactor R/S: user #7 không phải Planning Manager của xưởng (IsManagerOfAsync=false) → 403.
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
         _tasks.Setup(t => t.GetByIdAsync(StageId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MPS.Domain.Entities.ProjectTask
             {
-                Id = StageId, IsBatchParent = true, DepartmentId = DeptId, AssignedPmUserId = 999,
+                Id = StageId, IsBatchParent = true, DepartmentId = DeptId, ProgressType = ProgressType.Quantity,
             });
 
         var act = () => CreateSut().Handle(Command(new[] { 11 }), CancellationToken.None);

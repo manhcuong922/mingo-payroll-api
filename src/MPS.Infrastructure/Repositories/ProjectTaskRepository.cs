@@ -97,6 +97,9 @@ public class ProjectTaskRepository : IProjectTaskRepository
     public Task<bool> HasChildrenAsync(int taskId, CancellationToken ct) =>
         _context.ProjectTasks.AnyAsync(t => t.ParentTaskId == taskId, ct);
 
+    public Task<bool> HasAnyByProjectAsync(int projectId, CancellationToken ct) =>
+        _context.ProjectTasks.AnyAsync(t => t.ProjectId == projectId, ct);
+
     public async Task<bool> AllChildrenDoneAsync(int parentTaskId, CancellationToken ct)
     {
         var hasChildren = await _context.ProjectTasks.AnyAsync(t => t.ParentTaskId == parentTaskId, ct);
@@ -109,6 +112,13 @@ public class ProjectTaskRepository : IProjectTaskRepository
         _context.ProjectTasks.CountAsync(
             t => !t.IsBatchParent
                 && t.Status != TaskItemStatus.Done
+                && t.Assignees.Any(a => a.UserId == userId), ct);
+
+    // ⭐ refactor D: chỉ đếm task đang InProgress (không phải mọi task chưa Done).
+    public Task<int> CountInProgressByUserAsync(int userId, CancellationToken ct) =>
+        _context.ProjectTasks.CountAsync(
+            t => !t.IsBatchParent
+                && t.Status == TaskItemStatus.InProgress
                 && t.Assignees.Any(a => a.UserId == userId), ct);
 
     // Chỉ tính con Quantity — Gate (Milestone) không có sản lượng, không tham gia giới hạn PlannedQuantity cha.
@@ -171,6 +181,82 @@ public class ProjectTaskRepository : IProjectTaskRepository
         await _context.ProjectTasks
             .Where(p => p.Id == parentTaskId)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.CompletedQuantity, total), ct);
+    }
+
+    // ⭐ Cascade thời gian (refactor TM): recompute Deadline mọi task có DeadlineOffsetRatio theo timeline mới.
+    // Task không có ratio (null) giữ nguyên deadline tay. Đơn không Deadline ⇒ task có ratio về null.
+    public async Task RecomputeDeadlinesFromRatioAsync(
+        int projectId, DateOnly startDate, DateTime? deadline, CancellationToken ct)
+    {
+        var tasks = await _context.ProjectTasks
+            .Where(t => t.ProjectId == projectId && t.DeadlineOffsetRatio != null)
+            .ToListAsync(ct);
+        if (tasks.Count == 0) return;
+
+        var start = startDate.ToDateTime(TimeOnly.MinValue);
+        foreach (var t in tasks)
+        {
+            var ratio = Math.Clamp(t.DeadlineOffsetRatio!.Value, 0, 1);
+            t.Deadline = deadline is { } dl && dl > start
+                ? start.AddTicks((long)((dl - start).Ticks * ratio))
+                : null;
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    // ⭐ Rollup đệ quy lên tổ tiên (refactor mục 5/7): đi ngược ParentTaskId từ leaf vừa Done, mỗi container
+    // tự cộng CompletedQuantity rồi tự Done nếu đủ điều kiện (mọi con Done + gate bắt buộc Done + đạt capacity).
+    public async Task RollupAncestorsAsync(
+        int leafTaskId, DateTime completedAt, int completedByUserId, CancellationToken ct)
+    {
+        var parentId = await GetParentIdAsync(leafTaskId, ct);
+        while (parentId is int pid)
+        {
+            await RecomputeParentCompletedAsync(pid, ct);
+            await TrySetContainerDoneAsync(pid, completedAt, completedByUserId, ct);
+            parentId = await GetParentIdAsync(pid, ct);
+        }
+    }
+
+    public async Task RecomputeAncestorsCompletedAsync(int leafTaskId, CancellationToken ct)
+    {
+        var parentId = await GetParentIdAsync(leafTaskId, ct);
+        while (parentId is int pid)
+        {
+            await RecomputeParentCompletedAsync(pid, ct);
+            parentId = await GetParentIdAsync(pid, ct);
+        }
+    }
+
+    private Task<int?> GetParentIdAsync(int taskId, CancellationToken ct) =>
+        _context.ProjectTasks.AsNoTracking()
+            .Where(t => t.Id == taskId)
+            .Select(t => t.ParentTaskId)
+            .FirstOrDefaultAsync(ct);
+
+    // Container tự Done: mọi con (bỏ Paused/Cancelled) đã Done + mọi gate bắt buộc Done + Σ workunits con đạt
+    // capacity node (chống under-allocation: chưa chia hết capacity ⇒ chưa Done). PlannedQuantity container = 0.
+    private async Task<bool> TrySetContainerDoneAsync(
+        int containerId, DateTime completedAt, int completedByUserId, CancellationToken ct)
+    {
+        var affected = await _context.ProjectTasks
+            .Where(p => p.Id == containerId
+                && p.Status != TaskItemStatus.Done
+                && p.Children.Any()
+                && !p.Children.Any(c => c.Status != TaskItemStatus.Done
+                        && c.Status != TaskItemStatus.Paused && c.Status != TaskItemStatus.Cancelled)
+                && !p.Children.Any(c => c.ProgressType == ProgressType.Milestone
+                        && c.IsRequiredGate && c.Status != TaskItemStatus.Done)
+                && p.Children
+                        .Where(c => c.Status != TaskItemStatus.Paused && c.Status != TaskItemStatus.Cancelled)
+                        .Sum(c => c.PlannedWorkUnits) >= p.PlannedWorkUnits)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Status, TaskItemStatus.Done)
+                .SetProperty(p => p.CompletedAt, completedAt)
+                .SetProperty(p => p.CompletedByUserId, completedByUserId), ct);
+
+        return affected == 1;
     }
 
     // ⭐ Persist cha Done nguyên tử — điều kiện đúng docs/plans/plan.md mục 4.3, cả 3 phải thoả:

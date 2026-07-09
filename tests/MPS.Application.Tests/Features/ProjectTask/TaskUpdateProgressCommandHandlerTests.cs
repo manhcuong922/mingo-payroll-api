@@ -13,6 +13,7 @@ namespace MPS.Application.Tests.Features.ProjectTask;
 public sealed class TaskUpdateProgressCommandHandlerTests
 {
     private readonly Mock<IProjectTaskRepository> _tasks = new();
+    private readonly Mock<IProjectRepository> _projects = new();
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
@@ -20,7 +21,7 @@ public sealed class TaskUpdateProgressCommandHandlerTests
     private const int DeptId = 3;
 
     private TaskUpdateProgressCommandHandler CreateSut() =>
-        new(_tasks.Object, _authorizer.Object, _currentUser.Object);
+        new(_tasks.Object, _projects.Object, _authorizer.Object, _currentUser.Object);
 
     private static string Rv(byte[] b) => Convert.ToBase64String(b);
 
@@ -82,7 +83,7 @@ public sealed class TaskUpdateProgressCommandHandlerTests
 
         await CreateSut().Handle(new TaskUpdateProgressCommand(10, 30, Rv(task.RowVersion)), CancellationToken.None);
 
-        _tasks.Verify(t => t.RecomputeParentCompletedAsync(5, It.IsAny<CancellationToken>()), Times.Once);
+        _tasks.Verify(t => t.RecomputeAncestorsCompletedAsync(10, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
