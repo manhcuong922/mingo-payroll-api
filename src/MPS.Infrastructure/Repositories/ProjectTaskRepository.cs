@@ -26,7 +26,9 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .Include(t => t.CreatedBy)
             .Include(t => t.CompletedBy)
             .Include(t => t.Department)
+            .Include(t => t.RequiredPosition)
             .Include(t => t.Children).ThenInclude(c => c.Assignees).ThenInclude(a => a.User)
+            .Include(t => t.Children).ThenInclude(c => c.RequiredPosition)
             .FirstOrDefaultAsync(t => t.Id == id, ct);
 
     public async Task<IReadOnlyList<ProjectTask>> GetByProjectIdAsync(
@@ -35,6 +37,7 @@ public class ProjectTaskRepository : IProjectTaskRepository
         var query = _context.ProjectTasks
             .AsNoTracking()
             .Include(t => t.Assignees).ThenInclude(a => a.User)
+            .Include(t => t.RequiredPosition)
             .Where(t => t.ProjectId == projectId)
             .AsQueryable();
 
@@ -70,6 +73,7 @@ public class ProjectTaskRepository : IProjectTaskRepository
         var query = _context.ProjectTasks
             .AsNoTracking()
             .Include(t => t.Assignees).ThenInclude(a => a.User)
+            .Include(t => t.RequiredPosition)
             .Where(t => t.DepartmentId == departmentId)
             .AsQueryable();
 
@@ -86,6 +90,7 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .AsNoTracking()
             .Include(t => t.Department)
             .Include(t => t.Assignees)
+            .Include(t => t.RequiredPosition)
             .Where(t => !t.IsBatchParent && t.Assignees.Any(a => a.UserId == userId))
             .AsQueryable();
 
