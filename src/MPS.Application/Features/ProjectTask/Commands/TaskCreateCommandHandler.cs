@@ -55,7 +55,7 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
                 ?? throw new NotFoundException($"Không tìm thấy đơn #{pid}.");
 
         ValidateDeadlineScope(request, parent, project);
-        await ValidateQuantityScopeAsync(request, parent, ct);
+        // Sản lượng scale tự do — bỏ luật "tổng con ≤ sản lượng cha" (% tiến độ do trọng số, không do sản lượng).
         ValidateParentNotDone(parent);
 
         // Gán người vào vị trí lá: cùng xưởng + đúng chức danh + không InProgress ở task khác (refactor I/P/D).
@@ -117,18 +117,6 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
 
         if (project?.Deadline is { } projectDeadline && childDeadline > projectDeadline)
             throw new DomainValidationException("Deadline task không được vượt quá deadline đơn.");
-    }
-
-    // Tổng sản lượng các con Quantity không vượt sản lượng cha. Gate (Milestone) không có sản lượng nên không tham gia.
-    private async Task ValidateQuantityScopeAsync(TaskCreateCommand request, ProjectTaskEntity? parent, CancellationToken ct)
-    {
-        if (request.IsBatchParent || parent is null || parent.ProgressType != ProgressType.Quantity
-            || request.ProgressType != ProgressType.Quantity || parent.PlannedQuantity <= 0) return;
-
-        var siblingsPlanned = await _tasks.SumChildrenPlannedQuantityAsync(parent.Id, excludeTaskId: null, ct);
-        if (siblingsPlanned + request.PlannedQuantity > parent.PlannedQuantity)
-            throw new DomainValidationException(
-                $"Tổng sản lượng các task con ({siblingsPlanned + request.PlannedQuantity}) vượt quá sản lượng node cha ({parent.PlannedQuantity}).");
     }
 
     private static ProjectTaskEntity BuildTask(TaskCreateCommand request, int userId, ProjectEntity? project)

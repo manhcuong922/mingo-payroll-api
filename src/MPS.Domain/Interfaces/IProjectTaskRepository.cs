@@ -28,6 +28,10 @@ public interface IProjectTaskRepository
     Task<bool> UpdateAsync(ProjectTask entity, CancellationToken ct);
     Task<bool> DeleteAsync(int id, CancellationToken ct);
 
+    // ⭐ Đồng bộ danh sách người gán của 1 task lá: xoá sạch dòng cũ rồi chèn mới. Tách riêng khỏi UpdateAsync
+    // vì TaskAssignee dùng KHÓA GHÉP (TaskId, UserId) — EF Update coi entity mới là Modified → UPDATE 0 dòng.
+    Task ReplaceAssigneesAsync(int taskId, IReadOnlyCollection<int> userIds, DateTime assignedAt, CancellationToken ct);
+
     // Update có kiểm optimistic concurrency: expectedRowVersion khớp mới ghi.
     // Trả false nếu RowVersion đã đổi (client cần reload) — handler ánh xạ sang 409.
     Task<bool> UpdateWithConcurrencyAsync(ProjectTask entity, byte[] expectedRowVersion, CancellationToken ct);

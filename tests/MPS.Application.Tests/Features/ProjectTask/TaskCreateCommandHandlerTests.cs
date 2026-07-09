@@ -155,28 +155,6 @@ public sealed class TaskCreateCommandHandlerTests
     }
 
     [Fact]
-    public async Task Create_Throws_WhenQuantityChildExceedsParentRemainingQuantity()
-    {
-        // Công đoạn #5 PlannedQuantity=1000; sibling con Quantity đã chiếm 960 — thêm con Quantity 50
-        // nữa sẽ vượt 1000, phải bị chặn.
-        SetupManagerWithMembers(11, 12, 13);
-        _tasks.Setup(t => t.SumChildrenPlannedQuantityAsync(StageId, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(960);
-        var overflowCommand = new TaskCreateCommand(
-            ProjectId: 1, DepartmentId: DeptId, ParentTaskId: StageId,
-            Title: "Cắt khung - thêm", Description: null,
-            ProgressType: ProgressType.Quantity,
-            PlannedQuantity: 50, PlannedWorkUnits: 0, IsRequiredGate: false,
-            Deadline: null, Priority: null, StepOrder: 1,
-            AssigneeUserIds: new[] { 11 });
-
-        var act = () => CreateSut().Handle(overflowCommand, CancellationToken.None);
-
-        await act.Should().ThrowAsync<DomainValidationException>();
-        _tasks.Verify(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
     public async Task Create_Throws403_WhenNotPlanningManagerOfDepartment()
     {
         // refactor R/S: user #7 không phải Planning Manager của xưởng (IsManagerOfAsync=false) → 403.

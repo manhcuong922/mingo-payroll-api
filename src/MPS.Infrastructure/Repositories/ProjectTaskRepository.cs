@@ -148,6 +148,22 @@ public class ProjectTaskRepository : IProjectTaskRepository
         return await _context.SaveChangesAsync(ct) > 0;
     }
 
+    // Xoá sạch dòng gán cũ (set-based, không qua change-tracker) rồi chèn mới với state Added. Tránh việc
+    // EF Update coi TaskAssignee (khóa ghép TaskId+UserId, không store-generated) là Modified ⇒ UPDATE 0 dòng
+    // ⇒ DbUpdateConcurrencyException ("A database error occurred") khi gán người lần đầu.
+    public async Task ReplaceAssigneesAsync(
+        int taskId, IReadOnlyCollection<int> userIds, DateTime assignedAt, CancellationToken ct)
+    {
+        await _context.TaskAssignees.Where(a => a.TaskId == taskId).ExecuteDeleteAsync(ct);
+
+        var distinct = userIds.Distinct().ToList();
+        if (distinct.Count == 0) return;
+
+        var rows = distinct.Select(uid => new TaskAssignee { TaskId = taskId, UserId = uid, AssignedAt = assignedAt });
+        await _context.TaskAssignees.AddRangeAsync(rows, ct);
+        await _context.SaveChangesAsync(ct);
+    }
+
     public async Task<bool> UpdateWithConcurrencyAsync(ProjectTask entity, byte[] expectedRowVersion, CancellationToken ct)
     {
         _context.ProjectTasks.Update(entity);

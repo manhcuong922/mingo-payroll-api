@@ -5,12 +5,15 @@ namespace MPS.Application.Services;
 
 /// <summary>
 /// Tiến độ đệ quy N tầng theo chuẩn WBS (refactor task-full-generation, mục 2).
+/// Trọng số (PlannedWorkUnits) = % đóng góp của node vào nhóm cha; mỗi nhóm anh-em (và tập node
+/// top-level), bỏ Gate, được soạn sao cho tổng = 100 (chặn ở ProcessTemplateTreeBuilder).
 /// NodePercent(node), bỏ qua con Paused/Cancelled:
 ///   - Work-leaf (Quantity, không con): PlannedQuantity&gt;0 ? min(Completed,Planned)/Planned : (Done?1:0)
-///   - Container (có con): Σ(child.PlannedWorkUnits × NodePercent(child)) / node.PlannedWorkUnits, cap 1.0
-///       → mẫu số = capacity RIÊNG của node ⇒ chưa chia hết capacity thì % &lt; 100 (under-allocation mọi tầng).
+///   - Container (có con): Σ(child.PlannedWorkUnits × NodePercent(child)) / Σ(child.PlannedWorkUnits), cap 1.0
+///       → mẫu số = TỔNG trọng số con hiện có ⇒ mọi con xong 100% thì nhóm = 100% (không under-allocation).
+///         Con Paused/Cancelled rơi khỏi cả tử lẫn mẫu ⇒ tự chuẩn hoá lại theo phần còn hiệu lực.
 ///   - Gate (Milestone): KHÔNG tham gia % (chỉ chặn Done).
-/// ProjectPercent = earned/BAC ở gốc ảo bọc node top-level, weight theo PlannedWorkUnits.
+/// ProjectPercent = earned/BAC ở gốc ảo bọc node top-level, weight theo PlannedWorkUnits (Σ = 100).
 /// EV = earned gốc; BAC = Σ PlannedWorkUnits node top-level; PV = BAC × timeElapsed; SPI = EV/PV.
 /// </summary>
 public sealed class ProgressService : IProgressService
@@ -89,7 +92,8 @@ public sealed class ProgressService : IProgressService
 
         if (effectiveChildren.Count > 0)
         {
-            // Container: Σ(child.workunits × childPercent) / capacity riêng node (cap 1.0).
+            // Container: Σ(child.workunits × childPercent) / TỔNG trọng số con hiện có (cap 1.0).
+            // Mẫu số = tổng trọng số con (không phải capacity riêng của node) ⇒ mọi con xong = nhóm 100%.
             double childEarned = 0, childWorkUnits = 0;
             foreach (var child in effectiveChildren)
             {
@@ -97,8 +101,7 @@ public sealed class ProgressService : IProgressService
                 childWorkUnits += child.PlannedWorkUnits;
             }
 
-            var denom = node.PlannedWorkUnits > 0 ? node.PlannedWorkUnits : childWorkUnits;
-            result = denom > 0 ? Math.Min(childEarned / denom, 1.0) : 0;
+            result = childWorkUnits > 0 ? Math.Min(childEarned / childWorkUnits, 1.0) : 0;
         }
         else if (IsGate(node))
         {

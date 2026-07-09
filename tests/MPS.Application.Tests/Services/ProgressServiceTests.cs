@@ -8,10 +8,10 @@ namespace MPS.Application.Tests.Services;
 
 // Refactor task-full-generation: tiến độ đệ quy N tầng theo WBS.
 //   - Work-leaf (Quantity): min(Completed,Planned)/Planned.
-//   - Container: Σ(child.PlannedWorkUnits × childPct) / node.PlannedWorkUnits (capacity riêng, cap 1.0)
-//       ⇒ chưa chia hết capacity ⇒ % < 100 (under-allocation ở mọi tầng).
+//   - Container: Σ(child.PlannedWorkUnits × childPct) / Σ(child.PlannedWorkUnits) (cap 1.0)
+//       ⇒ mọi con xong 100% thì nhóm = 100% (trọng số con soạn tổng = 100, không under-allocation).
 //   - Gate (Milestone): KHÔNG tham gia %.
-//   - Paused/Cancelled: loại khỏi mẫu số ở mọi tầng.
+//   - Paused/Cancelled: loại khỏi tử & mẫu ở mọi tầng (tự chuẩn hoá theo phần còn hiệu lực).
 //   - BAC = Σ PlannedWorkUnits node top-level; EV = earned; PV = BAC × time; SPI = EV/PV.
 public sealed class ProgressServiceTests
 {
@@ -20,7 +20,7 @@ public sealed class ProgressServiceTests
     private static Project Project(DateOnly start, DateTime? deadline) =>
         new() { Id = 1, StartDate = start, Deadline = deadline, Quantity = 100 };
 
-    // Container = node có con (nhận diện theo cấu trúc). PlannedWorkUnits = capacity/mẫu số riêng.
+    // Container = node có con (nhận diện theo cấu trúc). PlannedWorkUnits = trọng số của node khi rollup lên cha.
     private static ProjectTask Container(int id, int plannedWorkUnits, int? parentId = null,
         TaskItemStatus status = TaskItemStatus.InProgress) =>
         new()
@@ -68,9 +68,11 @@ public sealed class ProgressServiceTests
     }
 
     [Fact]
-    public void Compute_UnderAllocation_CapacityIsDenominator()
+    public void Compute_Container_NormalizesByChildrenSum_NoUnderAllocation()
     {
-        // Capacity 500 nhưng chỉ 300 WorkUnits được giao, dù con đó xong 100% ⇒ 300/500 = 60%.
+        // Mẫu số = TỔNG trọng số con hiện có (không phải capacity riêng của container).
+        // Container "khai" 500 nhưng con duy nhất (trọng số 300) xong 100% ⇒ 300/300 = 100%
+        // (mọi con xong = nhóm 100%, không còn under-allocation khoá trần).
         var project = Project(DateOnly.FromDateTime(DateTime.UtcNow), DateTime.UtcNow.AddDays(10));
         var tasks = new List<ProjectTask>
         {
@@ -80,7 +82,7 @@ public sealed class ProgressServiceTests
 
         var result = _sut.Compute(project, tasks, DateTime.UtcNow);
 
-        result.CompletionPercent.Should().Be(60);
+        result.CompletionPercent.Should().Be(100);
     }
 
     [Fact]

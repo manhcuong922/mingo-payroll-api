@@ -80,8 +80,9 @@ public sealed class ProcessTemplateCreateCommandValidatorTests
     [Fact]
     public void TreeBuilder_Throws_WhenChildRatioExceedsParent()
     {
+        // Trọng số hợp lệ (gốc 100, con 100) để lỗi nổi lên là do ratio con > cha, không phải tổng nhóm.
         var parent = new ProcessStepInput(
-            "Cắt", null, 1, ProgressType.Quantity, 0, 500, false, 0, null, false,
+            "Cắt", null, 1, ProgressType.Quantity, 0, 100, false, 0, null, false,
             DefaultDeadlineOffsetRatio: 0.4, Priority: 2,
             Children: new[]
             {
@@ -95,13 +96,95 @@ public sealed class ProcessTemplateCreateCommandValidatorTests
     [Fact]
     public void TreeBuilder_BuildsContainerWithLeafAndGate_Flat()
     {
+        // Gốc: 1 container = 100. Con: 1 leaf = 100 (+ gate không tính) ⇒ mọi nhóm cộng đúng 100.
         var container = new ProcessStepInput(
-            "Cắt", null, 1, ProgressType.Quantity, 0, 500, false, 0, null, false, null, 2,
+            "Cắt", null, 1, ProgressType.Quantity, 0, 100, false, 0, null, false, null, 2,
             Children: new[] { Leaf(), Gate() });
 
         var flat = ProcessTemplateTreeBuilder.Build(new[] { container });
 
         flat.Should().HaveCount(3);
         flat.Single(s => s.Name == "Cắt").Children.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void TreeBuilder_Throws_WhenContainerHasZeroWorkUnits()
+    {
+        // Trọng số nhóm phải > 0 — bắt ngay khi soạn template thay vì để lỗi runtime lúc generate.
+        var container = new ProcessStepInput(
+            "Cắt", null, 1, ProgressType.Quantity, 0, DefaultPlannedWorkUnits: 0, false, 0, null, false, null, 2,
+            Children: new[] { Leaf() });
+
+        var act = () => ProcessTemplateTreeBuilder.Build(new[] { container });
+        act.Should().Throw<DomainValidationException>().WithMessage("*trọng số*");
+    }
+
+    [Fact]
+    public void TreeBuilder_Throws_WhenTopLevelWeightsDoNotSumTo100()
+    {
+        // 2 node gốc 60 + 30 = 90 ≠ 100 ⇒ chặn: khi mọi việc xong đơn không đạt 100%.
+        var a = Leaf(name: "A", order: 1) with { DefaultPlannedWorkUnits = 60 };
+        var b = Leaf(name: "B", order: 2) with { DefaultPlannedWorkUnits = 30 };
+
+        var act = () => ProcessTemplateTreeBuilder.Build(new[] { a, b });
+        act.Should().Throw<DomainValidationException>().WithMessage("*= 100*");
+    }
+
+    [Fact]
+    public void TreeBuilder_Throws_WhenChildrenWeightsDoNotSumTo100()
+    {
+        // Nhóm gốc = 100 (hợp lệ) nhưng con 70 + 20 = 90 ≠ 100 ⇒ chặn ở tầng con.
+        var container = new ProcessStepInput(
+            "Cắt", null, 1, ProgressType.Quantity, 0, 100, false, 0, null, false, null, 2,
+            Children: new[]
+            {
+                Leaf(name: "A", order: 1) with { DefaultPlannedWorkUnits = 70 },
+                Leaf(name: "B", order: 2) with { DefaultPlannedWorkUnits = 20 },
+            });
+
+        var act = () => ProcessTemplateTreeBuilder.Build(new[] { container });
+        act.Should().Throw<DomainValidationException>().WithMessage("*= 100*");
+    }
+
+    [Fact]
+    public void TreeBuilder_Passes_WhenGroupWeightsSumTo100_IgnoringGate()
+    {
+        // Gốc 100; con 60 + 40 = 100; Gate không tính vào tổng ⇒ hợp lệ.
+        var container = new ProcessStepInput(
+            "Cắt", null, 1, ProgressType.Quantity, 0, 100, false, 0, null, false, null, 2,
+            Children: new[]
+            {
+                Leaf(name: "A", order: 1) with { DefaultPlannedWorkUnits = 60 },
+                Leaf(name: "B", order: 2) with { DefaultPlannedWorkUnits = 40 },
+                Gate() with { StepOrder = 3 },
+            });
+
+        var flat = ProcessTemplateTreeBuilder.Build(new[] { container });
+
+        flat.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public void TreeBuilder_Throws_WhenLeafHasZeroWorkUnits()
+    {
+        var leaf = Leaf() with { DefaultPlannedWorkUnits = 0 };
+
+        var act = () => ProcessTemplateTreeBuilder.Build(new[] { leaf });
+        act.Should().Throw<DomainValidationException>().WithMessage("*trọng số*");
+    }
+
+    [Fact]
+    public void TreeBuilder_ForcesGateWorkUnits_ToZero_EvenIfInputPositive()
+    {
+        // User có thể lỡ nhập WorkUnits > 0 cho Gate; builder phải khoá lại về 0 để rollup
+        // không bao giờ đếm Gate vào % (Gate cũng không tính vào tổng-100 của nhóm).
+        var gateWithBogusWorkUnits = new ProcessStepInput(
+            "QC", null, 2, ProgressType.Milestone, 0, DefaultPlannedWorkUnits: 999,
+            DefaultIsRequiredGate: true, 0, null, false, null, 2, Array.Empty<ProcessStepInput>());
+
+        // Leaf 100 để nhóm gốc (bỏ Gate) cộng đúng 100 → template hợp lệ.
+        var flat = ProcessTemplateTreeBuilder.Build(new[] { Leaf(order: 1), gateWithBogusWorkUnits });
+
+        flat.Single(s => s.Name == "QC").DefaultPlannedWorkUnits.Should().Be(0);
     }
 }
