@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MPS.Domain.Common;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums;
 using MPS.Domain.Interfaces;
@@ -193,14 +194,8 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .ToListAsync(ct);
         if (tasks.Count == 0) return;
 
-        var start = startDate.ToDateTime(TimeOnly.MinValue);
         foreach (var t in tasks)
-        {
-            var ratio = Math.Clamp(t.DeadlineOffsetRatio!.Value, 0, 1);
-            t.Deadline = deadline is { } dl && dl > start
-                ? start.AddTicks((long)((dl - start).Ticks * ratio))
-                : null;
-        }
+            t.Deadline = TaskDeadlineCalculator.DeadlineFromRatio(startDate, deadline, t.DeadlineOffsetRatio);
 
         await _context.SaveChangesAsync(ct);
     }

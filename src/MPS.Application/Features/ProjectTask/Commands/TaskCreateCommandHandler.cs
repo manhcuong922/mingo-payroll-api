@@ -6,6 +6,7 @@ using MPS.Domain.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
+using ProjectEntity = MPS.Domain.Entities.Project;
 using ProjectTaskEntity = MPS.Domain.Entities.ProjectTask;
 using TaskAssignee = MPS.Domain.Entities.TaskAssignee;
 
@@ -46,7 +47,14 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
         // Lập kế hoạch: Planning Manager của xưởng / GĐ.
         await ProjectScopeGuard.EnsureCanWriteAsync(request.DepartmentId, _currentUser, _authorizer, ct);
 
-        await ValidateDeadlineScopeAsync(request, parent, ct);
+        // Chỉ load project khi có Deadline (để validate scope + khoá ratio). Task không deadline không cần —
+        // giữ hợp đồng cũ (task không deadline không phụ thuộc project được load).
+        ProjectEntity? project = null;
+        if (request.Deadline is not null && request.ProjectId is int pid)
+            project = await _projects.GetByIdAsync(pid, ct)
+                ?? throw new NotFoundException($"Không tìm thấy đơn #{pid}.");
+
+        ValidateDeadlineScope(request, parent, project);
         await ValidateQuantityScopeAsync(request, parent, ct);
         ValidateParentNotDone(parent);
 
@@ -56,7 +64,7 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
                 request.AssigneeUserIds, request.DepartmentId, request.RequiredPositionId,
                 Array.Empty<int>(), _departments, _tasks, ct);
 
-        var task = BuildTask(request, userId);
+        var task = BuildTask(request, userId, project);
         return await _tasks.AddAsync(task, ct);
     }
 
@@ -98,19 +106,16 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
         return parent;
     }
 
-    // Deadline con không được vượt phạm vi cha (container) / đơn.
-    private async Task ValidateDeadlineScopeAsync(TaskCreateCommand request, ProjectTaskEntity? parent, CancellationToken ct)
+    // Deadline con không được vượt phạm vi cha (container) / đơn. project + parent load sẵn ngoài (tránh N+1).
+    private static void ValidateDeadlineScope(
+        TaskCreateCommand request, ProjectTaskEntity? parent, ProjectEntity? project)
     {
         if (request.Deadline is not { } childDeadline) return;
 
         if (parent?.Deadline is { } parentDeadline && childDeadline > parentDeadline)
             throw new DomainValidationException("Deadline task con không được vượt quá deadline node cha.");
 
-        if (request.ProjectId is not int projectId) return;
-
-        var project = await _projects.GetByIdAsync(projectId, ct)
-            ?? throw new NotFoundException($"Không tìm thấy đơn #{projectId}.");
-        if (project.Deadline is { } projectDeadline && childDeadline > projectDeadline)
+        if (project?.Deadline is { } projectDeadline && childDeadline > projectDeadline)
             throw new DomainValidationException("Deadline task không được vượt quá deadline đơn.");
     }
 
@@ -126,9 +131,14 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
                 $"Tổng sản lượng các task con ({siblingsPlanned + request.PlannedQuantity}) vượt quá sản lượng node cha ({parent.PlannedQuantity}).");
     }
 
-    private static ProjectTaskEntity BuildTask(TaskCreateCommand request, int userId)
+    private static ProjectTaskEntity BuildTask(TaskCreateCommand request, int userId, ProjectEntity? project)
     {
         var now = VietnamClock.Now;
+        // Khoá ratio ngay khi tạo để lần đổi timeline đơn sau vẫn giữ deadline task theo ý người dùng
+        // (không có project hoặc không đủ timeline → ratio null → task "sticky/manual", cascade bỏ qua).
+        var ratio = project is null
+            ? null
+            : TaskDeadlineCalculator.RatioFromDeadline(project.StartDate, project.Deadline, request.Deadline);
         return new ProjectTaskEntity
         {
             Title = request.Title.Trim(),
@@ -139,6 +149,7 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
             IsBatchParent = request.IsBatchParent,
             Priority = request.Priority,
             Deadline = request.Deadline,
+            DeadlineOffsetRatio = ratio,
             StepOrder = request.StepOrder,
             // Gate (Milestone) không có sản lượng — PlannedQuantity/CompletedQuantity luôn 0.
             PlannedQuantity = request.ProgressType == ProgressType.Quantity ? request.PlannedQuantity : 0,

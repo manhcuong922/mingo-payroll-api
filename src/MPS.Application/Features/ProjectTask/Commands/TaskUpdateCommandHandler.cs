@@ -6,6 +6,7 @@ using MPS.Domain.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
+using ProjectEntity = MPS.Domain.Entities.Project;
 using ProjectTaskEntity = MPS.Domain.Entities.ProjectTask;
 using TaskAssignee = MPS.Domain.Entities.TaskAssignee;
 
@@ -40,12 +41,20 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
 
         await ProjectScopeGuard.EnsureCanPlanTaskAsync(task, _currentUser, _authorizer, ct);
 
-        await ValidateDeadlineScopeAsync(request, task, ct);
+        // Load 1 lần dùng chung cho validate deadline + recompute ratio (tránh N+1 khi 2 nhánh cùng cần).
+        var project = task.ProjectId is int pid ? await _projects.GetByIdAsync(pid, ct) : null;
+
+        ValidateDeadlineScope(request, task, project, await LoadParentIfNeededAsync(task, ct));
         await ValidateQuantityScopeAsync(request, task, ct);
 
         task.Title = request.Title.Trim();
         task.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
         task.Deadline = request.Deadline;
+        // ⭐ Khoá vị trí tương đối theo timeline đơn để lần đổi StartDate/Deadline sau vẫn giữ ý người dùng
+        // — nếu không, cascade recompute-from-ratio sẽ dùng ratio cũ và wipe deadline mới.
+        task.DeadlineOffsetRatio = project is null
+            ? null
+            : TaskDeadlineCalculator.RatioFromDeadline(project.StartDate, project.Deadline, request.Deadline);
         task.Priority = request.Priority;
 
         if (task.IsBatchParent)
@@ -68,25 +77,21 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         return await _tasks.UpdateAsync(task, ct);
     }
 
-    // Deadline task không được vượt phạm vi cha (công đoạn, nếu là task con) / đơn.
-    private async Task ValidateDeadlineScopeAsync(TaskUpdateCommand request, ProjectTaskEntity task, CancellationToken ct)
+    // Deadline task không được vượt phạm vi cha (công đoạn) / đơn. project + parent load sẵn ngoài (tránh N+1).
+    private static void ValidateDeadlineScope(
+        TaskUpdateCommand request, ProjectTaskEntity task, ProjectEntity? project, ProjectTaskEntity? parent)
     {
         if (request.Deadline is not { } newDeadline) return;
 
-        if (task.ParentTaskId is int parentId)
-        {
-            var parent = await _tasks.GetByIdAsync(parentId, ct);
-            if (parent?.Deadline is { } parentDeadline && newDeadline > parentDeadline)
-                throw new DomainValidationException("Deadline task con không được vượt quá deadline công đoạn cha.");
-        }
+        if (parent?.Deadline is { } parentDeadline && newDeadline > parentDeadline)
+            throw new DomainValidationException("Deadline task con không được vượt quá deadline công đoạn cha.");
 
-        if (task.ProjectId is int projectId)
-        {
-            var project = await _projects.GetByIdAsync(projectId, ct);
-            if (project?.Deadline is { } projectDeadline && newDeadline > projectDeadline)
-                throw new DomainValidationException("Deadline task không được vượt quá deadline đơn.");
-        }
+        if (project?.Deadline is { } projectDeadline && newDeadline > projectDeadline)
+            throw new DomainValidationException("Deadline task không được vượt quá deadline đơn.");
     }
+
+    private async Task<ProjectTaskEntity?> LoadParentIfNeededAsync(ProjectTaskEntity task, CancellationToken ct) =>
+        task.ParentTaskId is int parentId ? await _tasks.GetByIdAsync(parentId, ct) : null;
 
     // Tổng sản lượng các task con Quantity (kể cả sau khi sửa) không được vượt sản lượng công đoạn cha —
     // Gate (Milestone) không có sản lượng nên bỏ qua, xem TaskCreateCommandHandler.

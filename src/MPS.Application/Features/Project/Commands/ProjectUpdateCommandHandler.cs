@@ -39,8 +39,11 @@ public class ProjectUpdateCommandHandler : IRequestHandler<ProjectUpdateCommand,
 
         entity.Title = request.Title.Trim();
         entity.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        // Partial-update semantics: null = giữ nguyên (đối xứng với StartDate). Tránh trường hợp client gửi
+        // update Title-only không kèm Deadline → JSON default null → wipe deadline + cascade toàn bộ task về null.
+        // Muốn xoá deadline phải qua endpoint riêng (hiện chưa mở).
         if (request.StartDate is { } start) entity.StartDate = start;
-        entity.Deadline = request.Deadline;
+        if (request.Deadline is { } dl) entity.Deadline = dl;
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
@@ -49,7 +52,7 @@ public class ProjectUpdateCommandHandler : IRequestHandler<ProjectUpdateCommand,
             entity.Status = status;
         }
 
-        if (entity.Deadline is { } dl && dl < entity.StartDate.ToDateTime(TimeOnly.MinValue))
+        if (entity.Deadline is { } deadline && deadline < entity.StartDate.ToDateTime(TimeOnly.MinValue))
             throw new DomainValidationException("Deadline đơn không được trước StartDate.");
 
         var ok = await _repository.UpdateAsync(entity, cancellationToken);

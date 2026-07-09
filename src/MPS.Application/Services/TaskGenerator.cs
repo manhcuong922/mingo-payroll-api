@@ -1,3 +1,4 @@
+using MPS.Domain.Common;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums;
 using MPS.Domain.Exceptions;
@@ -67,7 +68,8 @@ public sealed class TaskGenerator : ITaskGenerator
             CreatedByUserId = createdByUserId,
             ParentTask = parent,
             DeadlineOffsetRatio = step.DefaultDeadlineOffsetRatio,
-            Deadline = ComputeDeadline(project, step.DefaultDeadlineOffsetRatio),
+            Deadline = TaskDeadlineCalculator.DeadlineFromRatio(
+                project.StartDate, project.Deadline, step.DefaultDeadlineOffsetRatio),
         };
 
         if (isGate)
@@ -97,18 +99,6 @@ public sealed class TaskGenerator : ITaskGenerator
         }
 
         return node;
-    }
-
-    // task.Deadline = StartDate + ratio × (Deadline − StartDate). null ratio / đơn không Deadline ⇒ không deadline.
-    private static DateTime? ComputeDeadline(Project project, double? ratio)
-    {
-        if (ratio is not { } r || project.Deadline is not { } deadline) return null;
-
-        var start = project.StartDate.ToDateTime(TimeOnly.MinValue);
-        var span = deadline - start;
-        if (span <= TimeSpan.Zero) return deadline;
-
-        return start.AddTicks((long)(span.Ticks * Math.Clamp(r, 0, 1)));
     }
 
     private static List<ProjectTask> Flatten(IEnumerable<ProjectTask> roots)
