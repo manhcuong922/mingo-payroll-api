@@ -243,14 +243,7 @@ public static class Permissions
     // dùng Read/Write.Project (tầng 1) và Read/Write.Stage (tầng 2+3) thay thế ở IDs 220–223.
     public const string ProductionAttachmentReadDepartment  = "ProductionAttachment.Read.Department";
 
-    // (170–173 reserved unused)
-
-    // ===== WeeklyDayOff module — IDs 174–177 =====
-
-    public const string WeeklyDayOffReadAll   = "WeeklyDayOff.Read.All";
-    public const string WeeklyDayOffCreateAll = "WeeklyDayOff.Create.All";
-    public const string WeeklyDayOffUpdateAll = "WeeklyDayOff.Update.All";
-    public const string WeeklyDayOffDeleteAll = "WeeklyDayOff.Delete.All";
+    // (170–177 reserved unused — WeeklyDayOff module removed 2026-07-10)
 
     // ===== OT batch workflow + EmployeeShift self-read — IDs 178–179 =====
 
@@ -538,14 +531,7 @@ public static class PermissionIds
 
     public const int ProductionAttachmentReadDepartment  = 169; // LEGACY
 
-    // (170–173 reserved unused)
-
-    // ===== WeeklyDayOff module — IDs 174–177 =====
-
-    public const int WeeklyDayOffReadAll   = 174;
-    public const int WeeklyDayOffCreateAll = 175;
-    public const int WeeklyDayOffUpdateAll = 176;
-    public const int WeeklyDayOffDeleteAll = 177;
+    // (170–177 reserved unused — WeeklyDayOff module removed 2026-07-10)
 
     // ===== OT batch workflow + EmployeeShift self-read — IDs 178–179 =====
 

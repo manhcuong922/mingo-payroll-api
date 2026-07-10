@@ -126,26 +126,6 @@ public sealed record PublicHolidayDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
-public sealed record WeeklyDayOffRuleDto(
-    int Id,
-    string Name,
-    string? Description,
-    IReadOnlyList<int> DaysOfWeek,
-    string ApplyScope,
-    string? TargetDepartmentIds,
-    string? TargetEmployeeIds,
-    DateOnly EffectiveFrom,
-    DateOnly? EffectiveTo,
-    bool IsActive,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt);
-
-public sealed record WeeklyDayOffResolveDto(
-    int EmployeeInformationId,
-    DateOnly Date,
-    IReadOnlyList<int> DaysOfWeek,
-    bool IsWeeklyRestDay);
-
 public sealed record AttendanceRecordDto(
     int Id,
     int EmployeeInformationId,

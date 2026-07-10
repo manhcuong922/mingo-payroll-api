@@ -65,7 +65,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         if (!LeaveTypeAssignmentPolicy.AppliesToEmployee(leaveType, employeeId, employee.DepartmentId))
             throw new DomainValidationException($"Leave type '{leaveType.Code}' is not assigned to this employee.");
 
-        // TotalDays = số ngày trong khoảng không phải WeeklyRestDay (theo WeeklyDayOffRule config).
+        // TotalDays = số ngày trong khoảng không phải WeeklyRestDay (Thứ 7 + Chủ nhật).
         var totalDays = await CountWorkingDaysAsync(employeeId, request.StartDate, request.EndDate, cancellationToken);
         if (totalDays <= 0)
             throw new DomainValidationException("Leave period must contain at least one working day (non-weekly-rest-day).");

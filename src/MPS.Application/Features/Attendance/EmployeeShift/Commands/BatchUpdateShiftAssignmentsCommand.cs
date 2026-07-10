@@ -28,7 +28,7 @@ public enum BatchShiftItemStatus
     InvalidEmployee = 8,
     /// <summary>Multi-shift: ca mới giao thoa thời gian với ca đã có trên cùng ngày.</summary>
     OverlapsExistingShift = 9,
-    /// <summary>Ngày rơi vào WeeklyRestDay của NV (theo WeeklyDayOffRule) — bỏ qua khi chưa acknowledge.</summary>
+    /// <summary>Ngày rơi vào WeeklyRestDay của NV (Thứ 7 + Chủ nhật) — bỏ qua khi chưa acknowledge.</summary>
     SkippedWeeklyRestDay = 10,
     /// <summary>Ngày rơi vào PublicHoliday áp dụng cho NV — bỏ qua khi chưa acknowledge.</summary>
     SkippedPublicHoliday = 11
