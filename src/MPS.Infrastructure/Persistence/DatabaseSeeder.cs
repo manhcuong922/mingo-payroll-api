@@ -11,7 +11,7 @@ using MPS.Domain.Enums.Compliance;
 
 namespace MPS.Infrastructure.Persistence;
 
-public sealed class DatabaseSeeder
+public sealed partial class DatabaseSeeder
 {
     private readonly AppDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
