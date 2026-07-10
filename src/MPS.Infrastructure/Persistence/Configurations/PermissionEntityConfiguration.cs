@@ -154,6 +154,18 @@ public class PermissionEntityConfiguration : IEntityTypeConfiguration<Permission
 
         P(PermissionIds.TaskAuditReadAll,        Permissions.TaskAuditReadAll,        "Task", "Audit.Read", PermissionScope.All, "Xem lịch sử chỉnh sửa task/đơn mọi xưởng."),
         P(PermissionIds.TaskAuditReadDepartment, Permissions.TaskAuditReadDepartment, "Task", "Audit.Read", "Department",        "Xem lịch sử chỉnh sửa task/đơn xưởng mình."),
+
+        // ===== Evaluation module (chấm điểm nhân sự theo tháng) — IDs 224–233 =====
+        P(PermissionIds.OrderEvaluationReadOwn,   Permissions.OrderEvaluationReadOwn,   "OrderEvaluation", "Read",   "Own",                "Xem bảng đánh giá theo đơn mình phụ trách."),
+        P(PermissionIds.OrderEvaluationReadAll,   Permissions.OrderEvaluationReadAll,   "OrderEvaluation", "Read",   PermissionScope.All,  "Xem mọi bảng đánh giá theo đơn."),
+        P(PermissionIds.OrderEvaluationScoreOwn,  Permissions.OrderEvaluationScoreOwn,  "OrderEvaluation", "Score",  "Own",                "Chấm điểm bảng đánh giá đơn mình phụ trách."),
+        P(PermissionIds.OrderEvaluationSubmitOwn, Permissions.OrderEvaluationSubmitOwn, "OrderEvaluation", "Submit", "Own",                "Chốt (submit) bảng đánh giá theo đơn."),
+        P(PermissionIds.MonthlyEvaluationReadAll,        Permissions.MonthlyEvaluationReadAll,        "MonthlyEvaluation", "Read",        PermissionScope.All,  "Xem mọi bảng đánh giá tháng."),
+        P(PermissionIds.MonthlyEvaluationReadSelf,       Permissions.MonthlyEvaluationReadSelf,       "MonthlyEvaluation", "Read",        PermissionScope.Self, "Xem bảng đánh giá tháng của chính mình."),
+        P(PermissionIds.MonthlyEvaluationAggregateAll,   Permissions.MonthlyEvaluationAggregateAll,   "MonthlyEvaluation", "Aggregate",   PermissionScope.All,  "Tổng hợp bảng tháng từ các bảng theo đơn."),
+        P(PermissionIds.MonthlyEvaluationScoreDirectAll, Permissions.MonthlyEvaluationScoreDirectAll, "MonthlyEvaluation", "ScoreDirect", PermissionScope.All,  "Director chấm trực tiếp tổ trưởng/văn phòng."),
+        P(PermissionIds.MonthlyEvaluationApproveAll,     Permissions.MonthlyEvaluationApproveAll,     "MonthlyEvaluation", "Approve",     PermissionScope.All,  "Duyệt & khóa bảng đánh giá tháng."),
+        P(PermissionIds.MonthlyEvaluationReopenAll,      Permissions.MonthlyEvaluationReopenAll,      "MonthlyEvaluation", "Reopen",      PermissionScope.All,  "Mở lại bảng tháng đã khóa."),
     };
 
     private static Permission P(int id, string code, string resource, string action, string scope, string description) => new()
