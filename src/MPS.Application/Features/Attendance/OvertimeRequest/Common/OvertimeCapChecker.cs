@@ -54,7 +54,7 @@ public sealed class OvertimeCapChecker
                     a.WorkDate, a.ShiftTemplate.StartTime, a.ShiftTemplate.EndTime))
             {
                 throw new DomainValidationException(
-                    $"BR-5: OT overlaps regular shift '{a.ShiftTemplate.Code}' on {a.WorkDate:yyyy-MM-dd} ({a.ShiftTemplate.StartTime:HH\\:mm}–{a.ShiftTemplate.EndTime:HH\\:mm}).");
+                    $"Thời gian làm thêm bị trùng với ca làm việc chính '{a.ShiftTemplate.Code}' vào ngày {a.WorkDate:yyyy-MM-dd} (từ {a.ShiftTemplate.StartTime:HH\\:mm} đến {a.ShiftTemplate.EndTime:HH\\:mm}).");
             }
         }
 
@@ -69,17 +69,17 @@ public sealed class OvertimeCapChecker
             var halfShift = totalShiftHours / 2m;
             if (otHours > halfShift)
                 throw new DomainValidationException(
-                    $"BR-6: Daily OT cannot exceed 50% of total shift hours ({halfShift}h).");
+                    $"Thời gian làm thêm không được vượt quá 50% thời lượng ca chính (tối đa {halfShift} giờ).");
             if (totalShiftHours + otHours > dailyTotalCap)
                 throw new DomainValidationException(
-                    $"BR-6: Total work (shifts {totalShiftHours}h + OT {otHours}h) exceeds {dailyTotalCap}h/day.");
+                    $"Tổng thời gian làm việc (gồm {totalShiftHours} giờ ca chính và {otHours} giờ làm thêm) đã vượt mức cho phép {dailyTotalCap} giờ/ngày.");
         }
         else
         {
             // Chưa phân ca: dùng OvertimeMaxHoursPerDay từ luật.
             if (otHours > laborLaw.OvertimeMaxHoursPerDay)
                 throw new DomainValidationException(
-                    $"BR-6: Daily OT cap exceeded ({otHours}h > {laborLaw.OvertimeMaxHoursPerDay}h).");
+                    $"Thời gian làm thêm trong ngày vượt mức giới hạn (yêu cầu {otHours} giờ, nhưng tối đa chỉ được {laborLaw.OvertimeMaxHoursPerDay} giờ).");
         }
 
         // BR-7: monthly cap từ luật (Điều 107.2.b — 40h/tháng default, có thể tăng theo NĐ145/2020)
@@ -87,14 +87,14 @@ public sealed class OvertimeCapChecker
             employeeInformationId, workDate.Year, workDate.Month, cancellationToken);
         if (monthlyApproved + otHours > laborLaw.OvertimeMaxHoursPerMonth)
             throw new DomainValidationException(
-                $"BR-7: Monthly OT cap exceeded. Approved={monthlyApproved}h, requested={otHours}h, cap={laborLaw.OvertimeMaxHoursPerMonth}h.");
+                $"Đã vượt giới hạn giờ làm thêm trong tháng. (Đã duyệt: {monthlyApproved} giờ, yêu cầu mới: {otHours} giờ, giới hạn tối đa: {laborLaw.OvertimeMaxHoursPerMonth} giờ).");
 
         // BR-8: yearly cap
         var yearlyApproved = await _otRepository.GetTotalOtHoursInYearAsync(
             employeeInformationId, workDate.Year, cancellationToken);
         if (yearlyApproved + otHours > laborLaw.OvertimeMaxHoursPerYear)
             throw new DomainValidationException(
-                $"BR-8: Yearly OT cap exceeded. Approved={yearlyApproved}h, requested={otHours}h, cap={laborLaw.OvertimeMaxHoursPerYear}h.");
+                $"Đã vượt giới hạn giờ làm thêm trong năm. (Đã duyệt: {yearlyApproved} giờ, yêu cầu mới: {otHours} giờ, giới hạn tối đa: {laborLaw.OvertimeMaxHoursPerYear} giờ).");
     }
 
     private static bool Overlaps(
