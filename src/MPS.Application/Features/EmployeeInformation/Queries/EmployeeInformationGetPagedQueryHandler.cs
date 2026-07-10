@@ -50,7 +50,7 @@ public class EmployeeInformationGetPagedQueryHandler
             request.Keyword,
             request.PositionId,
             request.HasAccount,
-            request.HasActiveContract,
+            hasActiveUser: request.HasActiveUser,
             request.Page,
             request.PageSize,
             cancellationToken: cancellationToken);

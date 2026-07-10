@@ -18,7 +18,6 @@ public class UpdateScheduleTemplateCommandHandler
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
-    private readonly IContractRepository _contractRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IMediator _mediator;
     private readonly ICurrentUserService _currentUser;
@@ -29,7 +28,6 @@ public class UpdateScheduleTemplateCommandHandler
         IShiftTemplateRepository shiftRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
-        IContractRepository contractRepository,
         IEmployeeInformationRepository employeeRepository,
         IMediator mediator,
         ICurrentUserService currentUser,
@@ -39,7 +37,6 @@ public class UpdateScheduleTemplateCommandHandler
         _shiftRepository = shiftRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
-        _contractRepository = contractRepository;
         _employeeRepository = employeeRepository;
         _mediator = mediator;
         _currentUser = currentUser;
@@ -90,7 +87,7 @@ public class UpdateScheduleTemplateCommandHandler
         // vì đang refactor — đơn giản hơn).
         var shifts = await LoadActiveShiftsAsync(request.ShiftTemplateIds, cancellationToken);
 
-        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
+        await EnsureEmployeesHaveActiveUsersAsync(employeeIds, cancellationToken);
 
         // Hướng mới: pattern-date overlap check chỉ chặn khi ca mới giao thoa thời gian với ca đã có.
         var newShape = new ScheduleTemplateEntity
@@ -185,14 +182,14 @@ public class UpdateScheduleTemplateCommandHandler
             .ToList();
     }
 
-    private async Task EnsureEmployeesHaveActiveContractsAsync(
+    private async Task EnsureEmployeesHaveActiveUsersAsync(
         IReadOnlyCollection<int> employeeIds,
         CancellationToken cancellationToken)
     {
         var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
         if (ids.Length == 0) return;
 
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(ids, cancellationToken);
         var activeSet = activeIds.ToHashSet();
         var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
         if (inactiveIds.Length == 0) return;
@@ -200,7 +197,7 @@ public class UpdateScheduleTemplateCommandHandler
         var preview = string.Join(", ", inactiveIds.Take(10));
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
-            $"Không thể cập nhật bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+            $"Không thể cập nhật bảng phân ca: nhân viên {preview}{suffix} không có tài khoản active.");
     }
 
     private async Task EnsureNoPatternOverlapAsync(

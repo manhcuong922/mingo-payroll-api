@@ -14,20 +14,20 @@ public class ReapplyScheduleTemplateCommandHandler
     private readonly IScheduleTemplateRepository _repository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
-    private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IMediator _mediator;
 
     public ReapplyScheduleTemplateCommandHandler(
         IScheduleTemplateRepository repository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
-        IContractRepository contractRepository,
+        IEmployeeInformationRepository employeeRepository,
         IMediator mediator)
     {
         _repository = repository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
-        _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
         _mediator = mediator;
     }
 
@@ -59,7 +59,7 @@ public class ReapplyScheduleTemplateCommandHandler
                 template.Id, dates.Count, 0, 0, 0, Array.Empty<ScheduleTemplateApplyConflictDto>());
         }
 
-        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
+        await EnsureEmployeesHaveActiveUsersAsync(employeeIds, cancellationToken);
 
         var operations = new List<BatchShiftOperation>(dates.Count * employeeIds.Count * shiftIds.Count);
         foreach (var empId in employeeIds)
@@ -104,14 +104,14 @@ public class ReapplyScheduleTemplateCommandHandler
                 .ToList());
     }
 
-    private async Task EnsureEmployeesHaveActiveContractsAsync(
+    private async Task EnsureEmployeesHaveActiveUsersAsync(
         IReadOnlyCollection<int> employeeIds,
         CancellationToken cancellationToken)
     {
         var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
         if (ids.Length == 0) return;
 
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(ids, cancellationToken);
         var activeSet = activeIds.ToHashSet();
         var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
         if (inactiveIds.Length == 0) return;
@@ -119,7 +119,7 @@ public class ReapplyScheduleTemplateCommandHandler
         var preview = string.Join(", ", inactiveIds.Take(10));
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
-            $"Không thể áp dụng lại bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+            $"Không thể áp dụng lại bảng phân ca: nhân viên {preview}{suffix} không có tài khoản active.");
     }
 
     private static IReadOnlyList<int> TemplateShiftIds(MPS.Domain.Entities.Attendance.ScheduleTemplate template)

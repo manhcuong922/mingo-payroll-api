@@ -19,7 +19,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
 {
     private readonly IAttendanceRecordRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
-    private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -29,7 +29,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
     public BulkRecordAttendanceCommandHandler(
         IAttendanceRecordRepository repository,
         IShiftTemplateRepository shiftRepository,
-        IContractRepository contractRepository,
+        IEmployeeInformationRepository employeeRepository,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -38,7 +38,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
-        _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -96,9 +96,9 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
 
                 if (existing is null)
                 {
-                    if (!await _contractRepository.HasActiveContractAsync(row.EmployeeInformationId, cancellationToken))
+                    if (!await _employeeRepository.HasActiveUserAsync(row.EmployeeInformationId, cancellationToken))
                         throw new DomainValidationException(
-                            $"Employee {row.EmployeeInformationId} has no active contract; cannot record attendance.");
+                            $"Employee {row.EmployeeInformationId} không có tài khoản active; không thể chấm công.");
 
                     var entity = new AttendanceRecordEntity
                     {

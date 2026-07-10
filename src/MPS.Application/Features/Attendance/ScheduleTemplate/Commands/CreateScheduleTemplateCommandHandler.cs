@@ -21,7 +21,6 @@ public class CreateScheduleTemplateCommandHandler
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
-    private readonly IContractRepository _contractRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IRegularHoursCapChecker _capChecker;
     private readonly IMediator _mediator;
@@ -33,7 +32,6 @@ public class CreateScheduleTemplateCommandHandler
         IShiftTemplateRepository shiftRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
-        IContractRepository contractRepository,
         IEmployeeInformationRepository employeeRepository,
         IRegularHoursCapChecker capChecker,
         IMediator mediator,
@@ -44,7 +42,6 @@ public class CreateScheduleTemplateCommandHandler
         _shiftRepository = shiftRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
-        _contractRepository = contractRepository;
         _employeeRepository = employeeRepository;
         _capChecker = capChecker;
         _mediator = mediator;
@@ -89,7 +86,7 @@ public class CreateScheduleTemplateCommandHandler
 
         var shifts = await LoadActiveShiftsAsync(request.ShiftTemplateIds, cancellationToken);
 
-        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
+        await EnsureEmployeesHaveActiveUsersAsync(employeeIds, cancellationToken);
 
         // Build a transient shape for pattern expansion (entity not yet persisted).
         var templateShape = new ScheduleTemplateEntity
@@ -173,14 +170,14 @@ public class CreateScheduleTemplateCommandHandler
             .ToList();
     }
 
-    private async Task EnsureEmployeesHaveActiveContractsAsync(
+    private async Task EnsureEmployeesHaveActiveUsersAsync(
         IReadOnlyCollection<int> employeeIds,
         CancellationToken cancellationToken)
     {
         var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
         if (ids.Length == 0) return;
 
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(ids, cancellationToken);
         var activeSet = activeIds.ToHashSet();
         var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
         if (inactiveIds.Length == 0) return;
@@ -188,7 +185,7 @@ public class CreateScheduleTemplateCommandHandler
         var preview = string.Join(", ", inactiveIds.Take(10));
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
-            $"Không thể tạo bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+            $"Không thể tạo bảng phân ca: nhân viên {preview}{suffix} không có tài khoản active.");
     }
 
     private async Task EnsureRegularHoursCapAsync(

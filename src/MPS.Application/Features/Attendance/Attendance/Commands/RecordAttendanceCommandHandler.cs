@@ -22,7 +22,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     private readonly IAttendanceRecordRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IOvertimeRequestRepository _overtimeRepository;
-    private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -33,7 +33,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         IAttendanceRecordRepository repository,
         IShiftTemplateRepository shiftRepository,
         IOvertimeRequestRepository overtimeRepository,
-        IContractRepository contractRepository,
+        IEmployeeInformationRepository employeeRepository,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -43,7 +43,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         _repository = repository;
         _shiftRepository = shiftRepository;
         _overtimeRepository = overtimeRepository;
-        _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -66,9 +66,9 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         await _lockChecker.EnsureCanModifyAsync(
             request.WorkDate, request.OverrideReason, cancellationToken);
 
-        if (!await _contractRepository.HasActiveContractAsync(request.EmployeeInformationId, cancellationToken))
+        if (!await _employeeRepository.HasActiveUserAsync(request.EmployeeInformationId, cancellationToken))
             throw new DomainValidationException(
-                $"Employee {request.EmployeeInformationId} has no active contract; cannot record attendance.");
+                $"Employee {request.EmployeeInformationId} không có tài khoản active; không thể chấm công.");
 
         var checkInAt = request.CheckInAt;
         var checkOutAt = request.CheckOutAt;

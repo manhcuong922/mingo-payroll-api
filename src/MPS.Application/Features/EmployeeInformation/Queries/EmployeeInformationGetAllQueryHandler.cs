@@ -34,7 +34,9 @@ public class EmployeeInformationGetAllQueryHandler
         // Tầng 1 — Read.All: xem toàn công ty (SystemAdmin, HR, Accountant, Director, DepartmentManager = Ban KH).
         if (_currentUserService.HasPermission(Permissions.EmployeeInformationReadAll))
         {
-            var all = await _repository.GetAllAsync(request.HasActiveContract, cancellationToken);
+            var all = await _repository.GetAllAsync(
+                hasActiveUser: request.HasActiveUser,
+                cancellationToken: cancellationToken);
             return _mapper.Map<IReadOnlyList<EmployeeInformationDto>>(all);
         }
 

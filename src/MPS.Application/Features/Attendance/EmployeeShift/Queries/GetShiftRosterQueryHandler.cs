@@ -11,14 +11,14 @@ public class GetShiftRosterQueryHandler : IRequestHandler<GetShiftRosterQuery, S
     private const int MaxRosterDays = 366;
 
     private readonly IEmployeeShiftAssignmentRepository _repository;
-    private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
 
     public GetShiftRosterQueryHandler(
         IEmployeeShiftAssignmentRepository repository,
-        IContractRepository contractRepository)
+        IEmployeeInformationRepository employeeRepository)
     {
         _repository = repository;
-        _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
     }
 
     public async Task<ShiftRosterDto> Handle(GetShiftRosterQuery request, CancellationToken cancellationToken)
@@ -38,7 +38,7 @@ public class GetShiftRosterQueryHandler : IRequestHandler<GetShiftRosterQuery, S
         }
 
         var requestedEmployeeIds = request.EmployeeInformationIds.Distinct().ToArray();
-        var activeEmployeeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(
+        var activeEmployeeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(
             requestedEmployeeIds,
             cancellationToken);
         var employeeIds = activeEmployeeIds.OrderBy(id => id).ToList();

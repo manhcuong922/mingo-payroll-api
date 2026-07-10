@@ -27,7 +27,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
 
     private readonly IEmployeeShiftAssignmentRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
-    private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IRegularHoursCapChecker _capChecker;
     private readonly IDayTypeResolver _dayTypeResolver;
     private readonly ICurrentUserService _currentUser;
@@ -36,7 +36,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
     public BatchUpdateShiftAssignmentsCommandHandler(
         IEmployeeShiftAssignmentRepository repository,
         IShiftTemplateRepository shiftRepository,
-        IContractRepository contractRepository,
+        IEmployeeInformationRepository employeeRepository,
         IRegularHoursCapChecker capChecker,
         IDayTypeResolver dayTypeResolver,
         ICurrentUserService currentUser,
@@ -44,7 +44,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
-        _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
         _capChecker = capChecker;
         _dayTypeResolver = dayTypeResolver;
         _currentUser = currentUser;
@@ -69,7 +69,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         }
 
         ValidateShape(operations);
-        await EnsureAssignableEmployeesHaveActiveContractsAsync(operations, cancellationToken);
+        await EnsureAssignableEmployeesHaveActiveUsersAsync(operations, cancellationToken);
 
         var employeeIds = operations.Select(o => o.EmployeeInformationId).Distinct().ToList();
         var fromDate = operations.Min(o => o.WorkDate);
@@ -245,7 +245,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         return new BatchUpdateShiftAssignmentsResult(applied, skipped, conflicts, items);
     }
 
-    private async Task EnsureAssignableEmployeesHaveActiveContractsAsync(
+    private async Task EnsureAssignableEmployeesHaveActiveUsersAsync(
         IReadOnlyList<BatchShiftOperation> operations,
         CancellationToken cancellationToken)
     {
@@ -257,7 +257,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
             .ToArray();
         if (employeeIds.Length == 0) return;
 
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(
             employeeIds,
             cancellationToken);
         var activeSet = activeIds.ToHashSet();
@@ -267,7 +267,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         var preview = string.Join(", ", inactiveIds.Take(10));
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
-            $"Không thể phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+            $"Không thể phân ca: nhân viên {preview}{suffix} không có tài khoản active.");
     }
 
     /// <summary>

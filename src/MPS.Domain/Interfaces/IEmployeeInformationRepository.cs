@@ -7,7 +7,15 @@ public interface IEmployeeInformationRepository
     Task<EmployeeInformation?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
-        bool? hasActiveContract = null,
+        bool? hasActiveUser = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Employee có gắn User và User.Status == 1. Dùng cho attendance/phân ca thay cho contract-active.</summary>
+    Task<bool> HasActiveUserAsync(int employeeInformationId, CancellationToken cancellationToken = default);
+
+    /// <summary>Lọc trong danh sách id, trả về những id mà EmployeeInformation có User.Status == 1.</summary>
+    Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithActiveUserAsync(
+        IEnumerable<int> employeeInformationIds,
         CancellationToken cancellationToken = default);
 
     // Scoped access: danh sách nhân viên thuộc 1 phòng ban (dùng cho EmployeeInformation.Read.Department).
@@ -17,7 +25,7 @@ public interface IEmployeeInformationRepository
         string? keyword,
         int? positionId,
         bool? hasAccount,
-        bool? hasActiveContract,
+        bool? hasActiveUser,
         int page,
         int pageSize,
         int? departmentId = null,

@@ -101,7 +101,7 @@ public class GetAttendanceSummaryQueryHandler
             keyword: null,
             positionId: null,
             hasAccount: null,
-            hasActiveContract: true,
+            hasActiveUser: true,
             page: page,
             pageSize: size,
             departmentId: request.DepartmentId,
