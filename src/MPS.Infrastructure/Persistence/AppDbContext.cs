@@ -85,6 +85,13 @@ public class AppDbContext : DbContext
     public DbSet<ProductionAttachment> ProductionAttachments => Set<ProductionAttachment>();
     public DbSet<Comment> Comments => Set<Comment>();
 
+    // ===== Evaluation module (chấm điểm nhân sự theo tháng) =====
+    public DbSet<Domain.Entities.Evaluation.OrderEvaluation> OrderEvaluations => Set<Domain.Entities.Evaluation.OrderEvaluation>();
+    public DbSet<Domain.Entities.Evaluation.OrderEvaluationSubject> OrderEvaluationSubjects => Set<Domain.Entities.Evaluation.OrderEvaluationSubject>();
+    public DbSet<Domain.Entities.Evaluation.MonthlyEvaluation> MonthlyEvaluations => Set<Domain.Entities.Evaluation.MonthlyEvaluation>();
+    public DbSet<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink> MonthlyEvaluationSourceLinks => Set<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink>();
+    public DbSet<Domain.Entities.Evaluation.EvaluationScoreLine> EvaluationScoreLines => Set<Domain.Entities.Evaluation.EvaluationScoreLine>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

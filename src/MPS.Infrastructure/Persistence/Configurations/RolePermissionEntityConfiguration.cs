@@ -62,6 +62,11 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.ContractTemplateUpdateAll, PermissionIds.ContractTemplateDeleteAll,
                 // Task/Production — HR: nghiệp vụ nhân sự (đọc đơn/task + tạo confidential)
                 PermissionIds.ProjectReadAll, PermissionIds.TaskReadAll, PermissionIds.TaskCreateConfidential,
+                // Evaluation — HR: xem tất cả, tổng hợp tháng, duyệt/khóa/reopen + tự xem điểm mình
+                PermissionIds.OrderEvaluationReadAll,
+                PermissionIds.MonthlyEvaluationReadAll, PermissionIds.MonthlyEvaluationReadSelf,
+                PermissionIds.MonthlyEvaluationAggregateAll, PermissionIds.MonthlyEvaluationApproveAll,
+                PermissionIds.MonthlyEvaluationReopenAll,
             }),
 
             (SystemRoles.AccountantId, new[]
@@ -78,6 +83,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.ContractFileReadAll,
                 // Task/Production — Accountant theo dõi tiến độ (chỉ đọc)
                 PermissionIds.ProjectReadAll, PermissionIds.TaskReadAll,
+                // Evaluation — Kế toán tự xem điểm mình
+                PermissionIds.MonthlyEvaluationReadSelf,
             }),
 
             (SystemRoles.DirectorId, new[]
@@ -109,6 +116,10 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
                 PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
                 PermissionIds.TaskAuditReadAll,
+                // Evaluation — Director: xem tất cả + chấm trực tiếp tổ trưởng/văn phòng + tự xem điểm mình
+                PermissionIds.OrderEvaluationReadAll,
+                PermissionIds.MonthlyEvaluationReadAll, PermissionIds.MonthlyEvaluationReadSelf,
+                PermissionIds.MonthlyEvaluationScoreDirectAll,
             }),
 
             // DeputyDirector = Ban kế hoạch cấp cao.
@@ -152,6 +163,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 // xưởng mình quản lý.
                 PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
                 PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
+                // Evaluation — Planning Manager tự xem điểm mình
+                PermissionIds.MonthlyEvaluationReadSelf,
             }),
 
             // ProjectManager = tổ trưởng xưởng (Department.ManagerId) → chỉ xem nhân viên xưởng mình (Read.Department).
@@ -178,6 +191,9 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 // Tài liệu/ảnh: chỉ tầng 2+3 (Công đoạn/Task lá) — PM KHÔNG xem/đăng tài liệu cấp Đơn hàng.
                 PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
                 PermissionIds.TaskAuditReadDepartment,
+                // Evaluation — Tổ trưởng: chấm/submit bảng-theo-đơn mình phụ trách + tự xem điểm mình
+                PermissionIds.OrderEvaluationReadOwn, PermissionIds.OrderEvaluationScoreOwn,
+                PermissionIds.OrderEvaluationSubmitOwn, PermissionIds.MonthlyEvaluationReadSelf,
             }),
 
             (SystemRoles.EmployeeId, new[]
@@ -197,6 +213,8 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 // không xem tài liệu cấp Đơn hàng).
                 PermissionIds.TaskReadAssigned,
                 PermissionIds.ProductionAttachmentReadStage,
+                // Evaluation — Công nhân tự xem điểm tháng của mình
+                PermissionIds.MonthlyEvaluationReadSelf,
             }),
         };
 
@@ -258,5 +276,11 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
         PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
         PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
         PermissionIds.TaskAuditReadAll, PermissionIds.TaskAuditReadDepartment,
+        // Evaluation module
+        PermissionIds.OrderEvaluationReadOwn, PermissionIds.OrderEvaluationReadAll,
+        PermissionIds.OrderEvaluationScoreOwn, PermissionIds.OrderEvaluationSubmitOwn,
+        PermissionIds.MonthlyEvaluationReadAll, PermissionIds.MonthlyEvaluationReadSelf,
+        PermissionIds.MonthlyEvaluationAggregateAll, PermissionIds.MonthlyEvaluationScoreDirectAll,
+        PermissionIds.MonthlyEvaluationApproveAll, PermissionIds.MonthlyEvaluationReopenAll,
     };
 }

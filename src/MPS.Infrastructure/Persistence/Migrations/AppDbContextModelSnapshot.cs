@@ -3017,6 +3017,248 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("EmployeeInformations", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.EvaluationScoreLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("MetricNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("MetricWeightSnapshot")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<int?>("MonthlyEvaluationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("OrderEvaluationSubjectId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Scale")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Score")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SourceMetricId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TypeNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("TypeWeightSnapshot")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("decimal(6,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MonthlyEvaluationId");
+
+                    b.HasIndex("OrderEvaluationSubjectId");
+
+                    b.HasIndex("SourceMetricId");
+
+                    b.ToTable("EvaluationScoreLines", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ApprovedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("FinalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReopenReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("ReopenedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReopenedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("SubjectRoleIdSnapshot")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PeriodYear", "PeriodMonth");
+
+                    b.HasIndex("EmployeeUserId", "PeriodYear", "PeriodMonth")
+                        .IsUnique();
+
+                    b.ToTable("MonthlyEvaluations", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluationSourceLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ContributedScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<int>("MonthlyEvaluationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrderEvaluationSubjectId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MonthlyEvaluationId");
+
+                    b.HasIndex("OrderEvaluationSubjectId");
+
+                    b.ToTable("MonthlyEvaluationSourceLinks", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("EvaluatorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("SubmittedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EvaluatorUserId");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique();
+
+                    b.HasIndex("PeriodYear", "PeriodMonth");
+
+                    b.ToTable("OrderEvaluations", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("FinalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("OrderEvaluationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SubjectRoleIdSnapshot")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeUserId");
+
+                    b.HasIndex("OrderEvaluationId", "EmployeeUserId")
+                        .IsUnique();
+
+                    b.ToTable("OrderEvaluationSubjects", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.PasswordResetToken", b =>
                 {
                     b.Property<int>("Id")
@@ -3987,6 +4229,96 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "Xem lịch sử chỉnh sửa task/đơn xưởng mình.",
                             Resource = "Task",
                             Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 224,
+                            Action = "Read",
+                            Code = "OrderEvaluation.Read.Own",
+                            Description = "Xem bảng đánh giá theo đơn mình phụ trách.",
+                            Resource = "OrderEvaluation",
+                            Scope = "Own"
+                        },
+                        new
+                        {
+                            Id = 225,
+                            Action = "Read",
+                            Code = "OrderEvaluation.Read.All",
+                            Description = "Xem mọi bảng đánh giá theo đơn.",
+                            Resource = "OrderEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 226,
+                            Action = "Score",
+                            Code = "OrderEvaluation.Score.Own",
+                            Description = "Chấm điểm bảng đánh giá đơn mình phụ trách.",
+                            Resource = "OrderEvaluation",
+                            Scope = "Own"
+                        },
+                        new
+                        {
+                            Id = 227,
+                            Action = "Submit",
+                            Code = "OrderEvaluation.Submit.Own",
+                            Description = "Chốt (submit) bảng đánh giá theo đơn.",
+                            Resource = "OrderEvaluation",
+                            Scope = "Own"
+                        },
+                        new
+                        {
+                            Id = 228,
+                            Action = "Read",
+                            Code = "MonthlyEvaluation.Read.All",
+                            Description = "Xem mọi bảng đánh giá tháng.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 229,
+                            Action = "Read",
+                            Code = "MonthlyEvaluation.Read.Self",
+                            Description = "Xem bảng đánh giá tháng của chính mình.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "Self"
+                        },
+                        new
+                        {
+                            Id = 230,
+                            Action = "Aggregate",
+                            Code = "MonthlyEvaluation.Aggregate.All",
+                            Description = "Tổng hợp bảng tháng từ các bảng theo đơn.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 231,
+                            Action = "ScoreDirect",
+                            Code = "MonthlyEvaluation.ScoreDirect.All",
+                            Description = "Director chấm trực tiếp tổ trưởng/văn phòng.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 232,
+                            Action = "Approve",
+                            Code = "MonthlyEvaluation.Approve.All",
+                            Description = "Duyệt & khóa bảng đánh giá tháng.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 233,
+                            Action = "Reopen",
+                            Code = "MonthlyEvaluation.Reopen.All",
+                            Description = "Mở lại bảng tháng đã khóa.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
                         });
                 });
 
@@ -5062,6 +5394,56 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 1,
+                            PermissionId = 224
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 225
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 226
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 227
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 228
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 229
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 230
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 231
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 232
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 233
+                        },
+                        new
+                        {
                             RoleId = 2,
                             PermissionId = 1
                         },
@@ -5317,6 +5699,36 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 2,
+                            PermissionId = 225
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 228
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 229
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 230
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 232
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 233
+                        },
+                        new
+                        {
                             RoleId = 3,
                             PermissionId = 2
                         },
@@ -5379,6 +5791,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 3,
                             PermissionId = 159
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 229
                         },
                         new
                         {
@@ -5607,6 +6024,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 4,
+                            PermissionId = 225
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 228
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 229
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 231
+                        },
+                        new
+                        {
                             RoleId = 9,
                             PermissionId = 2
                         },
@@ -5807,6 +6244,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 5,
+                            PermissionId = 229
+                        },
+                        new
+                        {
                             RoleId = 6,
                             PermissionId = 2
                         },
@@ -5922,6 +6364,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 6,
+                            PermissionId = 224
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 226
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 227
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 229
+                        },
+                        new
+                        {
                             RoleId = 7,
                             PermissionId = 2
                         },
@@ -5989,6 +6451,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionId = 222
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 229
                         });
                 });
 
@@ -6991,6 +7458,98 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.EvaluationScoreLine", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", "MonthlyEvaluation")
+                        .WithMany("Scores")
+                        .HasForeignKey("MonthlyEvaluationId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", "OrderEvaluationSubject")
+                        .WithMany("Scores")
+                        .HasForeignKey("OrderEvaluationSubjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MPS.Domain.Entities.PerformanceMetric", "SourceMetric")
+                        .WithMany()
+                        .HasForeignKey("SourceMetricId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("MonthlyEvaluation");
+
+                    b.Navigation("OrderEvaluationSubject");
+
+                    b.Navigation("SourceMetric");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluationSourceLink", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", "MonthlyEvaluation")
+                        .WithMany("SourceLinks")
+                        .HasForeignKey("MonthlyEvaluationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", "OrderEvaluationSubject")
+                        .WithMany()
+                        .HasForeignKey("OrderEvaluationSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MonthlyEvaluation");
+
+                    b.Navigation("OrderEvaluationSubject");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluation", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "Evaluator")
+                        .WithMany()
+                        .HasForeignKey("EvaluatorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Evaluator");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Evaluation.OrderEvaluation", "OrderEvaluation")
+                        .WithMany("Subjects")
+                        .HasForeignKey("OrderEvaluationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("OrderEvaluation");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.PasswordResetToken", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.User", "User")
@@ -7311,6 +7870,23 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
                 {
                     b.Navigation("Employees");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", b =>
+                {
+                    b.Navigation("Scores");
+
+                    b.Navigation("SourceLinks");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluation", b =>
+                {
+                    b.Navigation("Subjects");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", b =>
+                {
+                    b.Navigation("Scores");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Permission", b =>

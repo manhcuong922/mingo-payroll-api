@@ -36,6 +36,8 @@ public sealed partial class DatabaseSeeder
         await SeedDefaultRoleUsersAsync(cancellationToken);
         await SeedDefaultDepartmentsAsync(cancellationToken);
         await SeedDefaultPositionsAsync(cancellationToken);
+        // Bộ tiêu chí đánh giá mặc định (module chấm điểm tháng) — để bảng-theo-đơn auto sinh được (tránh E3).
+        await SeedDefaultEvaluationCriteriaAsync(cancellationToken);
         // Nhân sự công ty SẢN XUẤT: 3 xưởng × (1 quản đốc role 5 + 1 tổ trưởng role 6 + 6 công nhân role 7),
         // đúng role + chức danh sản xuất — đủ để test luồng tạo đơn → chọn tổ trưởng → gán người theo chức danh.
         await SeedManufacturingWorkforceDemoAsync(cancellationToken);
@@ -50,6 +52,9 @@ public sealed partial class DatabaseSeeder
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
+        // Dữ liệu chấm điểm demo vài kỳ gần nhất (cần tiêu chí + nhân sự đã seed ở trên) —
+        // xem DatabaseSeeder.EvaluationDemoData.cs.
+        await SeedEvaluationDemoDataAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)

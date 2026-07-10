@@ -295,6 +295,18 @@ public static class Permissions
     // Employee chỉ có Read (xem tài liệu mẫu của Công đoạn/task được giao, không đăng tải).
     public const string ProductionAttachmentReadStage  = "ProductionAttachment.Read.Stage";
     public const string ProductionAttachmentWriteStage = "ProductionAttachment.Write.Stage";
+
+    // ===== Evaluation module (chấm điểm nhân sự theo tháng) — IDs 224–233 =====
+    public const string OrderEvaluationReadOwn          = "OrderEvaluation.Read.Own";
+    public const string OrderEvaluationReadAll          = "OrderEvaluation.Read.All";
+    public const string OrderEvaluationScoreOwn         = "OrderEvaluation.Score.Own";
+    public const string OrderEvaluationSubmitOwn        = "OrderEvaluation.Submit.Own";
+    public const string MonthlyEvaluationReadAll        = "MonthlyEvaluation.Read.All";
+    public const string MonthlyEvaluationReadSelf       = "MonthlyEvaluation.Read.Self";
+    public const string MonthlyEvaluationAggregateAll   = "MonthlyEvaluation.Aggregate.All";
+    public const string MonthlyEvaluationScoreDirectAll = "MonthlyEvaluation.ScoreDirect.All";
+    public const string MonthlyEvaluationApproveAll     = "MonthlyEvaluation.Approve.All";
+    public const string MonthlyEvaluationReopenAll      = "MonthlyEvaluation.Reopen.All";
 }
 
 public static class PermissionIds
@@ -560,4 +572,16 @@ public static class PermissionIds
     public const int ProductionAttachmentWriteProject  = 221;
     public const int ProductionAttachmentReadStage     = 222;
     public const int ProductionAttachmentWriteStage    = 223;
+
+    // ===== Evaluation module (chấm điểm nhân sự theo tháng) — IDs 224–233 =====
+    public const int OrderEvaluationReadOwn          = 224;
+    public const int OrderEvaluationReadAll          = 225;
+    public const int OrderEvaluationScoreOwn         = 226;
+    public const int OrderEvaluationSubmitOwn        = 227;
+    public const int MonthlyEvaluationReadAll        = 228;
+    public const int MonthlyEvaluationReadSelf       = 229;
+    public const int MonthlyEvaluationAggregateAll   = 230;
+    public const int MonthlyEvaluationScoreDirectAll = 231;
+    public const int MonthlyEvaluationApproveAll     = 232;
+    public const int MonthlyEvaluationReopenAll      = 233;
 }

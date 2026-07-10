@@ -54,6 +54,16 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Services.ITaskGenerator, MPS.Application.Services.TaskGenerator>();
         services.AddScoped<MPS.Application.Services.IProgressService, MPS.Application.Services.ProgressService>();
         services.AddScoped<MPS.Application.Services.IProductionAttachmentService, MPS.Application.Services.ProductionAttachmentService>();
+        // Evaluation module (chấm điểm nhân sự theo tháng)
+        services.AddScoped<MPS.Domain.Interfaces.Evaluation.IOrderEvaluationRepository,
+            MPS.Infrastructure.Repositories.Evaluation.OrderEvaluationRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Evaluation.IMonthlyEvaluationRepository,
+            MPS.Infrastructure.Repositories.Evaluation.MonthlyEvaluationRepository>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IEvaluationCriteriaSnapshotService,
+            MPS.Infrastructure.Repositories.Evaluation.EvaluationCriteriaSnapshotService>();
+        services.AddScoped<MPS.Application.Features.Evaluation.Common.IMonthlyAggregationService,
+            MPS.Application.Features.Evaluation.Common.MonthlyAggregationService>();
+
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();

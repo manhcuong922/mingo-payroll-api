@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Project.Commands;
@@ -25,8 +26,11 @@ public sealed class ProjectCompleteAndScopeTests
 
     // ===== ProjectComplete =====
 
+    private readonly Mock<MediatR.IPublisher> _publisher = new();
+
     private ProjectCompleteCommandHandler CompleteSut() =>
-        new(_projects.Object, _tasks.Object, _authorizer.Object, _currentUser.Object);
+        new(_projects.Object, _tasks.Object, _authorizer.Object, _currentUser.Object,
+            _publisher.Object, NullLogger<ProjectCompleteCommandHandler>.Instance);
 
     [Fact]
     public async Task Complete_SetsCompleted_WithNote_WhenManager()
