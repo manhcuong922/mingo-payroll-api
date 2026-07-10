@@ -16,8 +16,6 @@ public static class SystemRoles
     public const int PlanningManagerId = DepartmentManagerId;
     public const int ProductionTeamLeaderId = ProjectManagerId;
     public const int DeputyDirectorId = 9;
-    // id 8 đã bị chiếm bởi role tự tạo trên DB dev, id 9 bởi DeputyDirector → dùng 10 cho AiService.
-    public const int AiServiceId = 10;
 
     public const string SystemAdmin = "SystemAdmin";
     public const string Hr = "HR";
@@ -28,7 +26,6 @@ public static class SystemRoles
     public const string DepartmentManager = "Planning Manager";
     public const string ProjectManager = "Production Team Leader";
     public const string Employee = "Employee";
-    public const string AiService = "AiService";
     public const string DeputyDirector = "DeputyDirector";
 
     // Role được phép làm tổ trưởng xưởng (Department.ManagerId).

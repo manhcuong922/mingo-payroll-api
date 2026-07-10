@@ -388,51 +388,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("EmployeeShiftAssignments", (string)null);
                 });
 
-            modelBuilder.Entity("MPS.Domain.Entities.Attendance.FaceRegistration", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("EmbeddingJson")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("EmployeeInformationId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PhotoObjectKey")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("RejectReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("ReviewedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<byte>("Status")
-                        .HasColumnType("tinyint");
-
-                    b.Property<DateTime>("SubmittedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmployeeInformationId");
-
-                    b.HasIndex("ReviewedByUserId");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("FaceRegistrations", (string)null);
-                });
-
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveBalance", b =>
                 {
                     b.Property<int>("Id")
@@ -680,6 +635,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<byte?>("ApproverRoute")
+                        .HasColumnType("tinyint");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -687,15 +648,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("EmployeeInformationId")
-                        .HasColumnType("int");
-
-                    b.Property<byte?>("ApproverRoute")
-                        .HasColumnType("tinyint");
-
-                    b.Property<Guid?>("BatchId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int?>("ProjectId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("OtDayHours")
@@ -718,6 +670,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("time");
 
                     b.Property<int?>("LaborLawConstantsVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProjectId")
                         .HasColumnType("int");
 
                     b.Property<string>("Reason")
@@ -760,9 +715,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UpdatedByUserId");
 
-                    b.HasIndex("EmployeeInformationId", "WorkDate", "Status");
-
                     b.HasIndex("Status", "ApproverRoute");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "Status");
 
                     b.ToTable("OvertimeRequests", (string)null);
                 });
@@ -4658,14 +4613,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
-                            Id = 10,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "AI Service account — chấm công và đọc embedding từ camera nhận diện khuôn mặt.",
-                            IsSystem = true,
-                            Name = "AiService"
-                        },
-                        new
-                        {
                             Id = 9,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình.",
@@ -6447,24 +6394,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("ScheduleTemplate");
 
                     b.Navigation("ShiftTemplate");
-                });
-
-            modelBuilder.Entity("MPS.Domain.Entities.Attendance.FaceRegistration", b =>
-                {
-                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
-                        .WithMany()
-                        .HasForeignKey("EmployeeInformationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
-                        .WithMany()
-                        .HasForeignKey("ReviewedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("EmployeeInformation");
-
-                    b.Navigation("ReviewedByUser");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveBalance", b =>

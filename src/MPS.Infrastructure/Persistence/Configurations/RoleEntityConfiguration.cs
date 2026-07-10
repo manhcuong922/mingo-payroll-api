@@ -37,7 +37,6 @@ public class RoleEntityConfiguration : IEntityTypeConfiguration<Role>
         NewSystemRole(SystemRoles.DepartmentManagerId, SystemRoles.DepartmentManager, "Planning Manager — lập kế hoạch, tạo đơn, gán người, đặt tổ trưởng, sửa timeline. Scope xưởng."),
         NewSystemRole(SystemRoles.ProjectManagerId, SystemRoles.ProjectManager, "Tổ trưởng sản xuất — chịu trách nhiệm đơn (ResponsibleUserId), cập nhật tiến độ + hoàn thành task/đơn."),
         NewSystemRole(SystemRoles.EmployeeId, SystemRoles.Employee, "Nhân viên — chỉ xem/sửa thông tin của chính mình."),
-        NewSystemRole(SystemRoles.AiServiceId, SystemRoles.AiService, "AI Service account — chấm công và đọc embedding từ camera nhận diện khuôn mặt."),
         NewSystemRole(SystemRoles.DeputyDirectorId, SystemRoles.DeputyDirector, "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình."),
     };
 
