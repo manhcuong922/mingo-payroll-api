@@ -4,6 +4,7 @@ using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
@@ -17,6 +18,9 @@ namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvertimeRequestCommand, bool>
 {
     private readonly IOvertimeRequestRepository _repository;
+    private readonly IProjectRepository _projectRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IContractLookupReader _lookup;
     private readonly OvertimeCapChecker _capChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -25,6 +29,9 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
 
     public ApproveOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
+        IProjectRepository projectRepository,
+        IEmployeeInformationRepository employeeRepository,
+        IContractLookupReader lookup,
         OvertimeCapChecker capChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -32,6 +39,9 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         IClock clock)
     {
         _repository = repository;
+        _projectRepository = projectRepository;
+        _employeeRepository = employeeRepository;
+        _lookup = lookup;
         _capChecker = capChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -58,6 +68,14 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         // Batch workflow gate — approver role phải khớp ApproverRoute (nếu request có route).
         // Legacy record (ApproverRoute = null) giữ hành vi cũ: ai có Approve.All đều duyệt được.
         EnsureApproverRouteMatches(existing.ApproverRoute, _currentUser.RoleId);
+
+        // Route = DepartmentManager: DM phải cùng phòng ban với project của đơn OT.
+        // Tránh DM xưởng A duyệt đơn OT của xưởng B.
+        if (existing.ApproverRoute == OvertimeApproverRoute.DepartmentManager
+            && existing.ProjectId is int projectId)
+        {
+            await EnsureDmSameDepartmentAsProjectAsync(userId, projectId, cancellationToken);
+        }
 
         // Re-check caps for race-condition safety
         await _capChecker.CheckAsync(
@@ -91,6 +109,25 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
 
         await _repository.UpdateAsync(existing, cancellationToken);
         return true;
+    }
+
+    private async Task EnsureDmSameDepartmentAsProjectAsync(
+        int dmUserId,
+        int projectId,
+        CancellationToken cancellationToken)
+    {
+        var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
+            ?? throw new NotFoundException($"Project {projectId} not found.");
+        if (project.DepartmentId is not int projectDeptId)
+            throw new DomainValidationException("Project không gắn phòng ban — không xác định được DM duyệt.");
+
+        var dmEmployeeId = await _lookup.GetEmployeeInformationIdByUserIdAsync(dmUserId, cancellationToken)
+            ?? throw new NotFoundException($"No employee profile linked to user {dmUserId}.");
+        var dm = await _employeeRepository.GetByIdAsync(dmEmployeeId, cancellationToken)
+            ?? throw new NotFoundException($"Employee {dmEmployeeId} not found.");
+
+        if (dm.DepartmentId != projectDeptId)
+            throw new ForbiddenAccessException("Bạn không phải quản lý phòng ban của đơn này — không được duyệt.");
     }
 
     internal static void EnsureApproverRouteMatches(OvertimeApproverRoute? route, int? currentRoleId)

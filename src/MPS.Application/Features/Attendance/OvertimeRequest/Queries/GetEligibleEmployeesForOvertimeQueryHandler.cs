@@ -39,8 +39,9 @@ public class GetEligibleEmployeesForOvertimeQueryHandler
 
         var project = await _projectRepository.GetByIdAsync(request.ProjectId, cancellationToken)
             ?? throw new NotFoundException($"Project {request.ProjectId} not found.");
-        if (project.DepartmentId != pm.DepartmentId)
-            throw new ForbiddenAccessException("PM không thuộc phòng ban của project này.");
+        // Chỉ tổ trưởng phụ trách chính đơn này mới được list NV để giao OT.
+        if (project.ResponsibleUserId != userId)
+            throw new ForbiddenAccessException("Bạn không phải tổ trưởng phụ trách đơn này.");
 
         if (project.DepartmentId is not int deptId)
             return Array.Empty<EligibleEmployeeForOvertimeDto>();

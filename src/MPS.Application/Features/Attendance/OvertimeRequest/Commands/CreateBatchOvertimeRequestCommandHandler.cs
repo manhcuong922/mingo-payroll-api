@@ -72,6 +72,12 @@ public class CreateBatchOvertimeRequestCommandHandler
         // 2. Load Project → validate
         var project = await _projectRepository.GetByIdAsync(request.ProjectId, cancellationToken)
             ?? throw new NotFoundException($"Project {request.ProjectId} not found.");
+        // Chỉ tổ trưởng phụ trách chính đơn này (ResponsibleUserId) mới giao được OT.
+        // PM đơn khác dù cùng xưởng cũng không được giao OT cho NV của đơn này.
+        if (project.ResponsibleUserId != userId)
+            throw new ForbiddenAccessException("Bạn không phải tổ trưởng phụ trách đơn này.");
+        // Guard defensive: PM phải cùng xưởng với project — thường đảm bảo bởi flow set ResponsibleUser,
+        // nhưng vẫn check để phòng khi dữ liệu bị lệch (PM đổi xưởng sau khi được gán).
         if (project.DepartmentId != pmDepartmentId)
             throw new ForbiddenAccessException("PM không thuộc phòng ban của project này.");
 

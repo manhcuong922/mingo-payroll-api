@@ -37,8 +37,11 @@ public class GetPmProjectsQueryHandler : IRequestHandler<GetPmProjectsQuery, IRe
         if (pm.DepartmentId is not int deptId)
             return Array.Empty<PmProjectDto>();
 
+        // Chỉ trả project mà user hiện tại là tổ trưởng phụ trách (ResponsibleUserId).
+        // PM đơn khác trong cùng xưởng KHÔNG được thấy — tránh giao OT chéo dự án.
         var projects = await _projectRepository.GetByDepartmentAsync(deptId, cancellationToken);
         return projects
+            .Where(p => p.ResponsibleUserId == userId)
             .Select(p => new PmProjectDto(
                 p.Id,
                 p.Title,
