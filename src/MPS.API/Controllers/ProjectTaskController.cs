@@ -61,7 +61,7 @@ public class ProjectTaskController : ControllerBase
             request.ProjectId, request.DepartmentId, request.ParentTaskId, request.Title, request.Description,
             request.ProgressType, request.PlannedQuantity, request.PlannedWorkUnits, request.IsRequiredGate,
             request.Deadline, request.Priority, request.StepOrder, request.AssigneeUserIds,
-            request.IsBatchParent, request.AssignedPmUserId), ct);
+            request.IsBatchParent, request.PlannedHeadcount, request.RequiredPositionId), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -110,17 +110,7 @@ public class ProjectTaskController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
-    // ⭐ Gán/đổi PM chịu trách nhiệm 1 Công đoạn — dùng khi tạo để trống, hoặc đổi PM giữa chừng
-    // (PM mới thừa kế toàn bộ công đoạn + task con hiện có, plan mục 4.9/10.2).
-    [HttpPatch("{id:int}/assign-pm")]
-    [HasPermission(Permissions.TaskCreateStageDepartment)]
-    public async Task<IActionResult> AssignPm(int id, [FromBody] AssignPmRequest request, CancellationToken ct)
-    {
-        var ok = await _mediator.Send(new TaskAssignPmCommand(id, request.PmUserId), ct);
-        return ok ? NoContent() : NotFound();
-    }
-
-    // ===== Pause/Resume/Cancel/Restore (plan mục 6.5) — quyền chi tiết (Manager vs PM) check trong handler =====
+    // ===== Pause/Resume/Cancel/Restore (plan mục 6.5) — Planning Manager của xưởng / GĐ (check trong handler) =====
 
     [HttpPatch("{id:int}/pause")]
     [HasAnyPermission(Permissions.TaskCreateStageDepartment, Permissions.TaskCompleteDepartment)]

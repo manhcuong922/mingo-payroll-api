@@ -13,9 +13,6 @@ namespace MPS.Infrastructure.Persistence;
 
 public sealed partial class DatabaseSeeder
 {
-    private const string DemoManagerUsername = "projmanager";
-    private const string DemoWorkerUsername = "employee";
-
     private readonly AppDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IConfiguration _configuration;
@@ -40,8 +37,11 @@ public sealed partial class DatabaseSeeder
         await SeedAiServiceAccountAsync(cancellationToken);
         await SeedDefaultDepartmentsAsync(cancellationToken);
         await SeedDefaultPositionsAsync(cancellationToken);
-        // Demo NV gắn xưởng + tổ trưởng — cần Departments + Positions + role users seed xong trước.
-        await SeedDemoEmployeesAsync(cancellationToken);
+        // Nhân sự công ty SẢN XUẤT: 3 xưởng × (1 quản đốc role 5 + 1 tổ trưởng role 6 + 6 công nhân role 7),
+        // đúng role + chức danh sản xuất — đủ để test luồng tạo đơn → chọn tổ trưởng → gán người theo chức danh.
+        await SeedManufacturingWorkforceDemoAsync(cancellationToken);
+        // Dọn account/data demo theo công ty IT cũ (ngoài scope sản xuất) khỏi DB đã seed trước đó.
+        await CleanupOutOfScopeDemoAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
@@ -49,8 +49,6 @@ public sealed partial class DatabaseSeeder
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
         await SeedDefaultWeeklyDayOffRuleAsync(cancellationToken);
-        // Task/Production demo: quy trình mẫu + đơn hàng + cây task + nhật ký sản lượng.
-        await SeedTaskProductionDemoAsync(cancellationToken);
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
@@ -103,8 +101,9 @@ public sealed partial class DatabaseSeeder
 
     private async Task SeedDefaultRoleUsersAsync(CancellationToken cancellationToken)
     {
-        // Seed 1 tài khoản test cho mỗi role (HR, Accountant, Director, DepartmentManager, ProjectManager, Employee)
-        // Skip nếu tài khoản đã tồn tại (idempotent theo Username)
+        // Seed 1 tài khoản test cho các role cấp CÔNG TY (HR, Accountant, Director). Idempotent theo Username.
+        // Role gắn xưởng (5 Planning Manager / 6 Tổ trưởng / 7 Công nhân) KHÔNG seed ở đây nữa — nhân sự thật
+        // của các role này do SeedManufacturingWorkforceDemoAsync tạo (gắn xưởng + chức danh sản xuất).
         var section = _configuration.GetSection("DefaultRoleUsers");
         var password = section["Password"];
 
@@ -116,12 +115,9 @@ public sealed partial class DatabaseSeeder
 
         var candidates = new[]
         {
-            (RoleId: SystemRoles.HrId,                Code: "HR001",   Username: "hr",         Email: "hr@mingo.local",         FullName: "HR Manager"),
-            (RoleId: SystemRoles.AccountantId,        Code: "ACC001",  Username: "accountant",  Email: "accountant@mingo.local", FullName: "Chief Accountant"),
-            (RoleId: SystemRoles.DirectorId,          Code: "DIR001",  Username: "director",    Email: "director@mingo.local",   FullName: "Director"),
-            (RoleId: SystemRoles.DepartmentManagerId, Code: "DM001",   Username: "deptmanager", Email: "deptmgr@mingo.local",    FullName: "Department Manager"),
-            (RoleId: SystemRoles.ProjectManagerId,    Code: "PM001",   Username: "projmanager", Email: "projmgr@mingo.local",    FullName: "Project Manager"),
-            (RoleId: SystemRoles.EmployeeId,          Code: "EMP001",  Username: "employee",    Email: "employee@mingo.local",   FullName: "Employee User"),
+            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: "hr@mingo.local",         FullName: "HR Manager"),
+            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: "accountant@mingo.local", FullName: "Chief Accountant"),
+            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: "director@mingo.local",   FullName: "Director"),
         };
 
         var existing = await _context.Users
@@ -335,128 +331,191 @@ public sealed partial class DatabaseSeeder
         _logger.LogInformation("Seeded {Count} default Position(s).", positions.Count);
     }
 
-    private async Task SeedDemoEmployeesAsync(CancellationToken cancellationToken)
+    // ---- Nhân sự công ty SẢN XUẤT (manufacturing workforce demo) ----
+    // Chức danh (Position) sản xuất — vừa là chức danh của nhân sự, vừa là RequiredPositionId dùng ở vị trí lá
+    // của quy trình mẫu. Test viên chọn các chức danh này khi soạn quy trình để gán đúng công nhân.
+    private static readonly (string Code, string Name, string Desc)[] ManufacturingPositions =
     {
-        // Demo dữ liệu để test scoped access + dropdown chọn tổ trưởng:
-        //   - projmanager (role ProjectManager) → EmployeeInformation gắn xưởng IT, đặt làm tổ trưởng xưởng IT.
-        //   - employee (role Employee)          → EmployeeInformation gắn xưởng IT (công nhân).
-        // Idempotent theo UserId — chỉ tạo EmployeeInformation nếu user đó chưa có.
-        var demoUsernames = new[] { DemoManagerUsername, DemoWorkerUsername };
+        ("QDX",    "Quản đốc xưởng",     "Lập kế hoạch, tạo đơn, phân công cho xưởng sản xuất."),
+        ("TTSX",   "Tổ trưởng sản xuất", "Chịu trách nhiệm tiến độ + hoàn thành đơn của xưởng."),
+        ("THOCAT", "Thợ cắt",            "Cắt phôi/khung theo bản vẽ."),
+        ("THOGHEP","Thợ ghép",           "Ghép/lắp ráp cụm chi tiết."),
+        ("THOSON", "Thợ sơn",            "Sơn, phủ bề mặt sản phẩm."),
+        ("THOHT",  "Thợ hoàn thiện",     "Hoàn thiện, đóng gói thành phẩm."),
+        ("KCS",    "Nhân viên KCS",      "Kiểm tra chất lượng (gate QC)."),
+    };
 
-        var users = await _context.Users
-            .Where(u => demoUsernames.Contains(u.Username))
-            .Select(u => new { u.Id, u.Username, u.FullName, u.Email, u.PhoneNo, u.Dob })
-            .ToListAsync(cancellationToken);
+    // Xưởng sản xuất (Department = xưởng trong module Task).
+    private static readonly (string Code, string Name, string Desc)[] ManufacturingDepartments =
+    {
+        ("XSX1", "Xưởng Khung tranh", "Xưởng sản xuất khung tranh, khung ảnh."),
+        ("XSX2", "Xưởng Nội thất",    "Xưởng sản xuất đồ nội thất gỗ."),
+        ("XSX3", "Xưởng Cơ khí",      "Xưởng gia công cơ khí, kết cấu thép."),
+    };
 
-        if (users.Count == 0)
+    // 6 công nhân mỗi xưởng — chức danh phủ mọi vị trí lá của 1 quy trình sản xuất điển hình
+    // (Cắt → Ghép → Sơn → Hoàn thiện + KCS), thừa 1 thợ cắt để test nhiều ứng viên/1 chức danh.
+    private static readonly string[] WorkerPositionCycle =
+        { "THOCAT", "THOCAT", "THOGHEP", "THOSON", "THOHT", "KCS" };
+
+    private async Task SeedManufacturingWorkforceDemoAsync(CancellationToken ct)
+    {
+        var positionsByCode = await EnsurePositionsByCodeAsync(ManufacturingPositions, ct);
+        var departments = await EnsureDepartmentsByCodeAsync(ManufacturingDepartments, ct);
+
+        var section = _configuration.GetSection("DefaultRoleUsers");
+        var configuredPassword = section["Password"];
+        var password = string.IsNullOrWhiteSpace(configuredPassword) ? "Demo@12345" : configuredPassword;
+
+        var totalUsers = 0;
+        for (var d = 0; d < departments.Count; d++)
         {
-            _logger.LogDebug("Demo role users not found; skipping demo employee seed.");
-            return;
-        }
+            var dept = departments[d];
+            var idx = d + 1;
 
-        var itDepartment = await _context.Departments
-            .FirstOrDefaultAsync(d => d.Code == "IT", cancellationToken);
-        if (itDepartment is null)
-        {
-            _logger.LogWarning("IT department not found; skipping demo employee seed.");
-            return;
-        }
+            // Quản đốc (role 5 Planning Manager) — trực thuộc xưởng ⇒ tạo/sửa đơn trong phạm vi xưởng.
+            await EnsureStaffAsync(
+                username: $"quandoc_x{idx}", code: $"SX{idx}QD", email: $"quandoc_x{idx}@mingo.local",
+                fullName: $"Quản đốc {dept.Name}", roleId: SystemRoles.PlanningManagerId,
+                positionId: positionsByCode["QDX"], departmentId: dept.Id, password, ct);
 
-        // Position bất kỳ để thỏa FK PositionId (non-nullable). Ưu tiên DEV, fallback position đầu tiên.
-        var position = await _context.Positions
-            .FirstOrDefaultAsync(p => p.Code == "DEV", cancellationToken)
-            ?? await _context.Positions.FirstOrDefaultAsync(cancellationToken);
-        if (position is null)
-        {
-            _logger.LogWarning("No Position found; skipping demo employee seed.");
-            return;
-        }
+            // Tổ trưởng sản xuất (role 6) — ứng viên Project.ResponsibleUserId của xưởng.
+            var (_, leaderEmpId) = await EnsureStaffAsync(
+                username: $"totruong_x{idx}", code: $"SX{idx}TT", email: $"totruong_x{idx}@mingo.local",
+                fullName: $"Tổ trưởng {dept.Name}", roleId: SystemRoles.ProductionTeamLeaderId,
+                positionId: positionsByCode["TTSX"], departmentId: dept.Id, password, ct);
 
-        var created = new Dictionary<string, EmployeeInformation>(StringComparer.OrdinalIgnoreCase);
-        var touchedExisting = false;
-
-        foreach (var u in users)
-        {
-            var citizenId = $"DEMO{u.Id:D9}";
-            var existing = await _context.EmployeeInformations
-                .FirstOrDefaultAsync(e => e.UserId == u.Id || e.CitizenId == citizenId, cancellationToken);
-
-            if (existing is not null)
+            // 6 công nhân (role 7) theo chức danh sản xuất.
+            for (var w = 0; w < WorkerPositionCycle.Length; w++)
             {
-                if (existing.UserId is null)
-                {
-                    existing.UserId = u.Id;
-                    touchedExisting = true;
-                }
-
-                if (existing.DepartmentId is null)
-                {
-                    existing.DepartmentId = itDepartment.Id;
-                    touchedExisting = true;
-                }
-
-                if (existing.PositionId <= 0)
-                {
-                    existing.PositionId = position.Id;
-                    touchedExisting = true;
-                }
-
-                continue;
+                var posCode = WorkerPositionCycle[w];
+                var posName = ManufacturingPositions.First(p => p.Code == posCode).Name;
+                await EnsureStaffAsync(
+                    username: $"cn_x{idx}_{w + 1}", code: $"SX{idx}W{w + 1}", email: $"cn_x{idx}_{w + 1}@mingo.local",
+                    fullName: $"CN {posName} X{idx}.{w + 1}", roleId: SystemRoles.EmployeeId,
+                    positionId: positionsByCode[posCode], departmentId: dept.Id, password, ct);
             }
 
-            var emp = new EmployeeInformation
-            {
-                UserId = u.Id,
-                FullName = string.IsNullOrWhiteSpace(u.FullName) ? u.Username : u.FullName,
-                Dob = u.Dob,
-                CitizenId = citizenId,
-                PermanentAddress = "N/A (demo seed)",
-                Email = u.Email,
-                PhoneNo = u.PhoneNo,
-                PositionId = position.Id,
-                DepartmentId = itDepartment.Id,
-                DependentsNo = 0,
-            };
-            await _context.EmployeeInformations.AddAsync(emp, cancellationToken);
-            created[u.Username] = emp;
-        }
+            totalUsers += 8;
 
-        if (created.Count > 0 || touchedExisting)
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-            if (created.Count > 0)
+            // Đặt tổ trưởng làm quản lý xưởng (Department.ManagerId) nếu xưởng chưa có.
+            if (dept.ManagerId is null)
             {
-                _logger.LogInformation("Seeded {Count} demo EmployeeInformation(s): {Users}.",
-                    created.Count, string.Join(", ", created.Keys));
+                dept.ManagerId = leaderEmpId;
+                await _context.SaveChangesAsync(ct);
             }
         }
 
-        await AssignItDepartmentManagerAsync(itDepartment, created, cancellationToken);
+        _logger.LogInformation(
+            "Seeded manufacturing workforce: {Depts} xưởng, {Users} nhân sự (quản đốc/tổ trưởng/công nhân).",
+            departments.Count, totalUsers);
     }
 
-    // Gán tổ trưởng xưởng IT = projmanager (nếu chưa có tổ trưởng). Ưu tiên bản ghi vừa tạo,
-    // nếu đã tồn tại thì tra lại từ DB.
-    private async Task AssignItDepartmentManagerAsync(
-        Department itDepartment,
-        IReadOnlyDictionary<string, EmployeeInformation> created,
-        CancellationToken cancellationToken)
+    // Chèn Position còn thiếu theo Code; trả về map Code → Id cho toàn bộ tập truyền vào.
+    private async Task<Dictionary<string, int>> EnsurePositionsByCodeAsync(
+        (string Code, string Name, string Desc)[] defs, CancellationToken ct)
     {
-        if (itDepartment.ManagerId is not null)
-            return;
+        var codes = defs.Select(p => p.Code).ToList();
+        var existing = await _context.Positions.Where(p => codes.Contains(p.Code)).ToListAsync(ct);
+        var byCode = existing.ToDictionary(p => p.Code, p => p, StringComparer.OrdinalIgnoreCase);
 
-        var managerEmployeeId = created.TryGetValue(DemoManagerUsername, out var pmEmp)
-            ? pmEmp.Id
-            : await _context.EmployeeInformations
-                .Where(e => e.User != null && e.User.Username == DemoManagerUsername)
-                .Select(e => (int?)e.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+        var toAdd = defs.Where(d => !byCode.ContainsKey(d.Code))
+            .Select(d => new Position { Code = d.Code, Name = d.Name, Description = d.Desc })
+            .ToList();
+        if (toAdd.Count > 0)
+        {
+            await _context.Positions.AddRangeAsync(toAdd, ct);
+            await _context.SaveChangesAsync(ct);
+            foreach (var p in toAdd) byCode[p.Code] = p;
+            _logger.LogInformation("Seeded {Count} chức danh sản xuất: {Codes}.",
+                toAdd.Count, string.Join(", ", toAdd.Select(p => p.Code)));
+        }
 
-        if (managerEmployeeId is null)
-            return;
+        return byCode.ToDictionary(kv => kv.Key, kv => kv.Value.Id, StringComparer.OrdinalIgnoreCase);
+    }
 
-        itDepartment.ManagerId = managerEmployeeId;
-        await _context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Set IT department manager to EmployeeInformation {Id} (projmanager).", managerEmployeeId);
+    // Chèn Department còn thiếu theo Code; trả về danh sách tracked theo đúng thứ tự defs (để set ManagerId).
+    private async Task<List<Department>> EnsureDepartmentsByCodeAsync(
+        (string Code, string Name, string Desc)[] defs, CancellationToken ct)
+    {
+        var codes = defs.Select(x => x.Code).ToList();
+        var existing = await _context.Departments.Where(d => codes.Contains(d.Code)).ToListAsync(ct);
+        var byCode = existing.ToDictionary(d => d.Code, d => d, StringComparer.OrdinalIgnoreCase);
+
+        var toAdd = defs.Where(d => !byCode.ContainsKey(d.Code))
+            .Select(d => new Department { Code = d.Code, Name = d.Name, Description = d.Desc, IsActive = true })
+            .ToList();
+        if (toAdd.Count > 0)
+        {
+            await _context.Departments.AddRangeAsync(toAdd, ct);
+            await _context.SaveChangesAsync(ct);
+            foreach (var d in toAdd) byCode[d.Code] = d;
+            _logger.LogInformation("Seeded {Count} xưởng sản xuất: {Codes}.",
+                toAdd.Count, string.Join(", ", toAdd.Select(d => d.Code)));
+        }
+
+        return defs.Select(d => byCode[d.Code]).ToList();
+    }
+
+    // Đảm bảo 1 User + EmployeeInformation (gắn xưởng + chức danh). Idempotent theo Username/Code/Email +
+    // CitizenId. Trả về (UserId, EmployeeInformationId). Sửa lại xưởng/chức danh nếu bản ghi cũ lệch.
+    private async Task<(int UserId, int EmployeeInfoId)> EnsureStaffAsync(
+        string username, string code, string email, string fullName,
+        int roleId, int positionId, int departmentId, string password, CancellationToken ct)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(
+            u => u.Username == username || u.EmployeeCode == code || u.Email == email, ct);
+        if (user is null)
+        {
+            user = new User
+            {
+                EmployeeCode = code,
+                FullName = fullName,
+                RoleId = roleId,
+                Username = username,
+                PasswordHash = _passwordHasher.Hash(password),
+                Email = email,
+                Dob = new DateTime(1992, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                PhoneNo = "0900000000",
+                Status = 1,
+                PasswordChangedAt = DateTime.UtcNow,
+            };
+            await _context.Users.AddAsync(user, ct);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        var citizenId = $"DEMO{user.Id:D9}";
+        var emp = await _context.EmployeeInformations
+            .FirstOrDefaultAsync(e => e.UserId == user.Id || e.CitizenId == citizenId, ct);
+        if (emp is null)
+        {
+            emp = new EmployeeInformation
+            {
+                UserId = user.Id,
+                FullName = fullName,
+                Dob = user.Dob,
+                CitizenId = citizenId,
+                PermanentAddress = "N/A (manufacturing seed)",
+                Email = email,
+                PhoneNo = user.PhoneNo,
+                PositionId = positionId,
+                DepartmentId = departmentId,
+                DependentsNo = 0,
+            };
+            await _context.EmployeeInformations.AddAsync(emp, ct);
+            await _context.SaveChangesAsync(ct);
+        }
+        else
+        {
+            // Bản ghi cũ (từ lần seed trước) — chỉnh về đúng xưởng/chức danh nếu lệch.
+            var changed = false;
+            if (emp.UserId is null) { emp.UserId = user.Id; changed = true; }
+            if (emp.DepartmentId != departmentId) { emp.DepartmentId = departmentId; changed = true; }
+            if (emp.PositionId != positionId) { emp.PositionId = positionId; changed = true; }
+            if (changed) await _context.SaveChangesAsync(ct);
+        }
+
+        return (user.Id, emp.Id);
     }
 
     private async Task SeedDefaultContractPartyAsync(CancellationToken cancellationToken)
@@ -1147,402 +1206,163 @@ public sealed partial class DatabaseSeeder
     // ===== Task/Production demo data =====
     // Idempotent theo Code/Title. Cần IT department + projmanager (tổ trưởng) + công nhân IT seed xong trước.
     private async Task SeedTaskProductionDemoAsync(CancellationToken ct)
+    /// <summary>
+    /// Seed 2 khung giờ OT mặc định — template hệ số theo cửa sổ giờ (KHÔNG phải khung
+    /// OT cố định). PM nhập giờ OT thực tế, payroll composer lookup slot khớp để lấy multiplier.
+    ///
+    /// Đơn vị hệ số: phần trăm (%). VD 150 = ×1.5.
+    ///  - Day slot (06:00–22:00): Normal 150 / WeeklyRest 200 / Holiday 300
+    ///  - Night slot (22:00–06:00): NormalNoPrevOt 200 / NormalWithPrevOt 210 / WeeklyRest 270 / Holiday 390
+    /// Khớp sàn Đ.98 BLLĐ + Thông tư 18/2021 (OvertimeMultiplierFloors).
+    /// </summary>
+    private async Task SeedDefaultOvertimeSlotTemplatesAsync(CancellationToken ct)
     {
-        var itDept = await _context.Departments.FirstOrDefaultAsync(d => d.Code == "IT", ct);
-        if (itDept is null)
-        {
-            _logger.LogWarning("IT department not found; skipping task/production demo seed.");
-            return;
-        }
-
-        var managerUserId = await _context.Users
-            .Where(u => u.Username == DemoManagerUsername)
-            .Select(u => (int?)u.Id)
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
+            .Select(u => u.Id)
             .FirstOrDefaultAsync(ct);
-        if (managerUserId is null)
+        if (adminId == 0)
         {
-            _logger.LogWarning("Demo manager user not found; skipping task/production demo seed.");
+            _logger.LogWarning("No system admin found; skipping OT slot template seed.");
             return;
         }
 
-        // Cần vài công nhân IT có tài khoản để chia task. 'employee' đã seed; thêm 5 công nhân demo nữa.
-        var workerUserIds = await EnsureDemoWorkersAsync(itDept.Id, ct);
-        if (workerUserIds.Count < 2)
-        {
-            _logger.LogWarning("Not enough demo workers in IT; skipping task/production demo seed.");
-            return;
-        }
-
-        await SeedProcessTemplateDemoAsync(itDept.Id, ct);
-        await SeedProjectsDemoAsync(itDept.Id, managerUserId.Value, workerUserIds, ct);
-    }
-
-    // Đảm bảo có >=3 công nhân IT (có UserId). Tạo worker2, worker3 nếu thiếu.
-    // Mật khẩu demo cố định (không phụ thuộc config secret) để seed tự chạy được ở mọi môi trường dev.
-    private async Task<IReadOnlyList<int>> EnsureDemoWorkersAsync(int itDepartmentId, CancellationToken ct)
-    {
-        var section = _configuration.GetSection("DefaultRoleUsers");
-        var configuredPassword = section["Password"];
-        var password = string.IsNullOrWhiteSpace(configuredPassword) ? "Demo@12345" : configuredPassword;
-
-        var position = await _context.Positions.FirstOrDefaultAsync(p => p.Code == "DEV", ct)
-            ?? await _context.Positions.FirstOrDefaultAsync(ct);
-        if (position is null) return Array.Empty<int>();
-
-        var demoWorkers = new[]
-        {
-            (Username: "employee",  Code: "EMP001", Email: "employee@mingo.local",  FullName: "Employee User"),
-            (Username: "worker2",   Code: "EMP002", Email: "worker2@mingo.local",   FullName: "Công nhân 2"),
-            (Username: "worker3",   Code: "EMP003", Email: "worker3@mingo.local",   FullName: "Công nhân 3"),
-            (Username: "worker4",   Code: "EMP004", Email: "worker4@mingo.local",   FullName: "Công nhân 4"),
-            (Username: "worker5",   Code: "EMP005", Email: "worker5@mingo.local",   FullName: "Công nhân 5"),
-            (Username: "worker6",   Code: "EMP006", Email: "worker6@mingo.local",   FullName: "Công nhân 6"),
-        };
-
-        var resultUserIds = new List<int>();
-
-        foreach (var w in demoWorkers)
-        {
-            var user = await _context.Users.FirstOrDefaultAsync(
-                u => u.Username == w.Username || u.EmployeeCode == w.Code || u.Email == w.Email,
-                ct);
-            if (user is null)
-            {
-                user = new User
-                {
-                    EmployeeCode = w.Code,
-                    FullName = w.FullName,
-                    RoleId = SystemRoles.EmployeeId,
-                    Username = w.Username,
-                    PasswordHash = _passwordHasher.Hash(password),
-                    Email = w.Email,
-                    Dob = new DateTime(1995, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                    PhoneNo = "0000000000",
-                    Status = 1,
-                    PasswordChangedAt = DateTime.UtcNow,
-                };
-                await _context.Users.AddAsync(user, ct);
-                 await _context.SaveChangesAsync(ct);
-            }
-            else if (!string.Equals(user.Username, w.Username, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(user.EmployeeCode, w.Code, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(user.Email, w.Email, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogDebug(
-                    "Demo worker seed reused existing user id={UserId} username={Username} code={EmployeeCode} email={Email}.",
-                    user.Id, user.Username, user.EmployeeCode, user.Email);
-            }
-
-            var citizenId = $"DEMO{user.Id:D9}";
-            // Idempotent theo cả UserId LẪN CitizenId (unique) — tránh trùng khóa khi user demo được tạo lại
-            // với Id mới nhưng CitizenId cũ còn tồn tại (bản ghi mồ côi từ lần seed trước).
-            var hasEmp = await _context.EmployeeInformations
-                .AnyAsync(e => e.UserId == user.Id || e.CitizenId == citizenId, ct);
-            if (!hasEmp)
-            {
-                await _context.EmployeeInformations.AddAsync(new EmployeeInformation
-                {
-                    UserId = user.Id,
-                    FullName = w.FullName,
-                    Dob = user.Dob,
-                    CitizenId = citizenId,
-                    PermanentAddress = "N/A (demo seed)",
-                    Email = user.Email,
-                    PhoneNo = user.PhoneNo,
-                    PositionId = position.Id,
-                    DepartmentId = itDepartmentId,
-                    DependentsNo = 0,
-                }, ct);
-                await _context.SaveChangesAsync(ct);
-            }
-
-            resultUserIds.Add(user.Id);
-        }
-
-        return resultUserIds;
-    }
-
-    private async Task SeedProcessTemplateDemoAsync(int itDepartmentId, CancellationToken ct)
-    {
-        if (await _context.ProcessTemplates.AnyAsync(t => t.Code == "KHUNG-A4", ct))
-        {
-            _logger.LogDebug("ProcessTemplate KHUNG-A4 already seeded; skipping.");
-            return;
-        }
-
-        var template = new ProcessTemplate
-        {
-            Code = "KHUNG-A4",
-            Name = "Gia công khung tranh A4",
-            Description = "Quy trình mẫu gia công khung tranh khổ A4.",
-            IsActive = true,
-            DefaultDepartmentId = itDepartmentId,
-        };
-
-        template.Steps.Add(new ProcessStep
-        {
-            Name = "Cắt khung", StepOrder = 1, DefaultProgressType = ProgressType.Quantity,
-            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 500, Priority = 2,
-        });
-        template.Steps.Add(new ProcessStep
-        {
-            Name = "Ghép góc", StepOrder = 2, DefaultProgressType = ProgressType.Quantity,
-            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 500, Priority = 2,
-        });
-        template.Steps.Add(new ProcessStep
-        {
-            Name = "Sơn", StepOrder = 3, DefaultProgressType = ProgressType.Quantity,
-            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 500, Priority = 2,
-        });
-        template.Steps.Add(new ProcessStep
-        {
-            Name = "Đóng gói", StepOrder = 4, DefaultProgressType = ProgressType.Quantity,
-            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 400, Priority = 1,
-        });
-        template.Steps.Add(new ProcessStep
-        {
-            Name = "Nghiệm thu khách hàng", StepOrder = 5, DefaultProgressType = ProgressType.Milestone,
-            DefaultIsRequiredGate = true, Priority = 2,
-        });
-
-        await _context.ProcessTemplates.AddAsync(template, ct);
-        await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded demo ProcessTemplate KHUNG-A4 (4 steps).");
-    }
-
-    private const string Project1Title = "[DEMO] Đơn 500 khung tranh A4 - Công ty X";
-    private const string Project2Title = "[DEMO] Đơn 200 khung tranh A4 - Công ty Y";
-    private const string Project3Title = "[DEMO] Đơn 300 khung tranh A4 - Công ty Z";
-
-    // Idempotent theo TỪNG project (theo Title) — không skip toàn hàm, vì lần seed sau có thể
-    // thêm project demo mới mà không đụng tới các project demo đã seed trước đó.
-    private async Task SeedProjectsDemoAsync(
-        int itDepartmentId, int managerUserId, IReadOnlyList<int> workerUserIds, CancellationToken ct)
-    {
-        var existingTitles = await _context.Projects
-            .Where(p => p.Title.StartsWith("[DEMO]"))
-            .Select(p => p.Title)
+        var existingCodes = await _context.OvertimeSlotTemplates
+            .AsNoTracking()
+            .Select(s => s.Code)
             .ToListAsync(ct);
-        var existing = existingTitles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existing = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        var seeds = new List<OvertimeSlotTemplate>
+        {
+            new()
+            {
+                Code = "OT-0600-2200",
+                StartTime = new TimeOnly(6, 0),
+                EndTime = new TimeOnly(22, 0),
+                IsNightSlot = false,
+                MultiplierNormalDay     = 150m,
+                MultiplierWeeklyRestDay = 200m,
+                MultiplierHolidayDay    = 300m,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "OT-2200-0600",
+                StartTime = new TimeOnly(22, 0),
+                EndTime = new TimeOnly(6, 0),
+                IsNightSlot = true,
+                MultiplierNormalNightNoPrevOt   = 200m,
+                MultiplierNormalNightWithPrevOt = 210m,
+                MultiplierWeeklyRestNight       = 270m,
+                MultiplierHolidayNight          = 390m,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+        };
 
-        if (existing.Contains(Project1Title))
+        var toAdd = seeds.Where(s => !existing.Contains(s.Code)).ToList();
+        if (toAdd.Count == 0)
         {
-            _logger.LogDebug("Demo project '{Title}' already seeded; skipping.", Project1Title);
-        }
-        else
-        {
-            await SeedProject1Async(itDepartmentId, managerUserId, workerUserIds, today, ct);
+            _logger.LogDebug("All default OvertimeSlotTemplates already present; skipping insert.");
+            return;
         }
 
-        if (existing.Contains(Project2Title))
-        {
-            _logger.LogDebug("Demo project '{Title}' already seeded; skipping.", Project2Title);
-        }
-        else
-        {
-            await SeedProject2Async(itDepartmentId, managerUserId, today, ct);
-        }
-
-        if (existing.Contains(Project3Title))
-        {
-            _logger.LogDebug("Demo project '{Title}' already seeded; skipping.", Project3Title);
-        }
-        else
-        {
-            await SeedProject3Async(itDepartmentId, managerUserId, workerUserIds, today, ct);
-        }
+        await _context.OvertimeSlotTemplates.AddRangeAsync(toAdd, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded {Count} default OvertimeSlotTemplate(s): {Codes}.",
+            toAdd.Count, string.Join(", ", toAdd.Select(s => s.Code)));
     }
 
-    private async Task SeedProject1Async(
-        int itDepartmentId, int managerUserId, IReadOnlyList<int> workerUserIds, DateOnly today, CancellationToken ct)
+    // Dọn account + dữ liệu demo theo công ty IT cũ (ngoài scope module sản xuất) khỏi DB đã seed trước đó.
+    // Giữ lại: admin, ai-service, hr, accountant, director + toàn bộ nhân sự sản xuất.
+    // Bọc try/catch: lỗi dọn KHÔNG được chặn khởi động app (worst case: data cũ còn, log cảnh báo).
+    private async Task CleanupOutOfScopeDemoAsync(CancellationToken ct)
     {
-        // ---- Đơn 1: đang sản xuất, có cây task 3 tầng + nhật ký sản lượng ----
-        var project1 = new Project
+        // Account demo IT / role rỗng cần bỏ — role gắn xưởng (5/6/7) nay do nhân sự sản xuất đảm nhiệm.
+        var demoUsernames = new[]
         {
-            Title = Project1Title,
-            Description = "Đơn demo đang sản xuất giữa chừng — có đủ cây task + daily log.",
-            Status = ProjectStatus.Active,
-            StartDate = today.AddDays(-5),
-            Deadline = DateTime.UtcNow.AddDays(10),
-            Quantity = 500,
-            DepartmentId = itDepartmentId,
-            CreatedByUserId = managerUserId,
+            "projmanager", "employee", "deptmanager",
+            "worker2", "worker3", "worker4", "worker5", "worker6",
         };
-        await _context.Projects.AddAsync(project1, ct);
-        await _context.SaveChangesAsync(ct);
 
-        // Công đoạn 1: Cắt khung (500) — cha + 3 con, đã có sản lượng.
-        var cutParent = NewStage("Cắt khung", 1, 500, project1.Id, itDepartmentId, managerUserId, TaskItemStatus.InProgress);
-        await _context.ProjectTasks.AddAsync(cutParent, ct);
-        await _context.SaveChangesAsync(ct);
-
-        var cutChildren = new[]
+        try
         {
-            NewChild(cutParent, workerUserIds[0], 200, managerUserId, TaskItemStatus.InProgress),
-            NewChild(cutParent, workerUserIds[1], 200, managerUserId, TaskItemStatus.InProgress),
-            NewChild(cutParent, workerUserIds[2], 100, managerUserId, TaskItemStatus.InProgress),
-        };
-        await _context.ProjectTasks.AddRangeAsync(cutChildren, ct);
-        await _context.SaveChangesAsync(ct);
+            // 1) Đơn demo [DEMO] + cây task + dòng gán (xoá set-based: assignee → task → project,
+            //    tôn trọng self-ref ParentTaskId Restrict vì xoá cả tập cùng lúc).
+            var demoProjectIds = await _context.Projects
+                .Where(p => p.Title.StartsWith("[DEMO]"))
+                .Select(p => p.Id)
+                .ToListAsync(ct);
+            if (demoProjectIds.Count > 0)
+            {
+                var demoTaskIds = await _context.ProjectTasks
+                    .Where(t => t.ProjectId != null && demoProjectIds.Contains(t.ProjectId.Value))
+                    .Select(t => t.Id)
+                    .ToListAsync(ct);
+                if (demoTaskIds.Count > 0)
+                    await _context.TaskAssignees.Where(a => demoTaskIds.Contains(a.TaskId)).ExecuteDeleteAsync(ct);
+                await _context.ProjectTasks
+                    .Where(t => t.ProjectId != null && demoProjectIds.Contains(t.ProjectId.Value))
+                    .ExecuteDeleteAsync(ct);
+                await _context.Projects.Where(p => demoProjectIds.Contains(p.Id)).ExecuteDeleteAsync(ct);
+            }
 
-        // Sản lượng demo (đủ / đang làm) — v5 cập nhật thẳng CompletedQuantity, không có daily-log.
-        cutChildren[0].CompletedQuantity = 200;   // đã đủ mục tiêu
-        cutChildren[1].CompletedQuantity = 80;    // đang làm
-        await _context.SaveChangesAsync(ct);
+            // 2) Quy trình mẫu demo IT (KHUNG-A4) + các bước.
+            var itTemplateIds = await _context.ProcessTemplates
+                .Where(t => t.Code == "KHUNG-A4")
+                .Select(t => t.Id)
+                .ToListAsync(ct);
+            if (itTemplateIds.Count > 0)
+            {
+                await _context.ProcessSteps.Where(s => itTemplateIds.Contains(s.ProcessTemplateId)).ExecuteDeleteAsync(ct);
+                await _context.ProcessTemplates.Where(t => itTemplateIds.Contains(t.Id)).ExecuteDeleteAsync(ct);
+            }
 
-        // Cha "Cắt khung" tự cộng = tổng các con (200 + 80 + 0 = 280/500).
-        cutParent.CompletedQuantity = cutChildren.Sum(c => c.CompletedQuantity);
-        await _context.SaveChangesAsync(ct);
+            // 3) Account demo + hồ sơ NV. EmployeeInformation → User là Restrict ⇒ xoá NV trước; gỡ
+            //    Department.ManagerId nếu trỏ tới NV sắp xoá (VD xưởng IT đang lấy projmanager làm tổ trưởng).
+            var demoUserIds = await _context.Users
+                .Where(u => demoUsernames.Contains(u.Username))
+                .Select(u => u.Id)
+                .ToListAsync(ct);
+            if (demoUserIds.Count == 0)
+            {
+                _logger.LogDebug("Cleanup: không còn account demo IT nào để xoá.");
+                return;
+            }
 
-        // Công đoạn 2: Ghép góc (500) — cha + 1 con, mới bắt đầu.
-        var joinParent = NewStage("Ghép góc", 2, 500, project1.Id, itDepartmentId, managerUserId, TaskItemStatus.Todo);
-        await _context.ProjectTasks.AddAsync(joinParent, ct);
-        await _context.SaveChangesAsync(ct);
-        var joinChild = NewChild(joinParent, workerUserIds[0], 500, managerUserId, TaskItemStatus.Todo);
-        await _context.ProjectTasks.AddAsync(joinChild, ct);
-        await _context.SaveChangesAsync(ct);
+            var demoEmpIds = await _context.EmployeeInformations
+                .Where(e => e.UserId != null && demoUserIds.Contains(e.UserId.Value))
+                .Select(e => e.Id)
+                .ToListAsync(ct);
+            if (demoEmpIds.Count > 0)
+            {
+                var managedDepts = await _context.Departments
+                    .Where(d => d.ManagerId != null && demoEmpIds.Contains(d.ManagerId.Value))
+                    .ToListAsync(ct);
+                foreach (var dept in managedDepts) dept.ManagerId = null;
+                if (managedDepts.Count > 0) await _context.SaveChangesAsync(ct);
 
-        // Công đoạn 3: Sơn (500) — cha chưa chia con.
-        var paintParent = NewStage("Sơn", 3, 500, project1.Id, itDepartmentId, managerUserId, TaskItemStatus.Todo);
-        await _context.ProjectTasks.AddAsync(paintParent, ct);
-        await _context.SaveChangesAsync(ct);
+                await _context.EmployeeInformations.Where(e => demoEmpIds.Contains(e.Id)).ExecuteDeleteAsync(ct);
+            }
 
-        // Công đoạn 4: Đóng gói (500) — chưa chia con.
-        var packParent = NewStage("Đóng gói", 4, 500, project1.Id, itDepartmentId, managerUserId, TaskItemStatus.Todo);
-        await _context.ProjectTasks.AddAsync(packParent, ct);
-        await _context.SaveChangesAsync(ct);
+            // User: RefreshToken/PasswordResetToken cascade; AuditLog.UserId set-null → không vướng FK.
+            await _context.Users.Where(u => demoUserIds.Contains(u.Id)).ExecuteDeleteAsync(ct);
 
-        _logger.LogInformation("Seeded demo Project '{Title}' (in-progress with task tree).", Project1Title);
-    }
-
-    private async Task SeedProject2Async(int itDepartmentId, int managerUserId, DateOnly today, CancellationToken ct)
-    {
-        // ---- Đơn 2: vừa tạo, chưa có task (để FE test luồng tạo/generate) ----
-        var project2 = new Project
-        {
-            Title = Project2Title,
-            Description = "Đơn demo mới tạo, chưa sinh task — để test generate/bulk-create.",
-            Status = ProjectStatus.Active,
-            StartDate = today,
-            Deadline = DateTime.UtcNow.AddDays(20),
-            Quantity = 200,
-            DepartmentId = itDepartmentId,
-            CreatedByUserId = managerUserId,
-        };
-        await _context.Projects.AddAsync(project2, ct);
-        await _context.SaveChangesAsync(ct);
-
-        _logger.LogInformation("Seeded demo Project '{Title}' (empty, no tasks yet).", Project2Title);
-    }
-
-    private async Task SeedProject3Async(
-        int itDepartmentId, int managerUserId, IReadOnlyList<int> workerUserIds, DateOnly today, CancellationToken ct)
-    {
-        // ---- Đơn 3: đã hoàn tất 1 công đoạn (Done) + 1 công đoạn đang tạm dừng (Paused) ----
-        // Đa dạng trạng thái để FE test hiển thị Done/Paused, không chỉ Todo/InProgress.
-        var project3 = new Project
-        {
-            Title = Project3Title,
-            Description = "Đơn demo có công đoạn Done và công đoạn Paused — test các trạng thái task đa dạng.",
-            Status = ProjectStatus.Active,
-            StartDate = today.AddDays(-15),
-            Deadline = DateTime.UtcNow.AddDays(5),
-            Quantity = 300,
-            DepartmentId = itDepartmentId,
-            CreatedByUserId = managerUserId,
-        };
-        await _context.Projects.AddAsync(project3, ct);
-        await _context.SaveChangesAsync(ct);
-
-        // Công đoạn 1: Cắt khung (300) — cha + 2 con, ĐÃ HOÀN THÀNH.
-        var p3CutParent = NewStage("Cắt khung", 1, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Done);
-        p3CutParent.CompletedQuantity = 300;
-        p3CutParent.CompletedByUserId = managerUserId;
-        p3CutParent.CompletedAt = DateTime.UtcNow.AddDays(-8);
-        await _context.ProjectTasks.AddAsync(p3CutParent, ct);
-        await _context.SaveChangesAsync(ct);
-
-        var p3CutChildren = new[]
-        {
-            NewChild(p3CutParent, workerUserIds[3 % workerUserIds.Count], 150, managerUserId, TaskItemStatus.Done),
-            NewChild(p3CutParent, workerUserIds[4 % workerUserIds.Count], 150, managerUserId, TaskItemStatus.Done),
-        };
-        foreach (var child in p3CutChildren)
-        {
-            child.CompletedQuantity = child.PlannedQuantity;
-            child.CompletedByUserId = managerUserId;
-            child.CompletedAt = DateTime.UtcNow.AddDays(-8);
+            _logger.LogInformation(
+                "Cleanup: đã xoá {Users} account demo IT + đơn/template demo IT (ngoài scope sản xuất).",
+                demoUserIds.Count);
         }
-        await _context.ProjectTasks.AddRangeAsync(p3CutChildren, ct);
-        await _context.SaveChangesAsync(ct);
-
-        // Công đoạn 2: Ghép góc (300) — cha + 2 con, ĐANG TẠM DỪNG (Paused).
-        var p3JoinParent = NewStage("Ghép góc", 2, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Paused);
-        p3JoinParent.StatusBeforePause = TaskItemStatus.InProgress;
-        await _context.ProjectTasks.AddAsync(p3JoinParent, ct);
-        await _context.SaveChangesAsync(ct);
-
-        var p3JoinChildren = new[]
+        catch (Exception ex)
         {
-            NewChild(p3JoinParent, workerUserIds[5 % workerUserIds.Count], 150, managerUserId, TaskItemStatus.Paused),
-            NewChild(p3JoinParent, workerUserIds[0], 150, managerUserId, TaskItemStatus.Paused),
-        };
-        foreach (var child in p3JoinChildren)
-        {
-            child.CompletedQuantity = 60;
-            child.StatusBeforePause = TaskItemStatus.InProgress;
-            child.PausedByCascadeFromId = p3JoinParent.Id;
+            _logger.LogWarning(ex,
+                "Cleanup demo IT (ngoài scope) thất bại — bỏ qua, không chặn khởi động. " +
+                "Có thể account demo đang bị dữ liệu khác tham chiếu; dọn thủ công nếu cần.");
         }
-        await _context.ProjectTasks.AddRangeAsync(p3JoinChildren, ct);
-        await _context.SaveChangesAsync(ct);
-
-        p3JoinParent.CompletedQuantity = p3JoinChildren.Sum(c => c.CompletedQuantity);
-        await _context.SaveChangesAsync(ct);
-
-        // Công đoạn 3+4: Sơn / Đóng gói (300) — chưa bắt đầu.
-        var p3PaintParent = NewStage("Sơn", 3, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Todo);
-        var p3PackParent = NewStage("Đóng gói", 4, 300, project3.Id, itDepartmentId, managerUserId, TaskItemStatus.Todo);
-        await _context.ProjectTasks.AddRangeAsync(new[] { p3PaintParent, p3PackParent }, ct);
-        await _context.SaveChangesAsync(ct);
-
-        _logger.LogInformation("Seeded demo Project '{Title}' (1 Done stage, 1 Paused stage).", Project3Title);
     }
-
-    private static ProjectTask NewStage(
-        string title, int stepOrder, int planned,
-        int projectId, int departmentId, int createdByUserId, TaskItemStatus status) =>
-        new()
-        {
-            Title = title,
-            IsBatchParent = true,
-            Type = TaskItemType.ProcessTask,
-            Status = status,
-            ProgressType = ProgressType.Quantity,
-            StepOrder = stepOrder,
-            PlannedQuantity = planned,
-            PlannedWorkUnits = planned,   // demo: khối lượng công việc = sản lượng kế hoạch (tỷ trọng đều nhau)
-            ProjectId = projectId,
-            DepartmentId = departmentId,
-            CreatedByUserId = createdByUserId,
-        };
-
-    private static ProjectTask NewChild(
-        ProjectTask parent, int assignedToUserId, int planned, int createdByUserId, TaskItemStatus status) =>
-        new()
-        {
-            Title = $"{parent.Title} - NV#{assignedToUserId}",
-            IsBatchParent = false,
-            Type = parent.Type,
-            Status = status,
-            ProgressType = ProgressType.Quantity,
-            StepOrder = parent.StepOrder,
-            PlannedQuantity = planned,
-            ProjectId = parent.ProjectId,
-            DepartmentId = parent.DepartmentId,
-            ParentTaskId = parent.Id,
-            CreatedByUserId = createdByUserId,
-            Assignees = { new TaskAssignee { UserId = assignedToUserId, AssignedAt = DateTime.UtcNow } },
-        };
 }

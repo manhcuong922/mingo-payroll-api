@@ -34,7 +34,7 @@ public class TaskResumeCommandHandler : IRequestHandler<TaskResumeCommand, bool>
         if (task.PausedByCascadeFromId is not null)
             throw new DomainValidationException("Task đang bị khóa bởi công đoạn cha — phải Resume công đoạn cha trước.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanPlanTaskAsync(task, _currentUser, _authorizer, ct);
 
         task.Status = task.StatusBeforePause ?? TaskItemStatus.Todo;
         task.StatusBeforePause = null;

@@ -87,30 +87,10 @@ public class TaskGetByDepartmentQueryHandler
         }
 
         var items = await _tasks.GetByDepartmentAsync(request.DepartmentId, ct, request.IncludeCancelled);
-        items = FilterByAssignedPm(items, _currentUser);
 
         return items
             .Where(t => !t.IsConfidential || _currentUser.HasPermission(Permissions.TaskReadConfidential))
             .Select(t => TaskMapper.ToDto(t))
-            .ToList();
-    }
-
-    // Plan mục 8 ràng buộc "PM chỉ thấy công đoạn của mình": ẩn Công đoạn ĐÃ gán cho PM khác
-    // (AssignedPmUserId khác userId hiện tại). Công đoạn CHƯA gán ai vẫn hiện — không thuộc về ai để giấu.
-    // GĐ/Phó GĐ (TaskReadAll) hoặc quản lý xưởng full-scope (TaskReadFullDepartment, vd. DepartmentManager)
-    // không bị lọc, xem toàn bộ xưởng — permission-based, không hardcode role.
-    internal static IReadOnlyList<Domain.Entities.ProjectTask> FilterByAssignedPm(
-        IReadOnlyList<Domain.Entities.ProjectTask> items, ICurrentUserService currentUser)
-    {
-        if (ProjectScopeGuard.CanSeeFullDepartmentTasks(currentUser)) return items;
-
-        var userId = currentUser.UserId;
-        var hiddenStageIds = items
-            .Where(t => t.IsBatchParent && t.AssignedPmUserId is int pmId && pmId != userId)
-            .Select(t => t.Id)
-            .ToHashSet();
-        return items
-            .Where(t => !hiddenStageIds.Contains(t.Id) && !hiddenStageIds.Contains(t.ParentTaskId ?? -1))
             .ToList();
     }
 }
@@ -151,7 +131,6 @@ public class TaskGetByProjectQueryHandler
         }
 
         var items = await _tasks.GetByProjectIdAsync(request.ProjectId, ct, request.IncludeCancelled);
-        items = TaskGetByDepartmentQueryHandler.FilterByAssignedPm(items, _currentUser);
 
         return items
             .Where(t => !t.IsConfidential || _currentUser.HasPermission(Permissions.TaskReadConfidential))

@@ -71,24 +71,22 @@ public class CommentCreateCommandHandler : IRequestHandler<CommentCreateCommand,
 
         if (_currentUser.HasPermission(Permissions.ProjectReadAll)) return; // GĐ/Phó GĐ
 
-        if (task.IsBatchParent)
-        {
-            // Công đoạn: Manager của xưởng, hoặc PM đang phụ trách chính công đoạn này.
-            if (task.AssignedPmUserId == userId) return;
-            await ProjectScopeGuard.EnsureCanWriteTaskAsync(task.DepartmentId, _currentUser, _authorizer, ct);
+        // Planning Manager của xưởng task (refactor: bỏ per-stage PM).
+        if (task.DepartmentId is int deptId && await _authorizer.IsManagerOfAsync(userId, deptId, ct))
             return;
+
+        // Tổ trưởng sản xuất đang phụ trách đơn của task.
+        if (task.ProjectId is int projectId)
+        {
+            var project = await _projects.GetByIdAsync(projectId, ct);
+            if (project?.ResponsibleUserId == userId) return;
         }
 
-        // Task lá: PM đang phụ trách công đoạn cha, HOẶC Employee là assignee của chính task này (ngoại lệ Comment.Create.Own).
-        var parentPm = task.ParentTaskId is int parentId
-            ? (await _tasks.GetByIdAsync(parentId, ct))?.AssignedPmUserId
-            : null;
-        if (parentPm == userId) return;
-
+        // Employee là assignee của chính task này (ngoại lệ Comment.Create.Own).
         if (_currentUser.HasPermission(Permissions.CommentCreateOwn))
         {
-            var isAssignee = await _tasks.GetByIdWithGraphAsync(task.Id, ct);
-            if (isAssignee?.Assignees.Any(a => a.UserId == userId) == true) return;
+            var withGraph = await _tasks.GetByIdWithGraphAsync(task.Id, ct);
+            if (withGraph?.Assignees.Any(a => a.UserId == userId) == true) return;
         }
 
         throw new ForbiddenAccessException("Bạn không có quyền viết comment trên task này.");

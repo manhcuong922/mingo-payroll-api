@@ -35,10 +35,19 @@ public class ProjectTask
     public int Weight { get; set; }
     public DateTime? ProgressUpdatedAt { get; set; }           // lần cuối cập nhật CompletedQuantity
 
-    // Khối lượng công việc chuẩn của CÔNG ĐOẠN (chỉ có ý nghĩa khi IsBatchParent=true, ProgressType=Quantity) —
-    // dùng để tính tỷ trọng đóng góp vào tiến độ Đơn (SUM StagePercent*PlannedWorkUnits / SUM PlannedWorkUnits),
-    // độc lập với PlannedQuantity (sản lượng thực tế của chính công đoạn đó).
+    // Trọng số/capacity ở MỌI node của cây N tầng (refactor PR). Container: mẫu số rollup con (capacity riêng
+    // của node — Σ con < capacity ⇒ % < 100%). Leaf: trọng số đóng góp lên node cha. KHÔNG scale theo quy mô đơn.
     public int PlannedWorkUnits { get; set; }
+
+    // --- N-tier authoring (refactor) ---
+    // Số người cố định của vị trí lá (copy từ template, KHÔNG scale). Gán < / > → cảnh báo mềm ở tầng handler.
+    public int PlannedHeadcount { get; set; }
+    // Chức danh bắt buộc để gán người vào vị trí lá (FK Position). Gán sai chức danh → 400.
+    public int? RequiredPositionId { get; set; }
+    public Position? RequiredPosition { get; set; }
+    // Vị trí tương đối trong timeline đơn (0..1): task.Deadline = StartDate + ratio × (Deadline − StartDate).
+    // null ⇒ task không có deadline dẫn xuất. Sửa deadline tay → cập nhật lại ratio (giữ vị trí tương đối).
+    public double? DeadlineOffsetRatio { get; set; }
 
     // Gate/Checklist bắt buộc (chỉ có ý nghĩa khi ProgressType=Milestone). Gate có thể là task lá dưới 1
     // công đoạn (ParentTaskId != null, chặn công đoạn cha tự Done) hoặc sinh trực tiếp dưới Project từ
@@ -65,16 +74,13 @@ public class ProjectTask
     public ProjectTask? ParentTask { get; set; }
     public List<ProjectTask> Children { get; set; } = new();
 
-    // true = task CÔNG ĐOẠN (tầng 2), không giao ai trực tiếp; tiến độ = tổng Children;
-    // loại khỏi "task của tôi" của nhân viên.
+    // true = node CONTAINER (gộp con) ở BẤT KỲ tầng nào — không giao ai/không sản lượng trực tiếp;
+    // tiến độ = rollup Children. false = work-leaf (Quantity) hoặc gate (Milestone). Refactor: bỏ ràng buộc
+    // "cây chỉ 3 tầng" — container lồng container tùy ý (cap MaxTreeDepth). Suy được từ "có con" nhưng giữ cột
+    // để query/rollup không phải join Children mỗi lần.
     public bool IsBatchParent { get; set; } = false;
 
-    // PM chịu trách nhiệm 1 Công đoạn (chỉ có ý nghĩa khi IsBatchParent=true). Đổi PM giữa chừng →
-    // PM mới thừa kế toàn bộ Công đoạn + task con hiện có (plan mục 3.3/4.9) — không cần field lịch sử riêng.
-    public int? AssignedPmUserId { get; set; }
-    public User? AssignedPmUser { get; set; }
-
-    // ⭐ Multi-assignee: 1 task giao 1 HOẶC nhiều người (bảng nối). Task cha (IsBatchParent) để rỗng.
+    // ⭐ Multi-assignee: 1 task giao 1 HOẶC nhiều người (bảng nối). Node container để rỗng.
     public List<TaskAssignee> Assignees { get; set; } = new();
 
     // Tài liệu/ảnh: KHÔNG navigation — ProductionAttachment polymorphic (OwnerType+OwnerId), query qua repo.

@@ -2,104 +2,102 @@ using FluentAssertions;
 using MPS.Application.Services;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums;
+using MPS.Domain.Exceptions;
 using Xunit;
 
 namespace MPS.Application.Tests.Services;
 
-// Bug đã fix: TaskGenerator từng đặt IsBatchParent=true cho MỌI step, kể cả step Milestone/Gate —
-// khiến "gate" sinh ra từ template thực chất là 1 công đoạn rỗng (IsBatchParent=true), sai model
-// plan.md mục 5.3 (step Gate phải sinh IsBatchParent=false, PlannedQuantity=0, PlannedWorkUnits=0).
+// Refactor task-full-generation: BuildTree sinh full cây N tầng, scale sản lượng lá (ceil), workunits/headcount
+// không scale, gate mọi tầng, ratio → deadline. Container không mang sản lượng trực tiếp.
 public sealed class TaskGeneratorTests
 {
-    private static Project Project() => new() { Id = 1, DepartmentId = 3 };
-
-    private static ProcessTemplate Template(params ProcessStep[] steps)
+    private static Project Project(int quantity = 505) => new()
     {
-        var t = new ProcessTemplate { Id = 9, DefaultDepartmentId = 3 };
-        t.Steps.AddRange(steps);
-        return t;
-    }
+        Id = 1,
+        DepartmentId = 3,
+        Quantity = quantity,
+        StartDate = new DateOnly(2026, 7, 1),
+        Deadline = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc),
+    };
 
-    [Fact]
-    public void BuildStages_QuantityStep_ProducesBatchParentStage()
+    // Cây: [1 Cắt (container)] → { [2 Thợ cắt (leaf, scale)], [3 QC (gate)] }; [4 Setup máy (leaf, không scale)].
+    private static ProcessTemplate Template(int baseQuantity = 100)
     {
-        var template = Template(new ProcessStep
+        var t = new ProcessTemplate { Id = 9, DefaultDepartmentId = 3, BaseQuantity = baseQuantity };
+        t.Steps.AddRange(new[]
         {
-            Id = 1, Name = "Cắt khung", StepOrder = 1,
-            DefaultProgressType = ProgressType.Quantity,
-            DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 400,
-        });
-
-        var stages = new TaskGenerator().BuildStages(Project(), template, createdByUserId: 7, overrides: null);
-
-        stages.Should().HaveCount(1);
-        var stage = stages[0];
-        stage.IsBatchParent.Should().BeTrue();
-        stage.ProgressType.Should().Be(ProgressType.Quantity);
-        stage.PlannedQuantity.Should().Be(500);
-        stage.PlannedWorkUnits.Should().Be(400);
-    }
-
-    [Fact]
-    public void BuildStages_GateStep_ProducesNonBatchParentGateWithZeroQuantityAndWorkUnits()
-    {
-        var template = Template(new ProcessStep
-        {
-            Id = 2, Name = "Nghiệm thu khách hàng", StepOrder = 1,
-            DefaultProgressType = ProgressType.Milestone,
-            DefaultIsRequiredGate = true,
-            // Vẫn set default quantity/work units khác 0 để chứng minh generator luôn ép 0 cho gate,
-            // bất kể dữ liệu step (phòng trường hợp step bị cấu hình sai qua đường khác).
-            DefaultPlannedQuantity = 999, DefaultPlannedWorkUnits = 999,
-        });
-
-        var stages = new TaskGenerator().BuildStages(Project(), template, createdByUserId: 7, overrides: null);
-
-        stages.Should().HaveCount(1);
-        var gate = stages[0];
-        gate.IsBatchParent.Should().BeFalse();
-        gate.ProgressType.Should().Be(ProgressType.Milestone);
-        gate.PlannedQuantity.Should().Be(0);
-        gate.PlannedWorkUnits.Should().Be(0);
-        gate.IsRequiredGate.Should().BeTrue();
-        gate.AssignedPmUserId.Should().BeNull();
-    }
-
-    [Fact]
-    public void BuildStages_GateStep_NotRequired_KeepsIsRequiredGateFalse()
-    {
-        var template = Template(new ProcessStep
-        {
-            Id = 3, Name = "Chụp ảnh lưu hồ sơ (tuỳ chọn)", StepOrder = 1,
-            DefaultProgressType = ProgressType.Milestone,
-            DefaultIsRequiredGate = false,
-        });
-
-        var stages = new TaskGenerator().BuildStages(Project(), template, createdByUserId: 7, overrides: null);
-
-        stages[0].IsRequiredGate.Should().BeFalse();
-    }
-
-    [Fact]
-    public void BuildStages_MixedSteps_PreservesOrderAndEachKind()
-    {
-        var template = Template(
+            new ProcessStep { Id = 1, Name = "Cắt", StepOrder = 1, DefaultProgressType = ProgressType.Quantity, DefaultPlannedWorkUnits = 500 },
             new ProcessStep
             {
-                Id = 1, Name = "Cắt khung", StepOrder = 1,
-                DefaultProgressType = ProgressType.Quantity,
-                DefaultPlannedQuantity = 500, DefaultPlannedWorkUnits = 500,
+                Id = 2, ParentProcessStepId = 1, Name = "Thợ cắt", StepOrder = 1,
+                DefaultProgressType = ProgressType.Quantity, DefaultPlannedQuantity = 7, DefaultPlannedWorkUnits = 300,
+                PlannedHeadcount = 3, RequiredPositionId = 42, ScalesWithQuantity = true, DefaultDeadlineOffsetRatio = 0.5,
             },
             new ProcessStep
             {
-                Id = 2, Name = "Nghiệm thu", StepOrder = 2,
+                Id = 3, ParentProcessStepId = 1, Name = "QC", StepOrder = 2,
                 DefaultProgressType = ProgressType.Milestone, DefaultIsRequiredGate = true,
-            });
+            },
+            new ProcessStep
+            {
+                Id = 4, Name = "Setup máy", StepOrder = 2,
+                DefaultProgressType = ProgressType.Quantity, DefaultPlannedQuantity = 10, DefaultPlannedWorkUnits = 50,
+                PlannedHeadcount = 1, RequiredPositionId = 43, ScalesWithQuantity = false,
+            },
+        });
+        return t;
+    }
 
-        var stages = new TaskGenerator().BuildStages(Project(), template, createdByUserId: 7, overrides: null);
+    private static IReadOnlyList<ProjectTask> Build(int quantity = 505, int baseQuantity = 100) =>
+        new TaskGenerator().BuildTree(Project(quantity), Template(baseQuantity), createdByUserId: 7);
 
-        stages.Should().HaveCount(2);
-        stages[0].IsBatchParent.Should().BeTrue();
-        stages[1].IsBatchParent.Should().BeFalse();
+    [Fact]
+    public void BuildTree_ProducesFullTree_AllNodes()
+    {
+        Build().Should().HaveCount(4);
+    }
+
+    [Fact]
+    public void BuildTree_Container_HasNoQuantityAndIsBatchParent()
+    {
+        var container = Build().Single(t => t.Title == "Cắt");
+        container.IsBatchParent.Should().BeTrue();
+        container.PlannedQuantity.Should().Be(0);
+        container.PlannedWorkUnits.Should().Be(500);
+    }
+
+    [Fact]
+    public void BuildTree_WorkLeaf_ScalesQuantityCeil_KeepsWorkUnitsAndHeadcountAndPosition()
+    {
+        var leaf = Build().Single(t => t.Title == "Thợ cắt");
+        leaf.IsBatchParent.Should().BeFalse();
+        leaf.PlannedQuantity.Should().Be(36);           // ceil(7 × 5.05) = ceil(35.35) = 36
+        leaf.PlannedWorkUnits.Should().Be(300);          // KHÔNG scale
+        leaf.PlannedHeadcount.Should().Be(3);            // KHÔNG scale
+        leaf.RequiredPositionId.Should().Be(42);
+        leaf.DeadlineOffsetRatio.Should().Be(0.5);
+        leaf.Deadline.Should().NotBeNull();              // ratio × timeline
+    }
+
+    [Fact]
+    public void BuildTree_LeafWithScalesFalse_KeepsQuantityUnchanged()
+    {
+        Build().Single(t => t.Title == "Setup máy").PlannedQuantity.Should().Be(10);
+    }
+
+    [Fact]
+    public void BuildTree_Gate_AtAnyTier_IsMilestoneWithZeroQuantity()
+    {
+        var gate = Build().Single(t => t.Title == "QC");
+        gate.ProgressType.Should().Be(ProgressType.Milestone);
+        gate.IsRequiredGate.Should().BeTrue();
+        gate.PlannedQuantity.Should().Be(0);
+    }
+
+    [Fact]
+    public void BuildTree_Throws_WhenBaseQuantityNotPositive()
+    {
+        var act = () => new TaskGenerator().BuildTree(Project(), Template(baseQuantity: 0), createdByUserId: 7);
+        act.Should().Throw<DomainValidationException>();
     }
 }

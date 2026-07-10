@@ -188,4 +188,11 @@ public class DepartmentRepository : IDepartmentRepository
             .AsNoTracking()
             .AnyAsync(e => e.UserId == userId && e.DepartmentId == departmentId
                 && e.User != null && e.User.RoleId == roleId, ct);
+
+    public async Task<bool> IsUserInDepartmentWithPositionAsync(
+        int userId, int departmentId, int positionId, CancellationToken ct) =>
+        await _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.UserId == userId && e.DepartmentId == departmentId
+                && e.PositionId == positionId, ct);
 }

@@ -49,17 +49,16 @@ public class ProjectTaskEntityConfiguration : IEntityTypeConfiguration<ProjectTa
             .HasForeignKey(t => t.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // AssignedPmUserId — PM chịu trách nhiệm 1 Công đoạn (mục 4.9 plan)
-        builder.HasOne(t => t.AssignedPmUser)
+        // RequiredPositionId — chức danh bắt buộc để gán vào vị trí lá (refactor P)
+        builder.HasOne(t => t.RequiredPosition)
             .WithMany()
-            .HasForeignKey(t => t.AssignedPmUserId)
+            .HasForeignKey(t => t.RequiredPositionId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(t => t.ProjectId);
         builder.HasIndex(t => t.DepartmentId);
         builder.HasIndex(t => t.ParentTaskId);
         builder.HasIndex(t => t.Status);
-        builder.HasIndex(t => t.AssignedPmUserId);
         builder.HasIndex(t => t.DeletedAt);
     }
 }

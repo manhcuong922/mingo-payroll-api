@@ -1,28 +1,17 @@
 using MPS.Domain.Entities;
-using MPS.Domain.Enums;
 
 namespace MPS.Application.Services;
-
-/// <summary>Override số liệu 1 bước khi áp quy trình mẫu (không bắt buộc dùng đúng số mẫu).</summary>
-public record GenerateStepOverride(
-    int StepId,
-    int? PlannedQuantityOverride,
-    int? PlannedWorkUnitsOverride,
-    DateTime? DeadlineOverride,
-    ProgressType? ProgressTypeOverride,
-    int? AssignedPmUserId = null);
 
 public interface ITaskGenerator
 {
     /// <summary>
-    /// Sinh task từ ProcessTemplate cho một đơn: step Quantity → công đoạn (IsBatchParent=true);
-    /// step Milestone/Gate → gate trực tiếp dưới Project (IsBatchParent=false, ParentTaskId=null).
-    /// KHÔNG auto-chia con cho công đoạn, KHÔNG auto-assign — quản lý xưởng chia sau bằng
-    /// CreateTask(ParentTaskId=cha).
+    /// Sinh FULL cây task N tầng cho một đơn từ cây node của ProcessTemplate (refactor task-full-generation):
+    ///   - container (ProcessStep có con) → node gộp (IsBatchParent=true), không sản lượng/không gán.
+    ///   - work-leaf (không con, Quantity) → vị trí gán được: PlannedQuantity = ceil(scale), PlannedHeadcount,
+    ///     RequiredPositionId, DeadlineOffsetRatio. 0 assignee — Planning gán sau.
+    ///   - gate (Milestone) ở bất kỳ tầng → node chặn (IsRequiredGate), không sản lượng, không %.
+    /// Scale sản lượng: factor = Project.Quantity / Template.BaseQuantity, ceil mỗi lá có ScalesWithQuantity=true.
+    /// PlannedWorkUnits (trọng số) &amp; PlannedHeadcount KHÔNG scale. Deadline mỗi node = ratio × timeline đơn.
     /// </summary>
-    IReadOnlyList<ProjectTask> BuildStages(
-        Project project,
-        ProcessTemplate template,
-        int createdByUserId,
-        IReadOnlyList<GenerateStepOverride>? overrides);
+    IReadOnlyList<ProjectTask> BuildTree(Project project, ProcessTemplate template, int createdByUserId);
 }

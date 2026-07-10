@@ -61,6 +61,7 @@ public sealed class EmployeeInformationDepartmentRoleValidatorTests
     [Theory]
     [InlineData(SystemRoles.ProjectManagerId)]
     [InlineData(SystemRoles.EmployeeId)]
+    [InlineData(SystemRoles.DepartmentManagerId)]   // refactor: Planning Manager scope xưởng ⇒ trực thuộc xưởng
     public async Task ProductionRole_CanBelongToDepartment(int roleId)
     {
         _repo.Setup(r => r.GetUserRoleIdAsync(50, It.IsAny<CancellationToken>())).ReturnsAsync(roleId);
@@ -76,7 +77,6 @@ public sealed class EmployeeInformationDepartmentRoleValidatorTests
     [InlineData(SystemRoles.HrId)]
     [InlineData(SystemRoles.AccountantId)]
     [InlineData(SystemRoles.DeputyDirectorId)]
-    [InlineData(SystemRoles.DepartmentManagerId)]
     public async Task AdminRole_CannotBelongToDepartment(int roleId)
     {
         _repo.Setup(r => r.GetUserRoleIdAsync(50, It.IsAny<CancellationToken>())).ReturnsAsync(roleId);
