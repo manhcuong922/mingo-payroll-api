@@ -93,6 +93,8 @@ public class UpdatePendingOvertimeRequestCommandHandler
         existing.OtHours = otHours;
         existing.OtDayHours = breakdown.DayHours;
         existing.OtNightHours = breakdown.NightHours;
+        // WorkDate có thể đổi — refresh snapshot LaborLaw version cho đúng ngày mới
+        existing.LaborLawConstantsVersionId = laborLaw.VersionId;
         existing.Reason = request.Reason;
         existing.ApproverRoute = request.ApproverRoute;
         existing.UpdatedAt = now;

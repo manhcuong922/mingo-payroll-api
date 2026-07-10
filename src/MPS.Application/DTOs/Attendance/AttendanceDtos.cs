@@ -247,8 +247,8 @@ public sealed record OvertimeRequestDto(
     decimal OtHours,
     decimal OtDayHours,
     decimal OtNightHours,
-    int? OvertimeSlotTemplateId,
-    OvertimeSlotSummaryDto? OvertimeSlotTemplate,
+    // Snapshot version LaborLawConstants — composer dùng để compute multiplier từ công thức
+    int? LaborLawConstantsVersionId,
     OtRequestStatus Status,
     string? Reason,
     string? ReviewNote,
@@ -273,32 +273,6 @@ public sealed record EligibleEmployeeForOvertimeDto(
     string FullName,
     string? EmployeeCode,
     string? PositionName);
-
-public sealed record OvertimeSlotSummaryDto(
-    int Id,
-    string Code,
-    TimeOnly StartTime,
-    TimeOnly EndTime,
-    bool IsActive);
-
-public sealed record OvertimeSlotTemplateDto(
-    int Id,
-    string Code,
-    TimeOnly StartTime,
-    TimeOnly EndTime,
-    bool IsNightSlot,
-    // Override multiplier %; null = dùng sàn luật (composer Phase C resolve).
-    decimal? MultiplierNormalDay,
-    decimal? MultiplierWeeklyRestDay,
-    decimal? MultiplierHolidayDay,
-    decimal? MultiplierNormalNightNoPrevOt,
-    decimal? MultiplierNormalNightWithPrevOt,
-    decimal? MultiplierWeeklyRestNight,
-    decimal? MultiplierHolidayNight,
-    string? Description,
-    bool IsActive,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt);
 
 public sealed record LeaveTypeDto(
     int Id,

@@ -15,7 +15,7 @@ namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 /// Flow:
 ///  1. Resolve currentUser → PM → EmployeeInformation → DepartmentId
 ///  2. Load Project → validate exists, Active, thuộc dept của PM (loose scope)
-///  3. Load OvertimeSlotTemplate → validate IsActive
+///  3. Snapshot LaborLawConstantsVersion active tại WorkDate → khoá rate cho composer
 ///  4. Load N EmployeeInformation → mỗi NV: validate thuộc dept của Project
 ///  5. Với mỗi NV: OvertimeCapChecker + split hours + tạo OvertimeRequest
 ///  6. Partial success — 1 NV fail không rollback cả batch (Q6)
@@ -75,9 +75,8 @@ public class CreateBatchOvertimeRequestCommandHandler
         if (project.DepartmentId != pmDepartmentId)
             throw new ForbiddenAccessException("PM không thuộc phòng ban của project này.");
 
-        // 3. Slot resolution defer sang payroll composer — PM chỉ nhập OtStartTime/OtEndTime.
-        //    Slot template chỉ là template hệ số theo cửa sổ giờ (day/night), không phải
-        //    khung OT cố định. Composer sẽ lookup slot khớp khi tính lương.
+        // 3. Multiplier resolution: composer sẽ compute từ công thức + LaborLawConstantsVersion
+        //    snapshotted trên entity. PM chỉ nhập OtStartTime/OtEndTime.
 
         // 4. Load N NV
         var employees = new List<Domain.Entities.EmployeeInformation>(request.EmployeeInformationIds.Count);
@@ -144,7 +143,7 @@ public class CreateBatchOvertimeRequestCommandHandler
                     OtStartTime = request.OtStartTime,
                     OtEndTime = request.OtEndTime,
                     OtHours = otHours,
-                    OvertimeSlotTemplateId = null, // Payroll composer resolve slot khi tính lương
+                    LaborLawConstantsVersionId = laborLaw.VersionId, // Khoá rate — composer dùng version này
                     OtDayHours = breakdown.DayHours,
                     OtNightHours = breakdown.NightHours,
                     Status = OtRequestStatus.Pending,

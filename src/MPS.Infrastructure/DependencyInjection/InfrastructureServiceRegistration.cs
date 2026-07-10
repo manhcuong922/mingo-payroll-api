@@ -96,6 +96,9 @@ public static class InfrastructureServiceRegistration
 
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
+        services.AddScoped<
+            MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,
+            MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeMultiplierCalculator>();
 
         // Attendance module repositories (FE-ATT)
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IShiftTemplateRepository, ShiftTemplateRepository>();
@@ -105,7 +108,6 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRecordRepository, AttendanceRecordRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceSettingRepository, AttendanceSettingRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeRequestRepository, OvertimeRequestRepository>();
-        services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeSlotTemplateRepository, OvertimeSlotTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveTypeRepository, LeaveTypeRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveRequestRepository, LeaveRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();

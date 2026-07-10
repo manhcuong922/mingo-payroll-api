@@ -1,3 +1,4 @@
+using MPS.Domain.Entities.Compliance;
 using AttendanceEnums = MPS.Domain.Enums.Attendance;
 
 namespace MPS.Domain.Entities.Attendance;
@@ -34,12 +35,13 @@ public class OvertimeRequest
     public decimal OtHours { get; set; }
 
     /// <summary>
-    /// FK tới slot template do HR/Manager tạo. Required khi tạo mới (snapshot
-    /// OtStartTime/OtEndTime từ slot); nullable để legacy data trước khi land
-    /// module slot không vỡ.
+    /// FK snapshot version LaborLawConstants tại thời điểm tạo request. Payroll composer
+    /// dùng version này để compute multiplier từ công thức — không đọc version active hiện
+    /// tại. Đảm bảo rate không bị ảnh hưởng khi HR đổi luật sau khi request được tạo.
+    /// Nullable cho legacy record trước khi land refactor này.
     /// </summary>
-    public int? OvertimeSlotTemplateId { get; set; }
-    public OvertimeSlotTemplate? OvertimeSlotTemplate { get; set; }
+    public int? LaborLawConstantsVersionId { get; set; }
+    public LaborLawConstantsVersion? LaborLawConstantsVersion { get; set; }
 
     /// <summary>
     /// Phase B: giờ OT rơi NGOÀI khung đêm. Compute qua <c>IWorkHourSplitter</c>

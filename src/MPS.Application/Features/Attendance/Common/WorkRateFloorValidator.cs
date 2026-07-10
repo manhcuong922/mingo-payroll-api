@@ -6,6 +6,8 @@ namespace MPS.Application.Features.Attendance.Common;
 /// BR-22 — Validate AttendanceRule work-rate fields against legal floors (Điều 98.1 BLLĐ).
 /// Floors are passed in from <c>LaborLawConstantsSnapshot</c>; this helper does not own them.
 /// Company policy may set rates higher than the floor, never lower.
+/// Unit: percent (VD 100 = 100%, 150 = 150%). Đơn vị đồng bộ giữa AttendanceRule.WorkRate*
+/// và LaborLawConstantsVersion.WorkRate*Floor.
 /// </summary>
 public static class WorkRateFloorValidator
 {

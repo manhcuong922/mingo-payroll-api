@@ -1,609 +1,425 @@
-# Overtime Request & Rate Window Refactor Plan
+# Overtime Rate Formula Refactor Plan
 
-**Status:** DRAFT - chua code, dung lam spec/refactor plan cho module OT.
+**Status:** DRAFT — chua code, dung lam spec/refactor plan cho module OT.
 **Project:** `mingo-payroll-api` (.NET 8, Clean Architecture, EF Core, MediatR CQRS).
-**Module:** Attendance / Overtime
+**Module:** Attendance / Overtime + Compliance / LaborLawConstants
 **SRS mapping:** FT-12
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-10
+**Supersedes:** version cu (2026-07-04) di theo huong `OvertimeRateWindow` (rename slot). Huong do da bi thay the boi cong thuc-hoa nen full-rewrite noi dung.
 
 ---
 
 ## 1. Muc tieu
 
-Refactor module OT theo huong:
+Refactor module OT theo huong **bo hoan toan cai dat he so OT tren slot template**, moi so lay tu `LaborLawConstantsVersion` va tinh qua cong thuc.
 
-- Nhan vien duoc dang ky OT bang ngay/gio thuc te, khong bi bat buoc chon nguyen mot slot gio co san.
-- HR/Manager cau hinh cac khung he so OT, vi du `06:00-22:00` va `22:00-06:00`.
-- Backend tu check OT khong trung voi ca lam thuong ngay, ke ca ca qua dem.
-- Backend tu tach OT thanh cac doan ngay/dem, ngay thuong/ngay nghi/ngay le de tinh he so tuong ung.
-- Du lieu sau approve phai du sach de payroll tinh luong OT on dinh, khong bi lech khi HR sua he so sau nay.
+- Xoa module `OvertimeSlotTemplate` (7 field multiplier + IsNightSlot + code generator + auto-inactive-overlap).
+- Xoa `OvertimeMultiplierFloors` static class (khong con khai niem "san" tren slot).
+- Chuan hoa don vi phan tram (%) cho toan bo `WorkRate*` (LaborLawConstants + AttendanceRule).
+- Composer/payroll compute multiplier tu cong thuc, input duy nhat la `LaborLawConstantsVersion` active tai `WorkDate` cua request.
+- Snapshot `LaborLawConstantsVersionId` len `OvertimeRequest` de khoa rate tai thoi diem tao/duyet, bat ke HR sua LaborLaw sau nay.
 
----
+Kes thua tu plan cu (phan van valid, khong rewrite lai):
 
-## 2. Hien trang
-
-### 2.1. OvertimeRequest hien tai
-
-Hien tai API tao don OT dang nhan:
-
-```csharp
-DateOnly WorkDate
-int OvertimeSlotTemplateId
-string? Reason
-```
-
-Handler resolve `OvertimeSlotTemplateId` roi snapshot:
-
-```csharp
-OtStartTime = slot.StartTime
-OtEndTime = slot.EndTime
-OtHours = duration(slot)
-OtDayHours / OtNightHours = splitter(slot.StartTime, slot.EndTime)
-```
-
-He qua: employee chon mot slot thi he thong hieu la dang ky toan bo gio cua slot do.
-
-Vi du neu HR tao slot `06:00-22:00`, employee chon slot nay thi backend hieu la dang ky 16 gio OT. Day khong dung voi nghiep vu moi.
-
-### 2.2. OvertimeSlotTemplate hien tai
-
-`OvertimeSlotTemplate` dang vua la:
-
-- Slot gio de employee chon khi dang ky.
-- Noi luu override multiplier theo ngay/dem.
-
-Entity co `IsNightSlot`; neu tick dem thi backend null-out nhom he so ngay, neu khong tick thi null-out nhom he so dem.
-
-He qua: slot mixed nhu `21:00-02:00` khong luu du duoc ca he so ngay va he so dem, trong khi thuc te:
-
-```text
-21:00-22:00 = OT ngay
-22:00-00:00 = OT dem
-00:00-02:00 = OT dem cua ngay hom sau
-```
-
-### 2.3. OvertimeCapChecker hien tai
-
-Check overlap ca thuong ngay dang so sanh `TimeOnly` don gian:
-
-```csharp
-aStart < bEnd && bStart < aEnd
-```
-
-Cach nay de sai voi ca qua dem.
-
-Vi du:
-
-```text
-Ca thuong: 22:00-06:00
-OT:        23:00-01:00
-```
-
-Thuc te OT nam trong ca thuong va phai bi chan, nhung neu so sanh gio roi rac thi `23:00 < 06:00` la false.
+- Rule 200%/210% cho OT dem ngay thuong theo `hasPrevDayOt`.
+- Cap OT theo `WorkDate` (toan bo don, ke ca cross-midnight).
+- Timezone UTC+7 cho tinh gio OT.
+- `OtStartAt/OtEndAt datetime2` (tach thanh phase rieng — xem section 11).
+- `IOvertimeSegmentCalculator` concept — segment tach theo moc 00:00 + day-type.
 
 ---
 
-## 3. Huong thiet ke moi
+## 2. Cong thuc trung tam
 
-### 3.1. Tach khai niem
+Tat ca so lay tu `LaborLawConstantsVersion` active tai `WorkDate` cua request (qua `ILaborLawConstantsRepository.GetActiveAtAsync`).
 
-Can tach 2 khai niem:
+```
+DayOtMultiplier(dayType):
+  Normal                        -> WorkRateNormalFloor + OvertimeNormalUpliftPercent
+  WeeklyRestDay                 -> WorkRateWeeklyRestFloor
+  PublicHoliday | PaidLeaveDay  -> WorkRateHolidayFloor
 
-| Khai niem | Vai tro moi |
-|---|---|
-| Don OT cua nhan vien | Luu ngay/gio bat dau va ket thuc thuc te nhan vien dang ky |
-| Khung he so OT | Do HR/Manager cau hinh de backend map he so khi tinh luong |
+NightOtMultiplier(dayType, hasPrevDayOt):
+  = DayOtMultiplier(dayType)
+  + NightWorkSurchargePercent
+  + OvertimeNightExtraPercent% x BaseHourRate
 
-Khung `06:00-22:00` va `22:00-06:00` khong nen con la slot employee chon nguyen cuc. No nen la "rate window".
-
-### 3.2. Ten goi UI de tranh hieu nham
-
-Nen doi label UI:
-
-- Tu: `Khung gio OT`
-- Thanh: `Khung he so OT` hoac `Cau hinh he so OT`
-
-Trong code co the lam theo 2 muc:
-
-- Da chot: doi ten domain/entity sang `OvertimeRateWindow`.
-- Trong qua trinh migration co the can mapping tu `OvertimeSlotTemplate` cu sang `OvertimeRateWindow` moi de giu du lieu legacy.
-
----
-
-## 4. Data model de xuat
-
-### 4.1. OvertimeRequest
-
-Them thoi diem bat dau/ket thuc thuc te:
-
-```csharp
-public DateOnly WorkDate { get; set; }
-public DateTime OtStartAt { get; set; }
-public DateTime OtEndAt { get; set; }
-public decimal OtHours { get; set; }
-public decimal OtDayHours { get; set; }
-public decimal OtNightHours { get; set; }
+  BaseHourRate:
+    Normal & !hasPrevDayOt        -> WorkRateNormalFloor              (100)
+    Normal &  hasPrevDayOt        -> DayOtMultiplier(Normal)          (150)
+    WeeklyRestDay                 -> WorkRateWeeklyRestFloor          (200)
+    PublicHoliday | PaidLeaveDay  -> WorkRateHolidayFloor             (300)
 ```
 
-DB SQL Server:
+Verify khop 7 muc san cu trong `OvertimeMultiplierFloors`:
 
-```text
-OtStartAt datetime2 not null
-OtEndAt   datetime2 not null
-```
-
-`WorkDate` van giu lai de:
-
-- Loc danh sach theo ngay nghiep vu.
-- Bao cao OT theo ngay.
-- Gan voi ca lam cua ngay do.
-
-`OtStartAt/OtEndAt` la source of truth de:
-
-- Check overlap.
-- Tinh tong gio.
-- Tach ngay/dem.
-- Tach qua ngay nghi/ngay le.
-
-### 4.2. Legacy fields
-
-Hien tai dang co:
-
-```csharp
-TimeOnly OtStartTime
-TimeOnly OtEndTime
-int? OvertimeSlotTemplateId
-```
-
-Phuong an chuyen doi:
-
-- Phase 1: giu lai de legacy/display, nhung khi tao moi thi source of truth la `OtStartAt/OtEndAt`.
-- Phase 2: neu khong con dung, drop `OtStartTime/OtEndTime` hoac bien chung thanh computed/display-only trong DTO.
-- `OvertimeSlotTemplateId` tren request nen optional hoac bo khoi create contract, vi request khong con chon slot co dinh.
-
-### 4.3. OvertimeRateWindow
-
-Entity moi dung nghia la khung he so OT:
-
-```csharp
-public TimeOnly StartTime { get; set; }
-public TimeOnly EndTime { get; set; }
-public bool IsNightSlot { get; set; }
-
-public decimal? MultiplierNormalDay { get; set; }
-public decimal? MultiplierWeeklyRestDay { get; set; }
-public decimal? MultiplierHolidayDay { get; set; }
-
-public decimal? MultiplierNormalNightNoPrevOt { get; set; }
-public decimal? MultiplierNormalNightWithPrevOt { get; set; }
-public decimal? MultiplierWeeklyRestNight { get; set; }
-public decimal? MultiplierHolidayNight { get; set; }
-```
-
-Khuyen nghi active windows mac dinh:
-
-| Window | Loai | He so goi y |
+| Case | Cong thuc | Ket qua |
 |---|---|---|
-| `06:00-22:00` | OT ban ngay | Normal 150%, Rest 200%, Holiday 300% |
-| `22:00-06:00` | OT ban dem | Normal no previous day OT 200%, Normal with previous day OT 210%, Rest 270%, Holiday 390% |
+| Day, Normal              | 100 + 50                     | 150 |
+| Day, WeeklyRestDay       | 200                          | 200 |
+| Day, Holiday             | 300                          | 300 |
+| Night, Normal, no prev   | 150 + 30 + 20%*100 = 150+30+20 | 200 |
+| Night, Normal, with prev | 150 + 30 + 20%*150 = 150+30+30 | 210 |
+| Night, WeeklyRestDay     | 200 + 30 + 20%*200 = 200+30+40 | 270 |
+| Night, Holiday           | 300 + 30 + 20%*300 = 300+30+60 | 390 |
 
-Luu y: he thong hien dang nhap multiplier theo percent (`150`, `200`) thay vi factor (`1.5`, `2.0`). Neu UI muon than thien hon, co the hien thi dang `1.5x` nhung payload/backend van luu percent.
+Cong thuc pass 7/7.
 
-### 4.4. OvertimeRequestSegment
-
-Nen them bang snapshot segment de payroll doc truc tiep:
-
-```csharp
-public class OvertimeRequestSegment
-{
-    public int Id { get; set; }
-    public int OvertimeRequestId { get; set; }
-    public DateTime StartAt { get; set; }
-    public DateTime EndAt { get; set; }
-    public decimal Hours { get; set; }
-    public bool IsNight { get; set; }
-    public DayType DayType { get; set; }
-    public decimal MultiplierPercent { get; set; }
-    public int? OvertimeRateWindowId { get; set; }
-}
-```
-
-Ly do can snapshot:
-
-- Payroll khong phai tinh lai phuc tap moi lan chay.
-- Don OT da approve khong bi doi ket qua khi HR sua khung he so sau nay.
-- De audit: biet chinh xac doan nao duoc tinh he so nao.
+**Ghi chu:** `Uplift` chi ap cho `Normal`. `WeeklyRestDay` va `Holiday` da la muc `>= 200%` va `>= 300%` cua ban than Dieu 98.1.b/c, khong cong them uplift.
 
 ---
 
-## 5. API contract de xuat
+## 3. Data model thay doi
 
-### 5.1. Employee tao don OT
+### 3.1. `LaborLawConstantsVersion`
 
-Hien tai:
+Doi don vi 3 field WorkRate*Floor sang phan tram:
 
-```json
-{
-  "workDate": "2026-07-04",
-  "overtimeSlotTemplateId": 1,
-  "reason": "Hoan thanh release"
-}
-```
+| Field | Cu | Moi |
+|---|---|---|
+| WorkRateNormalFloor      | decimal(4,2) default 1.00m  | decimal(6,2) default 100.00m |
+| WorkRateWeeklyRestFloor  | decimal(4,2) default 2.00m  | decimal(6,2) default 200.00m |
+| WorkRateHolidayFloor     | decimal(4,2) default 3.00m  | decimal(6,2) default 300.00m |
 
-De xuat moi:
+Validator (`LaborLawConstantsValidators`): range `0.01-10` -> `1-1000`.
 
-```json
-{
-  "workDate": "2026-07-04",
-  "otStartAt": "2026-07-04T21:00:00",
-  "otEndAt": "2026-07-05T02:00:00",
-  "reason": "Hoan thanh release"
-}
-```
+**Migration data:** `UPDATE LaborLawConstantsVersions SET WorkRate*Floor = WorkRate*Floor * 100` cho toan bo row.
 
-Hoac FE gui ngay/gio tach rieng:
+**Xu ly `ComplianceProposalApplier`** (line 209-211): da nhan ca 2 ten field `WorkRate*Floor` va `WorkRate*FloorPercent`. Sau refactor:
+- Ca 2 ten deu la percent (khong con multiplier form).
+- Con giu 2 ten de compatible voi proposal cu tu compliance advisor.
 
-```json
-{
-  "workDate": "2026-07-04",
-  "startDate": "2026-07-04",
-  "startTime": "21:00",
-  "endDate": "2026-07-05",
-  "endTime": "02:00",
-  "reason": "Hoan thanh release"
-}
-```
+### 3.2. `AttendanceRule`
 
-Backend nen normalize ve `OtStartAt/OtEndAt`.
+Doi don vi 3 field WorkRate* sang phan tram:
 
-### 5.2. DTO tra ve
+| Field | Cu | Moi |
+|---|---|---|
+| WorkRateNormal      | decimal(4,2) default 1.00m  | decimal(6,2) default 100.00m |
+| WorkRateWeeklyRest  | decimal(4,2) default 2.00m  | decimal(6,2) default 200.00m |
+| WorkRateHoliday     | decimal(4,2) default 3.00m  | decimal(6,2) default 300.00m |
 
-DTO nen co:
+Migration data: `UPDATE AttendanceRules SET WorkRate* = WorkRate* * 100`.
+
+`WorkRateFloorValidator.EnsureValid` logic khong doi (so sanh number). Chi cap nhat comment.
+
+### 3.3. `OvertimeRequest`
+
+- **Xoa** `OvertimeSlotTemplateId` FK + `OvertimeSlotTemplate` navigation.
+- **Them** `LaborLawConstantsVersionId int?` FK -> `LaborLawConstantsVersions.Id`, `DeleteBehavior.Restrict`.
+  - Nullable de legacy record khong vo.
+  - New record: handler snapshot `LaborLawConstantsRepository.GetActiveAtAsync(request.WorkDate)` -> set FK khi tao request.
+- Legacy comment `"Payroll composer resolve slot khi tinh luong"` (CreateBatchOvertimeRequestCommandHandler.cs:147) doi thanh `"Snapshot LaborLawConstantsVersionId de composer khoa rate"`.
+
+### 3.4. Xoa module `OvertimeSlotTemplate`
+
+Xoa toan bo:
+
+- `Domain/Entities/Attendance/OvertimeSlotTemplate.cs`
+- `Domain/Interfaces/Attendance/IOvertimeSlotTemplateRepository.cs`
+- `Application/Features/Attendance/OvertimeSlotTemplate/` (folder — Commands, Queries, Validators, Common, Mapper)
+- `Infrastructure/Repositories/Attendance/OvertimeSlotTemplateRepository.cs`
+- `Infrastructure/Persistence/Configurations/Attendance/OvertimeSlotTemplateEntityConfiguration.cs`
+- `API/Controllers/OvertimeSlotTemplateController.cs`
+- `API/Requests/Attendance/OvertimeSlotTemplateRequests.cs`
+- `tests/MPS.Application.Tests/Features/Attendance/OvertimeSlotTemplateValidatorTests.cs`
+
+Xoa reference:
+
+- `AppDbContext.OvertimeSlotTemplates DbSet<>`
+- `InfrastructureServiceRegistration` — `IOvertimeSlotTemplateRepository` DI registration
+- `DatabaseSeeder` — mo phan seed slot template
+- `Permissions.cs`: xoa 4 hang so `OvertimeSlotTemplate*` (IDs 137-140). Va migration seed permission tuong ung — can revoke tu Roles/Permission tables neu da assigned.
+
+**Migration DropTable:** `OvertimeSlotTemplates` (sau khi drop FK tren `OvertimeRequests`).
+
+Also cascade: `TimeOfDayOverlap` static class trong `OvertimeSlotTemplateRepository.cs` co the giu neu tai su dung sau, nhung hien tai chi slot template dung. Xoa cung.
+
+### 3.5. Xoa `OvertimeMultiplierFloors`
+
+Xoa `Application/Features/Attendance/OvertimeSlotTemplate/Common/OvertimeMultiplierFloors.cs`.
+Da khong con code nao consume sau khi xoa validator.
+
+### 3.6. `OvertimeCapChecker` — bo hard-coded cap, doc tu LaborLaw
+
+Theo theme "moi so lay tu LaborLawConstantsVersion", 2 const dang hard-code trong `Application/Features/Attendance/OvertimeRequest/Common/OvertimeCapChecker.cs:14-15` phai bo:
 
 ```csharp
-DateTime OtStartAt
-DateTime OtEndAt
-decimal OtHours
-decimal OtDayHours
-decimal OtNightHours
-IReadOnlyList<OvertimeRequestSegmentDto> Segments
+public const decimal MonthlyOvertimeCapHours = 40m;   // ← BO
+public const decimal DailyTotalWorkCapHours = 12m;    // ← BO
 ```
 
-Segment DTO:
+Doi thanh:
 
 ```csharp
-DateTime StartAt
-DateTime EndAt
-decimal Hours
-bool IsNight
-string DayType
-decimal MultiplierPercent
-string? RateWindowCode
+// Line 87 (monthly cap):
+if (monthlyApproved + otHours > laborLaw.OvertimeMaxHoursPerMonth)
+    throw new DomainValidationException(
+        $"BR-7: Monthly OT cap exceeded. Approved={monthlyApproved}h, requested={otHours}h, cap={laborLaw.OvertimeMaxHoursPerMonth}h.");
+
+// Line 72 (daily total cap):
+var dailyTotalCap = laborLaw.StandardWorkingHoursPerDay + laborLaw.OvertimeMaxHoursPerDay;
+if (totalShiftHours + otHours > dailyTotalCap)
+    throw new DomainValidationException(
+        $"BR-6: Total work (shifts {totalShiftHours}h + OT {otHours}h) exceeds {dailyTotalCap}h/day.");
 ```
+
+Loi ich:
+- HR chinh `OvertimeMaxHoursPerMonth` (VD 50h cho nganh dac thu theo ND145/2020) -> checker respect.
+- HR chinh `StandardWorkingHoursPerDay` hoac `OvertimeMaxHoursPerDay` -> daily total cap tinh dung.
+- 100% con so tu LaborLaw, khong con hard-code.
+
+Rui ro: gia tri default hien tai van la 40 va 12 (=8+4) -> khong break test/behaviour hien co. Neu HR chua tao `LaborLawConstantsVersion` -> `_complianceLookup.GetActiveLaborLawConstantsAsync` throw -> checker khong tra ve gia tri sai, throw error to.
 
 ---
 
-## 6. Business rules can sua
+## 4. Service moi: `IOvertimeMultiplierCalculator`
 
-### 6.1. Validate request time
+**Location:** `MPS.Application/Features/Attendance/OvertimeRequest/Common/OvertimeMultiplierCalculator.cs`
 
-Khi tao/sua don OT:
-
-- `OtEndAt` phai lon hon `OtStartAt`.
-- Khong cho OT duration bang 0.
-- Gio OT toi da mot don co the gioi han rieng neu can.
-- `WorkDate` nen bang ngay cua `OtStartAt.Date`, tru khi co quy uoc khac ro rang.
-
-### 6.2. Check overlap voi ca thuong
-
-Can doi `OvertimeCapChecker` sang interval absolute:
+**Interface:**
 
 ```csharp
-private static bool Overlaps(DateTime aStart, DateTime aEnd, DateTime bStart, DateTime bEnd) =>
-    aStart < bEnd && bStart < aEnd;
-```
-
-Khi shift qua dem:
-
-```text
-WorkDate 2026-07-04
-Shift 22:00-06:00
-=> ShiftStartAt = 2026-07-04 22:00
-=> ShiftEndAt   = 2026-07-05 06:00
-```
-
-Can load shifts rong hon `workDate` neu OT co the overlap voi ca qua dem cua ngay truoc/ngay sau.
-
-Vi du OT `2026-07-04 00:30-02:00` co the overlap voi ca `2026-07-03 22:00-06:00`.
-
-### 6.3. Check overlap voi don OT khac
-
-Can chan don OT moi overlap voi cac don:
-
-- `Pending`
-- `Approved`
-
-Khong can chan voi:
-
-- `Rejected`
-- `Cancelled` neu co status nay sau nay
-
-Check bang `OtStartAt/OtEndAt`, khong check bang `TimeOnly`.
-
-### 6.4. Cap OT theo ngay/thang/nam
-
-Hien co:
-
-- OT khong vuot 50% tong gio ca trong ngay.
-- Tong regular + OT khong vuot cap ngay.
-- Monthly cap.
-- Yearly cap.
-
-Can xem lai khi OT qua ngay:
-
-```text
-2026-07-04 21:00 -> 2026-07-05 02:00
-```
-
-Da chot: cap OT theo ngay tinh toan bo don vao `WorkDate`.
-
-Vi du:
-
-```text
-WorkDate = 2026-07-04
-OT       = 2026-07-04 21:00 -> 2026-07-05 02:00
-Cap ngay = tinh ca 5h vao 2026-07-04
-```
-
-Luu y: segment van luu `StartAt/EndAt` thuc te de payroll/audit va de mapping ngay nghi/ngay le theo moc thoi gian that khi can.
-
----
-
-## 7. Segment calculation
-
-### 7.1. Service moi
-
-Tao service:
-
-```csharp
-public interface IOvertimeSegmentCalculator
+public interface IOvertimeMultiplierCalculator
 {
-    Task<IReadOnlyList<OvertimeSegmentResult>> CalculateAsync(
-        int employeeInformationId,
-        DateTime otStartAt,
-        DateTime otEndAt,
+    /// <summary>
+    /// Tinh multiplier % cho 1 segment OT.
+    /// dayType: loai ngay cua segment (Normal / WeeklyRestDay / PublicHoliday / PaidLeaveDay).
+    /// isNight: segment nam trong khung NightStart-NightEnd cua LaborLaw active.
+    /// hasPrevDayOt: trong cung WorkDate, truoc segment nay da co OT ban ngay (Approved/Pending) chua.
+    /// </summary>
+    Task<decimal> CalculateAsync(
+        DayType dayType,
+        bool isNight,
+        bool hasPrevDayOt,
+        DateOnly workDate,
         CancellationToken cancellationToken);
 }
 ```
 
-Service nay phu trach:
+**Impl** dependency: `ILaborLawConstantsRepository.GetActiveAtAsync(workDate)`. Neu khong co active version tai `workDate` -> `DomainValidationException("Chua co LaborLawConstants active tai WorkDate.")`.
 
-- Tach theo moc ngay moi `00:00`.
-- Tach theo window ngay/dem `06:00`, `22:00`.
-- Resolve day type cho tung segment: ngay thuong, ngay nghi tuan, ngay le.
-- Resolve rate window tuong ung.
-- Chon multiplier dung voi segment.
+**Overload thay the** (khi da co snapshot FK):
 
-### 7.2. Vi du split
-
-Input:
-
-```text
-OtStartAt = 2026-07-04 21:00
-OtEndAt   = 2026-07-05 02:00
+```csharp
+Task<decimal> CalculateAsync(
+    DayType dayType,
+    bool isNight,
+    bool hasPrevDayOt,
+    int laborLawConstantsVersionId,
+    CancellationToken cancellationToken);
 ```
 
-Output:
+De composer tinh lai theo version da khoa tai OvertimeRequest thay vi active hien tai.
 
-```text
-2026-07-04 21:00-22:00 = 1h OT ngay
-2026-07-04 22:00-00:00 = 2h OT dem
-2026-07-05 00:00-02:00 = 2h OT dem
-```
-
-Neu `2026-07-05` la ngay le, segment `00:00-02:00` phai dung multiplier ngay le ban dem.
-
-### 7.3. Normal night 200% vs 210%
-
-Da chot rule cho case:
-
-- `MultiplierNormalNightNoPrevOt` = OT dem ngay thuong, truoc do khong co OT ban ngay.
-- `MultiplierNormalNightWithPrevOt` = OT dem ngay thuong, truoc do co OT ban ngay.
-
-Rule chi tinh "OT ban ngay", khong tinh gio lam viec theo hop dong/ca thuong.
-
-- Neu OT dem ngay thuong ma truoc do khong co OT ban ngay -> dung `MultiplierNormalNightNoPrevOt` = 200%.
-- Neu OT dem ngay thuong ma co OT ban ngay truoc do -> dung `MultiplierNormalNightWithPrevOt` = 210%.
-- Gio lam viec theo hop dong/ca thuong, vi du `08:00-17:00`, khong duoc tinh la "OT ban ngay".
-- Neu hop dong/phan ca cua nhan vien la ca dem `22:00-06:00`, thi khoang `22:00-06:00` la gio lam thuong; chi thoi gian ngoai khoang ca do moi duoc xem la OT.
-
-Mot segment OT dem ngay thuong dung `WithPrevOt` neu trong cung `WorkDate` co OT ban ngay da approved/pending truoc do hoac trong cung don co segment OT ban ngay truoc segment dem.
-
-Vi du:
-
-```text
-21:00-02:00
-```
-
-Co segment OT ngay `21:00-22:00`, nen segment dem `22:00-00:00` dung 210%.
+**DI:** `Scoped` trong `ApplicationServiceRegistration` (hoac tuong ung).
 
 ---
 
-## 8. Frontend changes
+## 5. Anh huong handler/service
 
-### 8.1. Man hinh nhan vien tao OT
+### 5.1. `CreateBatchOvertimeRequestCommandHandler`
 
-Form moi:
+Line 137-154 hien tai:
 
-- Ngay OT.
-- Gio bat dau.
-- Ngay ket thuc hoac checkbox `Qua ngay hom sau`.
-- Gio ket thuc.
-- Ly do.
-- Preview tong gio OT.
-- Preview ngay/dem va he so neu backend co endpoint preview.
-
-Khong bat employee chon `OvertimeSlotTemplateId` nua.
-
-### 8.2. Man hinh quan ly khung he so OT
-
-Doi wording:
-
-- Page/menu: `Khung he so OT`.
-- Modal: `Them/Sua khung he so OT`.
-- Checkbox giu: `La gio lam them ban dem`.
-
-Validate UI:
-
-- Khung active khong duoc overlap nhau.
-- Can canh bao neu thieu window phu toan bo 24h.
-- Khung qua dem `22:00-06:00` duoc chap nhan.
-
----
-
-## 9. Migration/backfill
-
-### 9.1. Migration de xuat
-
-Them column:
-
-```text
-OvertimeRequests.OtStartAt datetime2 not null
-OvertimeRequests.OtEndAt datetime2 not null
+```csharp
+OvertimeSlotTemplateId = null, // Payroll composer resolve slot khi tinh luong
 ```
 
-Backfill tu du lieu cu:
+Sua thanh:
 
-```text
-OtStartAt = WorkDate + OtStartTime
-OtEndAt = WorkDate + OtEndTime
-if OtEndTime <= OtStartTime:
-    OtEndAt = WorkDate + 1 day + OtEndTime
+```csharp
+LaborLawConstantsVersionId = laborLawSnapshot.Id, // Khoa rate tai thoi diem tao
 ```
 
-Neu co `OvertimeSlotTemplateId`, giu lai de audit legacy.
+Trong handler load `laborLawSnapshot` 1 lan truoc vong lap employee, khong lap lai per employee (chung 1 batch cung WorkDate).
 
-### 9.2. Seed/config mac dinh
+Neu `GetActiveAtAsync(request.WorkDate)` return null -> throw `DomainValidationException` truoc khi vao vong lap.
 
-Can dam bao co 2 khung active:
+### 5.2. `OvertimeCapChecker` — refactor theo §3.6
 
-```text
-06:00-22:00
-22:00-06:00
-```
+Xoa 2 const `MonthlyOvertimeCapHours` va `DailyTotalWorkCapHours`. Doc `laborLaw.OvertimeMaxHoursPerMonth`, `laborLaw.StandardWorkingHoursPerDay`, `laborLaw.OvertimeMaxHoursPerDay` tu bien `laborLaw` da co san line 39.
 
-Neu khong co seed backend, FE/HR phai tao thu cong truoc khi cho approve/payroll.
+Khong doi test hien co: default LaborLaw giu 40h/thang va 8+4=12h/ngay -> gia tri kiem tra khong doi.
 
----
+### 5.3. `hasPrevDayOt` resolution (composer-side, Phase 2)
 
-## 10. Test cases
+Calculator nhan `hasPrevDayOt` la input; nguoi tinh no la composer khi resolve segment. Logic:
 
-### 10.1. Time split
+1. Load moi `OvertimeRequest` cua employee trong `WorkDate` (status Approved + Pending) — de resolve cross-request case.
+2. Merge voi cac segment day cua chinh request dang tinh.
+3. Voi tung segment night `S` cua request dang tinh, `hasPrevDayOt(S) = true` neu ton tai bat ky segment day nao (Approved/Pending/current) co `StartTime < S.StartTime` trong cung `WorkDate`.
+4. "Segment day" = segment khong nam trong khung `[laborLaw.NightStartTime, laborLaw.NightEndTime]` cua LaborLaw da snapshot theo request.
 
-- `21:00-02:00` -> 1h ngay, 4h dem.
-- `22:00-06:00` -> 8h dem.
-- `05:00-07:00` -> 1h dem, 1h ngay.
-- `06:00-22:00` -> 16h ngay.
-- `22:00-00:00` -> 2h dem.
-- `00:00-02:00` -> 2h dem.
-
-### 10.2. Overlap ca thuong
-
-- Ca `22:00-06:00`, OT `23:00-01:00` -> bi chan.
-- Ca `22:00-06:00`, OT `06:00-08:00` -> khong overlap.
-- Ca ngay truoc `22:00-06:00`, OT hom nay `00:30-02:00` -> bi chan.
-
-### 10.3. Overlap OT request
-
-- Pending OT `18:00-20:00`, tao `19:00-21:00` -> bi chan.
-- Approved OT `18:00-20:00`, tao `20:00-22:00` -> hop le vi touch boundary khong overlap.
-- Rejected OT `18:00-20:00`, tao `19:00-21:00` -> hop le.
-
-### 10.4. Rate mapping
-
-- OT ngay thuong `18:00-20:00` -> normal day multiplier.
-- OT ngay nghi `18:00-20:00` -> weekly rest day multiplier.
-- OT ngay le `18:00-20:00` -> holiday day multiplier.
-- OT dem ngay thuong khong co OT ngay -> normal night no previous day OT.
-- OT `21:00-02:00` -> segment ngay + segment dem; dem co the dung `WithPrevOt` neu chot rule o muc 7.3.
-- OT qua 00:00 sang ngay le -> segment sau 00:00 dung holiday multiplier.
-
-### 10.5. Caps
-
-- Ca 8h, OT 4h -> hop le theo rule 50%.
-- Ca 8h, OT 5h -> bi chan.
-- Ca 6h, OT 3h -> hop le.
-- Ca 6h, OT 4h -> bi chan.
-- Tong monthly/yearly vuot cap -> bi chan.
+Ghi chu:
+- Gio ca thuong (`EmployeeShiftAssignment.ShiftTemplate.StartTime-EndTime`) KHONG tinh la "day OT" (kes thua rule §7.3 plan cu).
+- Case cross-midnight cua 1 don don le: segment day cua don do tinh cho segment night sau day cua chinh no.
+- Case 2 don cung ngay: don don day trigger `hasPrevDayOt` cho don don night sau do.
 
 ---
 
-## 11. Phasing de trien khai
+## 6. Testing
 
-### Phase 1 - Backend foundation
+### 6.1. Unit test `OvertimeMultiplierCalculator`
 
-- Them `OtStartAt/OtEndAt` vao `OvertimeRequest`.
-- Migration + backfill.
-- Sua create command/API de nhan datetime thuc te.
-- Sua `OvertimeCapChecker` sang absolute interval.
-- Them check overlap voi OT requests khac.
+7 kich ban khop `OvertimeMultiplierFloors` cu:
 
-### Phase 2 - Rate window semantics
+| Input | Expected % |
+|---|---|
+| Normal, Day, no prev              | 150 |
+| WeeklyRestDay, Day, *              | 200 |
+| PublicHoliday, Day, *              | 300 |
+| PaidLeaveDay, Day, *               | 300 |
+| Normal, Night, no prev             | 200 |
+| Normal, Night, with prev           | 210 |
+| WeeklyRestDay, Night, *            | 270 |
+| PublicHoliday, Night, *            | 390 |
+| PaidLeaveDay, Night, *             | 390 |
 
-- Rename domain `OvertimeSlotTemplate` -> `OvertimeRateWindow`.
-- Doi wording thanh khung he so OT tren UI/API docs.
-- Validate active windows khong overlap.
-- Dam bao co config `06:00-22:00` va `22:00-06:00`.
+Edge:
+- Khong co active LaborLawConstantsVersion tai workDate -> throw `DomainValidationException`.
+- Khi HR sua LaborLaw (VD `WorkRateNormalFloor = 120`) -> calculator ra `120 + 50 = 170` cho Normal Day (khong hard-code 150).
 
-### Phase 3 - Segment calculator
+### 6.2. Integration test
 
-- Tao `IOvertimeSegmentCalculator`.
-- Tach segment theo `00:00`, `06:00`, `22:00`, ngay nghi, ngay le.
-- Resolve multiplier tu khung he so.
-- Snapshot vao `OvertimeRequestSegment`.
+- Migration data forward: 1.00 -> 100.00, 2.00 -> 200.00, 3.00 -> 300.00 cho toan bo row LaborLawConstants + AttendanceRule.
+- Migration data backward (down): 100.00 -> 1.00, ... (round back).
+- Tao OvertimeRequest -> `LaborLawConstantsVersionId` duoc snapshot chinh xac.
+- HR update LaborLawConstants (new version) -> request cu van reference version cu.
 
-### Phase 4 - Frontend employee OT form
+### 6.3. Cap nhat tests hien co
 
-- Form employee nhap ngay/gio thuc te.
-- Bo viec employee chon slot OT.
-- Them preview tong gio/segment neu co endpoint preview.
-
-### Phase 5 - Payroll integration
-
-- Payroll doc `OvertimeRequestSegment` cua don approved.
-- Tinh tien OT theo `Hours * MultiplierPercent`.
-- Bao cao/audit hien thi du segment da snapshot.
-
----
-
-## 12. Quyet dinh da chot va note con lai
-
-1. **Rule 200% vs 210% cho OT dem ngay thuong.**
-   Da chot: OT dem ngay thuong = 200% neu khong co OT ban ngay truoc do; = 210% neu co OT ban ngay truoc do. Gio lam theo hop dong/ca thuong khong tinh la OT ban ngay.
-
-2. **Cap OT khi don qua ngay.**
-   Da chot: cap OT theo ngay tinh toan bo don vao `WorkDate`.
-
-3. **Ten entity.**
-   Da chot: rename sang `OvertimeRateWindow`.
-
-4. **Timezone.**
-   Da chot: dung gio Viet Nam UTC+7 cho `OtStartAt/OtEndAt` va cac tinh toan ngay cong/OT.
-
-5. **Coverage 24h cua rate windows - note, chua lam phase dau.**
-   Tam thoi chi note: neu HR cau hinh thieu khung hoac khung overlap, segment calculator co the khong map duoc he so. Chua bat buoc validate phu du 24h trong phase dau.
+- `OvertimeSlotTemplateValidatorTests` — xoa toan bo (module bo).
+- Test lien quan `WorkRateFloorValidator` — cap nhat number tu 1/2/3 sang 100/200/300.
+- Any test cua `AttendanceRule`, `LaborLawConstants` command handler — cap nhat expected values.
+- `OvertimeCapChecker` tests — verify sau khi bo const:
+  - Default LaborLaw (40h/thang, 8+4h/ngay) -> behavior khong doi.
+  - LaborLaw override `OvertimeMaxHoursPerMonth=50` -> monthly cap = 50h.
+  - LaborLaw override `StandardWorkingHoursPerDay=6, OvertimeMaxHoursPerDay=3` -> daily total cap = 9h.
 
 ---
 
-## 13. Ket luan
+## 7. Migration file
 
-Huong refactor dung la:
+Ten de xuat: `20260710030000_OvertimeMultiplierRefactorPhase1.cs`.
 
-- Don OT luu thoi gian thuc te bang `datetime2`.
-- Khung HR tao la khung he so, khong phai slot employee chon nguyen cuc.
-- Domain khung he so OT dung ten `OvertimeRateWindow`.
-- Thoi gian OT tinh theo gio Viet Nam UTC+7.
-- Backend check overlap va split segment bang absolute datetime.
-- Payroll nen doc snapshot segment da approve de tinh luong on dinh.
+Cac buoc trong 1 migration:
 
-Day la thay doi co anh huong den ca backend, frontend va payroll sau nay, nen nen lam theo phase thay vi sua tat ca mot lan.
+1. `UPDATE LaborLawConstantsVersions SET WorkRate*Floor = WorkRate*Floor * 100`.
+2. `UPDATE AttendanceRules SET WorkRate* = WorkRate* * 100`.
+3. `AlterColumn` decimal(4,2) -> decimal(6,2) cho 6 field.
+4. `AddColumn` `LaborLawConstantsVersionId int NULL` tren `OvertimeRequests` + FK.
+5. Backfill (optional): `UPDATE OvertimeRequests SET LaborLawConstantsVersionId = (SELECT TOP 1 Id FROM LaborLawConstantsVersions WHERE IsActive = 1 AND ValidFrom <= WorkDate ORDER BY ValidFrom DESC)`.
+6. `DropForeignKey` `FK_OvertimeRequests_OvertimeSlotTemplates_OvertimeSlotTemplateId` (neu ton tai).
+7. `DropColumn` `OvertimeSlotTemplateId` tren `OvertimeRequests`.
+8. `DropTable` `OvertimeSlotTemplates`.
+9. `DELETE` permission rows co `PermissionId IN (137,138,139,140)` khoi `Permissions` + `RolePermissions`.
+
+**Down:** khong reversible cho phan xoa slot template (data mat vinh vien). Down chi cover phan alter decimal + drop LaborLawConstantsVersionId column + revert `x100` -> `x1`. Ghi ro trong migration `Down()`: `// Slot template data cannot be restored — restore from backup if needed.`
+
+---
+
+## 8. Impact list (files se cham)
+
+Total ~25 file. Chia theo module:
+
+### LaborLawConstants (Compliance)
+
+- `Domain/Entities/Compliance/LaborLawConstantsVersion.cs` — default value
+- `Infrastructure/Persistence/Configurations/Compliance/LaborLawConstantsVersionEntityConfiguration.cs` — decimal precision
+- `Application/Features/Compliance/LaborLawConstants/Validators/LaborLawConstantsValidators.cs` — range
+- `Infrastructure/Persistence/DatabaseSeeder.cs` — seed values
+- `Application/Common/Models/Compliance/ComplianceSnapshots.cs` — record (nullable value doi thi type khong doi, chi doc/documentation)
+- `Application/Features/Compliance/AutoUpdate/Approval/ComplianceProposalApplier.cs` — comment/doc, khong doi logic vi da nhan 2 ten
+- `Infrastructure/ComplianceAutoUpdate/Validation/ComplianceDiffService.cs` — comment/doc
+- `Infrastructure/Services/ComplianceLookupService.cs` — doc
+
+### AttendanceRule (Attendance)
+
+- `Domain/Entities/Attendance/AttendanceRule.cs` — default
+- Config file tuong ung — decimal precision
+- `Application/Features/Attendance/Common/WorkRateFloorValidator.cs` — comment (logic giu nguyen)
+- `Application/Features/Attendance/AttendanceRule/Commands/*Handler.cs` — verify khong hard-code
+- Seeder — seed values
+
+### OvertimeSlotTemplate (xoa)
+
+Xoa toan bo (~9 file + tests + Permissions constants).
+
+### OvertimeRequest
+
+- `Domain/Entities/Attendance/OvertimeRequest.cs` — bo OvertimeSlotTemplateId, them LaborLawConstantsVersionId
+- `Infrastructure/Persistence/Configurations/Attendance/OvertimeRequestEntityConfiguration.cs` — FK
+- `Infrastructure/Repositories/Attendance/OvertimeRequestRepository.cs` — bo Include(OvertimeSlotTemplate) neu co
+- `Application/Features/Attendance/OvertimeRequest/Commands/CreateBatchOvertimeRequestCommandHandler.cs` — load laborLawSnapshot, set FK
+- `Application/Features/Attendance/OvertimeRequest/Common/OvertimeRequestMapper.cs` — bo field, them field
+- `Application/Features/Attendance/OvertimeRequest/Common/OvertimeCapChecker.cs` — bo 2 const, doc tu laborLaw (§3.6, §5.2)
+- `Application/DTOs/Attendance/AttendanceDtos.cs` — DTO update
+
+### New
+
+- `Application/Features/Attendance/OvertimeRequest/Common/OvertimeMultiplierCalculator.cs` (interface + impl)
+- `Application/Features/Attendance/OvertimeRequest/Common/OvertimeMultiplierCalculatorTests.cs` — unit tests
+
+### Migration
+
+- `Infrastructure/Persistence/Migrations/20260710030000_OvertimeMultiplierRefactorPhase1.cs`
+- Migration snapshot `AppDbContextModelSnapshot.cs` auto-regenerate
+
+---
+
+## 9. Phase plan
+
+### Phase 1 — Change unit + drop slot module + calculator (task hien tai)
+
+Bao gom moi thay doi tren. Ket qua: BE sach, khong con slot template, calculator san sang.
+
+### Phase 2 — Wire vao payroll composer (khi composer land)
+
+Composer inject `IOvertimeMultiplierCalculator`, doc `OvertimeRequest.LaborLawConstantsVersionId`, gap segment -> goi calculator, nhan gio x multiplier % = tien OT.
+
+Chua co composer trong repo -> chi contract, khong code.
+
+### Phase 3 — datetime2 OtStartAt/OtEndAt (ke thua tu plan cu)
+
+Section 4.1, 6.1, 6.2 cua plan cu van hop le. Tach thanh phase rieng vi:
+- Sua schema OT khac scope multiplier.
+- Fix bug cross-midnight cua `OvertimeCapChecker` doc lap voi multiplier.
+- Co the lam song song hoac sau Phase 1.
+
+### Phase 4 — Snapshot segments (optional, future)
+
+Neu payroll can performance/audit hon: them `OvertimeRequestSegment` table snapshot san. Hien tai chua can vi calculator + FK LaborLawVersionId da du de composer chay determinstic.
+
+---
+
+## 10. Rules ke thua tu plan cu
+
+Muc **da chot** tu plan truoc van valid:
+
+1. **200% vs 210% cho OT dem ngay thuong** — theo `hasPrevDayOt`, gio lam theo ca thuong khong tinh la OT ban ngay.
+2. **Cap OT theo `WorkDate`** — toan bo don, ke ca cross-midnight.
+3. **Timezone** — Vietnam UTC+7.
+4. **Coverage 24h cua rate windows** — NO LONGER APPLICABLE (khong con rate window).
+
+---
+
+## 11. Ket luan
+
+Refactor nay:
+- Bo hoan toan module `OvertimeSlotTemplate` va `OvertimeMultiplierFloors`.
+- Toan bo he so OT tinh boi cong thuc `LaborLawConstantsVersion` active tai `WorkDate`.
+- Snapshot version qua FK tren `OvertimeRequest` — request approve xong khong bi anh huong khi HR sua luat.
+- Chuan hoa don vi phan tram cho toan bo WorkRate*.
+- Kes thua concept `IOvertimeSegmentCalculator` cho phase segment sau.
+
+Loi ich:
+- Single source of truth (LaborLawConstantsVersion).
+- Khong con overlap-inactive logic phuc tap cua slot.
+- HR chi sua o 1 cho (LaborLawConstants) khi luat thay doi.
+- Cong thuc audit ro rang, thay so hop luat.
+
+Risk:
+- Data slot template cu bi xoa vinh vien -> can backup truoc migration.
+- Neu FE consume `api/overtime-slot-templates` -> phai cap nhat cung phase.
+- `Permissions.cs` sua compact-forward, ID 137-140 khong tai su dung.

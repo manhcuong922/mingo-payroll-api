@@ -5,9 +5,9 @@ public class AttendanceRule
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public decimal WorkRateNormal { get; set; } = 1.00m;
-    public decimal WorkRateWeeklyRest { get; set; } = 2.00m;
-    public decimal WorkRateHoliday { get; set; } = 3.00m;
+    public decimal WorkRateNormal { get; set; } = 100.00m;
+    public decimal WorkRateWeeklyRest { get; set; } = 200.00m;
+    public decimal WorkRateHoliday { get; set; } = 300.00m;
 
     public bool IsActive { get; set; } = true;
 

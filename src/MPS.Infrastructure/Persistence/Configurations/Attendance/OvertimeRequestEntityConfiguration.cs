@@ -19,7 +19,7 @@ public class OvertimeRequestEntityConfiguration : IEntityTypeConfiguration<Overt
         builder.Property(e => e.OtHours).HasColumnType("decimal(4,2)").IsRequired();
         builder.Property(e => e.OtDayHours).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(0m);
         builder.Property(e => e.OtNightHours).HasColumnType("decimal(4,2)").IsRequired().HasDefaultValue(0m);
-        builder.Property(e => e.OvertimeSlotTemplateId);
+        builder.Property(e => e.LaborLawConstantsVersionId);
         builder.Property(e => e.Status).HasConversion<byte>().IsRequired();
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
@@ -62,9 +62,9 @@ public class OvertimeRequestEntityConfiguration : IEntityTypeConfiguration<Overt
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne(e => e.OvertimeSlotTemplate)
-            .WithMany(s => s.OvertimeRequests)
-            .HasForeignKey(e => e.OvertimeSlotTemplateId)
+        builder.HasOne(e => e.LaborLawConstantsVersion)
+            .WithMany()
+            .HasForeignKey(e => e.LaborLawConstantsVersionId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 

@@ -1,18 +1,12 @@
 using MPS.Application.DTOs.Attendance;
-using MPS.Application.Features.Attendance.OvertimeSlotTemplate.Common;
 using OvertimeRequestEntity = MPS.Domain.Entities.Attendance.OvertimeRequest;
 
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Common;
 
 internal static class OvertimeRequestMapper
 {
-    public static OvertimeRequestDto ToDto(OvertimeRequestEntity r)
-    {
-        var slotSummary = r.OvertimeSlotTemplate is not null
-            ? OvertimeSlotTemplateMapper.ToSummary(r.OvertimeSlotTemplate)
-            : null;
-
-        return new OvertimeRequestDto(
+    public static OvertimeRequestDto ToDto(OvertimeRequestEntity r) =>
+        new(
             r.Id,
             r.EmployeeInformationId,
             r.EmployeeInformation?.FullName ?? string.Empty,
@@ -22,8 +16,7 @@ internal static class OvertimeRequestMapper
             r.OtHours,
             r.OtDayHours,
             r.OtNightHours,
-            r.OvertimeSlotTemplateId,
-            slotSummary,
+            r.LaborLawConstantsVersionId,
             r.Status,
             r.Reason,
             r.ReviewNote,
@@ -34,5 +27,4 @@ internal static class OvertimeRequestMapper
             r.Project?.Title,
             r.ApproverRoute,
             r.BatchId);
-    }
 }

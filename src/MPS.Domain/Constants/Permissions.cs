@@ -192,12 +192,7 @@ public static class Permissions
     public const string FaceRegistrationReadAll    = "FaceRegistration.Read.All";
     public const string FaceRegistrationApproveAll = "FaceRegistration.Approve.All";
 
-    // ===== OvertimeSlotTemplate (Attendance ext) — IDs 137–140 =====
-
-    public const string OvertimeSlotTemplateReadAll = "OvertimeSlotTemplate.Read.All";
-    public const string OvertimeSlotTemplateCreateAll = "OvertimeSlotTemplate.Create.All";
-    public const string OvertimeSlotTemplateUpdateAll = "OvertimeSlotTemplate.Update.All";
-    public const string OvertimeSlotTemplateDeleteAll = "OvertimeSlotTemplate.Delete.All";
+    // IDs 137–140 (OvertimeSlotTemplate) — retired; module removed. IDs kept unused for audit continuity.
 
     // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
 
@@ -498,12 +493,7 @@ public static class PermissionIds
     public const int FaceRegistrationReadAll    = 135;
     public const int FaceRegistrationApproveAll = 136;
 
-    // ===== OvertimeSlotTemplate (Attendance ext) — IDs 137–140 =====
-
-    public const int OvertimeSlotTemplateReadAll = 137;
-    public const int OvertimeSlotTemplateCreateAll = 138;
-    public const int OvertimeSlotTemplateUpdateAll = 139;
-    public const int OvertimeSlotTemplateDeleteAll = 140;
+    // IDs 137–140 (OvertimeSlotTemplate) — retired; module removed.
 
     // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
 

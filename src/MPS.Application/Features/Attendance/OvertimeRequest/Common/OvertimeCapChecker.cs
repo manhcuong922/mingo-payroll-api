@@ -11,9 +11,6 @@ namespace MPS.Application.Features.Attendance.OvertimeRequest.Common;
 /// </summary>
 public sealed class OvertimeCapChecker
 {
-    public const decimal MonthlyOvertimeCapHours = 40m;
-    public const decimal DailyTotalWorkCapHours = 12m;
-
     private readonly IOvertimeRequestRepository _otRepository;
     private readonly IEmployeeShiftAssignmentRepository _shiftRepository;
     private readonly IComplianceLookupService _complianceLookup;
@@ -61,17 +58,21 @@ public sealed class OvertimeCapChecker
             }
         }
 
+        // Daily total cap = standard giờ chuẩn + OT max (Điều 105 + Điều 107.2.b BLLĐ),
+        // đọc từ LaborLawConstants active tại workDate — không hard-code.
+        var dailyTotalCap = laborLaw.StandardWorkingHoursPerDay + laborLaw.OvertimeMaxHoursPerDay;
+
         if (assignments.Count > 0)
         {
-            // BR-6: tổng giờ chuẩn các ca + OT ≤ 12h/ngày; OT ≤ 50% tổng giờ ca.
+            // BR-6: tổng giờ chuẩn các ca + OT ≤ dailyTotalCap; OT ≤ 50% tổng giờ ca.
             var totalShiftHours = assignments.Sum(a => a.ShiftTemplate.StandardHours);
             var halfShift = totalShiftHours / 2m;
             if (otHours > halfShift)
                 throw new DomainValidationException(
                     $"BR-6: Daily OT cannot exceed 50% of total shift hours ({halfShift}h).");
-            if (totalShiftHours + otHours > DailyTotalWorkCapHours)
+            if (totalShiftHours + otHours > dailyTotalCap)
                 throw new DomainValidationException(
-                    $"BR-6: Total work (shifts {totalShiftHours}h + OT {otHours}h) exceeds {DailyTotalWorkCapHours}h/day.");
+                    $"BR-6: Total work (shifts {totalShiftHours}h + OT {otHours}h) exceeds {dailyTotalCap}h/day.");
         }
         else
         {
@@ -81,12 +82,12 @@ public sealed class OvertimeCapChecker
                     $"BR-6: Daily OT cap exceeded ({otHours}h > {laborLaw.OvertimeMaxHoursPerDay}h).");
         }
 
-        // BR-7: monthly cap
+        // BR-7: monthly cap từ luật (Điều 107.2.b — 40h/tháng default, có thể tăng theo NĐ145/2020)
         var monthlyApproved = await _otRepository.GetTotalOtHoursInMonthAsync(
             employeeInformationId, workDate.Year, workDate.Month, cancellationToken);
-        if (monthlyApproved + otHours > MonthlyOvertimeCapHours)
+        if (monthlyApproved + otHours > laborLaw.OvertimeMaxHoursPerMonth)
             throw new DomainValidationException(
-                $"BR-7: Monthly OT cap exceeded. Approved={monthlyApproved}h, requested={otHours}h, cap={MonthlyOvertimeCapHours}h.");
+                $"BR-7: Monthly OT cap exceeded. Approved={monthlyApproved}h, requested={otHours}h, cap={laborLaw.OvertimeMaxHoursPerMonth}h.");
 
         // BR-8: yearly cap
         var yearlyApproved = await _otRepository.GetTotalOtHoursInYearAsync(

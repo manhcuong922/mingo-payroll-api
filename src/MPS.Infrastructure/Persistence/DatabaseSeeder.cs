@@ -45,10 +45,9 @@ public sealed partial class DatabaseSeeder
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
-        // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (1/2/3) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
+        // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (100/200/300 %) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
-        await SeedDefaultOvertimeSlotTemplatesAsync(cancellationToken);
         await SeedDefaultWeeklyDayOffRuleAsync(cancellationToken);
         // Task/Production demo: quy trình mẫu + đơn hàng + cây task + nhật ký sản lượng.
         await SeedTaskProductionDemoAsync(cancellationToken);
@@ -840,9 +839,9 @@ public sealed partial class DatabaseSeeder
             MaxRegularHoursPerWeek = 48.00m,
             StandardWorkingDaysPerMonth = 26.00m,
             AnnualLeaveMinDays = 12,
-            WorkRateNormalFloor = 1.00m,
-            WorkRateWeeklyRestFloor = 2.00m,
-            WorkRateHolidayFloor = 3.00m,
+            WorkRateNormalFloor = 100.00m,
+            WorkRateWeeklyRestFloor = 200.00m,
+            WorkRateHolidayFloor = 300.00m,
             OvertimeMaxHoursPerDay = 4.00m,
             OvertimeMaxHoursPerMonth = 40.00m,
             OvertimeMaxHoursPerYear = 300,
@@ -980,9 +979,9 @@ public sealed partial class DatabaseSeeder
         {
             Name = DefaultAttendanceRuleName,
             Description = "Tiêu chuẩn",
-            WorkRateNormal = 1.00m,
-            WorkRateWeeklyRest = 2.00m,
-            WorkRateHoliday = 3.00m,
+            WorkRateNormal = 100.00m,
+            WorkRateWeeklyRest = 200.00m,
+            WorkRateHoliday = 300.00m,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             CreatedByUserId = adminId,
@@ -990,7 +989,7 @@ public sealed partial class DatabaseSeeder
 
         await _context.AttendanceRules.AddAsync(rule, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded default AttendanceRule '{Name}' (1/2/3).", DefaultAttendanceRuleName);
+        _logger.LogInformation("Seeded default AttendanceRule '{Name}' (100/200/300 %%).", DefaultAttendanceRuleName);
     }
 
     // Rule ngày nghỉ tuần mặc định — CN toàn công ty. Idempotent theo Name.
@@ -1142,79 +1141,6 @@ public sealed partial class DatabaseSeeder
         await _context.ShiftTemplates.AddRangeAsync(toAdd, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded {Count} default ShiftTemplate(s): {Codes}.",
-            toAdd.Count, string.Join(", ", toAdd.Select(s => s.Code)));
-    }
-
-    /// <summary>
-    /// Seed 2 khung giờ OT mặc định — template hệ số theo cửa sổ giờ (KHÔNG phải khung
-    /// OT cố định). PM nhập giờ OT thực tế, payroll composer lookup slot khớp để lấy multiplier.
-    ///
-    /// Đơn vị hệ số: phần trăm (%). VD 150 = ×1.5.
-    ///  - Day slot (06:00–22:00): Normal 150 / WeeklyRest 200 / Holiday 300
-    ///  - Night slot (22:00–06:00): NormalNoPrevOt 200 / NormalWithPrevOt 210 / WeeklyRest 270 / Holiday 390
-    /// Khớp sàn Đ.98 BLLĐ + Thông tư 18/2021 (OvertimeMultiplierFloors).
-    /// </summary>
-    private async Task SeedDefaultOvertimeSlotTemplatesAsync(CancellationToken ct)
-    {
-        var adminId = await _context.Users
-            .AsNoTracking()
-            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
-            .Select(u => u.Id)
-            .FirstOrDefaultAsync(ct);
-        if (adminId == 0)
-        {
-            _logger.LogWarning("No system admin found; skipping OT slot template seed.");
-            return;
-        }
-
-        var existingCodes = await _context.OvertimeSlotTemplates
-            .AsNoTracking()
-            .Select(s => s.Code)
-            .ToListAsync(ct);
-        var existing = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var now = DateTime.UtcNow;
-        var seeds = new List<OvertimeSlotTemplate>
-        {
-            new()
-            {
-                Code = "OT-0600-2200",
-                StartTime = new TimeOnly(6, 0),
-                EndTime = new TimeOnly(22, 0),
-                IsNightSlot = false,
-                MultiplierNormalDay     = 150m,
-                MultiplierWeeklyRestDay = 200m,
-                MultiplierHolidayDay    = 300m,
-                IsActive = true,
-                CreatedAt = now,
-                CreatedByUserId = adminId,
-            },
-            new()
-            {
-                Code = "OT-2200-0600",
-                StartTime = new TimeOnly(22, 0),
-                EndTime = new TimeOnly(6, 0),
-                IsNightSlot = true,
-                MultiplierNormalNightNoPrevOt   = 200m,
-                MultiplierNormalNightWithPrevOt = 210m,
-                MultiplierWeeklyRestNight       = 270m,
-                MultiplierHolidayNight          = 390m,
-                IsActive = true,
-                CreatedAt = now,
-                CreatedByUserId = adminId,
-            },
-        };
-
-        var toAdd = seeds.Where(s => !existing.Contains(s.Code)).ToList();
-        if (toAdd.Count == 0)
-        {
-            _logger.LogDebug("All default OvertimeSlotTemplates already present; skipping insert.");
-            return;
-        }
-
-        await _context.OvertimeSlotTemplates.AddRangeAsync(toAdd, ct);
-        await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded {Count} default OvertimeSlotTemplate(s): {Codes}.",
             toAdd.Count, string.Join(", ", toAdd.Select(s => s.Code)));
     }
 

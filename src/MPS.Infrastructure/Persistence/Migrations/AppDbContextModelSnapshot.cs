@@ -333,18 +333,18 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<decimal>("WorkRateHoliday")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(4,2)")
-                        .HasDefaultValue(3.00m);
+                        .HasColumnType("decimal(6,2)")
+                        .HasDefaultValue(300.00m);
 
                     b.Property<decimal>("WorkRateNormal")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(4,2)")
-                        .HasDefaultValue(1.00m);
+                        .HasColumnType("decimal(6,2)")
+                        .HasDefaultValue(100.00m);
 
                     b.Property<decimal>("WorkRateWeeklyRest")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(4,2)")
-                        .HasDefaultValue(2.00m);
+                        .HasColumnType("decimal(6,2)")
+                        .HasDefaultValue(200.00m);
 
                     b.HasKey("Id");
 
@@ -717,7 +717,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<TimeOnly>("OtStartTime")
                         .HasColumnType("time");
 
-                    b.Property<int?>("OvertimeSlotTemplateId")
+                    b.Property<int?>("LaborLawConstantsVersionId")
                         .HasColumnType("int");
 
                     b.Property<string>("Reason")
@@ -752,7 +752,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedByUserId");
 
-                    b.HasIndex("OvertimeSlotTemplateId");
+                    b.HasIndex("LaborLawConstantsVersionId");
 
                     b.HasIndex("ProjectId");
 
@@ -765,82 +765,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "ApproverRoute");
 
                     b.ToTable("OvertimeRequests", (string)null);
-                });
-
-            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CreatedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<TimeOnly>("EndTime")
-                        .HasColumnType("time");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsNightSlot")
-                        .HasColumnType("bit");
-
-                    b.Property<decimal?>("MultiplierHolidayDay")
-                        .HasColumnType("decimal(6,2)");
-
-                    b.Property<decimal?>("MultiplierHolidayNight")
-                        .HasColumnType("decimal(6,2)");
-
-                    b.Property<decimal?>("MultiplierNormalDay")
-                        .HasColumnType("decimal(6,2)");
-
-                    b.Property<decimal?>("MultiplierNormalNightNoPrevOt")
-                        .HasColumnType("decimal(6,2)");
-
-                    b.Property<decimal?>("MultiplierNormalNightWithPrevOt")
-                        .HasColumnType("decimal(6,2)");
-
-                    b.Property<decimal?>("MultiplierWeeklyRestDay")
-                        .HasColumnType("decimal(6,2)");
-
-                    b.Property<decimal?>("MultiplierWeeklyRestNight")
-                        .HasColumnType("decimal(6,2)");
-
-                    b.Property<TimeOnly>("StartTime")
-                        .HasColumnType("time");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("UpdatedByUserId");
-
-                    b.ToTable("OvertimeSlotTemplates", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.PublicHoliday", b =>
@@ -1779,13 +1703,13 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("date");
 
                     b.Property<decimal>("WorkRateHolidayFloor")
-                        .HasColumnType("decimal(4,2)");
+                        .HasColumnType("decimal(6,2)");
 
                     b.Property<decimal>("WorkRateNormalFloor")
-                        .HasColumnType("decimal(4,2)");
+                        .HasColumnType("decimal(6,2)");
 
                     b.Property<decimal>("WorkRateWeeklyRestFloor")
-                        .HasColumnType("decimal(4,2)");
+                        .HasColumnType("decimal(6,2)");
 
                     b.HasKey("Id");
 
@@ -6356,9 +6280,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", "OvertimeSlotTemplate")
-                        .WithMany("OvertimeRequests")
-                        .HasForeignKey("OvertimeSlotTemplateId")
+                    b.HasOne("MPS.Domain.Entities.Compliance.LaborLawConstantsVersion", "LaborLawConstantsVersion")
+                        .WithMany()
+                        .HasForeignKey("LaborLawConstantsVersionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("MPS.Domain.Entities.Project", "Project")
@@ -6380,29 +6304,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Navigation("EmployeeInformation");
 
-                    b.Navigation("OvertimeSlotTemplate");
+                    b.Navigation("LaborLawConstantsVersion");
 
                     b.Navigation("Project");
 
                     b.Navigation("ReviewedByUser");
-
-                    b.Navigation("UpdatedByUser");
-                });
-
-            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", b =>
-                {
-                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
-                        .WithMany()
-                        .HasForeignKey("UpdatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("CreatedByUser");
 
                     b.Navigation("UpdatedByUser");
                 });

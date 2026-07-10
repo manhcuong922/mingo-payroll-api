@@ -29,7 +29,6 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         var query = _context.OvertimeRequests
             .AsNoTracking()
             .Include(r => r.EmployeeInformation)
-            .Include(r => r.OvertimeSlotTemplate)
             .Include(r => r.Project)
             .AsQueryable();
 
@@ -61,7 +60,6 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         _context.OvertimeRequests
             .AsNoTracking()
             .Include(r => r.EmployeeInformation)
-            .Include(r => r.OvertimeSlotTemplate)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
     public async Task<decimal> GetTotalOtHoursInMonthAsync(int employeeInformationId, int year, int month, CancellationToken cancellationToken = default)
