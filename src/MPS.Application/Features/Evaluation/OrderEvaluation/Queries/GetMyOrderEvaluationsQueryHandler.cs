@@ -28,7 +28,7 @@ public class GetMyOrderEvaluationsQueryHandler
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Không xác định được người dùng hiện tại.");
 
-        var items = await _repo.GetForEvaluatorAsync(userId, request.Status, ct);
+        var items = await _repo.GetForEvaluatorAsync(userId, request.Status, request.DepartmentId, ct);
         return _mapper.Map<IReadOnlyList<OrderEvaluationSummaryDto>>(items);
     }
 }

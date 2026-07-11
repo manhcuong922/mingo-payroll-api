@@ -55,7 +55,7 @@ public class CreateDirectMonthlyEvaluationCommandHandler
             throw new ConflictException(
                 $"Đã có bảng đánh giá tháng {request.Month}/{request.Year} cho nhân viên này.");
 
-        var lines = await _criteria.BuildLinesForRoleAsync(employee.RoleId, ct);   // E3 nếu rỗng → 400
+        var lines = await _criteria.BuildLinesAsync(ct);   // rubric chung; E3/chưa cân 100% → 400
 
         var evaluation = new MPS.Domain.Entities.Evaluation.MonthlyEvaluation
         {

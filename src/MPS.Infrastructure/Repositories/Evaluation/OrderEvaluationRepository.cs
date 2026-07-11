@@ -41,7 +41,7 @@ public class OrderEvaluationRepository : IOrderEvaluationRepository
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<OrderEvaluation>> GetForEvaluatorAsync(
-        int evaluatorUserId, EvaluationStatus? status, CancellationToken ct)
+        int evaluatorUserId, EvaluationStatus? status, int? departmentId, CancellationToken ct)
     {
         var query = _context.OrderEvaluations
             .AsNoTracking()
@@ -52,6 +52,10 @@ public class OrderEvaluationRepository : IOrderEvaluationRepository
 
         if (status.HasValue)
             query = query.Where(x => x.Status == status.Value);
+
+        // Lọc theo phòng ban của ĐƠN (Project.DepartmentId).
+        if (departmentId.HasValue)
+            query = query.Where(x => x.Project!.DepartmentId == departmentId.Value);
 
         return await query
             .OrderByDescending(x => x.PeriodYear)
