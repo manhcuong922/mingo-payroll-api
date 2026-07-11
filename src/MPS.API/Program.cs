@@ -13,6 +13,7 @@ using MPS.API.Services;
 using MPS.Application.Behaviors;
 using MPS.Application.Common.Interfaces;
 using MPS.Infrastructure.DependencyInjection;
+using MPS.Infrastructure.Notifications;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Security;
 using MPS.Infrastructure.Storage;
@@ -87,6 +88,9 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
         .AddInterceptors(sp.GetRequiredService<MPS.Infrastructure.Persistence.Interceptors.AuditSaveChangesInterceptor>()));
 
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// ===== Notification module (độc lập, DbContext riêng) =====
+builder.Services.AddNotificationModule(builder.Configuration);
 
 builder.Services.AddHealthChecks()
     .AddCheck<MinioHealthCheck>("minio", tags: new[] { "storage", "ready" });
@@ -221,6 +225,11 @@ using (var scope = app.Services.CreateScope())
     // Cần thiết cho deploy container: DB mới sẽ được tạo schema đầy đủ.
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+
+    // Module thông báo có DbContext + lịch sử migration riêng — migrate độc lập.
+    var notificationDb = scope.ServiceProvider
+        .GetRequiredService<MPS.Infrastructure.Notifications.Persistence.NotificationDbContext>();
+    await notificationDb.Database.MigrateAsync();
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();

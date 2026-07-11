@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Common;
@@ -19,19 +20,22 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
     private readonly IDepartmentRepository _departments;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPublisher _publisher;
 
     public TaskUpdateCommandHandler(
         IProjectTaskRepository tasks,
         IProjectRepository projects,
         IDepartmentRepository departments,
         IDepartmentManagerAuthorizer authorizer,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPublisher publisher)
     {
         _tasks = tasks;
         _projects = projects;
         _departments = departments;
         _authorizer = authorizer;
         _currentUser = currentUser;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(TaskUpdateCommand request, CancellationToken ct)
@@ -75,6 +79,7 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
         }
 
         // Giải quyết + validate danh sách người gán TRƯỚC khi xoá khỏi graph (guard cần danh sách hiện tại).
+        var previousAssigneeIds = task.Assignees.Select(a => a.UserId).ToHashSet();
         var desiredAssignees = await ResolveAssigneesAsync(request, task, ct);
 
         // Không để UpdateAsync (DbSet.Update toàn graph) đụng vào dòng gán — TaskAssignee khóa ghép sẽ bị coi
@@ -84,6 +89,18 @@ public class TaskUpdateCommandHandler : IRequestHandler<TaskUpdateCommand, bool>
 
         if (desiredAssignees is not null)
             await _tasks.ReplaceAssigneesAsync(task.Id, desiredAssignees, VietnamClock.Now, ct);
+
+        // Planning gán người sau khi tạo (modal "Gán người thực hiện") → chỉ báo cho NGƯỜI MỚI được thêm,
+        // không báo lại người đã gán từ trước. Người tự gán mình (nếu có) đã được loại trong template.
+        if (desiredAssignees is not null)
+        {
+            var newlyAssigned = desiredAssignees.Where(id => !previousAssigneeIds.Contains(id)).ToList();
+            if (newlyAssigned.Count > 0)
+                await _publisher.Publish(
+                    new TaskAssignedDomainNotification(
+                        task.Id, task.Title, newlyAssigned, _currentUser.UserId, task.ProjectId),
+                    ct);
+        }
 
         return updated;
     }

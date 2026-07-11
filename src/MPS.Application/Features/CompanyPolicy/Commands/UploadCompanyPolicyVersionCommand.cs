@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Common.Models.Storage;
 using MPS.Application.Common.Storage;
 using MPS.Domain.Exceptions;
@@ -21,15 +22,18 @@ public sealed class UploadCompanyPolicyVersionCommandHandler
     private readonly ICompanyPolicyRepository _repo;
     private readonly IFileStorageService _storage;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPublisher _publisher;
 
     public UploadCompanyPolicyVersionCommandHandler(
         ICompanyPolicyRepository repo,
         IFileStorageService storage,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPublisher publisher)
     {
         _repo = repo;
         _storage = storage;
         _currentUser = currentUser;
+        _publisher = publisher;
     }
 
     public async Task<int> Handle(UploadCompanyPolicyVersionCommand request, CancellationToken cancellationToken)
@@ -69,6 +73,10 @@ public sealed class UploadCompanyPolicyVersionCommandHandler
         // Touch policy's UpdatedAt so list sort reflects the new version.
         await _repo.UpdateMetadataAsync(policy.Id, policy.Title, policy.Description,
             policy.IsActive, userId, now, cancellationToken);
+
+        await _publisher.Publish(
+            new CompanyPolicyChangedNotification(policy.Id, policy.Title, CompanyPolicyChangeKind.NewVersion),
+            cancellationToken);
 
         return fileId;
     }

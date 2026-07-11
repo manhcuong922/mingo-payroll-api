@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 
@@ -16,13 +17,16 @@ public sealed class UpdateCompanyPolicyMetadataCommandHandler
 {
     private readonly ICompanyPolicyRepository _repo;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPublisher _publisher;
 
     public UpdateCompanyPolicyMetadataCommandHandler(
         ICompanyPolicyRepository repo,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPublisher publisher)
     {
         _repo = repo;
         _currentUser = currentUser;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(UpdateCompanyPolicyMetadataCommand request, CancellationToken cancellationToken)
@@ -34,8 +38,15 @@ public sealed class UpdateCompanyPolicyMetadataCommandHandler
         if (string.IsNullOrWhiteSpace(title))
             throw new DomainValidationException("COMPANY_POLICY_TITLE_REQUIRED");
 
-        return await _repo.UpdateMetadataAsync(
+        var updated = await _repo.UpdateMetadataAsync(
             request.Id, title, request.Description?.Trim(),
             request.IsActive, userId, DateTime.UtcNow, cancellationToken);
+
+        if (updated)
+            await _publisher.Publish(
+                new CompanyPolicyChangedNotification(request.Id, title, CompanyPolicyChangeKind.Updated),
+                cancellationToken);
+
+        return updated;
     }
 }

@@ -25,6 +25,10 @@ public sealed class CreateLaborLawConstantsCommandHandler : IRequestHandler<Crea
     public async Task<int> Handle(CreateLaborLawConstantsCommand request, CancellationToken ct)
     {
         var userId = _currentUser.UserId ?? throw new ForbiddenAccessException("Authenticated user context is required.");
+
+        // Nếu áp ngay: giữ bản active hiện tại để tính "từ A thành B" khi thông báo cho nhân sự.
+        var previousActive = request.ApplyImmediately ? await _repo.GetActiveAsync(ct) : null;
+
         var entity = new LaborLawConstantsVersion
         {
             ValidFrom = request.ValidFrom,
@@ -63,7 +67,9 @@ public sealed class CreateLaborLawConstantsCommandHandler : IRequestHandler<Crea
             }, ct);
         }
 
-        await _publisher.Publish(new ComplianceVersionChangedNotification(nameof(LaborLawConstantsVersion)), ct);
+        var changes = LaborLawConstantsDiff.Build(previousActive, entity);
+        await _publisher.Publish(new ComplianceVersionChangedNotification(
+            nameof(LaborLawConstantsVersion), LaborLawConstantsDiff.DisplayName, changes), ct);
         return id;
     }
 }
@@ -85,6 +91,10 @@ public sealed class UpdateLaborLawConstantsCommandHandler : IRequestHandler<Upda
     public async Task<bool> Handle(UpdateLaborLawConstantsCommand request, CancellationToken ct)
     {
         var userId = _currentUser.UserId ?? throw new ForbiddenAccessException("Authenticated user context is required.");
+
+        // Giữ giá trị cũ (NoTracking) để tính "từ A thành B" khi thông báo.
+        var previous = await _repo.GetByIdAsync(request.Id, ct);
+
         var entity = new LaborLawConstantsVersion
         {
             Id = request.Id,
@@ -113,7 +123,9 @@ public sealed class UpdateLaborLawConstantsCommandHandler : IRequestHandler<Upda
         if (!result) return false;
 
         await SyncLegalDocumentLinksAsync(request.Id, request.LegalDocumentIds, userId, ct);
-        await _publisher.Publish(new ComplianceVersionChangedNotification(nameof(LaborLawConstantsVersion)), ct);
+        var changes = LaborLawConstantsDiff.Build(previous, entity);
+        await _publisher.Publish(new ComplianceVersionChangedNotification(
+            nameof(LaborLawConstantsVersion), LaborLawConstantsDiff.DisplayName, changes), ct);
         return result;
     }
 

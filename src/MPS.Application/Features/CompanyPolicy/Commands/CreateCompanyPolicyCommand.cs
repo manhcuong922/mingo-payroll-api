@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Common.Models.Storage;
 using MPS.Application.Common.Storage;
 using MPS.Domain.Exceptions;
@@ -23,15 +24,18 @@ public sealed class CreateCompanyPolicyCommandHandler
     private readonly ICompanyPolicyRepository _repo;
     private readonly IFileStorageService _storage;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPublisher _publisher;
 
     public CreateCompanyPolicyCommandHandler(
         ICompanyPolicyRepository repo,
         IFileStorageService storage,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPublisher publisher)
     {
         _repo = repo;
         _storage = storage;
         _currentUser = currentUser;
+        _publisher = publisher;
     }
 
     public async Task<int> Handle(CreateCompanyPolicyCommand request, CancellationToken cancellationToken)
@@ -79,6 +83,11 @@ public sealed class CreateCompanyPolicyCommandHandler
             UploadedAt = now,
             UploadedByUserId = userId,
         }, cancellationToken);
+
+        // Thông báo toàn bộ nhân sự có nội quy mới (logic thông báo nằm ở module Notification).
+        await _publisher.Publish(
+            new CompanyPolicyChangedNotification(policyId, title, CompanyPolicyChangeKind.Created),
+            cancellationToken);
 
         return policyId;
     }

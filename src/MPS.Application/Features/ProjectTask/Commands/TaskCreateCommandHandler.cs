@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Common;
@@ -20,19 +21,22 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
     private readonly IDepartmentRepository _departments;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPublisher _publisher;
 
     public TaskCreateCommandHandler(
         IProjectTaskRepository tasks,
         IProjectRepository projects,
         IDepartmentRepository departments,
         IDepartmentManagerAuthorizer authorizer,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPublisher publisher)
     {
         _tasks = tasks;
         _projects = projects;
         _departments = departments;
         _authorizer = authorizer;
         _currentUser = currentUser;
+        _publisher = publisher;
     }
 
     public async Task<int> Handle(TaskCreateCommand request, CancellationToken ct)
@@ -65,7 +69,16 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
                 Array.Empty<int>(), _departments, _tasks, ct);
 
         var task = BuildTask(request, userId, project);
-        return await _tasks.AddAsync(task, ct);
+        var taskId = await _tasks.AddAsync(task, ct);
+
+        // Giao việc cho nhân sự → thông báo cho người được giao (trừ người giao).
+        if (!request.IsBatchParent && request.AssigneeUserIds.Count > 0)
+            await _publisher.Publish(
+                new TaskAssignedDomainNotification(
+                    taskId, request.Title, request.AssigneeUserIds, userId, request.ProjectId),
+                ct);
+
+        return taskId;
     }
 
     // Plan mục 6.3: không cho tạo task con mới trong container đã Done — tránh % tự tụt sau khi đã chốt xong.
