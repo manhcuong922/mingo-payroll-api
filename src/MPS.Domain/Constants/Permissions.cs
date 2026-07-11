@@ -163,6 +163,27 @@ public static class Permissions
     public const string LeaveRequestReadSelf = "LeaveRequest.Read.Self";
     public const string LeaveRequestCreateSelf = "LeaveRequest.Create.Self";
     public const string LeaveRequestApproveAll = "LeaveRequest.Approve.All";
+    public const string LeaveRequestCancelSelf = "LeaveRequest.Cancel.Self";
+
+    public const string LateEarlyRequestReadAll = "LateEarlyRequest.Read.All";
+    public const string LateEarlyRequestReadSelf = "LateEarlyRequest.Read.Self";
+    public const string LateEarlyRequestCreateSelf = "LateEarlyRequest.Create.Self";
+    public const string LateEarlyRequestApproveAll = "LateEarlyRequest.Approve.All";
+    public const string LateEarlyRequestCancelSelf = "LateEarlyRequest.Cancel.Self";
+
+    public const string WfhRequestReadAll = "WfhRequest.Read.All";
+    public const string WfhRequestReadSelf = "WfhRequest.Read.Self";
+    public const string WfhRequestCreateSelf = "WfhRequest.Create.Self";
+    public const string WfhRequestApproveAll = "WfhRequest.Approve.All";
+    public const string WfhRequestCancelSelf = "WfhRequest.Cancel.Self";
+
+    public const string DependentRequestReadAll = "DependentRequest.Read.All";
+    public const string DependentRequestReadSelf = "DependentRequest.Read.Self";
+    public const string DependentRequestCreateSelf = "DependentRequest.Create.Self";
+    public const string DependentRequestApproveAll = "DependentRequest.Approve.All";
+    public const string DependentRequestCancelSelf = "DependentRequest.Cancel.Self";
+    public const string EmployeeDependentReadAll = "EmployeeDependent.Read.All";
+    public const string EmployeeDependentReadSelf = "EmployeeDependent.Read.Self";
 
     public const string AttendanceAdjustmentReadAll = "AttendanceAdjustment.Read.All";
     public const string AttendanceAdjustmentCreateSelf = "AttendanceAdjustment.Create.Self";
@@ -584,4 +605,30 @@ public static class PermissionIds
     public const int MonthlyEvaluationScoreDirectAll = 231;
     public const int MonthlyEvaluationApproveAll     = 232;
     public const int MonthlyEvaluationReopenAll      = 233;
+
+    // ===== LeaveRequest ext — Cancel — ID 234 =====
+    public const int LeaveRequestCancelSelf          = 234;
+
+    // ===== LateEarlyRequest — IDs 235–239 =====
+    public const int LateEarlyRequestReadAll         = 235;
+    public const int LateEarlyRequestReadSelf        = 236;
+    public const int LateEarlyRequestCreateSelf      = 237;
+    public const int LateEarlyRequestApproveAll      = 238;
+    public const int LateEarlyRequestCancelSelf      = 239;
+
+    // ===== WfhRequest — IDs 240–244 =====
+    public const int WfhRequestReadAll               = 240;
+    public const int WfhRequestReadSelf              = 241;
+    public const int WfhRequestCreateSelf            = 242;
+    public const int WfhRequestApproveAll            = 243;
+    public const int WfhRequestCancelSelf            = 244;
+
+    // ===== Dependent module — IDs 245–251 =====
+    public const int DependentRequestReadAll         = 245;
+    public const int DependentRequestReadSelf        = 246;
+    public const int DependentRequestCreateSelf      = 247;
+    public const int DependentRequestApproveAll      = 248;
+    public const int DependentRequestCancelSelf      = 249;
+    public const int EmployeeDependentReadAll        = 250;
+    public const int EmployeeDependentReadSelf       = 251;
 }

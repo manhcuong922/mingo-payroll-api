@@ -106,6 +106,9 @@ public static class InfrastructureServiceRegistration
 
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
         services.AddScoped<
             MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,
             MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeMultiplierCalculator>();
@@ -120,6 +123,10 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveTypeRepository, LeaveTypeRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveRequestRepository, LeaveRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.ILateEarlyRequestRepository, LateEarlyRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IWfhRequestRepository, WfhRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Employee.IEmployeeDependentRepository, MPS.Infrastructure.Repositories.Employee.EmployeeDependentRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Employee.IDependentRegistrationRequestRepository, MPS.Infrastructure.Repositories.Employee.DependentRegistrationRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceAdjustmentRepository, AttendanceAdjustmentRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleRepository, AttendanceRuleRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();

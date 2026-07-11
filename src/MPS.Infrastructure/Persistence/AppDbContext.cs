@@ -71,6 +71,10 @@ public class AppDbContext : DbContext
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
+    public DbSet<LateEarlyRequest> LateEarlyRequests => Set<LateEarlyRequest>();
+    public DbSet<WfhRequest> WfhRequests => Set<WfhRequest>();
+    public DbSet<MPS.Domain.Entities.Employee.EmployeeDependent> EmployeeDependents => Set<MPS.Domain.Entities.Employee.EmployeeDependent>();
+    public DbSet<MPS.Domain.Entities.Employee.DependentRegistrationRequest> DependentRegistrationRequests => Set<MPS.Domain.Entities.Employee.DependentRegistrationRequest>();
     public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
     public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();

@@ -88,7 +88,14 @@ public class AttendanceController : ControllerBase
             request.DailyEditCutoffTime,
             request.LockAfterDays,
             request.AllowAdminOverride,
-            request.RequireOverrideReason), cancellationToken);
+            request.RequireOverrideReason,
+            request.LateEarlyMaxOccurrencesPerMonth,
+            request.LateEarlyMaxMinutesPerOccurrence,
+            request.LateEarlyBackdateDaysAllowed,
+            request.WfhMaxDaysPerMonth,
+            request.WfhMinNoticeDays,
+            request.WfhMaxDaysPerRequest,
+            request.WfhWorkPlanMinLength), cancellationToken);
         return Ok(result);
     }
 

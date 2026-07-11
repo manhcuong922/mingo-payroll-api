@@ -105,6 +105,28 @@ internal sealed class LeaveTypeBaseValidator : AbstractValidator<ILeaveTypeComma
                 .Must(IsCsvOfPositiveIntegers)
                 .WithMessage("TargetEmployeeIds must contain one or more numeric employee ids.");
         });
+
+        RuleFor(x => x.MinNoticeDaysForShort)
+            .InclusiveBetween(0, 60).When(x => x.MinNoticeDaysForShort.HasValue)
+            .WithMessage("MinNoticeDaysForShort phải trong khoảng 0-60 ngày.");
+
+        RuleFor(x => x.MinNoticeDaysForMedium)
+            .InclusiveBetween(0, 60).When(x => x.MinNoticeDaysForMedium.HasValue)
+            .WithMessage("MinNoticeDaysForMedium phải trong khoảng 0-60 ngày.");
+
+        RuleFor(x => x.MinNoticeDaysForLong)
+            .InclusiveBetween(0, 120).When(x => x.MinNoticeDaysForLong.HasValue)
+            .WithMessage("MinNoticeDaysForLong phải trong khoảng 0-120 ngày.");
+
+        RuleFor(x => x.MinNoticeDaysForMedium)
+            .GreaterThanOrEqualTo(x => x.MinNoticeDaysForShort!.Value)
+            .When(x => x.MinNoticeDaysForShort.HasValue && x.MinNoticeDaysForMedium.HasValue)
+            .WithMessage("MinNoticeDaysForMedium phải ≥ MinNoticeDaysForShort.");
+
+        RuleFor(x => x.MinNoticeDaysForLong)
+            .GreaterThanOrEqualTo(x => x.MinNoticeDaysForMedium!.Value)
+            .When(x => x.MinNoticeDaysForMedium.HasValue && x.MinNoticeDaysForLong.HasValue)
+            .WithMessage("MinNoticeDaysForLong phải ≥ MinNoticeDaysForMedium.");
     }
 
     private static bool IsCsvOfPositiveIntegers(string? value)
@@ -137,4 +159,9 @@ public interface ILeaveTypeCommand
     string? TargetEmployeeIds { get; }
     bool RequireDocument { get; }
     bool DeductsBalance { get; }
+    int? MinNoticeDaysForShort { get; }
+    int? MinNoticeDaysForMedium { get; }
+    int? MinNoticeDaysForLong { get; }
+    bool AutoFallbackToUnpaid { get; }
+    bool AllowRetroactive { get; }
 }

@@ -18,6 +18,14 @@ public class AttendanceSettingEntityConfiguration : IEntityTypeConfiguration<Att
         builder.Property(e => e.AllowAdminOverride).IsRequired().HasDefaultValue(true);
         builder.Property(e => e.RequireOverrideReason).IsRequired().HasDefaultValue(true);
 
+        builder.Property(e => e.LateEarlyMaxOccurrencesPerMonth);
+        builder.Property(e => e.LateEarlyMaxMinutesPerOccurrence);
+        builder.Property(e => e.LateEarlyBackdateDaysAllowed);
+        builder.Property(e => e.WfhMaxDaysPerMonth).HasColumnType("decimal(5,1)");
+        builder.Property(e => e.WfhMinNoticeDays);
+        builder.Property(e => e.WfhMaxDaysPerRequest).HasColumnType("decimal(5,1)");
+        builder.Property(e => e.WfhWorkPlanMinLength);
+
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.CreatedByUserId);
         builder.Property(e => e.UpdatedAt);

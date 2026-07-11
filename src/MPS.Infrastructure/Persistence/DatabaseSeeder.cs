@@ -49,6 +49,7 @@ public sealed partial class DatabaseSeeder
         // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (100/200/300 %) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
+        await SeedDefaultLeaveTypesAsync(cancellationToken);
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
@@ -1120,6 +1121,136 @@ public sealed partial class DatabaseSeeder
         await _context.ShiftTemplates.AddRangeAsync(toAdd, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded {Count} default ShiftTemplate(s): {Codes}.",
+            toAdd.Count, string.Join(", ", toAdd.Select(s => s.Code)));
+    }
+
+
+    // Seed các LeaveType tối thiểu để module Request hoạt động:
+    //   • ANNUAL     — phép năm (12 ngày, cấu hình notice period 1/3/14, auto-fallback sang UNPAID khi hết)
+    //   • UNPAID     — nghỉ không lương (fallback khi ANNUAL hết quỹ; không yêu cầu chứng từ)
+    //   • SICK       — nghỉ ốm (BHXH chi trả; retroactive; require document + InsuranceCertNumber)
+    //   • MATERNITY  — thai sản (BHXH; retroactive; require document + InsuranceCertNumber; 180 ngày/năm)
+    private async Task SeedDefaultLeaveTypesAsync(CancellationToken ct)
+    {
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+        if (adminId == 0)
+        {
+            _logger.LogWarning("No system admin found; skipping default LeaveType seed.");
+            return;
+        }
+
+        var existingCodes = await _context.LeaveTypes
+            .AsNoTracking()
+            .Select(t => t.Code)
+            .ToListAsync(ct);
+        var existing = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var now = DateTime.UtcNow;
+        var seeds = new List<LeaveType>
+        {
+            new()
+            {
+                Code = "ANNUAL",
+                Name = "Phép năm",
+                Description = "Nghỉ phép hưởng nguyên lương theo BLLĐ (tối thiểu 12 ngày/năm).",
+                IsPaid = true,
+                PaidRate = 1.0m,
+                MaxDaysPerRequest = 30m,
+                MaxDaysPerYear = 12m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = false,
+                DeductsBalance = true,
+                MinNoticeDaysForShort = 1,
+                MinNoticeDaysForMedium = 3,
+                MinNoticeDaysForLong = 14,
+                AutoFallbackToUnpaid = true,
+                AllowRetroactive = false,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "UNPAID",
+                Name = "Nghỉ không lương",
+                Description = "Nghỉ không hưởng lương — dùng khi hết quỹ phép hoặc nghỉ ngoài chính sách.",
+                IsPaid = false,
+                PaidRate = null,
+                MaxDaysPerRequest = 60m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = false,
+                DeductsBalance = false,
+                MinNoticeDaysForShort = 1,
+                MinNoticeDaysForMedium = 3,
+                MinNoticeDaysForLong = 14,
+                AutoFallbackToUnpaid = false,
+                AllowRetroactive = false,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "SICK",
+                Name = "Nghỉ ốm",
+                Description = "Do quỹ BHXH chi trả (mẫu C65-HD). Cho phép nộp trễ; yêu cầu chứng từ y tế + InsuranceCertNumber.",
+                IsPaid = false,
+                PaidRate = null,
+                MaxDaysPerRequest = 30m,
+                MaxDaysPerYear = 30m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = true,
+                DeductsBalance = true,
+                MinNoticeDaysForShort = null,
+                MinNoticeDaysForMedium = null,
+                MinNoticeDaysForLong = null,
+                AutoFallbackToUnpaid = false,
+                AllowRetroactive = true,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "MATERNITY",
+                Name = "Thai sản",
+                Description = "Do quỹ BHXH chi trả — nghỉ thai sản 6 tháng theo Luật BHXH. Cho phép nộp trễ.",
+                IsPaid = false,
+                PaidRate = null,
+                MaxDaysPerRequest = 180m,
+                MaxDaysPerYear = 180m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = true,
+                DeductsBalance = true,
+                MinNoticeDaysForShort = null,
+                MinNoticeDaysForMedium = null,
+                MinNoticeDaysForLong = null,
+                AutoFallbackToUnpaid = false,
+                AllowRetroactive = true,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+        };
+
+        var toAdd = seeds.Where(s => !existing.Contains(s.Code)).ToList();
+        if (toAdd.Count == 0)
+        {
+            _logger.LogDebug("All default LeaveType(s) already present; skipping insert.");
+            return;
+        }
+
+        await _context.LeaveTypes.AddRangeAsync(toAdd, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded {Count} default LeaveType(s): {Codes}.",
             toAdd.Count, string.Join(", ", toAdd.Select(s => s.Code)));
     }
 

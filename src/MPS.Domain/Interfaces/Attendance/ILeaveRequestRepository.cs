@@ -39,6 +39,20 @@ public interface ILeaveRequestRepository
         string? reviewNote,
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cancel a request. If it is Approved, transactionally reverts LeaveBalance.UsedDays
+    /// and removes auto-created AttendanceRecords for the range [StartDate, EndDate].
+    /// Only the creator may cancel; a Pending request may be cancelled unconditionally,
+    /// an Approved one only if StartDate is strictly in the future.
+    /// </summary>
+    /// <returns>true if cancelled; false if the request is missing.</returns>
+    Task<bool> CancelAsync(
+        int requestId,
+        int cancelledByUserId,
+        string? cancelReason,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record EmployeeLeaveMonthlySummary(

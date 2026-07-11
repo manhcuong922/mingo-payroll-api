@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Models;
 using MPS.Application.DTOs.Attendance;
+using MPS.Application.Features.Attendance.LeaveRequest.Common;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.LeaveRequest.Queries;
@@ -22,12 +23,7 @@ public class GetLeaveRequestsQueryHandler : IRequestHandler<GetLeaveRequestsQuer
         var (items, total) = await _repository.GetPagedAsync(
             request.EmployeeInformationId, request.Status, request.FromDate, request.ToDate, page, size, cancellationToken);
 
-        var dtos = items.Select(r => new LeaveRequestDto(
-            r.Id, r.EmployeeInformationId, r.EmployeeInformation?.FullName ?? string.Empty,
-            r.LeaveTypeId, r.LeaveType?.Code ?? string.Empty, r.LeaveType?.Name ?? string.Empty,
-            r.StartDate, r.EndDate, r.TotalDays, r.IsPaid, r.Status,
-            r.Reason, r.SupportingDocumentUrl, r.ReviewNote, r.ReviewedByUserId, r.ReviewedAt, r.CreatedAt)).ToList();
-
+        var dtos = items.Select(LeaveRequestMapper.ToDto).ToList();
         return new PagedResult<LeaveRequestDto>(dtos, total, page, size);
     }
 }

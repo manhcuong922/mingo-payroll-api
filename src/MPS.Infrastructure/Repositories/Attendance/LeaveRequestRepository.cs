@@ -144,11 +144,102 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         tracked.ReviewNote = entity.ReviewNote;
         tracked.ReviewedByUserId = entity.ReviewedByUserId;
         tracked.ReviewedAt = entity.ReviewedAt;
+        tracked.MedicalCertificateUrl = entity.MedicalCertificateUrl;
+        tracked.InsuranceCertNumber = entity.InsuranceCertNumber;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
 
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<bool> CancelAsync(
+        int requestId,
+        int cancelledByUserId,
+        string? cancelReason,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var request = await _context.LeaveRequests
+            .Include(r => r.LeaveType)
+            .FirstOrDefaultAsync(r => r.Id == requestId, cancellationToken);
+        if (request is null)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        if (request.CreatedByUserId != cancelledByUserId)
+            throw new ForbiddenAccessException("Chỉ người tạo đơn mới được hủy.");
+
+        var today = DateOnly.FromDateTime(nowUtc.AddHours(7));
+
+        switch (request.Status)
+        {
+            case LeaveRequestStatus.Pending:
+                // OK — no compensation needed
+                break;
+
+            case LeaveRequestStatus.Approved:
+                if (request.StartDate <= today)
+                    throw new DomainValidationException(
+                        "Đơn đã duyệt chỉ được hủy trước ngày bắt đầu nghỉ.");
+
+                await RevertApprovedLeaveAsync(request, cancelledByUserId, nowUtc, cancellationToken);
+                break;
+
+            default:
+                throw new DomainValidationException(
+                    $"Không thể hủy đơn ở trạng thái {request.Status}.");
+        }
+
+        request.Status = LeaveRequestStatus.Cancelled;
+        request.CancelledAt = nowUtc;
+        request.CancelledByUserId = cancelledByUserId;
+        request.CancelReason = cancelReason;
+        request.UpdatedAt = nowUtc;
+        request.UpdatedByUserId = cancelledByUserId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task RevertApprovedLeaveAsync(
+        LeaveRequest request,
+        int userId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        // Revert LeaveBalance if the type deducts balance.
+        var tracksBalance = request.LeaveType.DeductsBalance || request.LeaveType.MaxDaysPerYear.HasValue;
+        if (tracksBalance)
+        {
+            var balance = await _context.LeaveBalances.FirstOrDefaultAsync(
+                b => b.EmployeeInformationId == request.EmployeeInformationId
+                  && b.Year == request.StartDate.Year
+                  && b.LeaveTypeId == request.LeaveTypeId,
+                cancellationToken);
+            if (balance is not null)
+            {
+                balance.UsedDays = Math.Max(0m, balance.UsedDays - request.TotalDays);
+                balance.UpdatedAt = nowUtc;
+                balance.UpdatedByUserId = userId;
+            }
+        }
+
+        // Remove auto-created OnLeave attendance records for the range.
+        var autoNote = $"Auto-applied from approved leave request #{request.Id}";
+        var records = await _context.AttendanceRecords
+            .Where(r => r.EmployeeInformationId == request.EmployeeInformationId
+                && r.WorkDate >= request.StartDate
+                && r.WorkDate <= request.EndDate
+                && r.Status == AttendanceStatus.OnLeave
+                && r.Notes == autoNote)
+            .ToListAsync(cancellationToken);
+        _context.AttendanceRecords.RemoveRange(records);
     }
 
     public async Task<bool> ApproveAndApplyAsync(

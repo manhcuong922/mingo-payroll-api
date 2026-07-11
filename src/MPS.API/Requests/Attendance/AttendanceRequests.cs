@@ -38,4 +38,11 @@ public sealed record UpdateAttendanceSettingRequest(
     TimeOnly DailyEditCutoffTime,
     int LockAfterDays,
     bool AllowAdminOverride,
-    bool RequireOverrideReason);
+    bool RequireOverrideReason,
+    int? LateEarlyMaxOccurrencesPerMonth,
+    int? LateEarlyMaxMinutesPerOccurrence,
+    int? LateEarlyBackdateDaysAllowed,
+    decimal? WfhMaxDaysPerMonth,
+    int? WfhMinNoticeDays,
+    decimal? WfhMaxDaysPerRequest,
+    int? WfhWorkPlanMinLength);

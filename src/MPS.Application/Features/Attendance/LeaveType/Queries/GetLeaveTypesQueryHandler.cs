@@ -38,6 +38,11 @@ public class GetLeaveTypesQueryHandler : IRequestHandler<GetLeaveTypesQuery, Pag
             t.TargetEmployeeIds,
             t.RequireDocument,
             t.DeductsBalance,
+            t.MinNoticeDaysForShort,
+            t.MinNoticeDaysForMedium,
+            t.MinNoticeDaysForLong,
+            t.AutoFallbackToUnpaid,
+            t.AllowRetroactive,
             t.IsActive,
             t.CreatedAt,
             t.UpdatedAt)).ToList();
