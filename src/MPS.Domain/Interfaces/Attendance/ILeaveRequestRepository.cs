@@ -12,6 +12,8 @@ public interface ILeaveRequestRepository
         DateOnly? toDate,
         int page,
         int size,
+        int? departmentIdFilter = null,
+        OvertimeApproverRoute? approverRouteFilter = null,
         CancellationToken cancellationToken = default);
 
     Task<LeaveRequest?> GetByIdAsync(int id, CancellationToken cancellationToken = default);

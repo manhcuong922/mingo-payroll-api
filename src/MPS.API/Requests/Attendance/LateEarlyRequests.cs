@@ -7,7 +7,7 @@ public sealed record CreateLateEarlyRequest(
     LateEarlyKind Kind,
     short Minutes,
     string? Reason,
-    OvertimeApproverRoute ApproverRoute,
+    OvertimeApproverRoute? ApproverRoute,
     string? OverrideReason);
 
 public sealed record ApproveLateEarlyRequestBody(

@@ -567,6 +567,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<byte?>("ApproverRoute")
+                        .HasColumnType("tinyint");
+
                     b.Property<string>("CancelReason")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -656,6 +659,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("EmployeeInformationId", "Status");
 
                     b.HasIndex("StartDate", "EndDate");
+
+                    b.HasIndex("Status", "ApproverRoute");
 
                     b.ToTable("LeaveRequests", (string)null);
                 });

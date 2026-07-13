@@ -137,6 +137,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         {
             OvertimeApproverRoute.Hr => SystemRoles.HrId,
             OvertimeApproverRoute.DepartmentManager => SystemRoles.DepartmentManagerId,
+            OvertimeApproverRoute.Director => SystemRoles.DirectorId,
             _ => throw new DomainValidationException($"Unknown approver route: {route}."),
         };
         if (currentRoleId != expected)

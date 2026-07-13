@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
@@ -10,15 +11,18 @@ namespace MPS.Application.Features.Attendance.WfhRequest.Commands;
 public class RejectWfhRequestCommandHandler : IRequestHandler<RejectWfhRequestCommand, bool>
 {
     private readonly IWfhRequestRepository _repository;
+    private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
     public RejectWfhRequestCommandHandler(
         IWfhRequestRepository repository,
+        ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
+        _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -39,6 +43,13 @@ public class RejectWfhRequestCommandHandler : IRequestHandler<RejectWfhRequestCo
             throw new DomainValidationException("BR-10: Self-review is forbidden.");
 
         ApproveOvertimeRequestCommandHandler.EnsureApproverRouteMatches(existing.ApproverRoute, _currentUser.RoleId);
+
+        // DM (Planning Manager) chỉ được reject đơn của nhân viên cùng phòng ban.
+        if (existing.ApproverRoute == OvertimeApproverRoute.DepartmentManager)
+        {
+            await _departmentGuard.EnsureCanApproveAsync(
+                userId, _currentUser.RoleId, existing.EmployeeInformationId, cancellationToken);
+        }
 
         var now = _clock.UtcNow;
         existing.Status = WfhRequestStatus.Rejected;

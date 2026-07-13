@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Application.Features.Attendance.WfhRequest.Common;
 using MPS.Domain.Enums.Attendance;
@@ -13,6 +14,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
     private readonly IWfhRequestRepository _repository;
     private readonly WfhQuotaChecker _quotaChecker;
     private readonly IAttendanceEditLockChecker _editLockChecker;
+    private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -20,12 +22,14 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         IWfhRequestRepository repository,
         WfhQuotaChecker quotaChecker,
         IAttendanceEditLockChecker editLockChecker,
+        ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
         _quotaChecker = quotaChecker;
         _editLockChecker = editLockChecker;
+        _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -46,6 +50,13 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
             throw new DomainValidationException("BR-10: Self-approval is forbidden.");
 
         ApproveOvertimeRequestCommandHandler.EnsureApproverRouteMatches(existing.ApproverRoute, _currentUser.RoleId);
+
+        // DM (Planning Manager) chỉ duyệt được đơn của nhân viên cùng phòng ban; HR duyệt cross-department.
+        if (existing.ApproverRoute == OvertimeApproverRoute.DepartmentManager)
+        {
+            await _departmentGuard.EnsureCanApproveAsync(
+                userId, _currentUser.RoleId, existing.EmployeeInformationId, cancellationToken);
+        }
 
         await _editLockChecker.EnsureCanModifyAsync(existing.StartDate, request.OverrideReason, cancellationToken);
 

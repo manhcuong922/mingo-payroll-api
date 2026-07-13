@@ -12,7 +12,8 @@ public class CreateWfhRequestCommandValidator : AbstractValidator<CreateWfhReque
             .NotEmpty()
             .MaximumLength(2000);
         RuleFor(x => x.Reason).MaximumLength(500);
-        RuleFor(x => x.ApproverRoute).IsInEnum();
+        RuleFor(x => x.ApproverRoute)
+            .IsInEnum().When(x => x.ApproverRoute.HasValue);
         RuleFor(x => x.OverrideReason).MaximumLength(500);
     }
 }

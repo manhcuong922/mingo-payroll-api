@@ -1,5 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
@@ -13,17 +15,20 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
 
     private readonly ILeaveRequestRepository _repository;
     private readonly IAttendanceEditLockChecker _editLockChecker;
+    private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
     public ApproveLeaveRequestCommandHandler(
         ILeaveRequestRepository repository,
         IAttendanceEditLockChecker editLockChecker,
+        ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
         _editLockChecker = editLockChecker;
+        _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -39,6 +44,20 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         if (existing.Status != LeaveRequestStatus.Pending)
             throw new DomainValidationException(
                 $"Leave request {request.Id} cannot be approved — current status is {existing.Status}.");
+
+        if (existing.CreatedByUserId == userId)
+            throw new DomainValidationException("BR-10: Self-approval is forbidden.");
+
+        // Gate role duyệt theo ApproverRoute của đơn (Hr/DepartmentManager/Director).
+        // Legacy record (ApproverRoute = null) giữ hành vi cũ: ai có Approve.All đều duyệt được.
+        ApproveOvertimeRequestCommandHandler.EnsureApproverRouteMatches(existing.ApproverRoute, _currentUser.RoleId);
+
+        // Chỉ DM (Planning Manager) cần scope phòng ban; HR/Director duyệt cross-department.
+        if (existing.ApproverRoute == OvertimeApproverRoute.DepartmentManager)
+        {
+            await _departmentGuard.EnsureCanApproveAsync(
+                userId, _currentUser.RoleId, existing.EmployeeInformationId, cancellationToken);
+        }
 
         // Cutoff: HR có thể override qua OverrideReason nếu có permission.
         await _editLockChecker.EnsureCanModifyAsync(existing.StartDate, request.OverrideReason, cancellationToken);

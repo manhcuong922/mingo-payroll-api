@@ -24,6 +24,8 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         DateOnly? toDate,
         int page,
         int size,
+        int? departmentIdFilter = null,
+        OvertimeApproverRoute? approverRouteFilter = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.LeaveRequests
@@ -40,6 +42,10 @@ public class LeaveRequestRepository : ILeaveRequestRepository
             query = query.Where(r => r.EndDate >= fromDate.Value);
         if (toDate.HasValue)
             query = query.Where(r => r.StartDate <= toDate.Value);
+        if (departmentIdFilter.HasValue)
+            query = query.Where(r => r.EmployeeInformation.DepartmentId == departmentIdFilter.Value);
+        if (approverRouteFilter.HasValue)
+            query = query.Where(r => r.ApproverRoute == approverRouteFilter.Value);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
@@ -141,6 +147,7 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         if (tracked is null) return false;
 
         tracked.Status = entity.Status;
+        tracked.ApproverRoute = entity.ApproverRoute;
         tracked.ReviewNote = entity.ReviewNote;
         tracked.ReviewedByUserId = entity.ReviewedByUserId;
         tracked.ReviewedAt = entity.ReviewedAt;
@@ -317,23 +324,36 @@ public class LeaveRequestRepository : ILeaveRequestRepository
             balance.UpdatedByUserId = reviewedByUserId;
         }
 
-        // Upsert AttendanceRecord (Status=OnLeave) for each day in the range
+        // Upsert AttendanceRecord (Status=OnLeave) for each day in the range.
+        // Only days with an EmployeeShiftAssignment become OnLeave records — the CHECK constraint
+        // CK_AttendanceRecords_ShiftOrOvertime requires a non-null ShiftTemplateId when there is
+        // no OvertimeRequestId.
         var existingRecords = await _context.AttendanceRecords
             .Where(r => r.EmployeeInformationId == request.EmployeeInformationId
                 && r.WorkDate >= request.StartDate
-                && r.WorkDate <= request.EndDate)
+                && r.WorkDate <= request.EndDate
+                && r.ShiftTemplateId != null)
             .ToListAsync(cancellationToken);
 
-        var existingByDate = existingRecords.ToDictionary(r => r.WorkDate);
+        var shiftAssignments = await _context.EmployeeShiftAssignments
+            .AsNoTracking()
+            .Where(a => a.EmployeeInformationId == request.EmployeeInformationId
+                && a.WorkDate >= request.StartDate
+                && a.WorkDate <= request.EndDate)
+            .Select(a => new { a.WorkDate, a.ShiftTemplateId })
+            .ToListAsync(cancellationToken);
 
-        for (var date = request.StartDate; date <= request.EndDate; date = date.AddDays(1))
+        var existingByKey = existingRecords.ToDictionary(r => (r.WorkDate, r.ShiftTemplateId!.Value));
+        var autoNote = $"Auto-applied from approved leave request #{request.Id}";
+
+        foreach (var assignment in shiftAssignments)
         {
-            if (existingByDate.TryGetValue(date, out var existing))
+            if (existingByKey.TryGetValue((assignment.WorkDate, assignment.ShiftTemplateId), out var existing))
             {
                 existing.Status = AttendanceStatus.OnLeave;
                 existing.DayHours = 0m;
                 existing.NightHours = 0m;
-                existing.Notes = $"Auto-applied from approved leave request #{request.Id}";
+                existing.Notes = autoNote;
                 existing.UpdatedAt = nowUtc;
                 existing.UpdatedByUserId = reviewedByUserId;
             }
@@ -342,11 +362,12 @@ public class LeaveRequestRepository : ILeaveRequestRepository
                 await _context.AttendanceRecords.AddAsync(new AttendanceRecord
                 {
                     EmployeeInformationId = request.EmployeeInformationId,
-                    WorkDate = date,
+                    WorkDate = assignment.WorkDate,
+                    ShiftTemplateId = assignment.ShiftTemplateId,
                     Status = AttendanceStatus.OnLeave,
                     DayHours = 0m,
                     NightHours = 0m,
-                    Notes = $"Auto-applied from approved leave request #{request.Id}",
+                    Notes = autoNote,
                     CreatedAt = nowUtc,
                     CreatedByUserId = reviewedByUserId
                 }, cancellationToken);

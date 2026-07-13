@@ -22,6 +22,8 @@ public class WfhRequestRepository : IWfhRequestRepository
         DateOnly? toDate,
         int page,
         int size,
+        int? departmentIdFilter = null,
+        OvertimeApproverRoute? approverRouteFilter = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.WfhRequests
@@ -37,6 +39,10 @@ public class WfhRequestRepository : IWfhRequestRepository
             query = query.Where(r => r.EndDate >= fromDate.Value);
         if (toDate.HasValue)
             query = query.Where(r => r.StartDate <= toDate.Value);
+        if (departmentIdFilter.HasValue)
+            query = query.Where(r => r.EmployeeInformation.DepartmentId == departmentIdFilter.Value);
+        if (approverRouteFilter.HasValue)
+            query = query.Where(r => r.ApproverRoute == approverRouteFilter.Value);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query

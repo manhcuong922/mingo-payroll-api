@@ -86,6 +86,7 @@ public class LeaveRequestController : ControllerBase
             request.SupportingDocumentUrl,
             request.MedicalCertificateUrl,
             request.InsuranceCertNumber,
+            request.ApproverRoute,
             request.OverrideReason), cancellationToken);
         return Created($"/api/leave-requests/{result.Id}", result);
     }

@@ -18,7 +18,53 @@ Mục tiêu của thay đổi: bổ sung 4 nhóm đơn còn thiếu và nâng c�
 
 Mọi entity mới trong plan này **bám sát 1-1 pattern của `OvertimeRequest`** để đảm bảo nhất quán và giảm risk. Cụ thể tái sử dụng:
 
-- **Approval routing**: enum `ApproverRoute { Hr=1, DepartmentManager=2 }` (copy cùng cấu trúc như [`OvertimeApproverRoute.cs`](src/MPS.Domain/Enums/Attendance/OvertimeApproverRoute.cs)). Approver phải khớp `SystemRoles.HrId` / `SystemRoles.DepartmentManagerId` — dùng lại logic `EnsureApproverRouteMatches` trong [`ApproveOvertimeRequestCommandHandler.cs`](src/MPS.Application/Features/Attendance/OvertimeRequest/Commands/ApproveOvertimeRequestCommandHandler.cs). BR-10 (self-approval forbidden) áp dụng như OT.
+- **Approval routing**: enum `ApproverRoute { Hr=1, DepartmentManager=2, Director=3 }` — **mở rộng** [`OvertimeApproverRoute.cs`](src/MPS.Domain/Enums/Attendance/OvertimeApproverRoute.cs) hiện tại bằng cách thêm `Director=3` (backward-compatible: giá trị 1/2 giữ nguyên semantic; OT giữ nguyên hành vi vì OT không auto-route cho HR/PM tạo đơn). Approver phải khớp `SystemRoles.HrId` / `SystemRoles.DepartmentManagerId` / `SystemRoles.DirectorId` — mở rộng `EnsureApproverRouteMatches` trong [`ApproveOvertimeRequestCommandHandler.cs`](src/MPS.Application/Features/Attendance/OvertimeRequest/Commands/ApproveOvertimeRequestCommandHandler.cs) để hỗ trợ nhánh `Director → DirectorId`. BR-10 (self-approval forbidden) áp dụng như OT.
+
+- **Auto-routing theo role của người tạo đơn (BẮT BUỘC — Leave/Sick-Maternity/LateEarly/WFH)**: FE có thể vẫn gửi `ApproverRoute` trong body Create, nhưng handler **OVERRIDE server-side** theo bảng dưới, tránh phụ thuộc FE tự chọn đúng. `DependentRegistrationRequest` bỏ qua bảng này (đã fix `Hr`).
+
+    | `CurrentUser.RoleId` | Handler force `ApproverRoute` = | Giải thích |
+    |---|---|---|
+    | `SystemRoles.DepartmentManagerId` (Planning Manager tạo đơn cho chính mình) | `Hr` | PM không có PM khác cấp trên trong phòng ban → đi thẳng lên HR |
+    | `SystemRoles.HrId` (HR tạo đơn cho chính mình) | `Director` | HR không thể tự duyệt → đẩy lên Director |
+    | Còn lại (`Employee`, `ProductionTeamLeader`, `Accountant`, `DeputyDirector`, `SystemAdmin`, ...) | Giữ nguyên giá trị FE gửi (`Hr` hoặc `DepartmentManager`) | User bình thường được chọn giữa 2 route |
+
+    **Contract API**: field `ApproverRoute` trong Create Command đổi thành `nullable` (`OvertimeApproverRoute?`). Validator:
+    - Nếu creator là HR hoặc PM → cho phép null (server tự set). Nếu FE truyền giá trị khác kỳ vọng, handler ghi đè, không throw.
+    - Nếu creator là role còn lại → bắt buộc non-null và ∈ {`Hr`, `DepartmentManager`}. Nếu FE truyền `Director` → `DomainValidationException("Chỉ HR mới được đẩy đơn cho Director duyệt.")`.
+
+    **Query filter cho Director**: `_currentUser.RoleId == SystemRoles.DirectorId` → auto-filter `ApproverRoute = Director` (Director chỉ thấy đơn thuộc route của mình). Cross-department không cần thêm scoping (Director duyệt toàn công ty).
+
+    **Cutoff cho HR-created request (route=Director)**: HR đã có permission `AttendanceAdjustmentOverrideAll` → `IAttendanceEditLockChecker` cho qua như hiện tại; không cần thêm nhánh riêng cho Director.
+
+- **Department scoping cho `DepartmentManager` (BẮT BUỘC)**: `EnsureApproverRouteMatches` chỉ check role, KHÔNG scope phòng ban. Với mỗi Approve handler mới có `ApproverRoute = DepartmentManager`, PHẢI bổ sung guard "DM cùng phòng ban với nhân viên tạo đơn". Scoping suy ra **server-side** từ `CreatedByUserId → EmployeeInformation.DepartmentId` — KHÔNG thêm field vào DTO Create/Approve, giữ nguyên contract API. Nguyên tắc:
+    ```
+    department(approver) == department(requester)
+    ```
+    Không khớp → `ForbiddenAccessException("Bạn không phải quản lý phòng ban của đơn này — không được duyệt.")`. Áp cho **Leave, Sick/Maternity, LateEarly, WFH**. **HR (`ApproverRoute = Hr`) KHÔNG áp check này** — HR duyệt cross-department là hợp lệ. **DependentRegistrationRequest** cũng miễn vì đã fix `ApproverRoute = Hr`.
+
+    **Lưu ý về tên role**: trong code hiện tại ([`SystemRoles.cs`](src/MPS.Domain/Constants/SystemRoles.cs)) role ID 5 có hằng canonical là `DepartmentManagerId` nhưng display name (DB / UI) là **"Planning Manager"** — `SystemRoles.PlanningManagerId` là alias `= DepartmentManagerId`. Do đó **plan này viết "DepartmentManager" đồng nghĩa với "Planning Manager"**; khi implement giữ nguyên hằng `SystemRoles.DepartmentManagerId` để nhất quán với OT hiện tại, không đổi tên hằng.
+
+    **Triển khai — tái dùng service có sẵn, KHÔNG viết helper mới**: [`IDepartmentManagerAuthorizer.IsManagerOfAsync(userId, departmentId, ct)`](src/MPS.Application/Services/IDepartmentManagerAuthorizer.cs) đã có, role-agnostic, chỉ so `department(user) == departmentId` qua `IDepartmentRepository.GetDepartmentIdOfUserAsync`. Mỗi Approve handler mới:
+    1. Inject `IDepartmentManagerAuthorizer` + `IEmployeeInformationRepository`.
+    2. Sau `EnsureApproverRouteMatches`, nếu `ApproverRoute = DepartmentManager`:
+       ```csharp
+       var requester = await _employeeRepository.GetByIdAsync(existing.EmployeeInformationId, ct)
+           ?? throw new NotFoundException(...);
+       if (requester.DepartmentId is not int reqDeptId)
+           throw new DomainValidationException("Nhân viên chưa gán phòng ban — không xác định được DM duyệt.");
+       if (!await _dmAuthorizer.IsManagerOfAsync(userId, reqDeptId, ct))
+           throw new ForbiddenAccessException("Bạn không phải quản lý phòng ban của đơn này — không được duyệt.");
+       ```
+    3. Đây là **thay thế** cho `EnsureDmSameDepartmentAsProjectAsync` của OT — OT scope theo `Project.DepartmentId` vì có `ProjectId`; Leave/LateEarly/WFH không có project nên scope theo `EmployeeInformation.DepartmentId` của người tạo đơn.
+
+    **Refactor phụ (tùy chọn, ngoài scope PR-1..PR-4)**: cân nhắc refactor `ApproveOvertimeRequestCommandHandler` để cũng dùng `IDepartmentManagerAuthorizer` — hiện tại nó tự inject `IEmployeeInformationRepository` + `IContractLookupReader` và tự viết logic tương đương. Không bắt buộc trong plan này.
+
+    **Query filter cho DM (BẮT BUỘC)**: guard trên chỉ chặn ở Approve. Nếu chỉ có guard đó, DM gọi `GET /api/<request>?status=Pending&approverRoute=DepartmentManager` sẽ thấy cả đơn phòng khác (duyệt 403 nhưng leak metadata). Do đó mỗi `GetXxxRequestsQuery` handler PHẢI:
+    - `_currentUser.RoleId == SystemRoles.DepartmentManagerId` → auto-filter `requester.DepartmentId == IDepartmentManagerAuthorizer.GetManagedDepartmentIdAsync(currentUserId)`.
+    - `_currentUser.RoleId == SystemRoles.HrId` → không thêm filter (HR xem tất).
+    - Employee gọi `GET /me` → chỉ đơn của bản thân (đã có pattern).
+
+    Repository method mỗi request type expose thêm optional param `int? requesterDepartmentId = null` để đẩy filter xuống SQL (tránh in-memory filter sau khi paged). Query string / route không đổi.
 - **Status enum**: `Pending=1, Approved=2, Rejected=3, Cancelled=4` (đúng như [`OtRequestStatus.cs`](src/MPS.Domain/Enums/Attendance/OtRequestStatus.cs)).
 - **Repository interface trong `MPS.Domain/Interfaces/Attendance/`** — không dùng generic repository, có phương thức chuyên biệt (theo memory `feedback_repository_interface_placement`).
 - **CQRS layout**: `MPS.Application/Features/Attendance/<Name>/{Commands,Queries,Common,Validators}` với MediatR + FluentValidation, gương mẫu là folder `OvertimeRequest`.
@@ -110,6 +156,16 @@ New:
 
 ## Phần 1 — Nâng cấp LeaveRequest (bao gồm Sick/Maternity)
 
+### 1.0. Bổ sung `ApproverRoute` cho LeaveRequest (đồng bộ với LateEarly/WFH)
+
+- File: [`src/MPS.Domain/Entities/Attendance/LeaveRequest.cs`](src/MPS.Domain/Entities/Attendance/LeaveRequest.cs) — thêm `public OvertimeApproverRoute? ApproverRoute { get; set; }` (nullable, tương ứng với semantic `null` = chưa gán / snapshot cũ). EF config bổ sung cột `ApproverRoute` int nullable.
+- FE bây giờ phải chọn route khi Create Leave (giống LateEarly/WFH). Handler `Create` áp bảng auto-routing ở "Nguyên tắc chung": nếu creator là PM → force `Hr`; nếu creator là HR → force `Director`; còn lại giữ giá trị FE gửi (bắt buộc ∈ {`Hr`, `DepartmentManager`}).
+- Handler `Approve`:
+  - `EnsureApproverRouteMatches` mở rộng: `Director → SystemRoles.DirectorId`.
+  - `ApproverDepartmentGuard.EnsureCanApproveAsync` giữ nguyên — Director đã nằm trong nhánh miễn scoping (line 45 [`ApproverDepartmentGuard.cs`](src/MPS.Application/Features/Attendance/Common/ApproverDepartmentGuard.cs)).
+- Query `GetLeaveRequestsQueryHandler` bổ sung nhánh: `_currentUser.RoleId == SystemRoles.DirectorId` → filter `ApproverRoute = Director` (Director chỉ thấy đơn do HR đẩy lên).
+- Migration `20260710_LeaveRequestApproverRoute.cs` chỉ add nullable column, không backfill (bản ghi cũ ApproverRoute = null; nếu cần tính vào report, HR chỉnh tay).
+
 ### 1.1. Bổ sung trạng thái Cancelled và audit hủy
 
 - File: [`src/MPS.Domain/Enums/Attendance/LeaveRequestStatus.cs`](src/MPS.Domain/Enums/Attendance/LeaveRequestStatus.cs) — thêm `Cancelled = 4`.
@@ -141,7 +197,20 @@ New:
 - Validator: nếu `LeaveType.Code IN ('SICK','MATERNITY')` → khi Approve **bắt buộc** có `MedicalCertificateAttachmentId` + `InsuranceCertNumber`. Cho phép nhân viên tạo Pending không kèm giấy tờ (nộp bổ sung sau).
 - Guard cutoff: `Approve` cho Sick/Maternity phải xảy ra trước ngày lock của `StartDate` — nếu quá thì HR phải dùng override.
 
-### 1.5. Files thay đổi/mới (Phần 1)
+### 1.5. Bắt buộc có phân ca (`EmployeeShiftAssignment`) trong khoảng nghỉ
+
+`CreateLeaveRequestCommandHandler` KHÔNG được đếm ngày công qua `IDayTypeResolver` (chỉ trả `WeeklyRestDay` cố định Thứ 7 + CN, không đọc shift assignment) — cách cũ gây 2 lỗi:
+- Nhân viên chưa được HR/PM phân ca cho ngày X vẫn tạo được đơn nghỉ ngày X.
+- `TotalDays` khi Create có thể lớn hơn số `AttendanceRecord OnLeave` mà [`ApproveAndApplyAsync`](src/MPS.Infrastructure/Repositories/Attendance/LeaveRequestRepository.cs) sinh ra (vốn chỉ tạo cho ngày có `ShiftTemplateId` do constraint `CK_AttendanceRecords_ShiftOrOvertime`), dẫn tới `LeaveBalance.UsedDays` bị trừ nhiều hơn thực tế.
+
+Sửa:
+- Bỏ inject `IDayTypeResolver` khỏi handler; inject [`IEmployeeShiftAssignmentRepository`](src/MPS.Domain/Interfaces/Attendance/IEmployeeShiftAssignmentRepository.cs).
+- `TotalDays` = số ngày distinct trong `[StartDate, EndDate]` có `EmployeeShiftAssignment` (gọi 1 lần `GetByEmployeesAndDateRangeAsync(new[]{empId}, start, end, includeInactiveTemplates: true, ct)`).
+- Nếu = 0 → `DomainValidationException("Khoảng nghỉ không có ngày nào đã được phân ca — vui lòng chọn ngày đi làm.")`.
+- Kết quả: quy tắc nhất quán với LateEarly/WFH ("phải có shift mới cần đơn"). Ngày Weekend nếu được HR/PM xếp ca làm bù vẫn được nghỉ hợp lệ; ngày trong tuần chưa xếp ca không tạo được đơn.
+- Đơn Sick/Maternity retroactive vẫn OK vì shift đã được xếp trước cho các ngày quá khứ đó.
+
+### 1.6. Files thay đổi/mới (Phần 1)
 
 Modified:
 - [`src/MPS.Domain/Enums/Attendance/LeaveRequestStatus.cs`](src/MPS.Domain/Enums/Attendance/LeaveRequestStatus.cs)
@@ -347,6 +416,7 @@ Ngoài rule chung (auth, permission, self-approval forbidden, status transition 
 - Nếu `LeaveType.RequireDocument = true` (Sick/Maternity) → khi **Approve** bắt buộc có `MedicalCertificateAttachmentId` + `InsuranceCertNumber` (10 hoặc 13 số).
 
 **Business rule (Handler)**
+- **Shift assignment tồn tại** — mỗi ngày cần nghỉ phải có `EmployeeShiftAssignment`. `TotalDays` = số ngày distinct trong `[StartDate, EndDate]` có shift. Nếu = 0 → reject. Nhất quán với LateEarly/WFH và với Approve step (chỉ sinh `AttendanceRecord OnLeave` cho ngày có shift).
 - **Notice period** — `daysAhead = StartDate − today`, bảng ngưỡng cấu hình trong `LeaveType`:
   - `TotalDays ≤ 1` → cần `daysAhead ≥ MinNoticeDaysForShort` (mặc định 1)
   - `TotalDays ≤ 3` → cần `daysAhead ≥ MinNoticeDaysForMedium` (mặc định 3)
@@ -358,6 +428,9 @@ Ngoài rule chung (auth, permission, self-approval forbidden, status transition 
 - **Cutoff** — `EnsureCanModifyAsync(StartDate)` khi Create/Approve (trừ Sick/Maternity Create).
 - **Cancel** — chỉ creator, khi `Status = Pending` HOẶC (`Status = Approved` VÀ `StartDate > today` VÀ chưa khóa).
 - **Self-approval forbidden** — `Reviewer.UserId ≠ CreatedByUserId`.
+- **Department scoping** — nếu `ApproverRoute = DepartmentManager` (Planning Manager): `department(approver) == requester.DepartmentId` (dùng `IDepartmentManagerAuthorizer.IsManagerOfAsync`). HR bỏ qua check này.
+- **Auto-routing theo creator** — creator là PM → force `ApproverRoute = Hr`; creator là HR → force `ApproverRoute = Director`; creator khác → FE chọn giữa {`Hr`, `DepartmentManager`}, KHÔNG được truyền `Director`.
+- **Approve route Director** — chỉ `RoleId = SystemRoles.DirectorId` được duyệt; không check phòng ban.
 
 ### 2. OvertimeRequest (đã implement — tham chiếu mẫu)
 
@@ -383,6 +456,9 @@ Chi tiết xem [`OvertimeCapChecker.cs`](src/MPS.Application/Features/Attendance
 - **Cutoff** — `EnsureCanModifyAsync(WorkDate)` khi Create + Approve + Cancel.
 - **Cancel** — chỉ creator, chỉ khi `Status = Pending`.
 - **No overlap** — cùng `WorkDate` + `Kind` không được có đơn Pending/Approved khác.
+- **Department scoping** — nếu `ApproverRoute = DepartmentManager` (Planning Manager): `department(approver) == requester.DepartmentId` (dùng `IDepartmentManagerAuthorizer.IsManagerOfAsync`). HR bỏ qua.
+- **Auto-routing theo creator** — creator là PM → force `ApproverRoute = Hr`; creator là HR → force `ApproverRoute = Director`; creator khác → FE chọn giữa {`Hr`, `DepartmentManager`}.
+- **Approve route Director** — chỉ `RoleId = SystemRoles.DirectorId` được duyệt.
 
 ### 4. WfhRequest (mới)
 
@@ -400,6 +476,9 @@ Chi tiết xem [`OvertimeCapChecker.cs`](src/MPS.Application/Features/Attendance
 - **No overlap** — không overlap với WfhRequest Pending/Approved + không overlap với LeaveRequest Approved của cùng employee.
 - **Cutoff** — `EnsureCanModifyAsync(StartDate)` khi Create/Approve. Cancel sau Approved chỉ được khi `StartDate > today` và chưa khóa.
 - **Cancel** — creator, khi Pending; hoặc Approved nhưng `StartDate > today`.
+- **Department scoping** — nếu `ApproverRoute = DepartmentManager` (Planning Manager): `department(approver) == requester.DepartmentId` (dùng `IDepartmentManagerAuthorizer.IsManagerOfAsync`). HR bỏ qua.
+- **Auto-routing theo creator** — creator là PM → force `ApproverRoute = Hr`; creator là HR → force `ApproverRoute = Director`; creator khác → FE chọn giữa {`Hr`, `DepartmentManager`}.
+- **Approve route Director** — chỉ `RoleId = SystemRoles.DirectorId` được duyệt.
 
 ### 5. DependentRegistrationRequest (mới)
 
@@ -445,8 +524,13 @@ Sau khi implement xong từng phần:
      - Late/Early: nộp lần 3 trong tháng → phải yêu cầu `DeductFromLeaveBalance`.
      - WFH: nộp quá 4 ngày trong tháng → chặn.
      - Leave: nộp khi Remaining = 0 → tự chuyển sang UNPAID (kiểm response).
+     - Leave: nộp ngày chưa có shift assignment → 400 `"Khoảng nghỉ không có ngày nào đã được phân ca..."`; nộp range gồm cả ngày có shift + ngày không → `TotalDays` chỉ đếm ngày có shift.
      - Sick: Approve mà không có attachment → 400.
      - Dependent: Register → Approve → `EmployeeInformation.DependentsNo` update đúng.
+     - **Department scoping**: DM phòng A đăng nhập → GET pending list chỉ thấy đơn của nhân viên phòng A; thử PUT approve đơn của nhân viên phòng B → 403 `"Bạn không phải quản lý phòng ban của đơn này"`. HR đăng nhập → approve được đơn của mọi phòng ban.
+     - **Auto-routing PM → HR**: user role PM đăng nhập → POST Leave/LateEarly/WFH (không cần truyền `ApproverRoute` hoặc truyền `DepartmentManager` cũng bị override) → DB lưu `ApproverRoute = Hr`. HR đăng nhập → thấy đơn trong pending list và approve được.
+     - **Auto-routing HR → Director**: user role HR đăng nhập → POST Leave/LateEarly/WFH cho chính mình → DB lưu `ApproverRoute = Director`. Director đăng nhập → GET pending list thấy đơn; approve được. Nếu HR/PM khác cố approve → 403.
+     - **Validator chặn Director route từ user thường**: role Employee gửi `ApproverRoute = Director` → 400 `"Chỉ HR mới được đẩy đơn cho Director duyệt."`
 
 4. **Security review**
    - Chạy `security-reviewer` agent trên diff cuối cùng.
@@ -461,7 +545,7 @@ Sau khi implement xong từng phần:
 ## Thứ tự triển khai đề xuất (6 PR nhỏ, dễ review)
 
 1. **PR-0** (prerequisite): Phần 0 — Mở rộng `AttendanceSetting` + `LeaveType` với field cấu hình chính sách công ty. Chỉ add nullable columns + mở rộng payload endpoint có sẵn. Không tạo permission mới. Merge trước tiên vì các PR sau phụ thuộc vào field mới.
-2. **PR-1**: Phần 1 — Enhance LeaveRequest (Cancelled + notice period + Sick/Maternity fields + UNPAID fallback + seed LeaveTypes). Migration đơn giản, ít risk.
+2. **PR-1**: Phần 1 — Enhance LeaveRequest (thêm `ApproverRoute` HR|PM + auto-route PM→HR / HR→Director + mở rộng enum `OvertimeApproverRoute` thêm `Director=3` + Cancelled + notice period + Sick/Maternity fields + UNPAID fallback + seed LeaveTypes). Migration chỉ add nullable columns, ít risk. Đồng thời cập nhật LateEarly/WFH Create+Approve+Query handler theo bảng auto-routing (cùng PR để enum thay đổi 1 lần duy nhất, tránh cascade).
 3. **PR-2**: Phần 2 — LateEarlyRequest end-to-end.
 4. **PR-3**: Phần 3 — WfhRequest end-to-end (không kèm auto-create AttendanceRecord — để PR sau).
 5. **PR-4**: Phần 4 — EmployeeDependent + DependentRegistrationRequest.

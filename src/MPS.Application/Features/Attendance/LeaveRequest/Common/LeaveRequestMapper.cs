@@ -16,6 +16,7 @@ internal static class LeaveRequestMapper
         r.EndDate,
         r.TotalDays,
         r.IsPaid,
+        r.ApproverRoute,
         r.Status,
         r.Reason,
         r.SupportingDocumentUrl,

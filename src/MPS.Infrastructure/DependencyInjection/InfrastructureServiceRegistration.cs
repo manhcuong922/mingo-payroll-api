@@ -44,6 +44,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<MPS.Application.Services.IDepartmentManagerAuthorizer,
             MPS.Application.Services.DepartmentManagerAuthorizer>();
+        services.AddScoped<MPS.Application.Features.Attendance.Common.ApproverDepartmentGuard>();
 
         // Task/Production module
         services.AddScoped<IProcessTemplateRepository, ProcessTemplateRepository>();

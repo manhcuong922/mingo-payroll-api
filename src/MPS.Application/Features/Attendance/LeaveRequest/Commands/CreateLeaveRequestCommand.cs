@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Domain.Enums.Attendance;
 
 namespace MPS.Application.Features.Attendance.LeaveRequest.Commands;
 
@@ -10,6 +11,7 @@ public sealed record CreateLeaveRequestCommand(
     string? SupportingDocumentUrl,
     string? MedicalCertificateUrl,
     string? InsuranceCertNumber,
+    OvertimeApproverRoute? ApproverRoute,
     string? OverrideReason) : IRequest<CreateLeaveRequestResult>;
 
 /// <summary>

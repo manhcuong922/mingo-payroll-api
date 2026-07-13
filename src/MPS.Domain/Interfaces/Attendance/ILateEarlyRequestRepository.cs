@@ -13,6 +13,8 @@ public interface ILateEarlyRequestRepository
         DateOnly? toDate,
         int page,
         int size,
+        int? departmentIdFilter = null,
+        OvertimeApproverRoute? approverRouteFilter = null,
         CancellationToken cancellationToken = default);
 
     Task<LateEarlyRequest?> GetByIdAsync(int id, CancellationToken cancellationToken = default);

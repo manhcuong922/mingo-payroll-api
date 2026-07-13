@@ -36,7 +36,7 @@ public class GetMyLeaveRequestsQueryHandler : IRequestHandler<GetMyLeaveRequests
         var size = request.Size <= 0 ? 20 : Math.Min(request.Size, 100);
 
         var (items, total) = await _repository.GetPagedAsync(
-            employeeId, request.Status, null, null, page, size, cancellationToken);
+            employeeId, request.Status, null, null, page, size, cancellationToken: cancellationToken);
 
         var dtos = items.Select(LeaveRequestMapper.ToDto).ToList();
         return new PagedResult<LeaveRequestDto>(dtos, total, page, size);

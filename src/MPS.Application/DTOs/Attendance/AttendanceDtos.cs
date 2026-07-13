@@ -298,6 +298,7 @@ public sealed record LeaveRequestDto(
     DateOnly EndDate,
     decimal TotalDays,
     bool IsPaid,
+    OvertimeApproverRoute? ApproverRoute,
     LeaveRequestStatus Status,
     string? Reason,
     string? SupportingDocumentUrl,

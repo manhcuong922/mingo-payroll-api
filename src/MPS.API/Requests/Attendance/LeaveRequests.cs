@@ -1,3 +1,5 @@
+using MPS.Domain.Enums.Attendance;
+
 namespace MPS.API.Requests.Attendance;
 
 public sealed record InitLeaveBalanceRequest(
@@ -13,6 +15,7 @@ public sealed record CreateLeaveRequest(
     string? SupportingDocumentUrl,
     string? MedicalCertificateUrl,
     string? InsuranceCertNumber,
+    OvertimeApproverRoute? ApproverRoute,
     string? OverrideReason);
 
 public sealed record ReviewLeaveRequest(string? ReviewNote);

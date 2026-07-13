@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.WfhRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
@@ -92,6 +93,8 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         await _quotaChecker.EnsureWithinQuotaAsync(
             employeeId, request.StartDate, request.EndDate, totalDays, _clock.UtcNow, cancellationToken);
 
+        var resolvedRoute = ApproverRouteResolver.Resolve(request.ApproverRoute, _currentUser.RoleId);
+
         var entity = new WfhRequestEntity
         {
             EmployeeInformationId = employeeId,
@@ -99,7 +102,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
             EndDate = request.EndDate,
             TotalDays = totalDays,
             WorkPlan = workPlan,
-            ApproverRoute = request.ApproverRoute,
+            ApproverRoute = resolvedRoute,
             Status = WfhRequestStatus.Pending,
             Reason = request.Reason,
             CreatedAt = _clock.UtcNow,

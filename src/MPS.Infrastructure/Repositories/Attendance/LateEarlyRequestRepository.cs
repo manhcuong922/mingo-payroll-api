@@ -23,6 +23,8 @@ public class LateEarlyRequestRepository : ILateEarlyRequestRepository
         DateOnly? toDate,
         int page,
         int size,
+        int? departmentIdFilter = null,
+        OvertimeApproverRoute? approverRouteFilter = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.LateEarlyRequests
@@ -40,6 +42,10 @@ public class LateEarlyRequestRepository : ILateEarlyRequestRepository
             query = query.Where(r => r.WorkDate >= fromDate.Value);
         if (toDate.HasValue)
             query = query.Where(r => r.WorkDate <= toDate.Value);
+        if (departmentIdFilter.HasValue)
+            query = query.Where(r => r.EmployeeInformation.DepartmentId == departmentIdFilter.Value);
+        if (approverRouteFilter.HasValue)
+            query = query.Where(r => r.ApproverRoute == approverRouteFilter.Value);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query

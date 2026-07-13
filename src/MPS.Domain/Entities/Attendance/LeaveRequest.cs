@@ -24,6 +24,12 @@ public class LeaveRequest
 
     public AttendanceEnums.LeaveRequestStatus Status { get; set; }
 
+    /// <summary>
+    /// Route duyệt HR|DepartmentManager|Director. Nullable để backward-compatible với
+    /// record cũ trước migration. Handler Create auto-set theo role người tạo.
+    /// </summary>
+    public AttendanceEnums.OvertimeApproverRoute? ApproverRoute { get; set; }
+
     public string? Reason { get; set; }
 
     /// <summary>

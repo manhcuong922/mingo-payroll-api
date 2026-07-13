@@ -35,7 +35,7 @@ public class GetMyWfhRequestsQueryHandler : IRequestHandler<GetMyWfhRequestsQuer
         var page = request.Page <= 0 ? 1 : request.Page;
         var size = request.Size <= 0 ? 20 : Math.Min(request.Size, 100);
         var (items, total) = await _repository.GetPagedAsync(
-            employeeId, request.Status, null, null, page, size, cancellationToken);
+            employeeId, request.Status, null, null, page, size, cancellationToken: cancellationToken);
         var dtos = items.Select(WfhRequestMapper.ToDto).ToList();
         return new PagedResult<WfhRequestDto>(dtos, total, page, size);
     }

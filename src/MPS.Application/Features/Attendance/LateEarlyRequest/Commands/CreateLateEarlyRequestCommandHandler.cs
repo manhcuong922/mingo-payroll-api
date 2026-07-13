@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -73,6 +74,8 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
             throw new DomainValidationException(
                 $"Đã tồn tại đơn {request.Kind} cho ngày {request.WorkDate:dd/MM/yyyy} (Pending/Approved).");
 
+        var resolvedRoute = ApproverRouteResolver.Resolve(request.ApproverRoute, _currentUser.RoleId);
+
         var entity = new LateEarlyRequestEntity
         {
             EmployeeInformationId = employeeId,
@@ -81,7 +84,7 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
             Minutes = request.Minutes,
             IsUnplanned = isUnplanned,
             DeductFromLeaveBalance = false,
-            ApproverRoute = request.ApproverRoute,
+            ApproverRoute = resolvedRoute,
             Status = LateEarlyRequestStatus.Pending,
             Reason = request.Reason,
             CreatedAt = _clock.UtcNow,

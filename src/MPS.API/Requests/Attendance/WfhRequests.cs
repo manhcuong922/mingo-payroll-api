@@ -7,7 +7,7 @@ public sealed record CreateWfhRequest(
     DateOnly EndDate,
     string WorkPlan,
     string? Reason,
-    OvertimeApproverRoute ApproverRoute,
+    OvertimeApproverRoute? ApproverRoute,
     string? OverrideReason);
 
 public sealed record ApproveWfhRequestBody(

@@ -16,7 +16,8 @@ public class CreateLateEarlyRequestCommandValidator : AbstractValidator<CreateLa
             .InclusiveBetween((short)1, (short)240)
             .WithMessage("Minutes phải trong khoảng 1-240 (nếu quá 4 giờ nên nộp Leave nửa ngày).");
         RuleFor(x => x.Reason).NotEmpty().MaximumLength(500);
-        RuleFor(x => x.ApproverRoute).IsInEnum();
+        RuleFor(x => x.ApproverRoute)
+            .IsInEnum().When(x => x.ApproverRoute.HasValue);
         RuleFor(x => x.OverrideReason).MaximumLength(500);
     }
 }

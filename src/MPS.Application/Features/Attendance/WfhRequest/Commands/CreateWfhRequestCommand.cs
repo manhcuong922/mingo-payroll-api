@@ -8,5 +8,5 @@ public sealed record CreateWfhRequestCommand(
     DateOnly EndDate,
     string WorkPlan,
     string? Reason,
-    OvertimeApproverRoute ApproverRoute,
+    OvertimeApproverRoute? ApproverRoute,
     string? OverrideReason) : IRequest<int>;

@@ -8,5 +8,5 @@ public sealed record CreateLateEarlyRequestCommand(
     LateEarlyKind Kind,
     short Minutes,
     string? Reason,
-    OvertimeApproverRoute ApproverRoute,
+    OvertimeApproverRoute? ApproverRoute,
     string? OverrideReason) : IRequest<int>;

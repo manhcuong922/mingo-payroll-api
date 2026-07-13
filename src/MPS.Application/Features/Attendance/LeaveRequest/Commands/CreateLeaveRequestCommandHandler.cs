@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.LeaveRequest.Common;
 using MPS.Application.Features.Attendance.LeaveType.Common;
 using MPS.Domain.Enums.Attendance;
@@ -23,7 +24,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly ILeaveBalanceRepository _balanceRepository;
     private readonly IContractLookupReader _lookup;
     private readonly IEmployeeInformationRepository _employeeRepository;
-    private readonly IDayTypeResolver _dayTypeResolver;
+    private readonly IEmployeeShiftAssignmentRepository _shiftAssignmentRepository;
     private readonly IAttendanceEditLockChecker _editLockChecker;
     private readonly LeaveBalanceFallbackResolver _fallbackResolver;
     private readonly ICurrentUserService _currentUser;
@@ -35,7 +36,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         ILeaveBalanceRepository balanceRepository,
         IContractLookupReader lookup,
         IEmployeeInformationRepository employeeRepository,
-        IDayTypeResolver dayTypeResolver,
+        IEmployeeShiftAssignmentRepository shiftAssignmentRepository,
         IAttendanceEditLockChecker editLockChecker,
         LeaveBalanceFallbackResolver fallbackResolver,
         ICurrentUserService currentUser,
@@ -46,7 +47,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _balanceRepository = balanceRepository;
         _lookup = lookup;
         _employeeRepository = employeeRepository;
-        _dayTypeResolver = dayTypeResolver;
+        _shiftAssignmentRepository = shiftAssignmentRepository;
         _editLockChecker = editLockChecker;
         _fallbackResolver = fallbackResolver;
         _currentUser = currentUser;
@@ -80,9 +81,10 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             throw new DomainValidationException(
                 $"Leave type '{leaveType.Code}' không cho phép nộp ngày đã qua.");
 
-        var totalDays = await CountWorkingDaysAsync(employeeId, request.StartDate, request.EndDate, cancellationToken);
+        var totalDays = await CountShiftAssignedDaysAsync(employeeId, request.StartDate, request.EndDate, cancellationToken);
         if (totalDays <= 0)
-            throw new DomainValidationException("Leave period must contain at least one working day (non-weekly-rest-day).");
+            throw new DomainValidationException(
+                "Khoảng nghỉ không có ngày nào đã được phân ca — vui lòng chọn ngày đi làm.");
 
         if (leaveType.MaxDaysPerRequest is decimal max && totalDays > max)
             throw new DomainValidationException(
@@ -143,6 +145,8 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             }
         }
 
+        var resolvedRoute = ApproverRouteResolver.Resolve(request.ApproverRoute, _currentUser.RoleId);
+
         var entity = new LeaveRequestEntity
         {
             EmployeeInformationId = employeeId,
@@ -151,6 +155,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             EndDate = request.EndDate,
             TotalDays = totalDays,
             IsPaid = finalType.IsPaid,
+            ApproverRoute = resolvedRoute,
             Status = LeaveRequestStatus.Pending,
             Reason = request.Reason,
             SupportingDocumentUrl = request.SupportingDocumentUrl,
@@ -165,13 +170,22 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         return new CreateLeaveRequestResult(id, finalType.Id, finalType.Code, switched, switchMessage);
     }
 
-    private async Task<decimal> CountWorkingDaysAsync(
+    /// <summary>
+    /// Đếm số ngày trong [start, end] mà nhân viên đã có <see cref="Domain.Entities.Attendance.EmployeeShiftAssignment"/>.
+    /// Bảo đảm Approve có thể sinh <c>AttendanceRecord OnLeave</c> cho từng ngày (mỗi bản ghi bắt buộc gắn ShiftTemplateId
+    /// theo constraint <c>CK_AttendanceRecords_ShiftOrOvertime</c>). Đồng nhất với LateEarly/WFH.
+    /// </summary>
+    private async Task<decimal> CountShiftAssignedDaysAsync(
         int employeeInformationId,
         DateOnly start,
         DateOnly end,
         CancellationToken cancellationToken)
     {
-        var dayTypes = await _dayTypeResolver.ResolveRangeAsync(employeeInformationId, start, end, cancellationToken);
-        return dayTypes.Count(kv => kv.Value != DayType.WeeklyRestDay);
+        var assignments = await _shiftAssignmentRepository.GetByEmployeesAndDateRangeAsync(
+            new[] { employeeInformationId }, start, end, includeInactiveTemplates: true, cancellationToken);
+        return assignments
+            .Select(a => a.WorkDate)
+            .Distinct()
+            .Count();
     }
 }
