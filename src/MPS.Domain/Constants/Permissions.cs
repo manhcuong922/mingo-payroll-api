@@ -152,12 +152,12 @@ public static class Permissions
 
     public const string OvertimeRequestReadAll = "OvertimeRequest.Read.All";
     public const string OvertimeRequestReadSelf = "OvertimeRequest.Read.Self";
-    /// <summary>
-    /// DEPRECATED — luồng OT giờ do PM tạo batch, NV không tự xin.
-    /// Constant giữ lại để migration cũ không vỡ, KHÔNG cấp cho role nào.
-    /// </summary>
+
+    /// <summary>NV tự đăng ký OT trong đơn mình đang có task InProgress.</summary>
     public const string OvertimeRequestCreateSelf = "OvertimeRequest.Create.Self";
-    public const string OvertimeRequestApproveAll = "OvertimeRequest.Approve.All";
+
+    /// <summary>DM duyệt cuối request OT khi PM chọn route = DepartmentManager.</summary>
+    public const string OvertimeRequestApproveDepartment = "OvertimeRequest.Approve.Department";
 
     public const string LeaveRequestReadAll = "LeaveRequest.Read.All";
     public const string LeaveRequestReadSelf = "LeaveRequest.Read.Self";
@@ -241,15 +241,18 @@ public static class Permissions
 
     // (170–177 reserved unused — WeeklyDayOff module removed 2026-07-10)
 
-    // ===== OT batch workflow + EmployeeShift self-read — IDs 178–179 =====
+    // ===== OT 2-tầng workflow (v3) + EmployeeShift self-read — IDs 178–180 =====
 
-    /// <summary>PM tạo batch OT request cho NV cùng phòng ban (project scope).</summary>
-    public const string OvertimeRequestCreateBatchDepartment = "OvertimeRequest.CreateBatch.Department";
+    /// <summary>PM (tổ trưởng đơn = Project.ResponsibleUserId) review tầng đầu, Forward chọn HR/DM hoặc Reject.</summary>
+    public const string OvertimeRequestReviewProject = "OvertimeRequest.Review.Project";
 
     /// <summary>NV xem lịch phân ca kế hoạch của chính mình.</summary>
     public const string EmployeeShiftReadSelf = "EmployeeShift.Read.Self";
 
-    // (180–204 reserved unused)
+    /// <summary>HR duyệt cuối request OT khi PM chọn route = Hr.</summary>
+    public const string OvertimeRequestApproveHr = "OvertimeRequest.Approve.Hr";
+
+    // (181–204 reserved unused)
 
     // ===== Task/Production extensions — IDs 205–213 =====
 
@@ -458,8 +461,8 @@ public static class PermissionIds
 
     public const int OvertimeRequestReadAll = 110;
     public const int OvertimeRequestReadSelf = 111;
-    public const int OvertimeRequestCreateSelf = 112; // DEPRECATED — không seed cho role nào
-    public const int OvertimeRequestApproveAll = 113;
+    public const int OvertimeRequestCreateSelf = 112;               // v3: NV self-create
+    public const int OvertimeRequestApproveDepartment = 113;        // v3: DM route (renamed from ApproveAll)
 
     public const int LeaveRequestReadAll = 114;
     public const int LeaveRequestReadSelf = 115;
@@ -537,12 +540,13 @@ public static class PermissionIds
 
     // (170–177 reserved unused — WeeklyDayOff module removed 2026-07-10)
 
-    // ===== OT batch workflow + EmployeeShift self-read — IDs 178–179 =====
+    // ===== OT 2-tầng workflow (v3) + EmployeeShift self-read — IDs 178–180 =====
 
-    public const int OvertimeRequestCreateBatchDepartment = 178;
+    public const int OvertimeRequestReviewProject = 178;    // v3: PM review (Forward/Reject) — repurposed from batch-create
     public const int EmployeeShiftReadSelf = 179;
+    public const int OvertimeRequestApproveHr = 180;        // v3: HR route
 
-    // (180–204 reserved unused)
+    // (181–204 reserved unused)
 
     // ===== Task/Production extensions — IDs 205–213 =====
 

@@ -27,7 +27,7 @@ public class GetAttendanceSummaryQueryHandler
     private const decimal NightRateBonus = 1.30m;
     private const decimal HalfDayWeight = 0.5m;
     private const decimal FullDayWeight = 1.0m;
-    private const int MaxPageSize = 100;
+    private const int MaxPageSize = 1000;
     private const int DefaultPageSize = 20;
 
     private readonly IEmployeeInformationRepository _employeeRepository;
@@ -142,6 +142,10 @@ public class GetAttendanceSummaryQueryHandler
             bucket.DayHours += r.DayHours;
             bucket.NightHours += r.NightHours;
 
+            // OT — subset của DayHours+NightHours, filter records gắn với OvertimeRequest.
+            if (r.OvertimeRequestId is not null)
+                bucket.OtHours += r.DayHours + r.NightHours;
+
             var rule = r.ShiftTemplate?.AppliedAttendanceRule;
             var rate = ResolveRate(rule, dayType);
             bucket.EquivalentHours += r.DayHours * rate + r.NightHours * rate * NightRateBonus;
@@ -168,7 +172,8 @@ public class GetAttendanceSummaryQueryHandler
             DayHours: bucket.DayHours,
             NightHours: bucket.NightHours,
             TotalHours: bucket.DayHours + bucket.NightHours,
-            EquivalentHours: bucket.EquivalentHours);
+            EquivalentHours: bucket.EquivalentHours,
+            OtHours: bucket.OtHours);
     }
 
     private static void AccrueDayType(Bucket bucket, DayType dayType, decimal weight)
@@ -209,5 +214,6 @@ public class GetAttendanceSummaryQueryHandler
         public decimal DayHours;
         public decimal NightHours;
         public decimal EquivalentHours;
+        public decimal OtHours;
     }
 }
