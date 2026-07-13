@@ -83,7 +83,7 @@ public class GenerateOrderEvaluationHandlerTests
         SetupProject(ResponsibleUserId, new DateTime(2026, 7, 15));
         _orderEvals.Setup(r => r.GetSubjectUserIdsForProjectAsync(ProjectId, SystemRoles.EmployeeId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { 10 });
-        _criteria.Setup(c => c.BuildLinesForRoleAsync(SystemRoles.EmployeeId, It.IsAny<CancellationToken>()))
+        _criteria.Setup(c => c.BuildLinesAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DomainValidationException("chưa cấu hình tiêu chí"));
 
         // Không ném ra ngoài (đóng đơn không được fail) và không tạo bảng.
@@ -100,7 +100,7 @@ public class GenerateOrderEvaluationHandlerTests
         SetupProject(ResponsibleUserId, new DateTime(2026, 7, 15));
         _orderEvals.Setup(r => r.GetSubjectUserIdsForProjectAsync(ProjectId, SystemRoles.EmployeeId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { 10, 11 });
-        _criteria.Setup(c => c.BuildLinesForRoleAsync(SystemRoles.EmployeeId, It.IsAny<CancellationToken>()))
+        _criteria.Setup(c => c.BuildLinesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { TemplateLine(), TemplateLine() });
 
         MPS.Domain.Entities.Evaluation.OrderEvaluation? captured = null;

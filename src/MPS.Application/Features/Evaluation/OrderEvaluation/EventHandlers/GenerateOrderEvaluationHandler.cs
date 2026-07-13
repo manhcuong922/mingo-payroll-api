@@ -69,14 +69,14 @@ public sealed class GenerateOrderEvaluationHandler : INotificationHandler<Projec
         IReadOnlyList<EvaluationScoreLine> template;
         try
         {
-            template = await _criteria.BuildLinesForRoleAsync(SystemRoles.EmployeeId, ct);
+            template = await _criteria.BuildLinesAsync(ct);
         }
         catch (DomainValidationException ex)
         {
-            // E3 — chưa cấu hình tiêu chí cho role 7. Không tạo bảng rỗng vô nghĩa; cảnh báo HR.
+            // E3 — rubric chung chưa cấu hình / chưa cân 100%. Không tạo bảng rỗng vô nghĩa; cảnh báo HR.
             _log.LogWarning(ex,
-                "Không sinh bảng đánh giá cho đơn #{ProjectId}: chưa cấu hình tiêu chí cho công nhân (role 7).",
-                n.ProjectId);
+                "Không sinh bảng đánh giá cho đơn #{ProjectId}: rubric chưa sẵn sàng ({Reason}).",
+                n.ProjectId, ex.Message);
             return;
         }
 

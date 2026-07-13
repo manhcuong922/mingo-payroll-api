@@ -63,6 +63,8 @@ public static class InfrastructureServiceRegistration
             MPS.Infrastructure.Repositories.Evaluation.EvaluationCriteriaSnapshotService>();
         services.AddScoped<MPS.Application.Features.Evaluation.Common.IMonthlyAggregationService,
             MPS.Application.Features.Evaluation.Common.MonthlyAggregationService>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IOrderEvaluationExcelService,
+            MPS.Infrastructure.Services.OrderEvaluationExcelService>();
 
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();

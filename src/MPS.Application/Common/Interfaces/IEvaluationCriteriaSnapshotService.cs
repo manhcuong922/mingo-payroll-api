@@ -3,15 +3,17 @@ using MPS.Domain.Entities.Evaluation;
 namespace MPS.Application.Common.Interfaces;
 
 /// <summary>
-/// Xây các dòng snapshot tiêu chí (D2) cho 1 role: mỗi <see cref="PerformanceMetric"/> có
-/// <c>TargetRoles</c> chứa roleId → 1 <see cref="EvaluationScoreLine"/> mới (Score = null, Scale = 5),
-/// copy tên nhóm/tiêu chí + trọng số. Xem plan §2, §13.6.
+/// Xây các dòng snapshot tiêu chí (D2) từ RUBRIC CHUNG toàn công ty: mỗi <see cref="PerformanceMetric"/>
+/// trong catalog → 1 <see cref="EvaluationScoreLine"/> mới (Score = null, Scale = 5), copy tên
+/// nhóm/tiêu chí + trọng số. Rubric dùng CHUNG cho mọi vai trò (không còn lọc theo role — xem plan §2).
 /// </summary>
 public interface IEvaluationCriteriaSnapshotService
 {
     /// <summary>
-    /// Trả các dòng snapshot cho 1 role. Ném <c>DomainValidationException</c> nếu KHÔNG có tiêu chí
-    /// nào cho role (E3 — không sinh bảng rỗng vô nghĩa).
+    /// Trả các dòng snapshot của rubric chung. Ném <c>DomainValidationException</c> nếu:
+    /// (a) catalog rỗng (E3 — không sinh bảng rỗng vô nghĩa); hoặc
+    /// (b) rubric chưa cân: tổng trọng số các nhóm ≠ 100, hoặc tổng trọng số tiêu chí trong bất kỳ
+    ///     nhóm nào ≠ 100 (điểm tổng chỉ đúng khi trọng số tròn 100%).
     /// </summary>
-    Task<IReadOnlyList<EvaluationScoreLine>> BuildLinesForRoleAsync(int roleId, CancellationToken ct);
+    Task<IReadOnlyList<EvaluationScoreLine>> BuildLinesAsync(CancellationToken ct);
 }

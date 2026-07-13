@@ -23,7 +23,7 @@ public interface IOrderEvaluationRepository
     Task<OrderEvaluation?> GetByIdForUpdateAsync(int id, CancellationToken ct);
 
     Task<IReadOnlyList<OrderEvaluation>> GetForEvaluatorAsync(
-        int evaluatorUserId, EvaluationStatus? status, CancellationToken ct);
+        int evaluatorUserId, EvaluationStatus? status, int? departmentId, CancellationToken ct);
 
     /// <summary>Các subject của bảng-theo-đơn đã Submit trong kỳ (Y, M), điểm ≠ null — để gộp tháng.</summary>
     Task<IReadOnlyList<OrderEvaluationSubject>> GetSubmittedSubjectsByMonthAsync(
