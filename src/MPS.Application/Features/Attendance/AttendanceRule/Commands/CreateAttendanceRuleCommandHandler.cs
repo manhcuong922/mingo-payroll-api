@@ -4,23 +4,27 @@ using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 using AttendanceRuleEntity = MPS.Domain.Entities.Attendance.AttendanceRule;
+using AttendanceRuleVersionEntity = MPS.Domain.Entities.Attendance.AttendanceRuleVersion;
 
 namespace MPS.Application.Features.Attendance.AttendanceRule.Commands;
 
 public class CreateAttendanceRuleCommandHandler : IRequestHandler<CreateAttendanceRuleCommand, int>
 {
     private readonly IAttendanceRuleRepository _repository;
+    private readonly IAttendanceRuleVersionRepository _versionRepository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly IComplianceLookupService _complianceLookup;
 
     public CreateAttendanceRuleCommandHandler(
         IAttendanceRuleRepository repository,
+        IAttendanceRuleVersionRepository versionRepository,
         ICurrentUserService currentUser,
         IClock clock,
         IComplianceLookupService complianceLookup)
     {
         _repository = repository;
+        _versionRepository = versionRepository;
         _currentUser = currentUser;
         _clock = clock;
         _complianceLookup = complianceLookup;
@@ -46,18 +50,32 @@ public class CreateAttendanceRuleCommandHandler : IRequestHandler<CreateAttendan
             laborLaw.WorkRateHolidayFloor);
 
         var now = _clock.UtcNow;
-        var entity = new AttendanceRuleEntity
+        var today = DateOnly.FromDateTime(now);
+
+        var rule = new AttendanceRuleEntity
         {
             Name = name,
             Description = request.Description,
-            WorkRateNormal = request.WorkRateNormal,
-            WorkRateWeeklyRest = request.WorkRateWeeklyRest,
-            WorkRateHoliday = request.WorkRateHoliday,
             IsActive = true,
             CreatedAt = now,
             CreatedByUserId = userId
         };
 
-        return await _repository.AddAsync(entity, cancellationToken);
+        var ruleId = await _repository.AddAsync(rule, cancellationToken);
+
+        var version = new AttendanceRuleVersionEntity
+        {
+            AttendanceRuleId = ruleId,
+            EffectiveFrom = today,
+            EffectiveTo = null,
+            WorkRateNormal = request.WorkRateNormal,
+            WorkRateWeeklyRest = request.WorkRateWeeklyRest,
+            WorkRateHoliday = request.WorkRateHoliday,
+            CreatedAt = now,
+            CreatedByUserId = userId,
+        };
+        await _versionRepository.AddAsync(version, cancellationToken);
+
+        return ruleId;
     }
 }

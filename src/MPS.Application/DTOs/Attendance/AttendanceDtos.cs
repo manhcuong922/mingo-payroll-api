@@ -42,7 +42,18 @@ public sealed record AttendanceRuleDto(
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<int>? UsedByShiftTemplateIds = null);
+    IReadOnlyList<int>? UsedByShiftTemplateIds = null,
+    IReadOnlyList<AttendanceRuleVersionDto>? VersionHistory = null);
+
+public sealed record AttendanceRuleVersionDto(
+    int Id,
+    DateOnly EffectiveFrom,
+    DateOnly? EffectiveTo,
+    decimal WorkRateNormal,
+    decimal WorkRateWeeklyRest,
+    decimal WorkRateHoliday,
+    DateTime CreatedAt,
+    int CreatedByUserId);
 
 public sealed record EmployeeShiftAssignmentDto(
     int Id,
