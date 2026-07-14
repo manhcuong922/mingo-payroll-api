@@ -25,10 +25,18 @@ public class OvertimeRequestEntityConfiguration : IEntityTypeConfiguration<Overt
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.Property(e => e.ReviewedAt);
 
-        // Batch workflow — PM tạo cho N NV
+        // v3 workflow: NV self-create → PM review → HR/DM approve
         builder.Property(e => e.ProjectId);
         builder.Property(e => e.ApproverRoute).HasConversion<byte>();
-        builder.Property(e => e.BatchId);
+        builder.Property(e => e.BatchId);   // deprecated cho legacy — luôn null cho record v3
+
+        // Audit tầng 1 — PM review
+        builder.Property(e => e.PmReviewNote).HasMaxLength(500);
+        builder.Property(e => e.PmReviewedAt);
+
+        // Audit tầng 2 — Approver (HR/DM) decide
+        builder.Property(e => e.ApproverReviewNote).HasMaxLength(500);
+        builder.Property(e => e.ApproverReviewedAt);
 
         builder.HasIndex(e => new { e.EmployeeInformationId, e.WorkDate, e.Status });
         builder.HasIndex(e => e.ProjectId);
@@ -53,6 +61,18 @@ public class OvertimeRequestEntityConfiguration : IEntityTypeConfiguration<Overt
         builder.HasOne(e => e.ReviewedByUser)
             .WithMany()
             .HasForeignKey(e => e.ReviewedByUserId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(e => e.PmReviewedByUser)
+            .WithMany()
+            .HasForeignKey(e => e.PmReviewedByUserId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(e => e.ApproverReviewedByUser)
+            .WithMany()
+            .HasForeignKey(e => e.ApproverReviewedByUserId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 

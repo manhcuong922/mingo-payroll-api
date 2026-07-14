@@ -100,10 +100,14 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         if (!string.IsNullOrWhiteSpace(keyword))
         {
             var kw = keyword.Trim();
+            // COLLATE Latin1_General_CI_AI: case + accent insensitive, phân rã cả chữ Việt đặc biệt
+            // (ư→u, ơ→o, đ→d, ă/â→a, ê→e, ô→o) nên "xuong" match "xưởng", "dat" match "Đạt".
+            // Vietnamese_CI_AI KHÔNG làm được vì nó coi ư/ơ/đ… là chữ cái riêng của bảng chữ VN.
+            // Non-sargable (bỏ qua index trên cột), OK vì bảng NV không lớn và search chỉ ở modal picker.
             query = query.Where(e =>
-                EF.Functions.Like(e.FullName, $"%{kw}%") ||
-                EF.Functions.Like(e.CitizenId, $"%{kw}%") ||
-                (e.Email != null && EF.Functions.Like(e.Email, $"%{kw}%")));
+                EF.Functions.Like(EF.Functions.Collate(e.FullName, "Latin1_General_CI_AI"), $"%{kw}%") ||
+                EF.Functions.Like(EF.Functions.Collate(e.CitizenId, "Latin1_General_CI_AI"), $"%{kw}%") ||
+                (e.Email != null && EF.Functions.Like(EF.Functions.Collate(e.Email, "Latin1_General_CI_AI"), $"%{kw}%")));
         }
 
         if (positionId.HasValue)

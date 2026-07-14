@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.AttendanceRule.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 
@@ -28,6 +29,13 @@ public class DeleteAttendanceRuleCommandHandler : IRequestHandler<DeleteAttendan
 
         var existing = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (existing is null) return false;
+
+        if (existing.IsActive)
+        {
+            var activeShiftNames = await _repository.GetActiveShiftTemplateNamesUsingRuleAsync(request.Id, cancellationToken);
+            if (activeShiftNames.Count > 0)
+                throw new ConflictException(AttendanceRuleUsageMessage.Build(existing.Name, activeShiftNames));
+        }
 
         return await _repository.DeactivateAsync(request.Id, userId, _clock.UtcNow, cancellationToken);
     }

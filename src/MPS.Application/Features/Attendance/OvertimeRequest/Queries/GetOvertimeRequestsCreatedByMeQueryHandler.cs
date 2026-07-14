@@ -32,13 +32,17 @@ public class GetOvertimeRequestsCreatedByMeQueryHandler
         var page = request.Page <= 0 ? 1 : request.Page;
         var size = request.Size <= 0 ? 20 : Math.Min(request.Size, 100);
 
+        // v3: endpoint /created-by-me giờ mang nghĩa "PM inbox" — trả OT của NV
+        // trong đơn PM là ResponsibleUserId, KHÔNG phải OT do PM tạo (v1). Tên endpoint
+        // giữ để BE-FE contract không vỡ.
         var (items, total) = await _repository.GetPagedAsync(
             employeeInformationId: null,
             status: request.Status,
             fromDate: request.FromDate,
             toDate: request.ToDate,
-            createdByUserId: userId,
+            createdByUserId: null,
             projectId: request.ProjectId,
+            projectResponsibleUserId: userId,
             page: page,
             size: size,
             cancellationToken: cancellationToken);

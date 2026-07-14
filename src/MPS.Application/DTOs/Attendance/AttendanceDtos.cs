@@ -42,7 +42,18 @@ public sealed record AttendanceRuleDto(
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<int>? UsedByShiftTemplateIds = null);
+    IReadOnlyList<int>? UsedByShiftTemplateIds = null,
+    IReadOnlyList<AttendanceRuleVersionDto>? VersionHistory = null);
+
+public sealed record AttendanceRuleVersionDto(
+    int Id,
+    DateOnly EffectiveFrom,
+    DateOnly? EffectiveTo,
+    decimal WorkRateNormal,
+    decimal WorkRateWeeklyRest,
+    decimal WorkRateHoliday,
+    DateTime CreatedAt,
+    int CreatedByUserId);
 
 public sealed record EmployeeShiftAssignmentDto(
     int Id,
@@ -195,7 +206,11 @@ public sealed record EmployeeAttendanceSummaryDto(
 
     // Quy đổi × hệ số (WorkRateNormal/WeeklyRest/Holiday × hours + NightHours × 1.3).
     // Trả decimal giờ; FE chia StandardHours nếu muốn hiển thị "công".
-    decimal EquivalentHours);
+    decimal EquivalentHours,
+
+    // Giờ OT — subset của TotalHours, filter records có OvertimeRequestId != null.
+    // Dùng cho sort "OT nhiều nhất" trên bảng chấm công tháng.
+    decimal OtHours);
 
 public sealed record AttendanceSettingDto(
     int Id,
@@ -242,24 +257,19 @@ public sealed record OvertimeRequestDto(
     int? ReviewedByUserId,
     DateTime? ReviewedAt,
     DateTime CreatedAt,
-    // Batch workflow — nullable cho legacy records
+    // v3 workflow — nullable cho legacy records
     int? ProjectId,
     string? ProjectTitle,
     OvertimeApproverRoute? ApproverRoute,
-    Guid? BatchId);
-
-public sealed record PmProjectDto(
-    int Id,
-    string Title,
-    int? DepartmentId,
-    string? DepartmentName,
-    string Status);
-
-public sealed record EligibleEmployeeForOvertimeDto(
-    int Id,
-    string FullName,
-    string? EmployeeCode,
-    string? PositionName);
+    Guid? BatchId,
+    // v3 audit tầng 1 — PM (tổ trưởng đơn) review
+    int? PmReviewedByUserId,
+    DateTime? PmReviewedAt,
+    string? PmReviewNote,
+    // v3 audit tầng 2 — Approver (HR hoặc DM) decide
+    int? ApproverReviewedByUserId,
+    DateTime? ApproverReviewedAt,
+    string? ApproverReviewNote);
 
 public sealed record LeaveTypeDto(
     int Id,

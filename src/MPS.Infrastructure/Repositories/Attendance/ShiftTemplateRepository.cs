@@ -70,7 +70,9 @@ public class ShiftTemplateRepository : IShiftTemplateRepository
     public Task<bool> ExistsByCodeAsync(string code, int? excludeId, CancellationToken cancellationToken = default)
     {
         var normalized = code.Trim();
-        var query = _context.ShiftTemplates.AsNoTracking().Where(t => t.Code == normalized);
+        var query = _context.ShiftTemplates
+            .AsNoTracking()
+            .Where(t => t.IsActive && t.Code == normalized);
         if (excludeId.HasValue)
             query = query.Where(t => t.Id != excludeId.Value);
         return query.AnyAsync(cancellationToken);
@@ -79,10 +81,49 @@ public class ShiftTemplateRepository : IShiftTemplateRepository
     public Task<bool> ExistsByNameAsync(string name, int? excludeId, CancellationToken cancellationToken = default)
     {
         var normalized = name.Trim();
-        var query = _context.ShiftTemplates.AsNoTracking().Where(t => t.Name == normalized);
+        var query = _context.ShiftTemplates
+            .AsNoTracking()
+            .Where(t => t.IsActive && t.Name == normalized);
         if (excludeId.HasValue)
             query = query.Where(t => t.Id != excludeId.Value);
         return query.AnyAsync(cancellationToken);
+    }
+
+    public async Task<ShiftTemplateFutureUsage> GetFutureUsageAsync(int shiftTemplateId, DateOnly fromDate, CancellationToken cancellationToken = default)
+    {
+        var futureAssignments = _context.EmployeeShiftAssignments
+            .AsNoTracking()
+            .Where(a => a.ShiftTemplateId == shiftTemplateId && a.WorkDate >= fromDate);
+
+        var assignmentCount = await futureAssignments.CountAsync(cancellationToken);
+        DateOnly? earliest = assignmentCount > 0
+            ? await futureAssignments.MinAsync(a => a.WorkDate, cancellationToken)
+            : null;
+
+        var legacyRefs = await _context.ScheduleTemplates
+            .AsNoTracking()
+            .Where(s => s.ShiftTemplateId == shiftTemplateId
+                     && s.IsActive
+                     && s.EffectiveTo >= fromDate)
+            .Select(s => new { s.Id, s.Name })
+            .ToListAsync(cancellationToken);
+
+        var multiRefs = await _context.ScheduleTemplateShifts
+            .AsNoTracking()
+            .Where(sts => sts.ShiftTemplateId == shiftTemplateId
+                       && sts.ScheduleTemplate.IsActive
+                       && sts.ScheduleTemplate.EffectiveTo >= fromDate)
+            .Select(sts => new { sts.ScheduleTemplate.Id, sts.ScheduleTemplate.Name })
+            .ToListAsync(cancellationToken);
+
+        var scheduleTemplateNames = legacyRefs
+            .Concat(multiRefs)
+            .GroupBy(x => x.Id)
+            .Select(g => g.First().Name)
+            .OrderBy(n => n, StringComparer.CurrentCulture)
+            .ToList();
+
+        return new ShiftTemplateFutureUsage(assignmentCount, earliest, scheduleTemplateNames);
     }
 
     public async Task<int> AddAsync(ShiftTemplate entity, CancellationToken cancellationToken = default)

@@ -1063,21 +1063,34 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        var now = DateTime.UtcNow;
         var rule = new AttendanceRule
         {
             Name = DefaultAttendanceRuleName,
             Description = "Tiêu chuẩn",
-            WorkRateNormal = 100.00m,
-            WorkRateWeeklyRest = 200.00m,
-            WorkRateHoliday = 300.00m,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
             CreatedByUserId = adminId,
         };
 
         await _context.AttendanceRules.AddAsync(rule, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded default AttendanceRule '{Name}' (100/200/300 %%).", DefaultAttendanceRuleName);
+
+        var initialVersion = new AttendanceRuleVersion
+        {
+            AttendanceRuleId = rule.Id,
+            EffectiveFrom = new DateOnly(2000, 1, 1),
+            EffectiveTo = null,
+            WorkRateNormal = 100.00m,
+            WorkRateWeeklyRest = 200.00m,
+            WorkRateHoliday = 300.00m,
+            CreatedAt = now,
+            CreatedByUserId = adminId,
+        };
+        await _context.AttendanceRuleVersions.AddAsync(initialVersion, ct);
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Seeded default AttendanceRule '{Name}' (100/200/300 %%) + version đầu tiên.", DefaultAttendanceRuleName);
     }
 
     // 4 ca làm việc mặc định: CA-SANG, CA-CHIEU, CA-DEM, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".

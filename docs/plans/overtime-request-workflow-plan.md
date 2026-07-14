@@ -1,48 +1,92 @@
-# Overtime Request — Workflow Overhaul Plan
+# Overtime Request — Workflow Overhaul Plan (v3)
 
-**Status:** APPROVED (all decisions confirmed 2026-07-08)
+**Status:** APPROVED — flow v3 chốt cuối 2026-07-11
 **Project:** `mingo-payroll-api` (.NET 8, Clean Architecture, EF Core, MediatR CQRS) + `mingo-payroll-ui` (React/Vite)
 **Module:** Attendance / OvertimeRequest
-**Scope:** Đảo chủ thể tạo request từ NV → ProjectManager, gắn với Project, batch assign N NV
-**Last updated:** 2026-07-08
+**Scope:** Đổi luồng OT sang 2 tầng duyệt — NV tự đăng ký → Tổ trưởng đơn review → HR hoặc Quản lý xưởng duyệt cuối.
+**Last updated:** 2026-07-11
+
+---
+
+## 0. Legend — Role naming (refactor task-full-generation R/S)
+
+RoleId giữ nguyên, chỉ đổi tên hiển thị. **Cẩn thận: abbreviation "PM"/"DM" theo code cũ, KHÔNG đúng với tên hiển thị mới. Ưu tiên đọc tên tiếng Việt để tránh nhầm.**
+
+| RoleId | C# constant (code) | Tên hiển thị (DB `Role.Name` + UI) | Vai trò trong OT flow |
+|---|---|---|---|
+| 2 | `HrId` | **HR** | 1 trong 2 route Approver — duyệt cuối OT |
+| 5 | `DepartmentManagerId` / alias `PlanningManagerId` | **Planning Manager** (Quản lý kế hoạch xưởng) | 1 trong 2 route Approver — duyệt cuối OT; cấp trên trong xưởng |
+| 6 | `ProjectManagerId` / alias `ProductionTeamLeaderId` | **Production Team Leader** (Tổ trưởng đơn sản xuất) | Reviewer tầng 1 — nhận OT của NV, Forward hoặc Reject; = `Project.ResponsibleUserId` |
+| 7 | `EmployeeId` | Nhân viên | Tạo request OT (chủ thể) |
+
+**Convention trong plan:**
+- Ưu tiên **"tổ trưởng"** (role 6, Production Team Leader) và **"quản lý xưởng"** (role 5, Planning Manager) khi viết prose.
+- Khi bắt buộc phải dùng abbreviation trong tên biến / code C#, giữ theo code cũ (`ProjectManager`, `DepartmentManager`) vì backward compat. Kèm chú giải role ID lần đầu.
 
 ---
 
 ## 1. Context
 
-Hiện tại luồng OT là:
+**Luồng OT trước v3:** NV tự tạo OT → HR/quản lý xưởng duyệt 1 tầng. Bị bỏ.
 
-1. Employee tự vào `MyRequestsPage` tạo `OvertimeRequest` (permission `OvertimeRequest.Create.Self`).
-2. `CreateOvertimeRequestCommandHandler.cs:47-50` hard-code: lấy `_currentUser.UserId` → resolve `employeeId` → tạo request cho **chính mình**.
-3. HR/Manager (`OvertimeRequest.Approve.All`) vào `RequestsPage` approve/reject.
+**Luồng OT v3 mới:**
 
-Vấn đề nghiệp vụ (theo user): **NV không có quyền tự tạo yêu cầu OT** vì:
-- Không phải lúc nào cũng có việc phát sinh cần OT.
-- OT phải xuất phát từ nhu cầu sản xuất do **ProjectManager (PM)** — tổ trưởng đơn hàng — nắm.
-- PM biết đơn hàng nào cần OT, cần bao nhiêu người, khung giờ nào → PM là người tạo yêu cầu, không phải NV.
-- Cấp trên (**HR hoặc DepartmentManager**) là người duyệt.
+1. **Nhân viên (NV, role 7)** vào `MyRequestsPage` tự đăng ký OT — chọn đơn sản xuất (Project) mình đang có task được assign, ngày, khung giờ.
+2. Request auto route đến **tổ trưởng đơn** (Production Team Leader, role 6) — là `Project.ResponsibleUserId`.
+3. **Tổ trưởng review** trong page "Yêu cầu OT của tổ":
+   - **Forward**: chuyển tiếp cho HR hoặc quản lý xưởng duyệt cuối (chọn 1 route).
+   - **Reject**: đóng đơn, các cấp không thấy nữa.
+4. **Approver cuối** (HR hoặc quản lý xưởng, tuỳ route tổ trưởng chọn) mở `RequestsPage` để duyệt:
+   - **Approve**: request final Approved, NV auto phải làm.
+   - **Reject**: request final Rejected.
 
-Kết quả kỳ vọng: PM vào 1 màn hình mới, chọn **Project** mình đang phụ trách → chọn **khung giờ OT** (từ `OvertimeSlotTemplate` sẵn có) → tick chọn **N nhân viên** cùng dự án → chọn **approver route** (HR hoặc DM) → submit → tạo N request `Pending`. Approver mở danh sách, duyệt từng NV hoặc batch. Duyệt xong = NV **auto** phải làm (không có bước NV confirm).
+**Sơ đồ trạng thái:**
 
-Không đụng `OvertimeSlotTemplate` (hệ số/khung giờ) — module đó giữ nguyên, chỉ là "menu" cho PM chọn.
+```
+             [NV submit]
+                  │
+                  ▼
+           ┌─────────────┐
+           │  Pending    │  (chờ tổ trưởng review)
+           └──────┬──────┘
+                  │
+        ┌─────────┴─────────┐
+        │                   │
+   Tổ trưởng Reject   Tổ trưởng Forward (chọn route)
+        │                   │
+        │            ┌──────┴──────┐
+        │       route=Hr      route=DepartmentManager
+        │            │             │
+        │            ▼             ▼
+        │      ┌──────────────────────────────┐
+        │      │  PendingApprover             │
+        │      │  ApproverRoute=Hr|DM         │
+        │      └────────────┬─────────────────┘
+        │                   │
+        │        ┌──────────┴──────────┐
+        │        │                     │
+        │  HR/PLM Approve       HR/PLM Reject
+        │        │                     │
+        ▼        ▼                     ▼
+   ┌────────┐ ┌──────────┐      ┌──────────┐
+   │Rejected│ │ Approved │      │ Rejected │
+   └────────┘ └──────────┘      └──────────┘
+```
+
+Không đụng `OvertimeSlotTemplate` (khung giờ + hệ số) — module đó giữ nguyên.
 
 ---
 
 ## 2. Mục tiêu
 
-- **Bỏ hoàn toàn** khả năng NV tự tạo `OvertimeRequest`:
-  - Xóa permission `OvertimeRequest.Create.Self` khỏi mọi role.
-  - Xóa/hide form tạo request ở `MyRequestsPage`.
-  - Handler cũ `CreateOvertimeRequestCommandHandler` giữ hoặc rewrite hoàn toàn (xem §7).
-- Thêm luồng **PM assign OT cho N nhân viên**:
-  - Chỉ role `ProjectManager` (RoleId=6) được tạo.
-  - Mỗi batch gắn với 1 `Project` (đơn hàng SX).
-  - NV được chọn phải thuộc **cùng Department** với Project (Loose scope — Q5b).
-  - PM chọn approver route: **HR** hoặc **DepartmentManager** (single choice — Q3).
-  - Không giới hạn số NV/batch (Q5c).
-- Approve/Reject giữ nguyên cơ chế hiện tại, chỉ **thêm ràng buộc scope**: approver phải khớp `ApproverRoute` của request (HR route → chỉ HR duyệt; DM route → chỉ DM duyệt).
-- **KHÔNG** có bước NV confirm (Q4). Duyệt xong = auto binding, NV phải làm.
-  - **Ghi chú pháp lý (Đ.107 BLLĐ 2019):** user đã acknowledge risk và explicit chọn bỏ bước này. Ghi lại trong audit log để dấu vết pháp lý; nếu bị thanh tra là trách nhiệm quản lý.
+- **Giữ** NV là chủ thể tạo OT (chọn đơn + slot + ngày + lý do).
+- **Auto-derive** đơn sản xuất từ task NV được assign — không lọc Status task, miễn có `TaskAssignee` row + task lá + task chưa soft-delete + đơn Active. 1 đơn → auto-select; N đơn → picker; 0 đơn → block.
+- **Thêm** tầng tổ trưởng review giữa NV và Approver cuối. Tổ trưởng = `Project.ResponsibleUserId` (1 người/đơn, role 6).
+- **Tổ trưởng Reject** = final. Nếu Forward, tổ trưởng **phải chọn route** = `Hr` hoặc `DepartmentManager` → request rơi vào inbox role tương ứng.
+- **Approver cuối** duyệt/reject với gate role match `ApproverRoute`.
+- **Giữ** compliance check (Đ.107 BLLĐ 2019) — chạy 2 lần: NV submit (warn-then-confirm) + Approver duyệt.
+- **Audit** đầy đủ 2 tầng: ai review, ai duyệt, thời điểm, note.
+- **KHÔNG** có bước NV confirm sau khi duyệt xong. Duyệt xong = auto binding.
 
 ---
 
@@ -50,265 +94,281 @@ Không đụng `OvertimeSlotTemplate` (hệ số/khung giờ) — module đó gi
 
 ### 3.1. Đã có, reuse được
 
-- **Entity `OvertimeRequest`** — `EmployeeInformationId`, `WorkDate`, `OtStartTime/EndTime`, `OtHours`, `OvertimeSlotTemplateId`, `OtDayHours/NightHours`, `Status`, `Reason`, `ReviewedByUserId`, `ReviewNote` ([src/MPS.Domain/Entities/Attendance/OvertimeRequest.cs](../../src/MPS.Domain/Entities/Attendance/OvertimeRequest.cs))
-- **Enum `OtRequestStatus`** = `Pending` (1) / `Approved` (2) / `Rejected` (3) ([src/MPS.Domain/Enums/Attendance/OtRequestStatus.cs](../../src/MPS.Domain/Enums/Attendance/OtRequestStatus.cs))
-- **Entity `Project`** — có `DepartmentId`, `Status`, `StartDate/Deadline` ([src/MPS.Domain/Entities/Project.cs](../../src/MPS.Domain/Entities/Project.cs))
-- **Entity `EmployeeInformation.DepartmentId`** — dùng để filter NV thuộc dept của project
-- **Role `ProjectManager`** — RoleId=6 sẵn ([src/MPS.Domain/Constants/SystemRoles.cs](../../src/MPS.Domain/Constants/SystemRoles.cs))
-- **`OvertimeSlotTemplate`** — khung giờ + hệ số, không đụng
-- **`OvertimeCapChecker`** — Đ.107 BLLĐ (BR-5/6/7/8), tái sử dụng nguyên vẹn khi validate mỗi NV trong batch
-- **`IWorkHourSplitter`** + `IComplianceLookupService` — split day/night hours
-- **`ApproveOvertimeRequestCommandHandler`** — logic re-check cap, split hours, self-approval check — **giữ**, chỉ thêm gate `ApproverRoute`
-- **UI `RequestsPage`** — approve/reject — **giữ**, thêm filter theo approver route và Project
+- **Entity `OvertimeRequest`** — `EmployeeInformationId`, `WorkDate`, `OtStartTime/EndTime`, `OtHours`, `OvertimeSlotTemplateId`, `OtDayHours/NightHours`, `Status`, `Reason`, `ReviewedByUserId`, `ReviewNote`, `LaborLawConstantsVersionId`, `ProjectId`, `ApproverRoute`, `BatchId` (legacy).
+- **Entity `Project`** — có `Title`, `Status`, `StartDate`, `Deadline`, `DepartmentId`, **`ResponsibleUserId`** (tổ trưởng đơn, 1 người, role 6), `CompletedAt`, `DeletedAt`.
+- **Entity `ProjectTask`** — cây 3 tầng; check `IsBatchParent=false`, `DeletedAt=null` để lấy task lá.
+- **Entity `TaskAssignee`** — bảng nối `TaskId × UserId × AssignedAt`.
+- **Roles**: `HrId`=2, `DepartmentManagerId`=5 (Planning Manager), `ProjectManagerId`=6 (Production Team Leader), `EmployeeId`=7.
+- **`OvertimeSlotTemplate`** — khung giờ + hệ số.
+- **`OvertimeCapChecker`** — Đ.107 BLLĐ pure logic.
+- **`IWorkHourSplitter` + `IComplianceLookupService`** — split day/night hours.
 
-### 3.2. Cần thay/xóa
+### 3.2. Cần thay/thêm (v3)
 
 | Item | Thao tác |
 |---|---|
-| `CreateOvertimeRequestCommandHandler` — self-create | **Xóa** (hoặc rewrite thành internal helper cho batch) |
-| `CreateOvertimeRequestCommand` — 1 record | **Xóa**, thay bằng `CreateBatchOvertimeRequestCommand` |
-| Permission `OvertimeRequest.Create.Self` (ID 112) | **Xóa khỏi tất cả role**, giữ constant để migration cũ không vỡ |
-| Endpoint `POST /api/overtime-requests` (self-create) | **Xóa** hoặc trả 410 Gone |
-| `MyRequestsPage` — form tạo OT của NV | **Xóa form**, để lại danh sách "OT của tôi" (Read.Self) |
-| `OvertimeRequest` entity | **Thêm field**: `ProjectId`, `ApproverRoute` (enum), `BatchId` (nullable Guid) |
+| `OtRequestStatus` enum | **Thêm** `PendingApprover=5` (Cancelled=4 đã có) |
+| `OvertimeRequest` entity | **Thêm** 6 cột audit: `PmReviewedByUserId/At/Note`, `ApproverReviewedByUserId/At/Note`. Tên cột dùng "Pm" theo code cũ — thực chất Production Team Leader review. |
+| `CreateOvertimeRequestCommand` | **Rewrite** — NV self-create, body: `ProjectId`, `WorkDate`, `OtStartTime`, `OtEndTime`, `Reason` |
+| Permission `OvertimeRequest.Create.Self` (112) | **Cấp cho Employee** (role 7) |
+| Permission `OvertimeRequest.Review.Project` (178) | **NEW** — tổ trưởng (role 6) review tầng 1. Scope: request thuộc Project mà mình là ResponsibleUserId. |
+| Permission `OvertimeRequest.Approve.Hr` (180) | **NEW** — HR (role 2) duyệt cuối request `ApproverRoute=Hr` |
+| Permission `OvertimeRequest.Approve.Department` (113) | **Rename** từ `Approve.All` — quản lý xưởng (role 5) duyệt cuối request `ApproverRoute=DepartmentManager` cùng dept |
+| Command `PmReviewOvertimeRequestCommand` | **NEW** — tổ trưởng Forward (chọn route) hoặc Reject |
+| Handler `ApproveOvertimeRequestCommand` | **Sửa** — guard `Status=PendingApprover`, gate role theo `ApproverRoute`, ghi `ApproverReview*` |
+| Handler `RejectOvertimeRequestCommand` | Sửa tương tự Approve |
+| Query `GetMyActiveOrdersForOtQuery` | **NEW** — trả đơn NV đang được assign task (không lọc Status), cho form NV |
+| Query `GetOvertimeRequestNvTasksQuery` | **NEW** — list task NV được assign trong đơn của request, cho detail panel tổ trưởng / Approver |
+| Query `GetOvertimeRequestsCreatedByMeQuery` | **Sửa semantic** — scope theo `Project.ResponsibleUserId=me` (tổ trưởng inbox), không phải `CreatedByUserId=me` (v1) |
 
-### 3.3. Không đụng
+### 3.3. Cần xoá (v1 batch leftover)
 
-- `OvertimeSlotTemplate` (khung giờ + hệ số) — module riêng, giữ nguyên
-- `OvertimeCapChecker` — logic pháp lý pure, không sửa
-- `ApproveOvertimeRequestCommandHandler` — chỉ thêm 1 gate check approver route
-- `RejectOvertimeRequestCommand/Handler` — logic không đổi, chỉ thêm gate approver route
-- Payroll composer — vẫn đọc `OvertimeRequest` theo Status=Approved, không quan tâm ai tạo
+- **Xoá**: `CreateBatchOvertimeRequestCommand + Handler`, `GetPmProjectsQuery + Handler`, `GetEligibleEmployeesForOvertimeQuery + Handler`, DTO `PmProjectDto`/`EligibleEmployeeForOvertimeDto`.
+- **Xoá** endpoint: `POST /batch`, `GET /pm-projects`, `GET /eligible-employees`.
+- **Xoá** FE component `MyOvertimeSubmissionsPanel.tsx` (v1 batch history — không dùng cho v3).
+
+### 3.4. Không đụng
+
+- `OvertimeSlotTemplate`.
+- `OvertimeCapChecker` (logic pháp lý pure).
+- Payroll composer — vẫn đọc `OvertimeRequest.Status=Approved`, không quan tâm ai duyệt.
+- `ProjectTask` / `TaskAssignee` schema.
 
 ---
 
 ## 4. Data model
 
-### 4.1. Migration — thêm 3 field vào `OvertimeRequests`
+### 4.1. Enum `OtRequestStatus`
 
 ```csharp
-public class OvertimeRequest
+public enum OtRequestStatus
 {
-    // ... existing fields ...
-
-    /// <summary>
-    /// FK tới Project (đơn hàng SX). Bắt buộc — mọi request tạo bởi PM phải gắn 1 project.
-    /// Nullable trong migration để legacy records (self-created cũ) không vỡ.
-    /// </summary>
-    public int? ProjectId { get; set; }
-    public Project? Project { get; set; }
-
-    /// <summary>
-    /// PM chọn route duyệt khi tạo. HR hoặc DepartmentManager, không cả 2 (Q3).
-    /// Nullable cho legacy records; NEW records luôn required (validator).
-    /// </summary>
-    public OvertimeApproverRoute? ApproverRoute { get; set; }
-
-    /// <summary>
-    /// Nhóm N request cùng batch (PM tạo cho 5 NV → 5 record cùng BatchId).
-    /// UI hiển thị approver dạng "1 batch của PM X — 5 NV, project Y".
-    /// </summary>
-    public Guid? BatchId { get; set; }
+    Pending         = 1,   // chờ tổ trưởng review
+    Approved        = 2,   // final — Approver đã duyệt
+    Rejected        = 3,   // final — tổ trưởng hoặc Approver reject
+    Cancelled       = 4,   // NV tự huỷ khi còn Pending
+    PendingApprover = 5    // NEW — tổ trưởng đã Forward, chờ Approver (HR|PLM) duyệt cuối
 }
 
 public enum OvertimeApproverRoute
 {
-    Hr = 1,
-    DepartmentManager = 2
+    Hr                = 1,
+    DepartmentManager = 2   // code cũ; hiển thị = Planning Manager (role 5)
 }
 ```
 
-### 4.2. Migration file
+### 4.2. Entity `OvertimeRequest` — thêm 6 cột audit
 
-- `YYYYMMDDHHMMSS_OvertimeRequest_ProjectAndApproverRoute.cs`
-- Add 3 columns nullable
-- Add FK `OvertimeRequests.ProjectId → Projects.Id` (ON DELETE Restrict)
-- Add index `IX_OvertimeRequests_ProjectId`, `IX_OvertimeRequests_BatchId`, `IX_OvertimeRequests_Status_ApproverRoute` (cho query approver inbox)
+```csharp
+public class OvertimeRequest
+{
+    // ... existing fields (ProjectId, ApproverRoute, BatchId đã có) ...
 
-### 4.3. Permission changes
+    // Audit tầng 1 — tổ trưởng review
+    // Đặt tên "Pm" theo code cũ (ProjectManager); thực chất là Production Team Leader.
+    public int? PmReviewedByUserId { get; set; }
+    public User? PmReviewedByUser { get; set; }
+    public DateTime? PmReviewedAt { get; set; }
+    public string? PmReviewNote { get; set; }
 
-| Permission | ID | Action |
-|---|---|---|
-| `OvertimeRequest.Create.Self` | 112 | **Deprecated** — remove khỏi mọi RolePermission. Giữ constant để migration cũ không vỡ. |
-| `OvertimeRequest.CreateBatch.Department` | 178 | **NEW** — cấp cho role `ProjectManager` (RoleId=6). PM chỉ tạo được cho Project thuộc Department mà PM đang thuộc. |
-| `OvertimeRequest.Approve.All` | 113 | Giữ — cấp cho HR (2) và DepartmentManager (5). Handler thêm gate: approver role phải match `ApproverRoute` của request. |
+    // Audit tầng 2 — Approver decide (HR hoặc Planning Manager)
+    public int? ApproverReviewedByUserId { get; set; }
+    public User? ApproverReviewedByUser { get; set; }
+    public DateTime? ApproverReviewedAt { get; set; }
+    public string? ApproverReviewNote { get; set; }
 
-Migration seed:
-```sql
-INSERT INTO [Permissions] ([Id], [Action], [Code], [Description], [Resource], [Scope]) VALUES
-    (178, N'Create', N'OvertimeRequest.CreateBatch.Department',
-     N'PM tạo batch OT request cho NV cùng phòng ban.', N'OvertimeRequest', N'Department');
-
-INSERT INTO [RolePermissions] ([PermissionId], [RoleId]) VALUES (178, 6);
--- Xóa OvertimeRequest.Create.Self khỏi mọi role
-DELETE FROM [RolePermissions] WHERE [PermissionId] = 112;
+    // Existing ReviewedByUserId / ReviewedAt / ReviewNote:
+    //   giữ nguyên, set = giá trị của tầng quyết định cuối.
+    //   Payroll & query cũ đọc field này — không phá.
+}
 ```
+
+### 4.3. Migration
+
+`20260713000000_OvertimeTwoStageApproval` — ✅ đã apply lên DB. Bao gồm:
+- 6 cột nullable + 2 FK Users.
+- Enum value `PendingApprover=5`.
+- Permission 178 rename `CreateBatch.Department` → `Review.Project`; giữ mapping cho role 6.
+- Permission 113 rename `Approve.All` → `Approve.Department`; bỏ HR (role 2), giữ quản lý xưởng (role 5).
+- Permission 180 NEW `Approve.Hr` cho HR (role 2).
+- Idempotent grant 112 (`Create.Self`) cho Employee (role 7).
+- Bulk reject legacy `Status=Pending` records không có `ProjectId` (Q8=(a)).
+
+### 4.4. Permission summary
+
+| ID | Code | Role được cấp | Ý nghĩa |
+|---|---|---|---|
+| 112 | `OvertimeRequest.Create.Self` | Employee (7) | NV tự đăng ký OT |
+| 178 | `OvertimeRequest.Review.Project` | Production Team Leader (6) | Tổ trưởng review tầng 1 |
+| 180 | `OvertimeRequest.Approve.Hr` | HR (2) | HR duyệt cuối request route=Hr |
+| 113 | `OvertimeRequest.Approve.Department` | Planning Manager (5) | Quản lý xưởng duyệt cuối request route=DepartmentManager |
 
 ---
 
 ## 5. Backend — Commands & Queries
 
-### 5.1. `CreateBatchOvertimeRequestCommand`
+### 5.1. `GetMyActiveOrdersForOtQuery` — NEW
+
+Trả list đơn NV được assign task (không lọc Status).
 
 ```csharp
-public sealed record CreateBatchOvertimeRequestCommand(
+public sealed record GetMyActiveOrdersForOtQuery : IRequest<IReadOnlyList<MyActiveOrderForOtDto>>;
+
+public sealed record MyActiveOrderForOtDto(
+    int OrderId,
+    string OrderTitle,
+    DateOnly StartDate,
+    DateTime? Deadline,
+    int? ResponsibleUserId,               // Tổ trưởng đơn (Production Team Leader)
+    string? ResponsibleUserFullName,
+    IReadOnlyList<MyActiveOrderTaskDto> AssignedTasks);
+
+public sealed record MyActiveOrderTaskDto(
+    int TaskId, string TaskTitle,
+    DateTime? Deadline, int? Priority);
+```
+
+Handler:
+```
+1. Resolve currentUser → User.Id.
+2. Distinct list ProjectId mà currentUser có TaskAssignee row với task lá chưa soft-delete.
+3. Filter Project: Active + không Completed/Deleted.
+4. Load ResponsibleUser (User.FullName).
+5. Return list — có thể ≥1 phần tử.
+```
+
+### 5.2. `CreateOvertimeRequestCommand` — rewrite v3
+
+```csharp
+public sealed record CreateOvertimeRequestCommand(
     int ProjectId,
-    int OvertimeSlotTemplateId,   // PM phải chọn từ menu (không tự nhập TimeOnly)
     DateOnly WorkDate,
-    IReadOnlyList<int> EmployeeInformationIds,
-    OvertimeApproverRoute ApproverRoute,
-    string? Reason) : IRequest<CreateBatchOvertimeRequestResult>;
-
-public sealed record CreateBatchOvertimeRequestResult(
-    Guid BatchId,
-    int CreatedCount,
-    IReadOnlyList<CreateBatchItemResult> Results);
-
-public sealed record CreateBatchItemResult(
-    int EmployeeInformationId,
-    string EmployeeFullName,
-    bool Success,
-    int? RequestId,
-    string? Error);
+    TimeOnly OtStartTime,
+    TimeOnly OtEndTime,
+    string? Reason) : IRequest<int>;
 ```
 
-### 5.2. Handler logic
-
+Handler:
 ```
-1. Resolve currentUser → phải có role ProjectManager (permission gác ở attribute)
+1. Resolve currentUser → EmployeeInformation.
 2. Load Project → validate:
-   - Exists
-   - Project.Status = Active
-   - Project.DepartmentId != null
-   - CurrentUser thuộc cùng Project.DepartmentId (scope check qua IDepartmentManagerAuthorizer hoặc query trực tiếp)
-3. Load OvertimeSlotTemplate → validate IsActive, resolve OtStartTime/OtEndTime
-4. Load compliance labor law (night window)
-5. Validate ApproverRoute in {Hr, DepartmentManager}
-6. Load N EmployeeInformation (batch, 1 query) → validate:
-   - All exist
-   - All thuộc cùng Project.DepartmentId (Loose scope — Q5b)
-   - Nếu 1 NV không thuộc → return failure cho record đó, NOT abort cả batch
-7. Sinh BatchId = Guid.NewGuid()
-8. Với mỗi NV:
-   a. Gọi OvertimeCapChecker.CheckAsync — nếu fail, ghi error, tiếp NV tiếp
-   b. Split day/night hours
-   c. Tạo OvertimeRequest {
-        EmployeeInformationId,
-        ProjectId, BatchId, ApproverRoute,
-        WorkDate, OtStartTime, OtEndTime, OtHours,
-        OvertimeSlotTemplateId,
-        OtDayHours, OtNightHours,
-        Status = Pending,
-        Reason,
-        CreatedByUserId = currentUser
-      }
-9. SaveChanges 1 lần (batch add) — hoặc per-record nếu muốn tolerance từng NV
-10. Return CreateBatchOvertimeRequestResult
+    - Active + không Completed/Deleted
+    - ResponsibleUserId != null (tổ trưởng đã set)
+3. Validate NV được assign ≥1 task trong đơn (không kiểm Status task).
+4. Guard trùng OT: NV đã có Pending/PendingApprover/Approved giao thoa khung giờ.
+5. Snapshot LaborLawConstantsVersion + split day/night hours + cap check.
+6. Insert Status=Pending, ApproverRoute=null, PmReview*=null, ApproverReview*=null.
 ```
 
-**Quyết định lỗi từng NV:** không rollback cả batch. Cho phép partial success — PM nhìn kết quả biết NV nào đã tạo thành công, NV nào lỗi (VD "NV Nguyễn A đã vượt trần OT tháng"). Reduce friction, tránh 1 NV overrides làm cả batch fail.
-
-### 5.3. `ApproveOvertimeRequestCommandHandler` — sửa nhẹ
-
-Thêm gate check sau khi resolve `existing`:
+### 5.3. `PmReviewOvertimeRequestCommand` — NEW
 
 ```csharp
-// Gate: approver role phải khớp ApproverRoute
-var approverRoleId = await _lookup.GetUserRoleIdAsync(userId, ct);
-if (existing.ApproverRoute is not null)
-{
-    var expectedRoleId = existing.ApproverRoute switch
-    {
-        OvertimeApproverRoute.Hr => SystemRoles.HrId,             // = 2
-        OvertimeApproverRoute.DepartmentManager => SystemRoles.DepartmentManagerId, // = 5
-        _ => throw new DomainValidationException("Unknown approver route.")
-    };
-    if (approverRoleId != expectedRoleId)
-        throw new ForbiddenAccessException(
-            $"Request đã chỉ định route duyệt = {existing.ApproverRoute}. Role hiện tại không có quyền duyệt.");
-}
-// legacy request (ApproverRoute = null) → giữ hành vi cũ, ai có Approve.All đều duyệt được
+public sealed record PmReviewOvertimeRequestCommand(
+    int RequestId,
+    PmReviewDecision Decision,                // Forward | Reject
+    OvertimeApproverRoute? ApproverRoute,     // Required khi Forward; null khi Reject
+    string? Note) : IRequest<bool>;
+
+public enum PmReviewDecision { Forward = 1, Reject = 2 }
 ```
 
-Tương tự cho `RejectOvertimeRequestCommandHandler`.
+Handler:
+```
+1. Load request → NotFound.
+2. Guard: Status = Pending. Nếu khác → DomainValidationException.
+3. Gate: currentUser.Id == request.Project.ResponsibleUserId
+   (chỉ tổ trưởng của đúng đơn mới review được).
+4. Self-review guard: currentUser.Id != request.CreatedByUserId.
+5. Ghi PmReview{ByUserId, At, Note}.
+6. Switch Decision:
+     Forward → Status=PendingApprover, ApproverRoute=input (Hr|DM required)
+     Reject  → Status=Rejected, mirror ReviewedBy*/ReviewNote = tổ trưởng
+7. Save.
+```
 
-### 5.4. Queries mới / sửa
+### 5.4. `ApproveOvertimeRequestCommandHandler` — sửa
 
-- `GetOvertimeRequestsQuery` — thêm filter `ProjectId?`, `BatchId?`, `ApproverRoute?`, giúp approver lọc inbox theo route mình phụ trách.
-- **New** `GetPmProjectsQuery` — trả list Project mà PM đang phụ trách (thuộc Department của PM). Dùng cho dropdown trong form batch.
-- **New** `GetEligibleEmployeesForOvertimeQuery(projectId)` — trả list NV thuộc cùng Department với Project (Loose). Dùng cho picker.
+```
+1. Load request → NotFound.
+2. Guard: Status = PendingApprover.
+3. Gate role theo ApproverRoute:
+     Hr → currentRoleId == HrId (2)
+     DepartmentManager → currentRoleId == DepartmentManagerId (5)
+                       + currentUser cùng Dept với Project
+   Mismatch → ForbiddenAccessException.
+4. Self-approval guard: currentUser != CreatedByUserId AND != PmReviewedByUserId.
+5. Re-run OvertimeCapChecker + re-split day/night hours (compliance có thể đã đổi).
+6. Ghi ApproverReview{ByUserId, At, Note} + mirror ReviewedBy*/ReviewNote.
+7. Status = Approved. Save.
+```
 
-### 5.5. Endpoints mới / sửa
+Reject handler tương tự — Status=Rejected.
+
+### 5.5. `GetOvertimeRequestNvTasksQuery` — NEW
+
+Trả list task NV (`CreatedByUserId`) được assign trong đơn (`ProjectId`) của request. Dùng ở tổ trưởng Inbox / Approver detail để enrich context.
+
+### 5.6. `GetOvertimeRequestsCreatedByMeQuery` — sửa semantic
+
+Endpoint tên legacy `/created-by-me` nhưng v3 nghĩa mới: trả OT của NV trong đơn mà currentUser là `Project.ResponsibleUserId` (tổ trưởng inbox scope). Repo filter theo `projectResponsibleUserId=me`.
+
+### 5.7. Endpoints
 
 | Method | Path | Permission | Purpose |
 |---|---|---|---|
-| POST | `/api/overtime-requests/batch` | `OvertimeRequest.CreateBatch.Department` | PM tạo batch |
-| GET | `/api/overtime-requests/pm-projects` | `OvertimeRequest.CreateBatch.Department` | List project của PM |
-| GET | `/api/overtime-requests/eligible-employees?projectId=X` | `OvertimeRequest.CreateBatch.Department` | List NV chọn được |
-| POST | `/api/overtime-requests` (self-create cũ) | ~~`OvertimeRequest.Create.Self`~~ | **Xóa endpoint** |
+| GET  | `/api/overtime-requests/my-active-orders` | `Create.Self` | NV: list đơn được assign |
+| POST | `/api/overtime-requests` | `Create.Self` | NV tạo OT |
+| PUT  | `/api/overtime-requests/{id}` | `Create.Self` | NV sửa (chỉ khi Status=Pending) |
+| PUT  | `/api/overtime-requests/{id}/cancel` | `Create.Self` | NV huỷ (chỉ khi Status=Pending) |
+| GET  | `/api/overtime-requests/created-by-me` | `Review.Project` | Tổ trưởng: OT trong đơn mình phụ trách |
+| PUT  | `/api/overtime-requests/{id}/pm-review` | `Review.Project` | Tổ trưởng: Forward (chọn route) / Reject |
+| GET  | `/api/overtime-requests/{id}/nv-tasks` | Any of 4 approver perms | Context task NV |
+| PUT  | `/api/overtime-requests/{id}/approve` | `Approve.Hr` OR `Approve.Department` | Approver Approve |
+| PUT  | `/api/overtime-requests/{id}/reject` | `Approve.Hr` OR `Approve.Department` | Approver Reject |
+| GET  | `/api/overtime-requests` | `Read.All` | Approver page |
+| GET  | `/api/overtime-requests/me` | `Read.Self` | NV: OT của tôi |
 
-Approve/Reject/Read endpoints giữ nguyên.
+**Xoá endpoint v1**: `POST /batch`, `GET /pm-projects`, `GET /eligible-employees`.
 
 ---
 
 ## 6. Frontend
 
-### 6.1. Files mới
+### 6.1. NV page (`MyRequestsPage`)
 
-| File | Purpose |
-|---|---|
-| `src/types/overtime-batch.ts` | Types cho batch command + query |
-| `src/services/overtime-batch.ts` | API wrapper |
-| `src/hooks/useOvertimeBatch.ts` | Hook create batch |
-| `src/hooks/usePmProjects.ts` | Dropdown project của PM |
-| `src/hooks/useEligibleEmployeesForOt.ts` | List NV chọn được |
-| `src/pages/OvertimeAssignmentPage.tsx` | Page mới cho PM tạo batch |
-| `src/components/overtime/OvertimeAssignForm.tsx` | Form batch (project + slot + ngày + N NV + approver route) |
+- Tab **Tăng ca**: form self-create bên trái + history bên phải.
+- Form:
+  - Auto-fetch `/my-active-orders` → 1 đơn = auto-select; N đơn = radio picker; 0 đơn = empty state (liên hệ tổ trưởng nhận task).
+  - Hiển thị task NV đang được assign trong đơn (context, read-only, không hiển thị Status task).
+  - Slot template + workDate + reason → submit.
+  - Button "Gửi cho tổ trưởng" (primary, xanh, căn phải).
+- History card badge 4 trạng thái: "Chờ tổ trưởng" / "Chờ duyệt cuối" / "Đã duyệt" / "Từ chối".
 
-### 6.2. Files sửa
+### 6.2. Tổ trưởng page (`OvertimeAssignmentPage` — rewrite)
 
-- `src/pages/MyRequestsPage.tsx` — **xóa form tạo OT của NV**, giữ list "OT của tôi" (view-only)
-- `src/pages/RequestsPage.tsx` (approver) — thêm filter theo `Project`, `ApproverRoute`; hiển thị badge "Batch của PM X — 5 NV"
-- `src/types/overtime.ts` — thêm `projectId`, `projectTitle`, `approverRoute`, `batchId` vào response DTO
-- Menu/route — thêm entry "Giao OT" (icon: clock) chỉ show cho role PM
+- Title: "Yêu cầu OT của tổ".
+- Master-detail layout:
+  - **List trái**: card OT NV gửi, filter status (default `Pending` = chờ tôi review), filter date range.
+  - **Detail phải**: chi tiết request + section "Task NV được giao trong đơn" (fetch `/nv-tasks`) + review form inline.
+- Review form:
+  - Radio HR / Quản lý xưởng (luôn hiển thị).
+  - Textarea note (bắt buộc khi Reject).
+  - 2 nút hành động dưới cùng, căn phải: `[Từ chối]` (secondary) + `[Chuyển HR duyệt]` hoặc `[Chuyển Quản lý xưởng duyệt]` (primary, label theo route đang chọn).
 
-### 6.3. Wireframe — Form batch (`OvertimeAssignmentPage`)
+### 6.3. Approver page (`RequestsPage` tab Tăng ca)
 
-```
-┌── Giao OT cho tổ ─────────────────────────────────────────────┐
-│                                                               │
-│ Dự án *          [ Đơn hàng #A123 — SX áo mưa ▾ ]             │
-│ Khung giờ OT *   [ Ca đêm 22:00-06:00 (×3.0) ▾ ]              │
-│ Ngày *           [ 2026-07-15 📅 ]                            │
-│                                                               │
-│ Nhân viên * (chọn từ tổ)          [ Tìm: _______ ] [☑ All]    │
-│ ┌───────────────────────────────────────────────────┐         │
-│ │ ☑ Nguyễn Văn A  — Công nhân dệt                   │         │
-│ │ ☑ Trần Thị B    — Công nhân dệt                   │         │
-│ │ ☐ Lê Văn C      — Kiểm soát chất lượng            │         │
-│ │ ☑ Phạm Thị D    — Công nhân dệt                   │         │
-│ └───────────────────────────────────────────────────┘         │
-│ Đã chọn: 3 nhân viên                                          │
-│                                                               │
-│ Gửi duyệt cho *  ⦿ HR       ○ Quản lý xưởng (DM)              │
-│                                                               │
-│ Lý do (tuỳ chọn)                                              │
-│ [ Đơn cần giao gấp trước 20/07... ______________________ ]    │
-│                                                               │
-│ [ Huỷ ]                       [ Giao OT & Gửi duyệt ]         │
-└───────────────────────────────────────────────────────────────┘
-```
+- Master-detail giống tổ trưởng.
+- Filter status default `PendingApprover` = "Chờ tôi duyệt".
+- Detail hiển thị: đơn, route đã forward, ghi chú tổ trưởng, section "Task NV" (dùng chung endpoint `/nv-tasks`).
+- Approve/Reject qua modal dialog (`ReviewRequestDialog`).
 
-Sau khi submit:
-- Toast: "Đã giao OT cho 3 NV, chờ HR duyệt. 0 NV lỗi."
-- Nếu có failure: modal chi tiết "1 NV vượt trần OT tháng: Lê Văn C — 42h/40h".
-- Redirect list "OT đã giao" (view riêng cho PM).
+### 6.4. Menu / route
 
-### 6.4. Approver UI (`RequestsPage`)
-
-- Thêm filter chip "Route: Chờ tôi duyệt" (auto lọc theo role của user)
-- Group by BatchId — mỗi group là 1 card có header "PM Nguyễn X giao — Dự án #A123 — 5 NV — 15/07/2026"
-- Approve/reject có thể per-NV hoặc bulk (checkbox nhiều NV)
+- **`components/layout/constants.ts`**:
+  - "Đơn của tôi" (`/my-requests`) → gate `Create.Self` hoặc `Read.Self` (NV).
+  - "Yêu cầu OT của tổ" (`/overtime-assignments`) → gate `Review.Project` (chỉ tổ trưởng).
+  - "Phê duyệt" (`/requests`) → gate `Read.All`.
+- **`App.tsx`**: route `/overtime-assignments` gate `Review.Project`.
 
 ---
 
@@ -316,13 +376,16 @@ Sau khi submit:
 
 | Rủi ro | Mức | Mitigation |
 |---|---|---|
-| Bỏ bước NV confirm → vi phạm Đ.107 BLLĐ (rủi ro pháp lý) | **CAO** | User đã acknowledge & explicit chọn bỏ. Ghi audit log rõ ràng ai tạo, ai duyệt, ngày giờ. Nếu bị thanh tra, trách nhiệm quản lý — hệ thống chỉ thực thi. |
-| Legacy record (không có ProjectId/ApproverRoute) | Trung | Migration để field nullable. Handler xử lý null case (giữ hành vi cũ cho record cũ). Payroll không quan tâm ProjectId → không vỡ. |
-| PM tạo cho NV không thuộc dept → data leak | Trung | Handler validate scope 2 tầng: (1) PM thuộc Department của Project, (2) mỗi NV thuộc cùng Department. Fail item, không fail cả batch. |
-| Approver không đúng route duyệt request | Thấp | Gate ở handler + FE hide button "Duyệt" nếu role không match |
-| Batch quá lớn → timeout | Thấp | Không limit theo user quyết định. Nhưng cap `OvertimeCapChecker` phải chạy per-NV → có thể chậm với 100+ NV. Monitor, đặt limit sau nếu cần. |
-| Self-approval (PM = HR/DM cùng người) | Thấp | Handler cũ đã có `existing.CreatedByUserId == userId` throw. Giữ. |
-| Xóa permission `Create.Self` phá màn `MyRequestsPage` | Trung | Xóa form khỏi FE cùng lúc. Endpoint cũ trả 410 Gone hoặc route bị đóng. |
+| NV chưa được assign task → không đăng ký OT | Trung | Đúng thiết kế. Empty state hướng dẫn liên hệ tổ trưởng. Không kiểm Status task — chỉ cần có `TaskAssignee` row là đủ (Q18). |
+| Đơn thiếu `ResponsibleUserId` (legacy) | Trung | Handler reject nếu null. Pre-go-live: audit đơn Active có tổ trưởng. |
+| Tổ trưởng nghỉ / đổi giữa lúc request pending | Trung | Query tổ trưởng inbox filter theo `ResponsibleUserId` hiện tại → request tự "chuyển inbox". Audit log ghi ai forward. |
+| Tổ trưởng review request của chính mình (tự đăng ký) | Trung | Self-review guard: `currentUser != CreatedByUserId`. Case hiếm; nếu cần, admin chuyển tay hoặc tổ trưởng khác handle. |
+| Approver approve mà chính mình là tổ trưởng đã forward hoặc người tạo | Trung | Self-approval guard check cả `CreatedByUserId` và `PmReviewedByUserId`. |
+| Multi-HR / Multi-PLM race | Thấp | Guard `Status=PendingApprover` throw "Đã xử lý bởi X lúc Y". |
+| Tổ trưởng chọn nhầm route | Trung | Approver có thể Reject với note "chuyển sai route". Tổ trưởng thấy Reject → forward lại đúng route (không auto-reassign để audit rõ). |
+| Compliance thay đổi giữa submit và Approver duyệt | Thấp | Re-run cap + re-split ở `ApproveOvertimeRequestCommandHandler`. |
+| Vi phạm Đ.107 (bỏ bước NV confirm sau duyệt) | Trung | Model 2-tầng gate quản lý = chuẩn thực tế. Audit log 2 tầng đủ dấu vết. |
+| Confuse role naming (PM/DM ambiguous) | Thấp | §0 Legend + ưu tiên tên tiếng Việt trong UI text. |
 
 ---
 
@@ -330,85 +393,122 @@ Sau khi submit:
 
 ### 8.1. Backend unit test
 
-- **`CreateBatchOvertimeRequestCommandHandlerTests`**
-  - Happy path: 5 NV cùng dept, cùng project → 5 record created, cùng BatchId
-  - PM không thuộc Dept của Project → ForbiddenAccessException
-  - Project không tồn tại / Inactive → NotFoundException
-  - 1/5 NV không thuộc Dept → 4 success + 1 failure trong result
-  - 1/5 NV vượt trần OT tháng → 4 success + 1 failure (không rollback)
-  - Empty EmployeeInformationIds → DomainValidationException
-  - ApproverRoute invalid → validation fail
+- **`GetMyActiveOrdersForOtQueryHandlerTests`**
+  - NV có task ở đơn active → hiện đơn (bất kỳ Status task: Todo/InProgress/Done).
+  - Đơn Completed/Cancelled/DeletedAt → không hiện.
+  - Task `IsBatchParent=true` / `DeletedAt!=null` → không đếm.
+  - NV có task ở nhiều đơn → nhiều order.
+- **`CreateOvertimeRequestCommandHandlerTests`**
+  - Happy: NV có task trong đơn → 1 record Pending.
+  - Đơn thiếu ResponsibleUserId → DomainValidationException.
+  - NV không có task trong đơn → DomainValidationException.
+  - Overlap OT khung giờ → DomainValidationException.
+- **`PmReviewOvertimeRequestCommandHandlerTests`**
+  - Forward route=Hr: Pending → PendingApprover, ApproverRoute=Hr.
+  - Forward route=DM: Pending → PendingApprover, ApproverRoute=DepartmentManager.
+  - Forward thiếu ApproverRoute → validation fail.
+  - Reject có ApproverRoute → validation fail (mutually exclusive).
+  - Reject: Pending → Rejected, mirror ReviewedBy*.
+  - currentUser != Project.ResponsibleUserId → ForbiddenAccessException.
+  - Tổ trưởng review request mình tạo → self-review guard.
+  - Request đã PendingApprover → DomainValidationException.
 - **`ApproveOvertimeRequestCommandHandlerTests`**
-  - HR duyệt request route=HR → success
-  - DM duyệt request route=HR → ForbiddenAccessException
-  - Legacy record (ApproverRoute=null) → HR duyệt vẫn thành công
+  - HR duyệt request ApproverRoute=Hr → Approved.
+  - PLM duyệt request ApproverRoute=DM cùng dept → Approved.
+  - HR duyệt request ApproverRoute=DM → ForbiddenAccessException.
+  - PLM khác dept của Project → ForbiddenAccessException.
+  - Request ở Pending (chưa qua tổ trưởng) → DomainValidationException.
+  - Self-approval (Approver = người tạo hoặc = tổ trưởng cũ) → guard.
 
-### 8.2. Backend integration test
+### 8.2. E2E FE
 
-- POST `/api/overtime-requests/batch` với 3 NV thuộc dept → 201 + BatchId + 3 request IDs
-- POST với ProjectId của dept khác → 403
-- POST `/api/overtime-requests` (endpoint cũ) → 410 Gone
-
-### 8.3. FE
-
-- E2E: login PM → mở form → chọn project → chọn 3 NV → submit → assert toast + redirect
-- Component: form validate — thiếu approver route → disable submit
+- **Prereq:** login Planning Manager tạo đơn + task lá → assign NV test.
+- Login NV → form auto-show đơn + task list → submit → badge "Chờ tổ trưởng".
+- Login Production Team Leader (ResponsibleUser đơn đó) → inbox thấy request → Forward chọn route HR → badge "Chờ duyệt cuối".
+- Login HR → "Phê duyệt" tab Tăng ca → thấy request → Approve → badge "Đã duyệt".
+- Flow route=PLM: PTL Forward chọn Quản lý xưởng → HR không thấy, PLM thấy → PLM Approve → "Đã duyệt".
+- Reject flow: PTL Reject → NV thấy "Từ chối", HR/PLM không thấy.
 
 ---
 
 ## 9. Migration & Rollout
 
-**Phase 1 — Single shot, không phase 2:**
-1. Migration: thêm 3 field, seed permission 178, xóa RolePermission 112
-2. Command `CreateBatchOvertimeRequest` + queries `PmProjects` / `EligibleEmployees`
-3. Sửa Approve/Reject handler thêm gate ApproverRoute (approve **từng NV**, chưa bulk)
-4. **Xóa dứt điểm** `CreateOvertimeRequestCommand/Handler` cũ + endpoint POST `/api/overtime-requests` (self-create)
-5. FE: page mới + xóa form OT ở MyRequestsPage
+**Phase 1 — single shot:**
 
-**Không cần feature flag** — chuyển đổi 1 shot vì flow cũ và mới không cùng tồn tại được.
+1. Migration `20260713000000_OvertimeTwoStageApproval` — ✅ đã apply.
+2. Seed permissions 178/180 + rename 113 + grant Employee (112) — ✅ trong migration.
+3. Backend: rewrite `CreateOvertimeRequestCommand`, thêm `PmReviewOvertimeRequestCommand`, sửa `ApproveOvertimeRequestCommand`/`RejectOvertimeRequestCommand`, thêm `GetMyActiveOrdersForOtQuery` + `GetOvertimeRequestNvTasksQuery`.
+4. Backend: xoá `CreateBatchOvertimeRequestCommand + Handler` + validators + 3 endpoint v1 batch.
+5. Frontend: NV form self-create + history; Tổ trưởng inbox (master-detail + review inline); Approver detail thêm section task NV.
+6. Menu + route wiring.
 
-**Bulk approve cả batch** → defer sau (chỉ approve từng NV riêng ở Phase 1).
+**Legacy data (Q8=(a) bulk reject) — đã chạy trong migration.**
 
----
-
-## 10. File list dự kiến
-
-### Backend (10-12 file)
-- **Entity**: `OvertimeRequest.cs` (thêm 3 field), `OvertimeApproverRoute.cs` (enum mới)
-- **Migration**: 1 file mới
-- **Permission**: `Permissions.cs` (thêm constant + ID 178)
-- **Commands**: `CreateBatchOvertimeRequestCommand.cs` + Handler + Validator; sửa Approve/Reject Handler
-- **Queries**: `GetPmProjectsQuery` + Handler; `GetEligibleEmployeesForOvertimeQuery` + Handler
-- **Repo**: thêm `IProjectRepository.GetByPmDepartmentAsync`, `IEmployeeInformationRepository` (đã có `GetByDepartmentIdAsync`)
-- **Controller**: `OvertimeRequestController` (thêm 3 endpoint, xóa 1)
-- **Xóa**: `CreateOvertimeRequestCommand.cs` + Handler (Phase 2)
-- **DTO**: extend `OvertimeRequestDto` thêm `projectId`, `projectTitle`, `approverRoute`, `batchId`
-
-### Frontend (7-8 file mới + 3 file sửa)
-- **New**: `types/overtime-batch.ts`, `services/overtime-batch.ts`, `hooks/useOvertimeBatch.ts`, `hooks/usePmProjects.ts`, `hooks/useEligibleEmployeesForOt.ts`, `pages/OvertimeAssignmentPage.tsx`, `components/overtime/OvertimeAssignForm.tsx`
-- **Sửa**: `pages/MyRequestsPage.tsx` (xoá form), `pages/RequestsPage.tsx` (filter Project/route), `types/overtime.ts` (extend DTO)
-- **Menu/Route**: thêm "Giao OT" cho role PM
-
-### Test (2-3 file)
-- `tests/MPS.Application.Tests/Features/Attendance/CreateBatchOvertimeRequestCommandHandlerTests.cs`
-- Integration test cho endpoint batch
+**Pre-go-live checklist:**
+- Audit các đơn `Status=Active` phải có `ResponsibleUserId` (nếu không NV bị block khi tạo OT).
 
 ---
 
-## 11. Decisions log (from user 2026-07-08)
+## 10. File list
+
+### Backend
+
+- **Entity/Enum**: `OvertimeRequest.cs` (6 field mới), `OtRequestStatus.cs` (PendingApprover=5).
+- **Migration**: `20260713000000_OvertimeTwoStageApproval.cs`.
+- **Permissions**: `Permissions.cs` cập nhật constant.
+- **Commands**:
+  - Rewrite `CreateOvertimeRequestCommand.cs` + Handler + Validator.
+  - NEW `PmReviewOvertimeRequestCommand.cs` + Handler + Validator.
+  - Sửa `ApproveOvertimeRequestCommandHandler.cs`, `RejectOvertimeRequestCommandHandler.cs`.
+  - Xoá `CreateBatchOvertimeRequestCommand + Handler`.
+- **Queries**:
+  - NEW `GetMyActiveOrdersForOtQuery/Handler.cs`.
+  - NEW `GetOvertimeRequestNvTasksQuery/Handler.cs`.
+  - Sửa `GetOvertimeRequestsCreatedByMeQueryHandler.cs` (scope theo `ResponsibleUserId`).
+  - Xoá `GetPmProjectsQuery/Handler`, `GetEligibleEmployeesForOvertimeQuery/Handler`.
+- **Repo**: `IProjectTaskRepository` thêm `HasAssignedTaskInProjectAsync`, `GetAssignedTasksByUserInProjectAsync`, `GetAssignedProjectIdsByUserAsync`. `IOvertimeRequestRepository.GetPagedAsync` thêm `projectResponsibleUserId?`.
+- **Controller**: `OvertimeRequestController.cs` (xoá 3 endpoint v1, thêm endpoint v3).
+- **DTO**: `AttendanceDtos.cs` — extend `OvertimeRequestDto` (6 audit field); xoá `PmProjectDto`, `EligibleEmployeeForOvertimeDto`.
+
+### Frontend
+
+- **Types**: `types/overtime-request.ts` — `OtRequestStatus` thêm `PendingApprover`; DTO thêm audit; NEW `CreateOvertimeRequestInput`, `MyActiveOrderForOtDto`, `MyActiveOrderTaskDto`, `PmReviewDecision`, `PmReviewOvertimeRequestInput`; xoá batch types.
+- **Service**: `services/overtime-request.ts` — thêm `create`, `getMyActiveOrders`, `pmReview`, `getNvTasks`; xoá batch/pmProjects/eligibleEmployees.
+- **Pages**:
+  - `pages/MyRequestsPage.tsx` — thêm form NV self-create + task display; label chip 4 status.
+  - `pages/OvertimeAssignmentPage.tsx` — rewrite v3 master-detail (list + detail + review inline).
+  - `pages/RequestsPage.tsx` — permission check dùng `Approve.Hr` OR `Approve.Department`.
+- **Components**:
+  - `components/requests/OvertimeRequestList.tsx` — filter option `PendingApprover`, detail thêm route/ghi chú tổ trưởng/task NV.
+  - Xoá `components/overtime/MyOvertimeSubmissionsPanel.tsx`.
+- **Menu/Route**: `components/layout/constants.ts` gate menu theo permission v3; `App.tsx` route `/overtime-assignments` gate `Review.Project`.
+
+---
+
+## 11. Decisions log (chốt cuối 2026-07-11)
 
 | # | Question | Decision | Rationale |
 |---|---|---|---|
-| Q1 | Giữ luồng NV self-request song song hay bỏ hẳn? | ✅ **Bỏ hẳn** — chỉ PM tạo | NV không phải lúc nào cũng có việc; OT chủ động từ nhu cầu SX |
-| Q2 | "PM" là role nào? | ✅ **`ProjectManager`** (RoleId=6, đã có) | Tổ trưởng xưởng trong model 3 tầng |
-| Q3 | Approver route | ✅ **PM chọn 1 trong 2** (HR hoặc DM) | User quyết định linh hoạt theo tình huống |
-| Q4 | Có bước NV confirm không? | ✅ **KHÔNG có** — auto binding | User acknowledge legal risk và chốt bỏ |
-| Q5 | Batch nhiều NV — scope? | ✅ **Loose**: NV cùng Department với Project | MVP; Strict (theo task assignment) defer Phase 2 |
-| Q5c | Cap max NV/batch | ✅ **Không giới hạn** | Công ty nhỏ, không có nguy cơ 500 NV/batch |
-| Q6 | Batch có rollback khi 1 NV fail? | ✅ **Partial success** — 1 NV fail thì bỏ NV đó, 4 NV còn lại vẫn tạo | Reduce friction cho PM |
-| Q7 | Xóa endpoint self-create khi nào? | ✅ **Ngay Phase 1** — không có Phase 2 riêng | User quyết định one-shot |
-| Q8 | Bulk approve cả batch ở Phase 1? | ✅ **Không, approve từng NV riêng** | Simple first, bulk approve defer |
+| Q1 | Chủ thể tạo OT | ✅ **NV tự đăng ký** (revert v1 batch) | NV biết mình sẵn sàng OT ngày nào; chủ động |
+| Q2 | NV có phải chọn đơn? | ✅ Có, required — auto-derive từ task assign | Route request tới đúng tổ trưởng |
+| Q3 | NV chọn slot hay tự nhập time? | ✅ Nhập time (kèm slot template nếu FE cho phép) | Dữ liệu chuẩn |
+| Q4 | Chuỗi duyệt | ✅ **2 tầng: Tổ trưởng → HR hoặc PLM** | Tổ trưởng review nhu cầu, cấp trên duyệt về nhân sự |
+| Q5 | Tổ trưởng Reject | ✅ Final rejected — Approver không thấy | Gate đầu, tránh spam |
+| Q6 | Route Approver | ✅ Tổ trưởng chọn **1 trong 2**: HR hoặc PLM | Linh hoạt theo đơn |
+| Q7 | Bỏ batch PM tạo? | ✅ Bỏ hoàn toàn | 1 luồng NV self-create duy nhất |
+| Q8 | Legacy `Pending` records | ✅ **(a) bulk reject** với ReviewNote "Chuyển luồng mới" | SQL 1 câu, chạy trong migration |
+| Q9 | HR có route riêng không? | ✅ Có — permission 180 `Approve.Hr`; PLM giữ 113 `Approve.Department` | Tách 2 route rõ ràng |
+| Q10 | Cách NV chọn đơn | ✅ **Auto-derive từ task được assign** (không dropdown tự do) | Chống chọn sai đơn |
+| Q11 | Thuật ngữ UI | ✅ "đơn sản xuất" / "đơn hàng" thay "dự án" | Khớp `Project = Đơn hàng SX` |
+| Q12 | Tổ trưởng route theo gì? | ✅ **`Project.ResponsibleUserId`** (1 người/đơn) | Chính xác hơn scope Dept |
+| Q13 | Hiển thị task NV ở form + inbox không? | ✅ **Có** — form NV, inbox tổ trưởng, inbox Approver đều enrich | Context cho quyết định |
+| Q14 | Snapshot task list vào request? | ✅ **Không** — enrich runtime qua `/nv-tasks` | Đơn giản; nếu về sau cần audit thêm bảng snapshot |
+| Q15 | Filter task chỉ InProgress? | ⚠️ REVERTED bởi Q17 | |
+| Q16 | Ai chuyển task sang InProgress? | ℹ️ Fact: tổ trưởng/PLM cập nhật Status. KHÔNG gate OT (Q18). | Task Status không dùng làm gate OT |
+| Q17 | Filter task Todo+InProgress? | ⚠️ REVERTED bởi Q18 | |
+| Q18 | **Điều kiện đơn nào hiện ở form NV?** | ✅ **Chỉ cần NV có `TaskAssignee` row** — KHÔNG lọc Status task | Đơn giản nhất; miễn NV được assign là đăng ký được. Gate ở `Project.Status=Active` và task lá (`IsBatchParent=false`, `DeletedAt IS NULL`), không phụ thuộc Status task |
+| Q19 | **Role naming** (2026-07-11 clarify) | ✅ **Ưu tiên tên tiếng Việt** ("tổ trưởng", "quản lý xưởng"), avoid PM/DM abbr | Sau refactor R/S: role 6 = Production Team Leader, role 5 = Planning Manager — abbr "PM"/"DM" ambiguous. Xem §0 Legend |
 
 ---
 
-**Next step:** confirm plan, sau đó implement Phase 1 (Backend + FE core).
+**Next step:** verify BE và FE code đã đồng bộ với plan v3 này. Nếu còn dấu vết v1 (`CreateBatchOvertimeRequestCommand`, `PmProjectDto`, `MyOvertimeSubmissionsPanel`, `OvertimeAssignmentPage.tsx` v1) → cleanup.
