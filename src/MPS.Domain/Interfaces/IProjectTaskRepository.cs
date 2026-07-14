@@ -19,6 +19,19 @@ public interface IProjectTaskRepository
     // ⭐ refactor D: chỉ chặn gán khi người đó đang có task InProgress (nới luật "1 task mở").
     Task<int> CountInProgressByUserAsync(int userId, CancellationToken ct);
 
+    // ⭐ OT workflow v3 (Q18): check NV được assign task nào trong 1 project cụ thể.
+    // Không lọc Status task — miễn có TaskAssignee row + task lá + task chưa soft-delete.
+    // Dùng ở CreateOvertimeRequestCommand.
+    Task<bool> HasAssignedTaskInProjectAsync(int userId, int projectId, CancellationToken ct);
+
+    // ⭐ OT workflow v3: list task NV được assign trong 1 project — dùng ở
+    // GetMyActiveOrdersForOtQuery để enrich context. Không lọc Status.
+    Task<IReadOnlyList<ProjectTask>> GetAssignedTasksByUserInProjectAsync(int userId, int projectId, CancellationToken ct);
+
+    // ⭐ OT workflow v3: distinct list ProjectId mà NV được assign task (bất kỳ Status).
+    // Dùng ở GetMyActiveOrdersForOtQuery — auto-derive đơn cho NV form đăng ký.
+    Task<IReadOnlyList<int>> GetAssignedProjectIdsByUserAsync(int userId, CancellationToken ct);
+
     // ⭐ Tổng PlannedQuantity các con Quantity hiện có của 1 công đoạn (không tính task đang sửa, nếu có) —
     // Gate (Milestone) không có sản lượng nên không tham gia.
     Task<int> SumChildrenPlannedQuantityAsync(int parentTaskId, int? excludeTaskId, CancellationToken ct);

@@ -127,6 +127,39 @@ public class ProjectTaskRepository : IProjectTaskRepository
                 && t.Status == TaskItemStatus.InProgress
                 && t.Assignees.Any(a => a.UserId == userId), ct);
 
+    // ⭐ OT workflow v3 (Q18): NV tạo OT cho đơn được assign task bất kỳ Status.
+    public Task<bool> HasAssignedTaskInProjectAsync(int userId, int projectId, CancellationToken ct) =>
+        _context.ProjectTasks.AnyAsync(
+            t => !t.IsBatchParent
+                && t.ProjectId == projectId
+                && t.DeletedAt == null
+                && t.Assignees.Any(a => a.UserId == userId), ct);
+
+    public async Task<IReadOnlyList<ProjectTask>> GetAssignedTasksByUserInProjectAsync(
+        int userId, int projectId, CancellationToken ct)
+    {
+        return await _context.ProjectTasks
+            .Where(t => !t.IsBatchParent
+                && t.ProjectId == projectId
+                && t.DeletedAt == null
+                && t.Assignees.Any(a => a.UserId == userId))
+            .OrderBy(t => t.Deadline)
+            .ThenBy(t => t.Priority)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<int>> GetAssignedProjectIdsByUserAsync(int userId, CancellationToken ct)
+    {
+        return await _context.ProjectTasks
+            .Where(t => !t.IsBatchParent
+                && t.ProjectId != null
+                && t.DeletedAt == null
+                && t.Assignees.Any(a => a.UserId == userId))
+            .Select(t => t.ProjectId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
     // Chỉ tính con Quantity — Gate (Milestone) không có sản lượng, không tham gia giới hạn PlannedQuantity cha.
     public Task<int> SumChildrenPlannedQuantityAsync(int parentTaskId, int? excludeTaskId, CancellationToken ct) =>
         _context.ProjectTasks

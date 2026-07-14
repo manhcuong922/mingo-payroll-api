@@ -73,6 +73,7 @@ public class AppDbContext : DbContext
     public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
     public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
     public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
+    public DbSet<AttendanceRuleVersion> AttendanceRuleVersions => Set<AttendanceRuleVersion>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<ScheduleTemplateEmployee> ScheduleTemplateEmployees => Set<ScheduleTemplateEmployee>();
     public DbSet<ScheduleTemplateShift> ScheduleTemplateShifts => Set<ScheduleTemplateShift>();

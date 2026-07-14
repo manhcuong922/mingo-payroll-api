@@ -1,12 +1,12 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models;
+using MPS.Application.Common.Services;
 using MPS.Application.DTOs.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using AttendanceRecordEntity = MPS.Domain.Entities.Attendance.AttendanceRecord;
-using AttendanceRuleEntity = MPS.Domain.Entities.Attendance.AttendanceRule;
 using EmployeeInformationEntity = MPS.Domain.Entities.EmployeeInformation;
 
 namespace MPS.Application.Features.Attendance.Attendance.Queries;
@@ -27,21 +27,24 @@ public class GetAttendanceSummaryQueryHandler
     private const decimal NightRateBonus = 1.30m;
     private const decimal HalfDayWeight = 0.5m;
     private const decimal FullDayWeight = 1.0m;
-    private const int MaxPageSize = 100;
+    private const int MaxPageSize = 1000;
     private const int DefaultPageSize = 20;
 
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IAttendanceRecordRepository _attendanceRepository;
     private readonly IDayTypeResolver _dayTypeResolver;
+    private readonly IAttendanceRateResolver _rateResolver;
 
     public GetAttendanceSummaryQueryHandler(
         IEmployeeInformationRepository employeeRepository,
         IAttendanceRecordRepository attendanceRepository,
-        IDayTypeResolver dayTypeResolver)
+        IDayTypeResolver dayTypeResolver,
+        IAttendanceRateResolver rateResolver)
     {
         _employeeRepository = employeeRepository;
         _attendanceRepository = attendanceRepository;
         _dayTypeResolver = dayTypeResolver;
+        _rateResolver = rateResolver;
     }
 
     public async Task<PagedResult<EmployeeAttendanceSummaryDto>> Handle(
@@ -64,6 +67,16 @@ public class GetAttendanceSummaryQueryHandler
             request.ToDate,
             cancellationToken);
 
+        // Tầng 2b — prefetch versions cho toàn bộ rule liên quan (avoid N+1 khi resolve rate per record)
+        var ruleIds = recordsByEmp.Values
+            .SelectMany(list => list)
+            .Select(r => r.ShiftTemplate?.AppliedAttendanceRuleId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        await _rateResolver.PrefetchAsync(ruleIds, cancellationToken);
+
         // Tầng 3 — mỗi NV: resolve DayType range (prefetch, no N+1 trong resolver) + aggregate
         var results = new List<EmployeeAttendanceSummaryDto>(employees.Count);
         foreach (var emp in employees)
@@ -75,7 +88,7 @@ public class GetAttendanceSummaryQueryHandler
                 ? list
                 : Array.Empty<AttendanceRecordEntity>();
 
-            results.Add(Aggregate(emp, empRecords, dayMap));
+            results.Add(Aggregate(emp, empRecords, dayMap, _rateResolver));
         }
 
         return new PagedResult<EmployeeAttendanceSummaryDto>(results, total, page, size);
@@ -113,7 +126,8 @@ public class GetAttendanceSummaryQueryHandler
     private static EmployeeAttendanceSummaryDto Aggregate(
         EmployeeInformationEntity emp,
         IReadOnlyList<AttendanceRecordEntity> records,
-        IReadOnlyDictionary<DateOnly, DayType> dayMap)
+        IReadOnlyDictionary<DateOnly, DayType> dayMap,
+        IAttendanceRateResolver rateResolver)
     {
         var bucket = new Bucket();
 
@@ -142,8 +156,11 @@ public class GetAttendanceSummaryQueryHandler
             bucket.DayHours += r.DayHours;
             bucket.NightHours += r.NightHours;
 
-            var rule = r.ShiftTemplate?.AppliedAttendanceRule;
-            var rate = ResolveRate(rule, dayType);
+            // OT — subset của DayHours+NightHours, filter records gắn với OvertimeRequest.
+            if (r.OvertimeRequestId is not null)
+                bucket.OtHours += r.DayHours + r.NightHours;
+
+            var rate = rateResolver.Resolve(r.ShiftTemplate?.AppliedAttendanceRuleId, r.WorkDate, dayType);
             bucket.EquivalentHours += r.DayHours * rate + r.NightHours * rate * NightRateBonus;
         }
 
@@ -168,7 +185,8 @@ public class GetAttendanceSummaryQueryHandler
             DayHours: bucket.DayHours,
             NightHours: bucket.NightHours,
             TotalHours: bucket.DayHours + bucket.NightHours,
-            EquivalentHours: bucket.EquivalentHours);
+            EquivalentHours: bucket.EquivalentHours,
+            OtHours: bucket.OtHours);
     }
 
     private static void AccrueDayType(Bucket bucket, DayType dayType, decimal weight)
@@ -180,17 +198,6 @@ public class GetAttendanceSummaryQueryHandler
             case DayType.WeeklyRestDay:  bucket.WeeklyRestDays += weight; break;
             default:                     bucket.NormalDays += weight; break;
         }
-    }
-
-    private static decimal ResolveRate(AttendanceRuleEntity? rule, DayType dayType)
-    {
-        if (rule is null) return 1.0m;
-        return dayType switch
-        {
-            DayType.PublicHoliday => rule.WorkRateHoliday,
-            DayType.WeeklyRestDay => rule.WorkRateWeeklyRest,
-            _ => rule.WorkRateNormal,
-        };
     }
 
     private sealed class Bucket
@@ -209,5 +216,6 @@ public class GetAttendanceSummaryQueryHandler
         public decimal DayHours;
         public decimal NightHours;
         public decimal EquivalentHours;
+        public decimal OtHours;
     }
 }

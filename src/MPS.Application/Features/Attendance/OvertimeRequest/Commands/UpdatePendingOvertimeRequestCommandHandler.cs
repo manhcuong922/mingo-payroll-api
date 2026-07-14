@@ -9,10 +9,10 @@ using MPS.Domain.Interfaces.Attendance;
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 
 /// <summary>
-/// PM sửa đơn OT của chính mình khi còn Pending. Guards:
+/// NV tự sửa đơn OT của chính mình khi còn Pending (chưa PM review). Guards:
 ///  - Chỉ CreatedByUserId = current user.
-///  - Chỉ status = Pending.
-/// Recompute OtHours + day/night split, re-run cap check giống lúc create batch.
+///  - Chỉ status = Pending (không sửa được sau khi PM đã Forward/Reject).
+/// Recompute OtHours + day/night split, re-run cap check.
 /// </summary>
 public class UpdatePendingOvertimeRequestCommandHandler
     : IRequestHandler<UpdatePendingOvertimeRequestCommand, bool>
@@ -72,10 +72,12 @@ public class UpdatePendingOvertimeRequestCommandHandler
                 $"NV đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) giao thoa khung giờ mới.");
         }
 
-        // Cap check dùng monthly/yearly Approved (chưa tính đơn Pending này) → an toàn recompute.
+        // Cap check tính cumulative Pending + PendingApprover + Approved; exclude chính đơn
+        // đang sửa để tránh double-count giờ cũ.
         await _capChecker.CheckAsync(
             existing.EmployeeInformationId, request.WorkDate,
-            request.OtStartTime, request.OtEndTime, otHours, cancellationToken);
+            request.OtStartTime, request.OtEndTime, otHours, cancellationToken,
+            excludeRequestId: existing.Id);
 
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
         var breakdown = _splitter.Split(new WorkHourSplitInput(
@@ -96,7 +98,7 @@ public class UpdatePendingOvertimeRequestCommandHandler
         // WorkDate có thể đổi — refresh snapshot LaborLaw version cho đúng ngày mới
         existing.LaborLawConstantsVersionId = laborLaw.VersionId;
         existing.Reason = request.Reason;
-        existing.ApproverRoute = request.ApproverRoute;
+        // ApproverRoute do PM chọn khi Forward — NV không được đổi.
         existing.UpdatedAt = now;
         existing.UpdatedByUserId = userId;
 

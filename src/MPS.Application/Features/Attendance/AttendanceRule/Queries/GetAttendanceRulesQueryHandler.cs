@@ -8,10 +8,14 @@ namespace MPS.Application.Features.Attendance.AttendanceRule.Queries;
 public class GetAttendanceRulesQueryHandler : IRequestHandler<GetAttendanceRulesQuery, PagedResult<AttendanceRuleDto>>
 {
     private readonly IAttendanceRuleRepository _repository;
+    private readonly IAttendanceRuleVersionRepository _versionRepository;
 
-    public GetAttendanceRulesQueryHandler(IAttendanceRuleRepository repository)
+    public GetAttendanceRulesQueryHandler(
+        IAttendanceRuleRepository repository,
+        IAttendanceRuleVersionRepository versionRepository)
     {
         _repository = repository;
+        _versionRepository = versionRepository;
     }
 
     public async Task<PagedResult<AttendanceRuleDto>> Handle(GetAttendanceRulesQuery request, CancellationToken cancellationToken)
@@ -21,17 +25,24 @@ public class GetAttendanceRulesQueryHandler : IRequestHandler<GetAttendanceRules
 
         var (items, total) = await _repository.GetPagedAsync(request.IsActive, page, size, cancellationToken);
 
-        var dtos = items.Select(r => new AttendanceRuleDto(
-            r.Id,
-            r.Name,
-            r.Description,
-            r.WorkRateNormal,
-            r.WorkRateWeeklyRest,
-            r.WorkRateHoliday,
-            r.IsActive,
-            r.CreatedAt,
-            r.UpdatedAt,
-            null)).ToList();
+        var ruleIds = items.Select(r => r.Id).ToList();
+        var openVersions = await _versionRepository.GetOpenByRuleIdsAsync(ruleIds, cancellationToken);
+
+        var dtos = items.Select(r =>
+        {
+            openVersions.TryGetValue(r.Id, out var v);
+            return new AttendanceRuleDto(
+                r.Id,
+                r.Name,
+                r.Description,
+                v?.WorkRateNormal ?? 0m,
+                v?.WorkRateWeeklyRest ?? 0m,
+                v?.WorkRateHoliday ?? 0m,
+                r.IsActive,
+                r.CreatedAt,
+                r.UpdatedAt,
+                null);
+        }).ToList();
 
         return new PagedResult<AttendanceRuleDto>(dtos, total, page, size);
     }

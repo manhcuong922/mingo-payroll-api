@@ -42,6 +42,15 @@ public class AttendanceRuleController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("{id:int}/versions")]
+    [HasPermission(Permissions.AttendanceRuleReadAll)]
+    public async Task<IActionResult> GetVersions(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAttendanceRuleVersionsQuery(id), cancellationToken);
+        if (result is null) return NotFound();
+        return Ok(result);
+    }
+
     [HttpPost]
     [HasPermission(Permissions.AttendanceRuleCreateAll)]
     public async Task<IActionResult> Create(

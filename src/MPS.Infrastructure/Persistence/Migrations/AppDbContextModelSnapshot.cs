@@ -267,31 +267,64 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int?>("UpdatedByUserId")
                         .HasColumnType("int");
 
-                    b.Property<decimal>("WorkRateHoliday")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(6,2)")
-                        .HasDefaultValue(300.00m);
-
-                    b.Property<decimal>("WorkRateNormal")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(6,2)")
-                        .HasDefaultValue(100.00m);
-
-                    b.Property<decimal>("WorkRateWeeklyRest")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(6,2)")
-                        .HasDefaultValue(200.00m);
-
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
 
                     b.HasIndex("UpdatedByUserId");
 
                     b.ToTable("AttendanceRules", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRuleVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendanceRuleId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("WorkRateHoliday")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("WorkRateNormal")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("WorkRateWeeklyRest")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("AttendanceRuleId", "EffectiveFrom")
+                        .IsUnique();
+
+                    b.HasIndex("AttendanceRuleId")
+                        .IsUnique()
+                        .HasFilter("[EffectiveTo] IS NULL")
+                        .HasDatabaseName("IX_AttendanceRuleVersions_OpenPerRule");
+
+                    b.ToTable("AttendanceRuleVersions", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceSetting", b =>
@@ -975,12 +1008,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("AppliedAttendanceRuleId");
 
                     b.HasIndex("Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
 
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
 
                     b.HasIndex("UpdatedByUserId");
 
@@ -6741,6 +6776,25 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("UpdatedByUser");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRuleVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.AttendanceRule", "AttendanceRule")
+                        .WithMany("Versions")
+                        .HasForeignKey("AttendanceRuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AttendanceRule");
+
+                    b.Navigation("CreatedByUser");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceSetting", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
@@ -7790,6 +7844,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRecord", b =>
                 {
                     b.Navigation("AttendanceAdjustments");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
+                {
+                    b.Navigation("Versions");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", b =>

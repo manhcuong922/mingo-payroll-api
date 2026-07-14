@@ -21,6 +21,8 @@ public class GetAttendanceSummaryQueryValidator : AbstractValidator<GetAttendanc
             .WithMessage($"Khoảng thời gian tối đa {MaxRangeDays} ngày.");
 
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.Size).InclusiveBetween(1, 100);
+        // FE có thể chọn size lớn để sort/filter toàn bộ NV client-side (bảng chấm công tháng).
+        // Range đã cap 92 ngày nên load 1000 NV × 92 ngày vẫn ok về perf.
+        RuleFor(x => x.Size).InclusiveBetween(1, 1000);
     }
 }
