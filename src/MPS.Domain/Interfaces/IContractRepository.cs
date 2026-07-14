@@ -147,8 +147,12 @@ public interface IContractRepository
     /// <see cref="AutoConvertExpiredDefiniteAsync"/> bắt (đã có HĐ con — quan hệ
     /// <c>ParentContractId</c>) → set Status=Expired, UpdatedAt=nowUtc.
     /// </summary>
-    /// <returns>Số HĐ đã expire.</returns>
-    Task<int> ExpireOverdueContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default);
+    /// <returns>
+    /// <c>ExpiredCount</c>: số HĐ đã expire.
+    /// <c>AffectedEmployeeInformationIds</c>: danh sách distinct EmployeeInformationId của các HĐ vừa expire — dùng để downstream deactivate user account nếu NLĐ không còn HĐ Active nào.
+    /// </returns>
+    Task<(int ExpiredCount, IReadOnlyList<int> AffectedEmployeeInformationIds)> ExpireOverdueContractsAsync(
+        DateTime nowUtc, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Set <c>ArchivedAt = nowUtc</c> cho:

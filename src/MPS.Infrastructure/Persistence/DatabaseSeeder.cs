@@ -41,6 +41,10 @@ public sealed partial class DatabaseSeeder
         // Nhân sự công ty SẢN XUẤT: 3 xưởng × (1 quản đốc role 5 + 1 tổ trưởng role 6 + 6 công nhân role 7),
         // đúng role + chức danh sản xuất — đủ để test luồng tạo đơn → chọn tổ trưởng → gán người theo chức danh.
         await SeedManufacturingWorkforceDemoAsync(cancellationToken);
+        // Nhân sự các PHÒNG OFFICE: gắn EmployeeInformation cho HR/Accountant/Director (đã có User),
+        // seed thêm trưởng phòng Kinh doanh + IT (role DepartmentManager) để test auto-routing
+        // đơn từ nhân sự: HR tạo → Director; Trưởng phòng tạo → HR.
+        await SeedOfficeWorkforceDemoAsync(cancellationToken);
         // Dọn account/data demo theo công ty IT cũ (ngoài scope sản xuất) khỏi DB đã seed trước đó.
         await CleanupOutOfScopeDemoAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
@@ -372,6 +376,69 @@ public sealed partial class DatabaseSeeder
         _logger.LogInformation(
             "Seeded manufacturing workforce: {Depts} xưởng, {Users} nhân sự (quản đốc/tổ trưởng/công nhân).",
             departments.Count, totalUsers);
+    }
+
+    // Nhân sự OFFICE (khối văn phòng công ty sản xuất khung tranh Mingo). Idempotent qua EnsureStaffAsync.
+    // - HR (username=hr, role HrId, chức danh Trưởng phòng NS): gắn EmployeeInformation → HR nộp được đơn
+    //   (auto-route → Director duyệt).
+    // - Accountant (username=accountant, role AccountantId, chức danh Kế toán trưởng): gắn EmployeeInformation.
+    // - Director (username=director, role DirectorId, chức danh Giám đốc): gắn EmployeeInformation → duyệt đơn
+    //   HR đẩy lên.
+    // - Trưởng phòng Kinh doanh (role DepartmentManagerId, phòng BIZ): phụ trách bán khung tranh — nhận
+    //   auto-route "trưởng phòng tạo → HR".
+    // Quản đốc 3 xưởng sản xuất (Khung tranh / Nội thất / Cơ khí) đã được seed riêng ở
+    // SeedManufacturingWorkforceDemoAsync — không lặp lại ở đây.
+    private async Task SeedOfficeWorkforceDemoAsync(CancellationToken ct)
+    {
+        var section = _configuration.GetSection("DefaultRoleUsers");
+        var configuredPassword = section["Password"];
+        var password = string.IsNullOrWhiteSpace(configuredPassword) ? "Demo@12345" : configuredPassword;
+
+        var deptCodes = new[] { "HR", "ACC", "BIZ", "BGD" };
+        var posCodes = new[] { "TPHR", "KTT", "TPKD", "GD" };
+
+        var deptMap = await _context.Departments
+            .Where(d => deptCodes.Contains(d.Code))
+            .ToDictionaryAsync(d => d.Code, d => d.Id, StringComparer.OrdinalIgnoreCase, ct);
+        var posMap = await _context.Positions
+            .Where(p => posCodes.Contains(p.Code))
+            .ToDictionaryAsync(p => p.Code, p => p.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+        var missingDepts = deptCodes.Where(c => !deptMap.ContainsKey(c)).ToList();
+        var missingPos = posCodes.Where(c => !posMap.ContainsKey(c)).ToList();
+        if (missingDepts.Count > 0 || missingPos.Count > 0)
+        {
+            _logger.LogWarning(
+                "Skip SeedOfficeWorkforceDemoAsync — thiếu department: {Depts}; thiếu position: {Positions}.",
+                string.Join(",", missingDepts), string.Join(",", missingPos));
+            return;
+        }
+
+        var seeds = new (string Username, string Code, string Email, string FullName, int RoleId, int PositionId, int DepartmentId)[]
+        {
+            // Backfill EmployeeInformation cho 3 user cấp công ty đã seed ở SeedDefaultRoleUsersAsync.
+            ("hr",         "HR001",   "hr@mingo.local",         "Trưởng phòng Nhân sự",
+                SystemRoles.HrId,                 posMap["TPHR"], deptMap["HR"]),
+            ("accountant", "ACC001",  "accountant@mingo.local", "Kế toán trưởng",
+                SystemRoles.AccountantId,         posMap["KTT"],  deptMap["ACC"]),
+            ("director",   "DIR001",  "director@mingo.local",   "Giám đốc",
+                SystemRoles.DirectorId,           posMap["GD"],   deptMap["BGD"]),
+
+            // Trưởng phòng Kinh doanh — role DepartmentManagerId để hưởng auto-route → HR khi nộp đơn.
+            ("tpkd",       "TPKD001", "tpkd@mingo.local",       "Trưởng phòng Kinh doanh",
+                SystemRoles.DepartmentManagerId,  posMap["TPKD"], deptMap["BIZ"]),
+        };
+
+        foreach (var s in seeds)
+        {
+            await EnsureStaffAsync(
+                s.Username, s.Code, s.Email, s.FullName,
+                s.RoleId, s.PositionId, s.DepartmentId, password, ct);
+        }
+
+        _logger.LogInformation(
+            "Seeded office workforce: {Count} nhân sự khối văn phòng (HR + KTT + GĐ + TP Kinh doanh).",
+            seeds.Length);
     }
 
     // Chèn Position còn thiếu theo Code; trả về map Code → Id cho toàn bộ tập truyền vào.

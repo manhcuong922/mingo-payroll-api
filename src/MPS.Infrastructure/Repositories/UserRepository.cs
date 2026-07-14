@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
+using MPS.Domain.Enums.Contract;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.Persistence;
 
@@ -216,5 +217,38 @@ public class UserRepository : IUserRepository
 
         await tx.CommitAsync(cancellationToken);
         return user.Id;
+    }
+
+    public async Task<int> DeactivateForEmployeesWithoutActiveContractAsync(
+        IReadOnlyCollection<int> employeeInformationIds,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (employeeInformationIds.Count == 0) return 0;
+
+        var stillHasActive = await _context.Contracts
+            .AsNoTracking()
+            .Where(c => employeeInformationIds.Contains(c.EmployeeInformationId)
+                && c.Status == ContractStatus.Active)
+            .Select(c => c.EmployeeInformationId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var stillActiveSet = stillHasActive.ToHashSet();
+        var toDeactivate = employeeInformationIds.Where(id => !stillActiveSet.Contains(id)).ToList();
+        if (toDeactivate.Count == 0) return 0;
+
+        var users = await _context.Users
+            .Where(u => u.Status == 1
+                && u.EmployeeInformation != null
+                && toDeactivate.Contains(u.EmployeeInformation.Id))
+            .ToListAsync(cancellationToken);
+        if (users.Count == 0) return 0;
+
+        foreach (var user in users)
+            user.Status = 0;
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return users.Count;
     }
 }
