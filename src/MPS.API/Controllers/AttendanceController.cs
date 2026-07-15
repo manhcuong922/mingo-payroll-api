@@ -29,12 +29,13 @@ public class AttendanceController : ControllerBase
         [FromQuery] DateOnly fromDate,
         [FromQuery] DateOnly toDate,
         [FromQuery] int? employeeInformationId,
+        [FromQuery] int? departmentId,
         [FromQuery] int page = 1,
         [FromQuery] int size = 20,
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(
-            new GetAttendanceSummaryQuery(fromDate, toDate, employeeInformationId, page, size), cancellationToken);
+            new GetAttendanceSummaryQuery(fromDate, toDate, employeeInformationId, departmentId, page, size), cancellationToken);
         return Ok(result);
     }
 
@@ -59,6 +60,15 @@ public class AttendanceController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>OT Approved chưa được chấm công cho ngày X — HR click từng row để chấm.</summary>
+    [HttpGet("daily/{workDate}/pending-overtime")]
+    [HasPermission(Permissions.AttendanceReadAll)]
+    public async Task<IActionResult> GetPendingOvertime(DateOnly workDate, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPendingOvertimeAttendanceQuery(workDate), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("settings")]
     [HasPermission(Permissions.AttendanceSettingReadAll)]
     public async Task<IActionResult> GetSettings(CancellationToken cancellationToken)
@@ -78,7 +88,14 @@ public class AttendanceController : ControllerBase
             request.DailyEditCutoffTime,
             request.LockAfterDays,
             request.AllowAdminOverride,
-            request.RequireOverrideReason), cancellationToken);
+            request.RequireOverrideReason,
+            request.LateEarlyMaxOccurrencesPerMonth,
+            request.LateEarlyMaxMinutesPerOccurrence,
+            request.LateEarlyBackdateDaysAllowed,
+            request.WfhMaxDaysPerMonth,
+            request.WfhMinNoticeDays,
+            request.WfhMaxDaysPerRequest,
+            request.WfhWorkPlanMinLength), cancellationToken);
         return Ok(result);
     }
 
@@ -110,10 +127,11 @@ public class AttendanceController : ControllerBase
         CancellationToken cancellationToken)
     {
         var id = await _mediator.Send(new RecordAttendanceCommand(
-            request.EmployeeInformationId, request.WorkDate, request.ShiftTemplateId,
+            request.EmployeeInformationId, request.WorkDate,
+            request.ShiftTemplateId, request.OvertimeRequestId,
             request.CheckInAt, request.CheckOutAt,
             request.Status, request.Notes, request.OverrideReason), cancellationToken);
-        return Created($"/api/attendance/{request.EmployeeInformationId}/{request.WorkDate:yyyy-MM-dd}/{request.ShiftTemplateId}", new { id });
+        return Created($"/api/attendance/{request.EmployeeInformationId}/{request.WorkDate:yyyy-MM-dd}", new { id });
     }
 
     [HttpPost("bulk")]
@@ -142,6 +160,23 @@ public class AttendanceController : ControllerBase
     {
         var updated = await _mediator.Send(new UpdateAttendanceCommand(
             employeeInformationId, workDate, shiftTemplateId,
+            request.CheckInAt, request.CheckOutAt,
+            request.Status,
+            request.Notes, request.OverrideReason), cancellationToken);
+        if (!updated) return NotFound();
+        return NoContent();
+    }
+
+    /// <summary>Sửa record theo Id — dùng cho record OT (không có ShiftTemplateId).</summary>
+    [HttpPut("records/{id:int}")]
+    [HasPermission(Permissions.AttendanceUpdateAll)]
+    public async Task<IActionResult> UpdateById(
+        int id,
+        [FromBody] UpdateAttendanceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var updated = await _mediator.Send(new UpdateAttendanceByIdCommand(
+            id,
             request.CheckInAt, request.CheckOutAt,
             request.Status,
             request.Notes, request.OverrideReason), cancellationToken);

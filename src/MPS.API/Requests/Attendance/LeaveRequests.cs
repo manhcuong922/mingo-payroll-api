@@ -1,3 +1,5 @@
+using MPS.Domain.Enums.Attendance;
+
 namespace MPS.API.Requests.Attendance;
 
 public sealed record InitLeaveBalanceRequest(
@@ -10,9 +12,21 @@ public sealed record CreateLeaveRequest(
     DateOnly StartDate,
     DateOnly EndDate,
     string? Reason,
-    string? SupportingDocumentUrl);
+    string? SupportingDocumentUrl,
+    string? MedicalCertificateUrl,
+    string? InsuranceCertNumber,
+    OvertimeApproverRoute? ApproverRoute,
+    string? OverrideReason);
 
 public sealed record ReviewLeaveRequest(string? ReviewNote);
+
+public sealed record ApproveLeaveRequestBody(
+    string? ReviewNote,
+    string? MedicalCertificateUrl,
+    string? InsuranceCertNumber,
+    string? OverrideReason);
+
+public sealed record CancelLeaveRequestBody(string? CancelReason);
 
 public sealed record CreateLeaveTypeRequest(
     string Code,
@@ -30,6 +44,11 @@ public sealed record CreateLeaveTypeRequest(
     string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
+    int? MinNoticeDaysForShort,
+    int? MinNoticeDaysForMedium,
+    int? MinNoticeDaysForLong,
+    bool AutoFallbackToUnpaid,
+    bool AllowRetroactive,
     bool IsActive = true);
 
 public sealed record UpdateLeaveTypeRequest(
@@ -48,4 +67,9 @@ public sealed record UpdateLeaveTypeRequest(
     string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
+    int? MinNoticeDaysForShort,
+    int? MinNoticeDaysForMedium,
+    int? MinNoticeDaysForLong,
+    bool AutoFallbackToUnpaid,
+    bool AllowRetroactive,
     bool IsActive);

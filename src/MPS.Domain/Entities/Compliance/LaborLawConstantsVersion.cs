@@ -21,9 +21,9 @@ public sealed class LaborLawConstantsVersion : IComplianceVersion
     public decimal MaxRegularHoursPerWeek { get; set; } = 48.00m;
     public decimal StandardWorkingDaysPerMonth { get; set; } = 26.00m;
     public int AnnualLeaveMinDays { get; set; } = 12;
-    public decimal WorkRateNormalFloor { get; set; } = 1.00m;
-    public decimal WorkRateWeeklyRestFloor { get; set; } = 2.00m;
-    public decimal WorkRateHolidayFloor { get; set; } = 3.00m;
+    public decimal WorkRateNormalFloor { get; set; } = 100.00m;
+    public decimal WorkRateWeeklyRestFloor { get; set; } = 200.00m;
+    public decimal WorkRateHolidayFloor { get; set; } = 300.00m;
     public decimal OvertimeMaxHoursPerDay { get; set; } = 4.00m;
     public decimal OvertimeMaxHoursPerMonth { get; set; } = 40.00m;
     public int OvertimeMaxHoursPerYear { get; set; } = 300;

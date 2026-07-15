@@ -449,7 +449,8 @@ public class ContractRepository : IContractRepository
         return candidates.Count;
     }
 
-    public async Task<int> ExpireOverdueContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    public async Task<(int ExpiredCount, IReadOnlyList<int> AffectedEmployeeInformationIds)> ExpireOverdueContractsAsync(
+        DateTime nowUtc, CancellationToken cancellationToken = default)
     {
         // 2 nhóm HĐ với logic expire khác nhau theo ContractKindMetadata.AllowsAutoConvert:
         //  A) AllowsAutoConvert = true (hiện chỉ LaborFullTime): giữ "vùng đệm 30 ngày" theo
@@ -464,7 +465,7 @@ public class ContractRepository : IContractRepository
                 && c.EffectiveTo.Value < nowUtc)
             .ToListAsync(cancellationToken);
 
-        if (candidates.Count == 0) return 0;
+        if (candidates.Count == 0) return (0, Array.Empty<int>());
 
         var autoConvertKinds = ContractKindMetadata.All
             .Where(m => m.AllowsAutoConvert)
@@ -504,7 +505,12 @@ public class ContractRepository : IContractRepository
 
         if (toExpire.Count > 0)
             await _context.SaveChangesAsync(cancellationToken);
-        return toExpire.Count;
+
+        var affectedEmployeeIds = toExpire
+            .Select(c => c.EmployeeInformationId)
+            .Distinct()
+            .ToList();
+        return (toExpire.Count, affectedEmployeeIds);
     }
 
     public async Task<int> ArchiveOldContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)

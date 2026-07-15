@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Project.Commands;
@@ -15,16 +16,21 @@ public sealed class ProjectCompleteAndScopeTests
 {
     private readonly Mock<IProjectRepository> _projects = new();
     private readonly Mock<IProjectTaskRepository> _tasks = new();
+    private readonly Mock<IDepartmentRepository> _departments = new();
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private const int ManagerUserId = 7;
     private const int DeptId = 3;
+    private const int TeamLeaderUserId = 9;
 
     // ===== ProjectComplete =====
 
+    private readonly Mock<MediatR.IPublisher> _publisher = new();
+
     private ProjectCompleteCommandHandler CompleteSut() =>
-        new(_projects.Object, _tasks.Object, _authorizer.Object, _currentUser.Object);
+        new(_projects.Object, _tasks.Object, _authorizer.Object, _currentUser.Object,
+            _publisher.Object, NullLogger<ProjectCompleteCommandHandler>.Instance);
 
     [Fact]
     public async Task Complete_SetsCompleted_WithNote_WhenManager()
@@ -105,16 +111,22 @@ public sealed class ProjectCompleteAndScopeTests
     // ===== ProjectScopeGuard qua ProjectCreate =====
 
     private ProjectCreateCommandHandler CreateSut() =>
-        new(_projects.Object, _authorizer.Object, _currentUser.Object);
+        new(_projects.Object, _departments.Object, _authorizer.Object, _currentUser.Object);
 
     private static ProjectCreateCommand CreateCmd() =>
-        new("Đơn 500 khung", null, null, null, DeptId);
+        new("Đơn 500 khung", null, null, null, DeptId, Quantity: 500, ResponsibleUserId: TeamLeaderUserId);
+
+    private void SetupValidTeamLeader() =>
+        _departments.Setup(d => d.IsUserInDepartmentWithRoleAsync(
+                TeamLeaderUserId, DeptId, SystemRoles.ProductionTeamLeaderId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
     [Fact]
     public async Task Create_Allowed_WhenDirectorHasReadAll()
     {
         _currentUser.SetupGet(c => c.UserId).Returns(1);
         _currentUser.Setup(c => c.HasPermission(Permissions.ProjectReadAll)).Returns(true);
+        SetupValidTeamLeader();
         _projects.Setup(p => p.AddAsync(It.IsAny<MPS.Domain.Entities.Project>(), It.IsAny<CancellationToken>())).ReturnsAsync(55);
 
         var id = await CreateSut().Handle(CreateCmd(), CancellationToken.None);
@@ -130,6 +142,7 @@ public sealed class ProjectCompleteAndScopeTests
         _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
         _currentUser.Setup(c => c.HasPermission(Permissions.ProjectReadAll)).Returns(false);
         _authorizer.Setup(a => a.IsManagerOfAsync(ManagerUserId, DeptId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        SetupValidTeamLeader();
         _projects.Setup(p => p.AddAsync(It.IsAny<MPS.Domain.Entities.Project>(), It.IsAny<CancellationToken>())).ReturnsAsync(55);
 
         var id = await CreateSut().Handle(CreateCmd(), CancellationToken.None);

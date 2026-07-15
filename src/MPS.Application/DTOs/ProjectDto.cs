@@ -10,6 +10,8 @@ public record ProjectDto(
     int Quantity,
     int? DepartmentId,
     string? DepartmentName,
+    int? ResponsibleUserId,             // tổ trưởng sản xuất phụ trách đơn
+    string? ResponsibleUserName,
     int CreatedByUserId,
     string? CreatedByName,
     string? CompletedByName,

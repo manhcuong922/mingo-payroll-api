@@ -34,6 +34,10 @@ public class GetDailyAttendanceQueryHandler
             r.Notes,
             r.OverrideReason,
             r.CreatedAt,
-            r.UpdatedAt)).ToList();
+            r.UpdatedAt,
+            OvertimeRequestId: r.OvertimeRequestId,
+            OtStartTime: r.OvertimeRequest?.OtStartTime,
+            OtEndTime: r.OvertimeRequest?.OtEndTime,
+            OvertimeProjectTitle: r.OvertimeRequest?.Project?.Title)).ToList();
     }
 }

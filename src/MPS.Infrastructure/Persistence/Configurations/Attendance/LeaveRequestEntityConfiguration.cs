@@ -19,14 +19,22 @@ public class LeaveRequestEntityConfiguration : IEntityTypeConfiguration<LeaveReq
         builder.Property(e => e.TotalDays).HasColumnType("decimal(4,1)").IsRequired();
         builder.Property(e => e.IsPaid).IsRequired();
         builder.Property(e => e.Status).HasConversion<byte>().IsRequired();
+        builder.Property(e => e.ApproverRoute).HasConversion<byte>();
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.SupportingDocumentUrl).HasMaxLength(1000);
+        builder.Property(e => e.IsRetroactive).IsRequired().HasDefaultValue(false);
+        builder.Property(e => e.MedicalCertificateUrl).HasMaxLength(1000);
+        builder.Property(e => e.InsuranceCertNumber).HasMaxLength(50);
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.Property(e => e.ReviewedAt);
+        builder.Property(e => e.CancelledAt);
+        builder.Property(e => e.CancelledByUserId);
+        builder.Property(e => e.CancelReason).HasMaxLength(500);
 
         builder.HasIndex(e => new { e.EmployeeInformationId, e.Status });
         builder.HasIndex(e => new { e.StartDate, e.EndDate });
         builder.HasIndex(e => e.LeaveTypeId);
+        builder.HasIndex(e => new { e.Status, e.ApproverRoute });
 
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt);
@@ -52,6 +60,12 @@ public class LeaveRequestEntityConfiguration : IEntityTypeConfiguration<LeaveReq
         builder.HasOne(e => e.ReviewedByUser)
             .WithMany()
             .HasForeignKey(e => e.ReviewedByUserId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(e => e.CancelledByUser)
+            .WithMany()
+            .HasForeignKey(e => e.CancelledByUserId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 

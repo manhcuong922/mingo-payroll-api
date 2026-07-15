@@ -28,9 +28,9 @@ public class LaborLawConstantsVersionEntityConfiguration : IEntityTypeConfigurat
         builder.Property(e => e.MaxRegularHoursPerWeek).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.StandardWorkingDaysPerMonth).HasColumnType("decimal(4,2)").IsRequired();
         builder.Property(e => e.AnnualLeaveMinDays).IsRequired();
-        builder.Property(e => e.WorkRateNormalFloor).HasColumnType("decimal(4,2)").IsRequired();
-        builder.Property(e => e.WorkRateWeeklyRestFloor).HasColumnType("decimal(4,2)").IsRequired();
-        builder.Property(e => e.WorkRateHolidayFloor).HasColumnType("decimal(4,2)").IsRequired();
+        builder.Property(e => e.WorkRateNormalFloor).HasColumnType("decimal(6,2)").IsRequired();
+        builder.Property(e => e.WorkRateWeeklyRestFloor).HasColumnType("decimal(6,2)").IsRequired();
+        builder.Property(e => e.WorkRateHolidayFloor).HasColumnType("decimal(6,2)").IsRequired();
         builder.Property(e => e.OvertimeMaxHoursPerDay).HasColumnType("decimal(4,2)").IsRequired();
         builder.Property(e => e.OvertimeMaxHoursPerMonth).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.OvertimeMaxHoursPerYear).IsRequired();

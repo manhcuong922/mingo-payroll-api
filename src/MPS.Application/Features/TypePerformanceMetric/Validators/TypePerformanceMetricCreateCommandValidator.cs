@@ -23,6 +23,6 @@ public class TypePerformanceMetricCreateCommandValidator
                 var existingTotal = await repository.GetTotalWeightExcludingAsync(null, ct);
                 return existingTotal + cmd.Weight <= 100;
             })
-            .WithMessage("Total weight of all TypePerformanceMetrics must not exceed 100.");
+            .WithMessage("Tổng trọng số các nhóm không được vượt 100% (mục tiêu: tổng đúng bằng 100%).");
     }
 }

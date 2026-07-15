@@ -42,7 +42,18 @@ public sealed record AttendanceRuleDto(
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<int>? UsedByShiftTemplateIds = null);
+    IReadOnlyList<int>? UsedByShiftTemplateIds = null,
+    IReadOnlyList<AttendanceRuleVersionDto>? VersionHistory = null);
+
+public sealed record AttendanceRuleVersionDto(
+    int Id,
+    DateOnly EffectiveFrom,
+    DateOnly? EffectiveTo,
+    decimal WorkRateNormal,
+    decimal WorkRateWeeklyRest,
+    decimal WorkRateHoliday,
+    DateTime CreatedAt,
+    int CreatedByUserId);
 
 public sealed record EmployeeShiftAssignmentDto(
     int Id,
@@ -97,7 +108,9 @@ public sealed record ScheduleTemplateDto(
     IReadOnlyList<int> ShiftTemplateIds,
     IReadOnlyList<ScheduleTemplateShiftDto> Shifts,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    ScheduleApplyTarget? ApplyTarget,
+    IReadOnlyList<int> TargetDepartmentIds);
 
 public sealed record ScheduleTemplateApplyConflictDto(
     int EmployeeInformationId,
@@ -126,26 +139,6 @@ public sealed record PublicHolidayDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
-public sealed record WeeklyDayOffRuleDto(
-    int Id,
-    string Name,
-    string? Description,
-    IReadOnlyList<int> DaysOfWeek,
-    string ApplyScope,
-    string? TargetDepartmentIds,
-    string? TargetEmployeeIds,
-    DateOnly EffectiveFrom,
-    DateOnly? EffectiveTo,
-    bool IsActive,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt);
-
-public sealed record WeeklyDayOffResolveDto(
-    int EmployeeInformationId,
-    DateOnly Date,
-    IReadOnlyList<int> DaysOfWeek,
-    bool IsWeeklyRestDay);
-
 public sealed record AttendanceRecordDto(
     int Id,
     int EmployeeInformationId,
@@ -161,18 +154,65 @@ public sealed record AttendanceRecordDto(
     string? Notes,
     string? OverrideReason,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    // OT metadata — null cho record ca chính
+    int? OvertimeRequestId = null,
+    TimeOnly? OtStartTime = null,
+    TimeOnly? OtEndTime = null,
+    string? OvertimeProjectTitle = null);
 
-public sealed record EmployeeAttendanceSummaryDto(
+/// <summary>
+/// OT Approved chưa được chấm công cho 1 ngày — FE hiển thị row riêng trong daily
+/// roster để HR click chấm. Sau khi chấm → AttendanceRecord tạo với OvertimeRequestId.
+/// </summary>
+public sealed record PendingOvertimeAttendanceDto(
+    int OvertimeRequestId,
     int EmployeeInformationId,
     string EmployeeFullName,
+    DateOnly WorkDate,
+    TimeOnly OtStartTime,
+    TimeOnly OtEndTime,
+    decimal OtHours,
+    int? ProjectId,
+    string? ProjectTitle);
+
+public sealed record EmployeeAttendanceSummaryDto(
+    // Định danh
+    int EmployeeInformationId,
+    string EmployeeFullName,
+    string? EmployeeCode,
+    int? DepartmentId,
+    string? DepartmentName,
+    string? PositionName,
+
+    // Status-based counts — reused bởi Báo cáo cũ (AttendanceReportPanel)
     int PresentDays,
     int AbsentDays,
     int LateDays,
     int HalfDays,
     int OnLeaveDays,
     int EarlyLeaveDays,
-    int TotalRecords);
+    int TotalRecords,
+
+    // DayType-based aggregations — cho Bảng chấm công tháng.
+    // Halfday cộng 0.5 vào DayType tương ứng của ngày đó.
+    decimal NormalDays,
+    decimal WeeklyRestDays,
+    decimal HolidayDays,
+    decimal PaidLeaveDays,
+
+    // Giờ công (từ AttendanceRecord.DayHours/NightHours).
+    decimal DayHours,
+    decimal NightHours,
+    decimal TotalHours,
+
+    // Quy đổi × hệ số (WorkRateNormal/WeeklyRest/Holiday × hours + NightHours × 1.3).
+    // Trả decimal giờ; FE chia StandardHours nếu muốn hiển thị "công".
+    decimal EquivalentHours,
+
+    // Giờ OT — subset của TotalHours, filter records có OvertimeRequestId != null.
+    // Dùng cho sort "OT nhiều nhất" trên bảng chấm công tháng.
+    decimal OtHours);
 
 public sealed record AttendanceSettingDto(
     int Id,
@@ -181,6 +221,13 @@ public sealed record AttendanceSettingDto(
     int LockAfterDays,
     bool AllowAdminOverride,
     bool RequireOverrideReason,
+    int? LateEarlyMaxOccurrencesPerMonth,
+    int? LateEarlyMaxMinutesPerOccurrence,
+    int? LateEarlyBackdateDaysAllowed,
+    decimal? WfhMaxDaysPerMonth,
+    int? WfhMinNoticeDays,
+    decimal? WfhMaxDaysPerRequest,
+    int? WfhWorkPlanMinLength,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
@@ -204,40 +251,27 @@ public sealed record OvertimeRequestDto(
     decimal OtHours,
     decimal OtDayHours,
     decimal OtNightHours,
-    int? OvertimeSlotTemplateId,
-    OvertimeSlotSummaryDto? OvertimeSlotTemplate,
+    // Snapshot version LaborLawConstants — composer dùng để compute multiplier từ công thức
+    int? LaborLawConstantsVersionId,
     OtRequestStatus Status,
     string? Reason,
     string? ReviewNote,
     int? ReviewedByUserId,
     DateTime? ReviewedAt,
-    DateTime CreatedAt);
-
-public sealed record OvertimeSlotSummaryDto(
-    int Id,
-    string Code,
-    TimeOnly StartTime,
-    TimeOnly EndTime,
-    bool IsActive);
-
-public sealed record OvertimeSlotTemplateDto(
-    int Id,
-    string Code,
-    TimeOnly StartTime,
-    TimeOnly EndTime,
-    bool IsNightSlot,
-    // Override multiplier %; null = dùng sàn luật (composer Phase C resolve).
-    decimal? MultiplierNormalDay,
-    decimal? MultiplierWeeklyRestDay,
-    decimal? MultiplierHolidayDay,
-    decimal? MultiplierNormalNightNoPrevOt,
-    decimal? MultiplierNormalNightWithPrevOt,
-    decimal? MultiplierWeeklyRestNight,
-    decimal? MultiplierHolidayNight,
-    string? Description,
-    bool IsActive,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    // v3 workflow — nullable cho legacy records
+    int? ProjectId,
+    string? ProjectTitle,
+    OvertimeApproverRoute? ApproverRoute,
+    Guid? BatchId,
+    // v3 audit tầng 1 — PM (tổ trưởng đơn) review
+    int? PmReviewedByUserId,
+    DateTime? PmReviewedAt,
+    string? PmReviewNote,
+    // v3 audit tầng 2 — Approver (HR hoặc DM) decide
+    int? ApproverReviewedByUserId,
+    DateTime? ApproverReviewedAt,
+    string? ApproverReviewNote);
 
 public sealed record LeaveTypeDto(
     int Id,
@@ -256,6 +290,11 @@ public sealed record LeaveTypeDto(
     string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
+    int? MinNoticeDaysForShort,
+    int? MinNoticeDaysForMedium,
+    int? MinNoticeDaysForLong,
+    bool AutoFallbackToUnpaid,
+    bool AllowRetroactive,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
@@ -271,12 +310,58 @@ public sealed record LeaveRequestDto(
     DateOnly EndDate,
     decimal TotalDays,
     bool IsPaid,
+    OvertimeApproverRoute? ApproverRoute,
     LeaveRequestStatus Status,
     string? Reason,
     string? SupportingDocumentUrl,
+    bool IsRetroactive,
+    string? MedicalCertificateUrl,
+    string? InsuranceCertNumber,
     string? ReviewNote,
     int? ReviewedByUserId,
     DateTime? ReviewedAt,
+    DateTime? CancelledAt,
+    int? CancelledByUserId,
+    string? CancelReason,
+    DateTime CreatedAt);
+
+public sealed record WfhRequestDto(
+    int Id,
+    int EmployeeInformationId,
+    string EmployeeFullName,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    decimal TotalDays,
+    string WorkPlan,
+    OvertimeApproverRoute? ApproverRoute,
+    WfhRequestStatus Status,
+    string? Reason,
+    string? ReviewNote,
+    int? ReviewedByUserId,
+    DateTime? ReviewedAt,
+    DateTime? CancelledAt,
+    int? CancelledByUserId,
+    string? CancelReason,
+    DateTime CreatedAt);
+
+public sealed record LateEarlyRequestDto(
+    int Id,
+    int EmployeeInformationId,
+    string EmployeeFullName,
+    DateOnly WorkDate,
+    LateEarlyKind Kind,
+    short Minutes,
+    bool IsUnplanned,
+    bool DeductFromLeaveBalance,
+    OvertimeApproverRoute? ApproverRoute,
+    LateEarlyRequestStatus Status,
+    string? Reason,
+    string? ReviewNote,
+    int? ReviewedByUserId,
+    DateTime? ReviewedAt,
+    DateTime? CancelledAt,
+    int? CancelledByUserId,
+    string? CancelReason,
     DateTime CreatedAt);
 
 public sealed record LeaveBalanceDto(

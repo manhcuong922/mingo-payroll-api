@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Attendance;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -10,13 +11,16 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
 {
     private readonly IEmployeeInformationRepository _repository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IMediator _mediator;
 
     public EmployeeInformationUpdateCommandHandler(
         IEmployeeInformationRepository repository,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IMediator mediator)
     {
         _repository = repository;
         _currentUserService = currentUserService;
+        _mediator = mediator;
     }
 
     public async Task<bool> Handle(EmployeeInformationUpdateCommand request, CancellationToken cancellationToken)
@@ -60,6 +64,22 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
             GuardianAddress = request.GuardianAddress?.Trim(),
         };
 
-        return await _repository.UpdateAsync(entity, cancellationToken);
+        var updated = await _repository.UpdateAsync(entity, cancellationToken);
+
+        // Publish notification khi dept thực sự đổi — handler AutoApplySchedule tự động
+        // gỡ ca dept cũ và apply ca dept mới. Không publish nếu update thất bại hoặc dept không đổi.
+        if (updated && existing.DepartmentId != request.DepartmentId)
+        {
+            await _mediator.Publish(
+                new EmployeeDepartmentChangedNotification(
+                    EmployeeInformationId: request.Id,
+                    OldDepartmentId: existing.DepartmentId,
+                    NewDepartmentId: request.DepartmentId,
+                    ChangedByUserId: _currentUserService.UserId ?? 0,
+                    ChangedAtUtc: DateTime.UtcNow),
+                cancellationToken);
+        }
+
+        return updated;
     }
 }

@@ -59,7 +59,8 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateProjectRequest request, CancellationToken ct)
     {
         var id = await _mediator.Send(new ProjectCreateCommand(
-            request.Title, request.Description, request.StartDate, request.Deadline, request.DepartmentId), ct);
+            request.Title, request.Description, request.StartDate, request.Deadline, request.DepartmentId,
+            request.Quantity, request.ResponsibleUserId), ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -68,8 +69,8 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> GenerateTasks(int id, [FromBody] GenerateTasksRequest request, CancellationToken ct)
     {
         var count = await _mediator.Send(
-            new ProjectGenerateTasksCommand(id, request.ProcessTemplateId, request.Overrides), ct);
-        return Ok(new { generatedStages = count });
+            new ProjectGenerateTasksCommand(id, request.ProcessTemplateId), ct);
+        return Ok(new { generatedTasks = count });
     }
 
     [HttpPut("{id:int}")]
@@ -77,7 +78,16 @@ public class ProjectController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] UpdateProjectRequest request, CancellationToken ct)
     {
         var ok = await _mediator.Send(new ProjectUpdateCommand(
-            id, request.Title, request.Description, request.Deadline, request.Status), ct);
+            id, request.Title, request.Description, request.StartDate, request.Deadline, request.Status), ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    // ⭐ Đổi tổ trưởng sản xuất phụ trách đơn (Planning/GĐ). PmUserId phải role 6 + cùng xưởng.
+    [HttpPatch("{id:int}/responsible")]
+    [HasPermission(Permissions.ProjectUpdateAll)]
+    public async Task<IActionResult> SetResponsible(int id, [FromBody] SetResponsibleRequest request, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new ProjectSetResponsibleCommand(id, request.ResponsibleUserId), ct);
         return ok ? NoContent() : NotFound();
     }
 

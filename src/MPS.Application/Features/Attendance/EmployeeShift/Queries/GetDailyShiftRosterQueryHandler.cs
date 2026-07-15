@@ -8,21 +8,21 @@ namespace MPS.Application.Features.Attendance.EmployeeShift.Queries;
 public class GetDailyShiftRosterQueryHandler : IRequestHandler<GetDailyShiftRosterQuery, IReadOnlyList<EmployeeShiftAssignmentDto>>
 {
     private readonly IEmployeeShiftAssignmentRepository _repository;
-    private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
 
     public GetDailyShiftRosterQueryHandler(
         IEmployeeShiftAssignmentRepository repository,
-        IContractRepository contractRepository)
+        IEmployeeInformationRepository employeeRepository)
     {
         _repository = repository;
-        _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
     }
 
     public async Task<IReadOnlyList<EmployeeShiftAssignmentDto>> Handle(GetDailyShiftRosterQuery request, CancellationToken cancellationToken)
     {
         var items = await _repository.GetByDateAsync(request.WorkDate, cancellationToken);
         var employeeIds = items.Select(a => a.EmployeeInformationId).Distinct().ToArray();
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(employeeIds, cancellationToken);
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(employeeIds, cancellationToken);
         var activeSet = activeIds.ToHashSet();
 
         return items.Where(a => activeSet.Contains(a.EmployeeInformationId)).Select(a => new EmployeeShiftAssignmentDto(

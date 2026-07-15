@@ -107,6 +107,11 @@ public class LeaveTypeRepository : ILeaveTypeRepository
         tracked.TargetEmployeeIds = entity.TargetEmployeeIds;
         tracked.RequireDocument = entity.RequireDocument;
         tracked.DeductsBalance = entity.DeductsBalance;
+        tracked.MinNoticeDaysForShort = entity.MinNoticeDaysForShort;
+        tracked.MinNoticeDaysForMedium = entity.MinNoticeDaysForMedium;
+        tracked.MinNoticeDaysForLong = entity.MinNoticeDaysForLong;
+        tracked.AutoFallbackToUnpaid = entity.AutoFallbackToUnpaid;
+        tracked.AllowRetroactive = entity.AllowRetroactive;
         tracked.IsActive = entity.IsActive;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;

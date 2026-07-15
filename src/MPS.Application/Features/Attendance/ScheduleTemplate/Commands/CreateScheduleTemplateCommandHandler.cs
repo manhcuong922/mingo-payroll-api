@@ -5,6 +5,7 @@ using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Application.Features.Attendance.ShiftTemplate.Common;
+using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -19,9 +20,9 @@ public class CreateScheduleTemplateCommandHandler
 {
     private readonly IScheduleTemplateRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IDepartmentRepository _departmentRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
-    private readonly IContractRepository _contractRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IRegularHoursCapChecker _capChecker;
     private readonly IMediator _mediator;
@@ -31,9 +32,9 @@ public class CreateScheduleTemplateCommandHandler
     public CreateScheduleTemplateCommandHandler(
         IScheduleTemplateRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IDepartmentRepository departmentRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
-        IContractRepository contractRepository,
         IEmployeeInformationRepository employeeRepository,
         IRegularHoursCapChecker capChecker,
         IMediator mediator,
@@ -42,9 +43,9 @@ public class CreateScheduleTemplateCommandHandler
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _departmentRepository = departmentRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
-        _contractRepository = contractRepository;
         _employeeRepository = employeeRepository;
         _capChecker = capChecker;
         _mediator = mediator;
@@ -60,10 +61,6 @@ public class CreateScheduleTemplateCommandHandler
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
 
         var name = request.Name?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new DomainValidationException("Tên bảng phân ca không được rỗng.");
-        }
 
         var employeeIds = await ScheduleTemplateEmployeeResolver.ResolveAsync(
             request.ApplyTarget,
@@ -82,14 +79,31 @@ public class CreateScheduleTemplateCommandHandler
             request.DaysOfMonth,
             employeeIds);
 
-        if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
+        if (string.IsNullOrEmpty(name))
+        {
+            // Auto-sinh tên nếu user không nhập — luôn unique (generator tự append suffix).
+            name = await ScheduleTemplateNameGenerator.GenerateAsync(
+                request.ShiftTemplateIds,
+                request.ApplyTarget,
+                request.EmployeeInformationIds,
+                request.DepartmentIds,
+                request.EffectiveFrom,
+                request.EffectiveTo,
+                excludeTemplateId: null,
+                _shiftRepository,
+                _departmentRepository,
+                _employeeRepository,
+                _repository,
+                cancellationToken);
+        }
+        else if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
         {
             throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
         }
 
         var shifts = await LoadActiveShiftsAsync(request.ShiftTemplateIds, cancellationToken);
 
-        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
+        await EnsureEmployeesHaveActiveUsersAsync(employeeIds, cancellationToken);
 
         // Build a transient shape for pattern expansion (entity not yet persisted).
         var templateShape = new ScheduleTemplateEntity
@@ -119,6 +133,7 @@ public class CreateScheduleTemplateCommandHandler
             cancellationToken);
 
         var now = _clock.UtcNow;
+        var applyTarget = request.ApplyTarget ?? ScheduleApplyTarget.Employees;
         var entity = new ScheduleTemplateEntity
         {
             Name = name,
@@ -131,6 +146,10 @@ public class CreateScheduleTemplateCommandHandler
             DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth),
             IsActive = true,
             Notes = request.Notes,
+            ApplyTarget = applyTarget,
+            TargetDepartmentIds = applyTarget == ScheduleApplyTarget.Departments
+                ? ScheduleTemplateValidation.ToCsvMask(request.DepartmentIds)
+                : null,
             CreatedAt = now,
             CreatedByUserId = userId
         };
@@ -173,14 +192,14 @@ public class CreateScheduleTemplateCommandHandler
             .ToList();
     }
 
-    private async Task EnsureEmployeesHaveActiveContractsAsync(
+    private async Task EnsureEmployeesHaveActiveUsersAsync(
         IReadOnlyCollection<int> employeeIds,
         CancellationToken cancellationToken)
     {
         var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
         if (ids.Length == 0) return;
 
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(ids, cancellationToken);
         var activeSet = activeIds.ToHashSet();
         var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
         if (inactiveIds.Length == 0) return;
@@ -188,7 +207,7 @@ public class CreateScheduleTemplateCommandHandler
         var preview = string.Join(", ", inactiveIds.Take(10));
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
-            $"Không thể tạo bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+            $"Không thể tạo bảng phân ca: nhân viên {preview}{suffix} không có tài khoản active.");
     }
 
     private async Task EnsureRegularHoursCapAsync(

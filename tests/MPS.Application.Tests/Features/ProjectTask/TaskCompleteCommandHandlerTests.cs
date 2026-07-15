@@ -14,6 +14,7 @@ namespace MPS.Application.Tests.Features.ProjectTask;
 public sealed class TaskCompleteCommandHandlerTests
 {
     private readonly Mock<IProjectTaskRepository> _tasks = new();
+    private readonly Mock<IProjectRepository> _projects = new();
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
@@ -21,7 +22,7 @@ public sealed class TaskCompleteCommandHandlerTests
     private const int DeptId = 3;
 
     private TaskCompleteCommandHandler CreateSut() =>
-        new(_tasks.Object, _authorizer.Object, _currentUser.Object);
+        new(_tasks.Object, _projects.Object, _authorizer.Object, _currentUser.Object);
 
     private static string Rv(byte[] bytes) => Convert.ToBase64String(bytes);
 
@@ -94,8 +95,8 @@ public sealed class TaskCompleteCommandHandlerTests
 
         await CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
 
-        _tasks.Verify(t => t.RecomputeParentCompletedAsync(99, It.IsAny<CancellationToken>()), Times.Once);
-        _tasks.Verify(t => t.TrySetParentDoneAsync(99, It.IsAny<DateTime>(), ManagerUserId, It.IsAny<CancellationToken>()), Times.Once);
+        // Rollup đệ quy lên tổ tiên từ chính leaf vừa Done (refactor).
+        _tasks.Verify(t => t.RollupAncestorsAsync(10, It.IsAny<DateTime>(), ManagerUserId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -133,17 +134,15 @@ public sealed class TaskCompleteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Complete_Throws403_WhenNotAssignedPmOfParentStage()
+    public async Task Complete_Throws403_WhenNotResponsibleNorPlanningManager()
     {
-        // Task lá thuộc công đoạn #99, PM phụ trách là user #999 — user hiện tại (#7) không phải PM đó.
-        _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);
-        var task = Task(DateTime.UtcNow.AddDays(2), parentId: 99);
+        // refactor R/S: chỉ tổ trưởng phụ trách đơn (ResponsibleUserId) / Planning Manager / GĐ mới hoàn thành được.
+        _currentUser.SetupGet(c => c.UserId).Returns(ManagerUserId);   // user #7 không phải tổ trưởng đơn
+        var task = Task(DateTime.UtcNow.AddDays(2));
+        task.ProjectId = 50;
         _tasks.Setup(t => t.GetByIdAsync(10, It.IsAny<CancellationToken>())).ReturnsAsync(task);
-        _tasks.Setup(t => t.GetByIdAsync(99, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MPS.Domain.Entities.ProjectTask
-            {
-                Id = 99, IsBatchParent = true, DepartmentId = DeptId, AssignedPmUserId = 999,
-            });
+        _projects.Setup(p => p.GetByIdAsync(50, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MPS.Domain.Entities.Project { Id = 50, DepartmentId = DeptId, ResponsibleUserId = 999 });
 
         var act = () => CreateSut().Handle(new TaskCompleteCommand(10, Rv(task.RowVersion)), CancellationToken.None);
 

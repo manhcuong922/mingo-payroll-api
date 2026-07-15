@@ -42,6 +42,6 @@ public class PerformanceMetricUpdateCommandValidator : AbstractValidator<Perform
                     cmd.TypePerformanceMetricId, cmd.Id, ct);
                 return total + cmd.Weight <= 100;
             })
-            .WithMessage("Total weight of PerformanceMetrics within this type must not exceed 100.");
+            .WithMessage("Tổng trọng số tiêu chí trong nhóm không được vượt 100% (mục tiêu: tổng đúng bằng 100%).");
     }
 }

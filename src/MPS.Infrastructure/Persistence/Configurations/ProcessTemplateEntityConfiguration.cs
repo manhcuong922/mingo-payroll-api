@@ -16,6 +16,7 @@ public class ProcessTemplateEntityConfiguration : IEntityTypeConfiguration<Proce
         builder.Property(e => e.Name).HasMaxLength(150).IsRequired();
         builder.Property(e => e.Description).HasColumnType("nvarchar(max)");
         builder.Property(e => e.IsActive).HasDefaultValue(true);
+        builder.Property(e => e.BaseQuantity).HasDefaultValue(1);
 
         builder.HasOne(t => t.DefaultDepartment)
             .WithMany()

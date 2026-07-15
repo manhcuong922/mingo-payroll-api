@@ -22,7 +22,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
     private readonly IClock _clock;
     private readonly IScheduleTemplateRepository _scheduleRepository;
     private readonly IShiftTemplateRepository _shiftRepository;
-    private readonly IContractRepository _contractRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IRegularHoursCapChecker _capChecker;
 
     public ConfirmMonthlyScheduleImportCommandHandler(
@@ -32,7 +32,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         IClock clock,
         IScheduleTemplateRepository scheduleRepository,
         IShiftTemplateRepository shiftRepository,
-        IContractRepository contractRepository,
+        IEmployeeInformationRepository employeeRepository,
         IRegularHoursCapChecker capChecker)
     {
         _cache = cache;
@@ -41,7 +41,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         _clock = clock;
         _scheduleRepository = scheduleRepository;
         _shiftRepository = shiftRepository;
-        _contractRepository = contractRepository;
+        _employeeRepository = employeeRepository;
         _capChecker = capChecker;
     }
 
@@ -75,7 +75,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         var fromDate = entry.Operations.Min(o => o.WorkDate);
         var toDate = entry.Operations.Max(o => o.WorkDate);
 
-        await EnsureEmployeesHaveActiveContractsAsync(
+        await EnsureEmployeesHaveActiveUsersAsync(
             entry.Operations.Select(o => o.EmployeeInformationId).Distinct().ToArray(),
             cancellationToken);
 
@@ -197,14 +197,14 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         }
     }
 
-    private async Task EnsureEmployeesHaveActiveContractsAsync(
+    private async Task EnsureEmployeesHaveActiveUsersAsync(
         IReadOnlyCollection<int> employeeIds,
         CancellationToken cancellationToken)
     {
         var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
         if (ids.Length == 0) return;
 
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(ids, cancellationToken);
         var activeSet = activeIds.ToHashSet();
         var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
         if (inactiveIds.Length == 0) return;
@@ -212,7 +212,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         var preview = string.Join(", ", inactiveIds.Take(10));
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
-            $"Không thể import phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+            $"Không thể import phân ca: nhân viên {preview}{suffix} không có tài khoản active.");
     }
 
     private static string BuildBatchLabel(MonthlyScheduleImportCacheEntry entry, DateTime now)

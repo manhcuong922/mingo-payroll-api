@@ -13,10 +13,14 @@ public class ShiftTemplateEntityConfiguration : IEntityTypeConfiguration<ShiftTe
         builder.Property(e => e.Id).UseIdentityColumn();
 
         builder.Property(e => e.Code).HasMaxLength(20).IsRequired();
-        builder.HasIndex(e => e.Code).IsUnique();
+        builder.HasIndex(e => e.Code)
+            .IsUnique()
+            .HasFilter("[IsActive] = 1");
 
         builder.Property(e => e.Name).HasMaxLength(100).IsRequired();
-        builder.HasIndex(e => e.Name).IsUnique();
+        builder.HasIndex(e => e.Name)
+            .IsUnique()
+            .HasFilter("[IsActive] = 1");
 
         builder.Property(e => e.StartTime).IsRequired();
         builder.Property(e => e.EndTime).IsRequired();

@@ -172,6 +172,7 @@ Có command/query:
 Quy tắc chính:
 
 - `ScheduleTemplate` là preset. Source of truth vẫn là `EmployeeShiftAssignments`.
+- `Name` unique **trong phạm vi các row đang active** (`IsActive = true`). Sau khi deactivate 1 bảng phân ca, tên đó được phép dùng lại cho bảng mới. Xem §12.
 - `ScheduleTemplateExpander` hỗ trợ lặp `Day`, `Week`, `Month`.
 - `EffectiveFrom..EffectiveTo` tối đa 366 ngày.
 - `RepeatEvery` trong `[1, 52]`.
@@ -862,3 +863,330 @@ DELETE FROM AttendanceRules WHERE Name = 'Night Shift Premium' AND Id = 2;
 ### 11.6. Thứ tự với §7, §9, §10
 
 §11 độc lập với §7/§9/§10 và làm trước. Sau khi §11 land, các plan kia vẫn áp được nhưng đơn giản hơn vì ShiftTemplate chỉ tham chiếu AttendanceRule, không giữ snapshot hệ số.
+
+## 12. ScheduleTemplate — cho phép tái sử dụng tên sau khi deactivate (Bug fix)
+
+### 12.1. Triệu chứng
+
+User inactivate 1 bảng phân ca (VD `Fulltime - tháng 7`) rồi tạo lại tên đó → 409 `Bảng phân ca với tên '…' đã tồn tại.`
+
+### 12.2. Nguyên nhân — 2 tầng chặn
+
+**Tầng application** — `CreateScheduleTemplateCommandHandler.cs:85` gọi `IScheduleTemplateRepository.ExistsByNameAsync(name, excludeId: null, …)`. Impl ở `ScheduleTemplateRepository.cs:65-68`:
+
+```csharp
+_context.ScheduleTemplates
+    .AnyAsync(t => t.Name == name && (excludeId == null || t.Id != excludeId), ct);
+```
+
+→ Không filter `IsActive`. Row đã soft-delete (IsActive = false) vẫn được tính.
+
+**Tầng database** — `ScheduleTemplateEntityConfiguration.cs:17`:
+
+```csharp
+builder.HasIndex(e => e.Name).IsUnique();
+```
+
+→ Unique full-column, không có filter. Kể cả sửa được tầng application, `INSERT` vẫn văng constraint violation từ SQL Server.
+
+**Deactivate flow** — `ScheduleTemplateRepository.cs:154-164` `DeactivateAsync` chỉ set `IsActive = false`, không đổi Name → row cũ giữ nguyên tên.
+
+`UpdateScheduleTemplateCommandHandler` dùng chung `ExistsByNameAsync` (với `excludeId != null`) nên cùng bug: rename một template active thành tên đã bị 1 template khác dùng-rồi-inactive → cũng bị chặn oan.
+
+### 12.3. Rule mới
+
+`Name` của `ScheduleTemplate` duy nhất **trong phạm vi các row active** (`IsActive = true`).
+
+- 2 template inactive cùng tên: OK (không cần đụng dữ liệu lịch sử).
+- 1 active + 1 inactive cùng tên: OK.
+- 2 active cùng tên: KHÔNG cho phép.
+
+### 12.4. Files phải chạm
+
+1. **`src/MPS.Infrastructure/Persistence/Configurations/Attendance/ScheduleTemplateEntityConfiguration.cs`** — đổi:
+   ```csharp
+   builder.HasIndex(e => e.Name).IsUnique();
+   ```
+   thành filtered unique index (SQL Server hỗ trợ):
+   ```csharp
+   builder.HasIndex(e => e.Name)
+       .IsUnique()
+       .HasFilter("[IsActive] = 1");
+   ```
+
+2. **`src/MPS.Infrastructure/Repositories/Attendance/ScheduleTemplateRepository.cs:65-68`** — thêm filter `IsActive`:
+   ```csharp
+   _context.ScheduleTemplates
+       .AsNoTracking()
+       .AnyAsync(t => t.IsActive
+                      && t.Name == name
+                      && (excludeId == null || t.Id != excludeId), ct);
+   ```
+
+3. **Migration mới** — drop unique index cũ `IX_ScheduleTemplates_Name`, tạo lại với `filter = "[IsActive] = 1"`. Tên đề xuất: `20260709xxxxxx_ScheduleTemplateNameUniqueActiveOnly.cs`.
+
+4. **Không đụng** `CreateScheduleTemplateCommandHandler` / `UpdateScheduleTemplateCommandHandler` — chỉ dùng repo interface, không thay đổi ngữ nghĩa method.
+
+### 12.5. Rủi ro
+
+- Nếu DB hiện tại đã có 2 row **active** trùng tên (do bug khác), migration up sẽ fail vì filtered unique index không tạo được. → Trước khi apply migration, chạy check:
+  ```sql
+  SELECT Name, COUNT(*) FROM ScheduleTemplates WHERE IsActive = 1 GROUP BY Name HAVING COUNT(*) > 1;
+  ```
+  Kết quả rỗng thì mới migrate.
+- Filter `[IsActive] = 1` là cú pháp SQL Server. Nếu sau này port sang Postgres, cần đổi thành partial index `WHERE "IsActive" = true` — flag ở đây để migrator sau dễ pickup.
+
+### 12.6. Acceptance test
+
+- [ ] Tạo template `A` (active) → OK.
+- [ ] Tạo lại template tên `A` khi `A` đang active → 409.
+- [ ] Deactivate `A` → tạo lại template `A` mới → OK.
+- [ ] Deactivate 2 template cùng tên `A` → OK (không có unique violation ở tầng inactive).
+- [ ] Update template `B` (active) đổi tên thành `A` khi tồn tại `A` inactive → OK; đổi thành `A` khi tồn tại `A` active khác → 409.
+- [ ] Migration up trên DB dev không văng lỗi index-duplicate; down revert được về unique full-column.
+
+### 12.7. Edge case: Update template inactive không đổi tên
+
+**Kịch bản**: Có `A` inactive tên `Fulltime - tháng 7` và `B` active tên `Fulltime - tháng 7` (do §12.3 cho phép trùng tên khi 1 trong 2 inactive). User edit `A` (VD bỏ chọn nhân viên) với PUT `IsActive: false` giữ nguyên inactive.
+
+**Bug**: `UpdateScheduleTemplateCommandHandler.cs:77` gọi `ExistsByNameAsync(name, excludeId: A.Id)` — sau §12 fix, query filter `t.IsActive` → tìm thấy `B` (active, cùng tên, id ≠ A.Id) → throw 409 `"Bảng phân ca với tên 'Fulltime - tháng 7' đã tồn tại."`.
+
+Nhưng A vẫn inactive sau update → DB filtered unique index **không hề conflict**. App-level check strict hơn DB, chặn oan.
+
+**Fix**: Chỉ check trùng tên khi request muốn activate (`IsActive: true`). Nếu update giữ inactive → skip.
+
+```csharp
+if (request.IsActive && await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
+{
+    throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
+}
+```
+
+**Acceptance thêm**:
+
+- [ ] Có `A` inactive + `B` active cùng tên `X`. Edit `A` (giữ `IsActive: false`, bỏ 1 NV) → OK, không 409.
+- [ ] Cùng scenario, nếu edit `A` chuyển `IsActive: true` → 409 (vì sẽ conflict DB unique).
+- [ ] Có 2 template inactive cùng tên `X`. Edit 1 template giữ inactive → OK.
+
+## 13. ScheduleTemplate — không hiển thị ca của template inactive trên roster (Bug fix)
+
+### 13.1. Triệu chứng
+
+Sau khi user set `IsActive = false` trên 1 `ScheduleTemplate` (qua PUT `/api/schedule-templates/{id}`), các `EmployeeShiftAssignment` do template đó tạo **vẫn hiện** trên bảng chấm công / shift roster theo tháng.
+
+### 13.2. Nguyên nhân
+
+`UpdateScheduleTemplateCommandHandler.cs:114` chỉ set `existing.IsActive = false` — không đụng vào bảng `EmployeeShiftAssignments`. Đúng ngữ nghĩa "soft deactivate" (khác với endpoint `DELETE` cascade-clean unlocked assignments).
+
+Các query hiển thị roster chỉ filter theo `EmployeeInformationId` + date range, **không quan tâm** `ScheduleTemplate.IsActive`:
+
+- `EmployeeShiftAssignmentRepository.cs:65-75` `GetByEmployeesAndDateRangeAsync` — dùng bởi `GetShiftRosterQueryHandler` (màn chấm công tháng) + `GetMyShiftRosterQueryHandler` (self view).
+- `EmployeeShiftAssignmentRepository.cs:42-52` `GetByDateAsync` — dùng bởi `GetDailyShiftRosterQueryHandler` + `GetDailyAttendanceQueryHandler`.
+
+⇒ Assignment orphan-owned-by-inactive-template lộ ra trên FE.
+
+### 13.3. Rule mới
+
+**Query hiển thị roster** loại bỏ assignment do template inactive sở hữu:
+
+```csharp
+a.ScheduleTemplateId == null || a.ScheduleTemplate!.IsActive
+```
+
+- `ScheduleTemplateId == null` = assignment ad-hoc (không thuộc template) → luôn hiện.
+- `ScheduleTemplate.IsActive = true` → hiện.
+- `ScheduleTemplate.IsActive = false` → ẩn (dữ liệu vẫn còn trong DB).
+
+**Không** filter ở write-path queries:
+
+- `GetByKeyAsync`, `GetByEmployeeAndDateAsync` — dùng cho check-in / record attendance. Assignment vẫn tồn tại nên vẫn cho phép chấm công.
+- `GetOwnedConflictsAsync` — dùng cho conflict-detection khi tạo/update template. Cần thấy ALL để tránh double-insert đè lên assignment inactive-owned (tránh sinh 2 row cùng key `(emp, date, shift)`).
+- `GetLockedShiftsAsync` — đọc `AttendanceRecords` (đã chấm công thật), không dính `ScheduleTemplate` → giữ nguyên.
+
+Nếu HR muốn xoá luôn assignments của template inactive → dùng endpoint `DELETE` (đã có cascade). §13 chỉ ẩn khỏi UI, không destructive.
+
+### 13.4. Files phải chạm
+
+Không cần migration. Không đụng controller / FE.
+
+1. **`src/MPS.Infrastructure/Repositories/Attendance/EmployeeShiftAssignmentRepository.cs`**:
+   - `GetByDateAsync` — thêm filter `(a.ScheduleTemplateId == null || a.ScheduleTemplate!.IsActive)` (chỉ callers display: `GetDailyAttendanceQueryHandler`, `GetDailyShiftRosterQueryHandler`).
+   - `GetByEmployeesAndDateRangeAsync` — **thêm param `bool includeInactiveTemplates = true`** rồi apply filter conditionally. Method này có 5 caller: 4 write-path (batch conflict, cap checkers) mặc định `true`; chỉ `GetShiftRosterQueryHandler` (display) pass `false`.
+
+2. **`src/MPS.Domain/Interfaces/Attendance/IEmployeeShiftAssignmentRepository.cs`** — cập nhật signature `GetByEmployeesAndDateRangeAsync` với param mới.
+
+3. **`src/MPS.Application/Features/Attendance/EmployeeShift/Queries/GetShiftRosterQueryHandler.cs`** — pass `includeInactiveTemplates: false`.
+
+4. **Callers khác dùng named arg cho `cancellationToken`** (vì thứ tự tham số đổi):
+   - `BatchUpdateShiftAssignmentsCommandHandler.cs:79`
+   - `OvertimeCapChecker.cs:42`
+   - `RegularHoursCapChecker.cs:46, 86`
+
+### 13.5. Rủi ro
+
+- Nếu template được **reactivate** sau đó (PUT với `IsActive: true`) → assignments của nó lại tự hiện. Đây là hành vi mong muốn (đã note trong §13.3).
+- EF Core dịch `a.ScheduleTemplate!.IsActive` thành `LEFT JOIN ScheduleTemplates ON …` + `WHERE IsActive = 1`. Đã có `Include(a => a.ScheduleTemplate)` chưa? Không — chỉ có `Include(ShiftTemplate)` + `Include(EmployeeInformation)`. Filter trong `Where` không cần `Include`; EF tự sinh JOIN cho filter. Verify SQL sau khi apply.
+- **Regression trap (đã fix)**: filter §13 KHÔNG được lan sang batch/cap-checker. `GetByEmployeesAndDateRangeAsync` cần thấy assignment inactive-owned để: (a) batch phát hiện `AttendanceLocked` đúng thay vì INSERT trùng `IX_EmployeeShiftAssignments_(Emp,Date,ShiftId)`; (b) cap-checker tính tổng giờ chính xác. Fix bằng param `includeInactiveTemplates` mặc định `true`.
+
+### 13.6. Acceptance test
+
+- [ ] Tạo template `A` active + assign 5 ngày → GET roster → thấy 5 shift.
+- [ ] PUT `A` với `IsActive: false` → GET roster → thấy 0 shift.
+- [ ] PUT `A` với `IsActive: true` lại → GET roster → thấy 5 shift.
+- [ ] Assignment ad-hoc (`ScheduleTemplateId = NULL`) không bị filter → vẫn hiển thị.
+- [ ] Check-in vào ngày assigned bởi template inactive vẫn work (không bị block) — assignment vẫn tồn tại ở write-path.
+- [ ] Tạo template `B` overlap thời gian với assignment inactive của `A` → xem §14 (không còn hard-block).
+
+## 14. ScheduleTemplate — cho phép tái sử dụng khoảng thời gian sau khi inactive/delete (Bug fix)
+
+### 14.1. Triệu chứng
+
+Kịch bản: HR tạo template A phân ca 1-30/07, NV chấm công ngày 1-5. Sau đó HR inactive A (PUT `IsActive: false`) hoặc DELETE A, rồi muốn tạo template B **y hệt** (cùng NV, cùng khoảng, cùng ca).
+
+Kết quả hiện tại: **không tạo được B**, error `"Không thể tạo: ca "S1" trùng giờ với "Fulltime - tháng 7" (30 ngày)."` (hoặc 5 ngày nếu DELETE).
+
+### 14.2. Nguyên nhân
+
+`CreateScheduleTemplateCommandHandler.cs:105-110` gọi `EnsureNoPatternOverlapAsync` → `GetOwnedConflictsAsync` (`EmployeeShiftAssignmentRepository.cs:173-190`). Query này **không filter** `ScheduleTemplate.IsActive`, nên assignment do A (đã inactive) sở hữu vẫn bị coi là "đang chiếm slot" → 409 hard-block trước khi tới batch step.
+
+Ngịch lý: batch handler `BatchUpdateShiftAssignmentsCommandHandler.cs:390-421` **đã có sẵn** logic đúng với policy `ReplaceIfNoAttendance` mà Create pass vào (line 251):
+
+- Overlap + đã chấm công (locked) → `AttendanceLocked`, giữ ca cũ.
+- Overlap + chưa chấm → xoá ca cũ, thêm ca mới.
+- Không overlap → thêm thẳng.
+
+Nhưng pre-check throw sớm nên logic này không bao giờ chạy.
+
+### 14.3. Rule mới
+
+Assignment do template **INACTIVE** sở hữu **không được coi là conflict** ở pre-check `GetOwnedConflictsAsync`. Batch step tiếp theo tự dùng `ReplaceIfNoAttendance` xử lý đúng:
+
+- Ngày locked (có attendance): giữ ca cũ, không đè → attendance nguyên vẹn.
+- Ngày unlocked: replace bằng ca mới thuộc B.
+
+Assignment ad-hoc (`ScheduleTemplateId = NULL`) và assignment của template ACTIVE khác **vẫn coi là conflict** (không thay đổi behavior với template đang dùng).
+
+### 14.4. Files phải chạm
+
+**`src/MPS.Infrastructure/Repositories/Attendance/EmployeeShiftAssignmentRepository.cs:173-190`** — branch `ownedRows`, thêm 1 điều kiện vào `Where`:
+
+```csharp
+.Where(a => a.ScheduleTemplateId != null
+    && a.ScheduleTemplate!.IsActive          // ← thêm
+    && (excludeScheduleTemplateId == null || a.ScheduleTemplateId != excludeScheduleTemplateId)
+    && employeeIds.Contains(a.EmployeeInformationId)
+    && a.WorkDate >= queryFromDate
+    && a.WorkDate <= queryToDate)
+```
+
+Không đụng handler, không migration, không FE.
+
+### 14.5. Rủi ro & UX gap
+
+- **UX gap ngày locked**: Assignment ngày 1-5 vẫn thuộc A (inactive) sau khi tạo B. `§13` filter roster ẩn assignment thuộc template inactive → **roster của B không hiển thị ngày 1-5** dù attendance có trên summary.
+- **Không mất data**: `AttendanceRecord` nguyên vẹn, luôn hiện đầy đủ trên "bảng chấm công tháng" (`GetAttendanceSummary`).
+- **Extension option**: Nếu QA/HR phàn nàn về roster gap, mở §15 sau — transfer ownership `ScheduleTemplateId` từ A → B khi batch gặp `AttendanceLocked`. Không phá backward compat.
+
+### 14.6. Acceptance test
+
+- [ ] Tạo A ngày 1-30/07, NV E1, ca S1 → OK.
+- [ ] Chấm công cho E1 ngày 1-5/07.
+- [ ] PUT A `IsActive: false` → tạo B y hệt (1-30/07, E1, S1) → **B tạo được**. Result DTO: `applied ≥ 25` (ngày 6-30 hoặc replaced), `attendanceLocked = 5` (ngày 1-5).
+- [ ] DELETE A → tạo B y hệt → **B tạo được**. Result DTO: `applied = 25` (ngày 6-30), `attendanceLocked = 5` (ngày 1-5).
+- [ ] Attendance ngày 1-5 vẫn hiện đầy đủ trên `GET /api/attendance-summary`.
+- [ ] Assignment ngày 1-5 trong DB: `ScheduleTemplateId = A.Id` (không đổi), `A.IsActive = false`.
+- [ ] Assignment ngày 6-30 trong DB: `ScheduleTemplateId = B.Id`, `B.IsActive = true`.
+- [ ] Tạo template C khi B **đang active** overlap thời gian với B → vẫn 409 (không nới lỏng cho active).
+- [ ] Assignment ad-hoc (`ScheduleTemplateId = NULL`) overlap → vẫn 409 (orphan branch không đổi).
+
+## 15. ScheduleTemplate — Update auto-sweep + auto re-expand (Bug fix)
+
+### 15.1. Triệu chứng
+
+Kịch bản: HR mở template A đang có NV [E1, E2, E3], **bỏ tick hết NV** rồi save. Sau đó tạo B y hệt (cùng khoảng thời gian, ca) chọn lại E1/E2/E3 → 409 `"Không thể tạo: ca 'S1' trùng giờ với 'A' (X ngày)"`. FE có thể swallow → user thấy "chọn NV mà không hiện".
+
+### 15.2. Nguyên nhân
+
+`UpdateScheduleTemplateCommandHandler.cs` chỉ update metadata + đồng bộ `ScheduleTemplateEmployees` link table, **KHÔNG dọn assignment** trong bảng `EmployeeShiftAssignments`. Sau khi save:
+
+- `A.Employees` link table: rỗng.
+- `EmployeeShiftAssignments` với `ScheduleTemplateId = A.Id` cho E1/E2/E3: **vẫn còn nguyên** (orphan ownership).
+
+`ReapplyScheduleTemplateCommandHandler` có gọi `DeleteStaleByScheduleTemplateAsync` sweep + batch re-expand — nhưng Update thì không. Design cũ giả định HR bấm Reapply sau Update, thực tế user expect "Save = sync ngay".
+
+Assignment mồ côi vẫn ACTIVE (A active) → `GetOwnedConflictsAsync` (đã filter inactive per §14) vẫn báo → chặn tạo B.
+
+### 15.3. Rule mới
+
+`UpdateScheduleTemplateCommand` sau khi save metadata, **tự chạy sync flow** giống Reapply:
+
+1. `DeleteStaleByScheduleTemplateAsync(A.Id, retainDates, retainShiftIds, retainEmployeeIds)` — dọn assignment không match retain sets, giữ locked.
+2. Nếu `request.IsActive == true` và có ngày/NV/ca → `BatchUpdateShiftAssignmentsCommand` với `ReplaceIfNoAttendance` để add/replace assignment cho pattern mới.
+
+Nếu `request.IsActive == false` → chỉ sweep, không re-expand (template inactive không cần assignment mới; assignment locked vẫn giữ do sweep loại trừ).
+
+### 15.4. Files phải chạm
+
+1. **`src/MPS.Application/Features/Attendance/ScheduleTemplate/Commands/UpdateScheduleTemplateCommandHandler.cs`**:
+   - Inject `IMediator` vào constructor.
+   - Sau `_repository.UpdateAsync(...)`, gọi sweep + (optionally) batch giống Reapply flow.
+
+Không đụng repository / interface / migration / FE.
+
+### 15.5. Rủi ro
+
+- **Ngày locked**: sweep của `DeleteStaleByScheduleTemplateAsync` đã có logic loại trừ khỏi delete → attendance nguyên vẹn.
+- **Update chỉ đổi Notes**: retain sets = current employees/dates/shifts → sweep là no-op (không có assignment không match retain). Batch re-expand: các assignment tồn tại được nhận diện qua `SkippedSameShift` → cũng no-op. Idempotent, không phá gì.
+- **Update với `IsActive: false`**: skip batch re-expand. Sweep vẫn chạy — có thể remove assignment unlocked của A. Đúng ngữ nghĩa: template inactive mà còn assignment thì sao? Nếu HR muốn giữ, họ đừng đổi employees/dates.
+
+### 15.6. Acceptance test
+
+- [ ] A có NV [E1, E2, E3], assignment 30 ngày cho cả 3. Update A bỏ hết NV → sau save: A.Employees rỗng, `EmployeeShiftAssignments WHERE ScheduleTemplateId=A.Id` rỗng (trừ ngày locked).
+- [ ] Sau khi bỏ NV khỏi A, tạo B y hệt (E1/E2/E3, 1-30) → **B tạo được**, roster B hiện đầy đủ.
+- [ ] A có NV [E1, E2] với attendance ngày 1-5. Update A bỏ E1 → assignment E1 ngày 1-5 (locked) giữ, ngày 6-30 xoá. Assignment E2 nguyên vẹn.
+- [ ] Update A chỉ đổi Notes → assignments không thay đổi (idempotent).
+- [ ] Update A với `IsActive: false` → sweep chạy, batch không chạy. Assignment inactive-owned giữ với ngày locked.
+
+## 16. ScheduleTemplate — locked assignment passthrough qua §13 filter (Bug fix)
+
+### 16.1. Triệu chứng
+
+Kịch bản: Template A đã inactive/delete, nhưng còn assignment ngày 1-5 giữ lại vì locked (có `AttendanceRecord`). Vào **bảng chấm công theo tháng** → cell ngày 1-5 **trống** dù attendance summary hiện đầy đủ ngày đó là Present. User confused: "sao ngày có bản ghi không hiện ca?"
+
+### 16.2. Nguyên nhân
+
+§13 filter aggressive quá — ẩn TẤT CẢ assignment thuộc template inactive, bao gồm cả những assignment đã locked bằng attendance. Roster query gọi `GetByEmployeesAndDateRangeAsync(includeInactiveTemplates: false)` → trả về danh sách assignments không có locked days của template inactive.
+
+`GetShiftRosterQueryHandler` cũng trả `lockedDtos` (từ `AttendanceRecord`) nhưng chỉ có `(EmpId, WorkDate, ShiftTemplateId)` — FE muốn hiện tên ca / giờ phải join thêm.
+
+### 16.3. Rule mới
+
+§13 filter refined: assignment hiển thị khi thoả 1 trong 3:
+
+1. `ScheduleTemplateId == null` (ad-hoc), hoặc
+2. `ScheduleTemplate.IsActive == true`, hoặc
+3. **Có `AttendanceRecord` match `(EmpId, WorkDate, ShiftTemplateId)`** (locked → attendance history phải nhìn được)
+
+Assignment chưa locked của template inactive vẫn bị ẩn (đúng ngữ nghĩa "inactive = ẩn kế hoạch chưa dùng").
+
+### 16.4. Files phải chạm
+
+**`src/MPS.Infrastructure/Repositories/Attendance/EmployeeShiftAssignmentRepository.cs`** — extend filter trong 2 method:
+
+- `GetByDateAsync` (line 42-52): thêm `|| _context.AttendanceRecords.Any(r => ...)` vào Where.
+- `GetByEmployeesAndDateRangeAsync` (branch `!includeInactiveTemplates`): tương tự.
+
+Không đụng handler / interface / migration / FE.
+
+### 16.5. Rủi ro
+
+- **Perf**: subquery `EXISTS (SELECT 1 FROM AttendanceRecords WHERE …)` cho mỗi row assignment. EF translate thành correlated subquery / semi-join — nếu có index `(EmployeeInformationId, WorkDate, ShiftTemplateId)` trên `AttendanceRecords` thì OK. Verify: hiện có index gì? Nếu chưa có, thêm index theo tuple này là phù hợp (không nằm trong §16 scope).
+- **Ngữ nghĩa ambiguity**: locked assignment thuộc template inactive giờ hiện trên roster như "bình thường" — nhưng không thể xoá qua reapply (locked). User cần biết đó là ca "lịch sử". FE có thể grey-out cell nếu muốn phân biệt.
+
+### 16.6. Acceptance test
+
+- [ ] A inactive, có assignment locked ngày 1-5 (đã chấm), ngày 6-30 unlocked. GET roster tháng → thấy ngày 1-5, không thấy 6-30.
+- [ ] A inactive, assignment ngày 1-5 chưa locked → không hiện trên roster (§13 gốc).
+- [ ] Assignment ad-hoc (NULL template) chưa locked → hiện (§13 gốc).
+- [ ] Assignment ad-hoc (NULL template) đã locked → hiện.
+- [ ] A active + có attendance → hiện bình thường (không thay đổi).

@@ -11,4 +11,12 @@ public sealed record GetOvertimeRequestsQuery(
     DateOnly? FromDate,
     DateOnly? ToDate,
     int Page,
-    int Size) : IRequest<PagedResult<OvertimeRequestDto>>;
+    int Size,
+    int? CreatedByUserId = null,
+    int? ProjectId = null,
+    /// <summary>
+    /// True → auto-filter list theo phạm vi duyệt của user (HR chỉ thấy route=Hr; DM chỉ
+    /// thấy route=DepartmentManager cùng dept). Dùng cho trang approval inbox.
+    /// False (default) → return mọi đơn user có quyền Read (attendance matrix, calendar…).
+    /// </summary>
+    bool MyScope = false) : IRequest<PagedResult<OvertimeRequestDto>>;

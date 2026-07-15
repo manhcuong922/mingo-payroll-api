@@ -9,18 +9,23 @@ public static class SystemRoles
     public const int DepartmentManagerId = 5;
     public const int ProjectManagerId = 6;
     public const int EmployeeId = 7;
+
+    // ⭐ Refactor task-full-generation (R/S): giữ nguyên Id 5/6, đổi vai trò + tên hiển thị.
+    //   Role 5 = Planning Manager (lập kế hoạch + gán tất người + đặt tổ trưởng + sửa timeline). Scope xưởng.
+    //   Role 6 = Production Team Leader / Tổ trưởng sản xuất (Project.ResponsibleUserId — cập nhật tiến độ + hoàn thành).
+    public const int PlanningManagerId = DepartmentManagerId;
+    public const int ProductionTeamLeaderId = ProjectManagerId;
     public const int DeputyDirectorId = 9;
-    // id 8 đã bị chiếm bởi role tự tạo trên DB dev, id 9 bởi DeputyDirector → dùng 10 cho AiService.
-    public const int AiServiceId = 10;
 
     public const string SystemAdmin = "SystemAdmin";
     public const string Hr = "HR";
     public const string Accountant = "Accountant";
     public const string Director = "Director";
-    public const string DepartmentManager = "DepartmentManager";
-    public const string ProjectManager = "ProjectManager";
+    // Tên hiển thị mới (refactor). Role.Name trong DB đổi theo (migration UpdateData). Auth vẫn permission-based
+    // nên đổi tên không vỡ phân quyền. Giữ const cũ để không vỡ tham chiếu ngoài dự kiến.
+    public const string DepartmentManager = "Planning Manager";
+    public const string ProjectManager = "Production Team Leader";
     public const string Employee = "Employee";
-    public const string AiService = "AiService";
     public const string DeputyDirector = "DeputyDirector";
 
     // Role được phép làm tổ trưởng xưởng (Department.ManagerId).

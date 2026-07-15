@@ -35,6 +35,11 @@ public class GetLeaveTypeByIdQueryHandler : IRequestHandler<GetLeaveTypeByIdQuer
             t.TargetEmployeeIds,
             t.RequireDocument,
             t.DeductsBalance,
+            t.MinNoticeDaysForShort,
+            t.MinNoticeDaysForMedium,
+            t.MinNoticeDaysForLong,
+            t.AutoFallbackToUnpaid,
+            t.AllowRetroactive,
             t.IsActive,
             t.CreatedAt,
             t.UpdatedAt);

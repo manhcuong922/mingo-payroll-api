@@ -8,5 +8,6 @@ public sealed record GetAttendanceSummaryQuery(
     DateOnly FromDate,
     DateOnly ToDate,
     int? EmployeeInformationId,
+    int? DepartmentId,
     int Page,
     int Size) : IRequest<PagedResult<EmployeeAttendanceSummaryDto>>;

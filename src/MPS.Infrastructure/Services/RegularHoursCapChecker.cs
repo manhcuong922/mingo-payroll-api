@@ -44,7 +44,7 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
         var toDate = grouped.Max(g => g.Key.WorkDate);
 
         var existing = await _assignmentRepository.GetByEmployeesAndDateRangeAsync(
-            employeeIds, fromDate, toDate, cancellationToken);
+            employeeIds, fromDate, toDate, cancellationToken: cancellationToken);
 
         var shiftHours = await LoadShiftHoursAsync(
             existing.Select(e => e.ShiftTemplateId).Distinct(),
@@ -84,7 +84,7 @@ public sealed class RegularHoursCapChecker : IRegularHoursCapChecker
         var toDate = grouped.Max(g => g.Key.WeekEnd);
 
         var existing = await _assignmentRepository.GetByEmployeesAndDateRangeAsync(
-            employeeIds, fromDate, toDate, cancellationToken);
+            employeeIds, fromDate, toDate, cancellationToken: cancellationToken);
 
         var shiftHours = await LoadShiftHoursAsync(
             existing.Select(e => e.ShiftTemplateId).Distinct(),

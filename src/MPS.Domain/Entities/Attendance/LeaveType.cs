@@ -44,6 +44,23 @@ public class LeaveType
     /// <summary>True = có LeaveBalance/năm và Approve sẽ trừ balance (vd Annual).</summary>
     public bool DeductsBalance { get; set; }
 
+    // ===== Company policy config (nullable = bỏ qua check) =====
+
+    /// <summary>Notice period cho đơn ≤ 1 ngày (số ngày báo trước tối thiểu). Null = bỏ qua.</summary>
+    public int? MinNoticeDaysForShort { get; set; }
+
+    /// <summary>Notice period cho đơn 2-3 ngày. Null = bỏ qua.</summary>
+    public int? MinNoticeDaysForMedium { get; set; }
+
+    /// <summary>Notice period cho đơn > 5 ngày. Null = bỏ qua.</summary>
+    public int? MinNoticeDaysForLong { get; set; }
+
+    /// <summary>Khi hết LeaveBalance → tự chuyển sang UNPAID thay vì reject.</summary>
+    public bool AutoFallbackToUnpaid { get; set; }
+
+    /// <summary>Cho phép StartDate &lt; today (nộp trễ). True cho SICK/MATERNITY.</summary>
+    public bool AllowRetroactive { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }

@@ -78,20 +78,32 @@ public class LeaveRequestController : ControllerBase
         [FromBody] CreateLeaveRequest request,
         CancellationToken cancellationToken)
     {
-        var id = await _mediator.Send(new CreateLeaveRequestCommand(
-            request.LeaveTypeId, request.StartDate, request.EndDate,
-            request.Reason, request.SupportingDocumentUrl), cancellationToken);
-        return Created($"/api/leave-requests/{id}", new { id });
+        var result = await _mediator.Send(new CreateLeaveRequestCommand(
+            request.LeaveTypeId,
+            request.StartDate,
+            request.EndDate,
+            request.Reason,
+            request.SupportingDocumentUrl,
+            request.MedicalCertificateUrl,
+            request.InsuranceCertNumber,
+            request.ApproverRoute,
+            request.OverrideReason), cancellationToken);
+        return Created($"/api/leave-requests/{result.Id}", result);
     }
 
     [HttpPut("{id:int}/approve")]
     [HasPermission(Permissions.LeaveRequestApproveAll)]
     public async Task<IActionResult> Approve(
         int id,
-        [FromBody] ReviewLeaveRequest request,
+        [FromBody] ApproveLeaveRequestBody request,
         CancellationToken cancellationToken)
     {
-        var ok = await _mediator.Send(new ApproveLeaveRequestCommand(id, request.ReviewNote), cancellationToken);
+        var ok = await _mediator.Send(new ApproveLeaveRequestCommand(
+            id,
+            request.ReviewNote,
+            request.MedicalCertificateUrl,
+            request.InsuranceCertNumber,
+            request.OverrideReason), cancellationToken);
         if (!ok) return NotFound();
         return NoContent();
     }
@@ -104,6 +116,18 @@ public class LeaveRequestController : ControllerBase
         CancellationToken cancellationToken)
     {
         var ok = await _mediator.Send(new RejectLeaveRequestCommand(id, request.ReviewNote), cancellationToken);
+        if (!ok) return NotFound();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/cancel")]
+    [HasPermission(Permissions.LeaveRequestCancelSelf)]
+    public async Task<IActionResult> Cancel(
+        int id,
+        [FromBody] CancelLeaveRequestBody request,
+        CancellationToken cancellationToken)
+    {
+        var ok = await _mediator.Send(new CancelLeaveRequestCommand(id, request.CancelReason), cancellationToken);
         if (!ok) return NotFound();
         return NoContent();
     }

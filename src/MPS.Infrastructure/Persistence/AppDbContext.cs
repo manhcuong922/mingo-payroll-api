@@ -63,20 +63,22 @@ public class AppDbContext : DbContext
     public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
 
     // Attendance module (FE-ATT)
-    public DbSet<FaceRegistration> FaceRegistrations => Set<FaceRegistration>();
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
-    public DbSet<WeeklyDayOffRule> WeeklyDayOffRules => Set<WeeklyDayOffRule>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
     public DbSet<AttendanceSetting> AttendanceSettings => Set<AttendanceSetting>();
     public DbSet<OvertimeRequest> OvertimeRequests => Set<OvertimeRequest>();
-    public DbSet<OvertimeSlotTemplate> OvertimeSlotTemplates => Set<OvertimeSlotTemplate>();
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
+    public DbSet<LateEarlyRequest> LateEarlyRequests => Set<LateEarlyRequest>();
+    public DbSet<WfhRequest> WfhRequests => Set<WfhRequest>();
+    public DbSet<MPS.Domain.Entities.Employee.EmployeeDependent> EmployeeDependents => Set<MPS.Domain.Entities.Employee.EmployeeDependent>();
+    public DbSet<MPS.Domain.Entities.Employee.DependentRegistrationRequest> DependentRegistrationRequests => Set<MPS.Domain.Entities.Employee.DependentRegistrationRequest>();
     public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
     public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
+    public DbSet<AttendanceRuleVersion> AttendanceRuleVersions => Set<AttendanceRuleVersion>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<ScheduleTemplateEmployee> ScheduleTemplateEmployees => Set<ScheduleTemplateEmployee>();
     public DbSet<ScheduleTemplateShift> ScheduleTemplateShifts => Set<ScheduleTemplateShift>();
@@ -88,6 +90,13 @@ public class AppDbContext : DbContext
     public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
     public DbSet<ProductionAttachment> ProductionAttachments => Set<ProductionAttachment>();
     public DbSet<Comment> Comments => Set<Comment>();
+
+    // ===== Evaluation module (chấm điểm nhân sự theo tháng) =====
+    public DbSet<Domain.Entities.Evaluation.OrderEvaluation> OrderEvaluations => Set<Domain.Entities.Evaluation.OrderEvaluation>();
+    public DbSet<Domain.Entities.Evaluation.OrderEvaluationSubject> OrderEvaluationSubjects => Set<Domain.Entities.Evaluation.OrderEvaluationSubject>();
+    public DbSet<Domain.Entities.Evaluation.MonthlyEvaluation> MonthlyEvaluations => Set<Domain.Entities.Evaluation.MonthlyEvaluation>();
+    public DbSet<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink> MonthlyEvaluationSourceLinks => Set<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink>();
+    public DbSet<Domain.Entities.Evaluation.EvaluationScoreLine> EvaluationScoreLines => Set<Domain.Entities.Evaluation.EvaluationScoreLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

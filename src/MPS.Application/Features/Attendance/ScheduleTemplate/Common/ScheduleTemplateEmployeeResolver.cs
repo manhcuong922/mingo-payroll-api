@@ -70,7 +70,9 @@ internal static class ScheduleTemplateEmployeeResolver
             .Distinct()
             .ToHashSet();
 
-        var employees = await employeeRepository.GetAllAsync(hasActiveContract: true, cancellationToken);
+        var employees = await employeeRepository.GetAllAsync(
+            hasActiveUser: true,
+            cancellationToken: cancellationToken);
         var employeeIds = employees
             .Where(employee => employee.DepartmentId.HasValue
                 && departmentSet.Contains(employee.DepartmentId.Value))

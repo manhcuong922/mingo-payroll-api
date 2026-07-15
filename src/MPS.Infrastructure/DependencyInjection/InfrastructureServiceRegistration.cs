@@ -44,6 +44,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<MPS.Application.Services.IDepartmentManagerAuthorizer,
             MPS.Application.Services.DepartmentManagerAuthorizer>();
+        services.AddScoped<MPS.Application.Features.Attendance.Common.ApproverDepartmentGuard>();
 
         // Task/Production module
         services.AddScoped<IProcessTemplateRepository, ProcessTemplateRepository>();
@@ -54,6 +55,18 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Services.ITaskGenerator, MPS.Application.Services.TaskGenerator>();
         services.AddScoped<MPS.Application.Services.IProgressService, MPS.Application.Services.ProgressService>();
         services.AddScoped<MPS.Application.Services.IProductionAttachmentService, MPS.Application.Services.ProductionAttachmentService>();
+        // Evaluation module (chấm điểm nhân sự theo tháng)
+        services.AddScoped<MPS.Domain.Interfaces.Evaluation.IOrderEvaluationRepository,
+            MPS.Infrastructure.Repositories.Evaluation.OrderEvaluationRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Evaluation.IMonthlyEvaluationRepository,
+            MPS.Infrastructure.Repositories.Evaluation.MonthlyEvaluationRepository>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IEvaluationCriteriaSnapshotService,
+            MPS.Infrastructure.Repositories.Evaluation.EvaluationCriteriaSnapshotService>();
+        services.AddScoped<MPS.Application.Features.Evaluation.Common.IMonthlyAggregationService,
+            MPS.Application.Features.Evaluation.Common.MonthlyAggregationService>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IOrderEvaluationExcelService,
+            MPS.Infrastructure.Services.OrderEvaluationExcelService>();
+
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
@@ -96,23 +109,33 @@ public static class InfrastructureServiceRegistration
 
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
+        services.AddScoped<
+            MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,
+            MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeMultiplierCalculator>();
 
         // Attendance module repositories (FE-ATT)
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IShiftTemplateRepository, ShiftTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IEmployeeShiftAssignmentRepository, EmployeeShiftAssignmentRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IPublicHolidayRepository, PublicHolidayRepository>();
-        services.AddScoped<MPS.Domain.Interfaces.Attendance.IWeeklyDayOffRuleRepository, WeeklyDayOffRuleRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRecordRepository, AttendanceRecordRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceSettingRepository, AttendanceSettingRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeRequestRepository, OvertimeRequestRepository>();
-        services.AddScoped<MPS.Domain.Interfaces.Attendance.IOvertimeSlotTemplateRepository, OvertimeSlotTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveTypeRepository, LeaveTypeRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveRequestRepository, LeaveRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.ILateEarlyRequestRepository, LateEarlyRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IWfhRequestRepository, WfhRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Employee.IEmployeeDependentRepository, MPS.Infrastructure.Repositories.Employee.EmployeeDependentRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Employee.IDependentRegistrationRequestRepository, MPS.Infrastructure.Repositories.Employee.DependentRegistrationRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceAdjustmentRepository, AttendanceAdjustmentRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleRepository, AttendanceRuleRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleVersionRepository, AttendanceRuleVersionRepository>();
+        services.AddScoped<MPS.Application.Common.Services.IAttendanceRateResolver,
+            MPS.Application.Common.Services.AttendanceRateResolver>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
-        services.AddScoped<MPS.Domain.Interfaces.Attendance.IFaceRegistrationRepository, FaceRegistrationRepository>();
         services.AddScoped<IDayTypeResolver, DayTypeResolver>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IWorkHourSplitter, WorkHourSplitter>();
         services.AddScoped<MPS.Application.Common.Interfaces.IScheduleTemplateExpander, ScheduleTemplateExpander>();

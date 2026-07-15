@@ -12,15 +12,18 @@ namespace MPS.Application.Features.ProjectTask.Commands;
 public class TaskUpdateProgressCommandHandler : IRequestHandler<TaskUpdateProgressCommand, bool>
 {
     private readonly IProjectTaskRepository _tasks;
+    private readonly IProjectRepository _projects;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
 
     public TaskUpdateProgressCommandHandler(
         IProjectTaskRepository tasks,
+        IProjectRepository projects,
         IDepartmentManagerAuthorizer authorizer,
         ICurrentUserService currentUser)
     {
         _tasks = tasks;
+        _projects = projects;
         _authorizer = authorizer;
         _currentUser = currentUser;
     }
@@ -30,7 +33,7 @@ public class TaskUpdateProgressCommandHandler : IRequestHandler<TaskUpdateProgre
         var task = await _tasks.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy task #{request.Id}.");
 
-        await ProjectScopeGuard.EnsureCanWriteTaskLeafAsync(task, _tasks, _currentUser, _authorizer, ct);
+        await ProjectScopeGuard.EnsureCanUpdateProgressAsync(task, _projects, _currentUser, _authorizer, ct);
 
         if (task.ProgressType != ProgressType.Quantity)
             throw new DomainValidationException("Chỉ task có sản lượng (Quantity) mới cập nhật được số lượng.");
@@ -55,8 +58,8 @@ public class TaskUpdateProgressCommandHandler : IRequestHandler<TaskUpdateProgre
         if (!ok)
             throw new ConflictException("Dữ liệu đã thay đổi ở nơi khác. Vui lòng tải lại rồi thử lại.");
 
-        if (task.ParentTaskId is int parentId)
-            await _tasks.RecomputeParentCompletedAsync(parentId, ct);
+        if (task.ParentTaskId is not null)
+            await _tasks.RecomputeAncestorsCompletedAsync(task.Id, ct);
 
         return true;
     }

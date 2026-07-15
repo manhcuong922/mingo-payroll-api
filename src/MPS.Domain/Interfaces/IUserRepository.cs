@@ -44,4 +44,17 @@ public interface IUserRepository
     Task<bool> UpdateLastLoginAsync(int userId, DateTime loginAt, CancellationToken cancellationToken = default);
     Task<bool> UpdatePasswordAsync(int userId, string passwordHash, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Set <c>User.Status = 0</c> cho các User đang Active (<c>Status = 1</c>) đã gắn với
+    /// <see cref="EmployeeInformation"/> nằm trong <paramref name="employeeInformationIds"/>
+    /// VÀ EI đó không còn HĐ nào <see cref="MPS.Domain.Enums.Contract.ContractStatus.Active"/>.
+    /// Idempotent: nếu User đã inactive hoặc EI vẫn còn HĐ Active khác thì bỏ qua.
+    /// Dùng bởi <c>ContractExpiryJob</c> khi HĐ hết hạn.
+    /// </summary>
+    /// <returns>Số User đã bị chuyển sang inactive.</returns>
+    Task<int> DeactivateForEmployeesWithoutActiveContractAsync(
+        IReadOnlyCollection<int> employeeInformationIds,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
 }

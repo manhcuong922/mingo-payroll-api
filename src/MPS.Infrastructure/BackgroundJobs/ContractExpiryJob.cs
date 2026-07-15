@@ -58,11 +58,28 @@ public sealed class ContractExpiryJob : BackgroundService
             var clock = scope.ServiceProvider.GetRequiredService<IClock>();
             var repo = scope.ServiceProvider.GetRequiredService<IContractRepository>();
 
-            var expired = await repo.ExpireOverdueContractsAsync(clock.UtcNow, cancellationToken);
-            if (expired > 0)
-                _logger.LogInformation("ContractExpiryJob: expired {Count} overdue contracts.", expired);
-            else
+            var (expired, affectedEmployeeIds) = await repo.ExpireOverdueContractsAsync(clock.UtcNow, cancellationToken);
+            if (expired == 0)
+            {
                 _logger.LogDebug("ContractExpiryJob: nothing to expire.");
+                return 0;
+            }
+
+            _logger.LogInformation("ContractExpiryJob: expired {Count} overdue contracts.", expired);
+
+            // Sau khi expire HĐ: inactive user account của NLĐ không còn HĐ Active nào.
+            // Nếu NLĐ vẫn còn HĐ khác đang Active (VD: HĐ mới ký, HĐ song song) thì repo tự bỏ qua.
+            if (affectedEmployeeIds.Count > 0)
+            {
+                var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+                var deactivated = await userRepo.DeactivateForEmployeesWithoutActiveContractAsync(
+                    affectedEmployeeIds, clock.UtcNow, cancellationToken);
+                if (deactivated > 0)
+                    _logger.LogInformation(
+                        "ContractExpiryJob: deactivated {Count} user account(s) whose employees no longer have any active contract.",
+                        deactivated);
+            }
+
             return expired;
         }
         finally

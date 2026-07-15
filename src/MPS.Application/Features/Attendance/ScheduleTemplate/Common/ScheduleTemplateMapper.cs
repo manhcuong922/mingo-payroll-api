@@ -52,6 +52,8 @@ internal static class ScheduleTemplateMapper
             shifts.Select(s => s.ShiftTemplateId).ToList(),
             shifts,
             entity.CreatedAt,
-            entity.UpdatedAt);
+            entity.UpdatedAt,
+            entity.ApplyTarget,
+            ScheduleTemplateValidation.FromCsvMask(entity.TargetDepartmentIds));
     }
 }

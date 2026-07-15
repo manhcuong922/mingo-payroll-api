@@ -1,7 +1,9 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Application.Features.Attendance.ShiftTemplate.Common;
+using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -15,29 +17,32 @@ public class UpdateScheduleTemplateCommandHandler
 {
     private readonly IScheduleTemplateRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IDepartmentRepository _departmentRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
-    private readonly IContractRepository _contractRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IMediator _mediator;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
     public UpdateScheduleTemplateCommandHandler(
         IScheduleTemplateRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IDepartmentRepository departmentRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
-        IContractRepository contractRepository,
         IEmployeeInformationRepository employeeRepository,
+        IMediator mediator,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _departmentRepository = departmentRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
-        _contractRepository = contractRepository;
         _employeeRepository = employeeRepository;
+        _mediator = mediator;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -51,10 +56,6 @@ public class UpdateScheduleTemplateCommandHandler
             ?? throw new NotFoundException($"ScheduleTemplate {request.Id} not found.");
 
         var name = request.Name?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new DomainValidationException("Tên bảng phân ca không được rỗng.");
-        }
 
         var employeeIds = await ScheduleTemplateEmployeeResolver.ResolveAsync(
             request.ApplyTarget,
@@ -74,8 +75,28 @@ public class UpdateScheduleTemplateCommandHandler
             employeeIds,
             requireEmployees: false);
 
-        if (await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
+        if (string.IsNullOrEmpty(name))
         {
+            // Auto-sinh nếu user xoá tên — luôn unique (loại trừ chính template đang sửa).
+            name = await ScheduleTemplateNameGenerator.GenerateAsync(
+                request.ShiftTemplateIds,
+                request.ApplyTarget,
+                request.EmployeeInformationIds,
+                request.DepartmentIds,
+                request.EffectiveFrom,
+                request.EffectiveTo,
+                excludeTemplateId: request.Id,
+                _shiftRepository,
+                _departmentRepository,
+                _employeeRepository,
+                _repository,
+                cancellationToken);
+        }
+        else if (request.IsActive
+            && await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
+        {
+            // Chỉ check trùng khi request muốn activate. Nếu giữ inactive → DB filtered unique index
+            // (§12) không enforce trên inactive rows, không cần chặn ở app layer. Xem §12.7.
             throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
         }
 
@@ -83,7 +104,7 @@ public class UpdateScheduleTemplateCommandHandler
         // vì đang refactor — đơn giản hơn).
         var shifts = await LoadActiveShiftsAsync(request.ShiftTemplateIds, cancellationToken);
 
-        await EnsureEmployeesHaveActiveContractsAsync(employeeIds, cancellationToken);
+        await EnsureEmployeesHaveActiveUsersAsync(employeeIds, cancellationToken);
 
         // Hướng mới: pattern-date overlap check chỉ chặn khi ca mới giao thoa thời gian với ca đã có.
         var newShape = new ScheduleTemplateEntity
@@ -103,6 +124,7 @@ public class UpdateScheduleTemplateCommandHandler
             excludeTemplateId: request.Id,
             cancellationToken);
 
+        var applyTarget = request.ApplyTarget ?? ScheduleApplyTarget.Employees;
         existing.Name = name;
         existing.ShiftTemplateId = shifts[0].Id;
         existing.EffectiveFrom = request.EffectiveFrom;
@@ -113,10 +135,40 @@ public class UpdateScheduleTemplateCommandHandler
         existing.DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth);
         existing.IsActive = request.IsActive;
         existing.Notes = request.Notes;
+        existing.ApplyTarget = applyTarget;
+        existing.TargetDepartmentIds = applyTarget == ScheduleApplyTarget.Departments
+            ? ScheduleTemplateValidation.ToCsvMask(request.DepartmentIds)
+            : null;
         existing.UpdatedAt = _clock.UtcNow;
         existing.UpdatedByUserId = userId;
 
-        await _repository.UpdateAsync(existing, employeeIds, shifts.Select(s => s.Id).ToList(), cancellationToken);
+        var shiftIds = shifts.Select(s => s.Id).ToList();
+        await _repository.UpdateAsync(existing, employeeIds, shiftIds, cancellationToken);
+
+        // §15: Sync assignments với pattern mới. Sweep stale (giữ locked) + re-expand nếu active.
+        // Update = Save + Sync (không cần user bấm Reapply riêng).
+        var dates = _expander.ExpandDates(existing);
+        await _assignmentRepository.DeleteStaleByScheduleTemplateAsync(
+            existing.Id, dates, shiftIds, employeeIds, cancellationToken);
+
+        if (request.IsActive && dates.Count > 0 && employeeIds.Count > 0 && shiftIds.Count > 0)
+        {
+            var operations = new List<BatchShiftOperation>(dates.Count * employeeIds.Count * shiftIds.Count);
+            foreach (var empId in employeeIds)
+            foreach (var date in dates)
+            foreach (var shiftId in shiftIds)
+                operations.Add(new BatchShiftOperation(
+                    BatchShiftOperationKind.Add, empId, date, shiftId));
+
+            await _mediator.Send(
+                new BatchUpdateShiftAssignmentsCommand(
+                    operations,
+                    BatchShiftConflictPolicy.ReplaceIfNoAttendance,
+                    SourceScheduleTemplateId: existing.Id,
+                    AcknowledgeWeeklyOvertimeWarnings: true,
+                    IncludeRestDaysAndHolidays: false),
+                cancellationToken);
+        }
 
         return Unit.Value;
     }
@@ -152,14 +204,14 @@ public class UpdateScheduleTemplateCommandHandler
             .ToList();
     }
 
-    private async Task EnsureEmployeesHaveActiveContractsAsync(
+    private async Task EnsureEmployeesHaveActiveUsersAsync(
         IReadOnlyCollection<int> employeeIds,
         CancellationToken cancellationToken)
     {
         var ids = employeeIds.Distinct().OrderBy(id => id).ToArray();
         if (ids.Length == 0) return;
 
-        var activeIds = await _contractRepository.GetEmployeeInformationIdsWithActiveContractsAsync(ids, cancellationToken);
+        var activeIds = await _employeeRepository.GetEmployeeInformationIdsWithActiveUserAsync(ids, cancellationToken);
         var activeSet = activeIds.ToHashSet();
         var inactiveIds = ids.Where(id => !activeSet.Contains(id)).ToArray();
         if (inactiveIds.Length == 0) return;
@@ -167,7 +219,7 @@ public class UpdateScheduleTemplateCommandHandler
         var preview = string.Join(", ", inactiveIds.Take(10));
         var suffix = inactiveIds.Length > 10 ? $" và {inactiveIds.Length - 10} nhân viên khác" : string.Empty;
         throw new DomainValidationException(
-            $"Không thể cập nhật bảng phân ca: nhân viên {preview}{suffix} chưa có hợp đồng active.");
+            $"Không thể cập nhật bảng phân ca: nhân viên {preview}{suffix} không có tài khoản active.");
     }
 
     private async Task EnsureNoPatternOverlapAsync(

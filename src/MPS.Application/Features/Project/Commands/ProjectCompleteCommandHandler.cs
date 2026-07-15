@@ -1,5 +1,7 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Evaluation;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Common;
@@ -15,17 +17,23 @@ public class ProjectCompleteCommandHandler : IRequestHandler<ProjectCompleteComm
     private readonly IProjectTaskRepository _tasks;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPublisher _publisher;
+    private readonly ILogger<ProjectCompleteCommandHandler> _log;
 
     public ProjectCompleteCommandHandler(
         IProjectRepository projects,
         IProjectTaskRepository tasks,
         IDepartmentManagerAuthorizer authorizer,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPublisher publisher,
+        ILogger<ProjectCompleteCommandHandler> log)
     {
         _projects = projects;
         _tasks = tasks;
         _authorizer = authorizer;
         _currentUser = currentUser;
+        _publisher = publisher;
+        _log = log;
     }
 
     public async Task<bool> Handle(ProjectCompleteCommand request, CancellationToken ct)
@@ -46,7 +54,24 @@ public class ProjectCompleteCommandHandler : IRequestHandler<ProjectCompleteComm
         project.CompletionNote = string.IsNullOrWhiteSpace(request.CompletionNote)
             ? null : request.CompletionNote.Trim();
 
-        return await _projects.UpdateAsync(project, ct);
+        var ok = await _projects.UpdateAsync(project, ct);
+
+        // Sinh bảng đánh giá theo đơn (D9). Đóng đơn là hành vi CHÍNH; sinh bảng là phụ —
+        // bọc try/catch để lỗi sinh bảng KHÔNG làm fail việc đóng đơn (HR có thể xử lý tay sau).
+        if (ok)
+        {
+            try
+            {
+                await _publisher.Publish(new ProjectCompletedNotification(project.Id), ct);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex,
+                    "Lỗi khi sinh bảng đánh giá cho đơn #{ProjectId} (đơn vẫn đã đóng thành công).", project.Id);
+            }
+        }
+
+        return ok;
     }
 
     // docs/plans/plan.md mục 4.4: chỉ cho đóng đơn khi mọi công đoạn (không Paused/Cancelled) đã Done

@@ -3,10 +3,13 @@ using MediatR;
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 
 /// <summary>
-/// Employee tự chọn ngày và khung giờ OT. Hệ số/rate sẽ được tính sau dựa trên
-/// các khung OT active, không bắt đơn phải phụ thuộc vào slot template.
+/// NV tự đăng ký OT trong đơn mình đang có task Status=InProgress. Luồng v3 §5.2:
+///  - <see cref="ProjectId"/>: đơn NV có task InProgress (auto-derive ở FE qua GetMyActiveOrdersForOtQuery).
+///  - <see cref="OtStartTime"/>/<see cref="OtEndTime"/>: khung giờ OT (FE map từ OvertimeSlotTemplate).
+///  - Status khởi tạo = Pending (chờ PM tổ trưởng đơn review).
 /// </summary>
 public sealed record CreateOvertimeRequestCommand(
+    int ProjectId,
     DateOnly WorkDate,
     TimeOnly OtStartTime,
     TimeOnly OtEndTime,

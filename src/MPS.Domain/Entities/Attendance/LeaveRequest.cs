@@ -24,6 +24,12 @@ public class LeaveRequest
 
     public AttendanceEnums.LeaveRequestStatus Status { get; set; }
 
+    /// <summary>
+    /// Route duyệt HR|DepartmentManager|Director. Nullable để backward-compatible với
+    /// record cũ trước migration. Handler Create auto-set theo role người tạo.
+    /// </summary>
+    public AttendanceEnums.OvertimeApproverRoute? ApproverRoute { get; set; }
+
     public string? Reason { get; set; }
 
     /// <summary>
@@ -31,11 +37,28 @@ public class LeaveRequest
     /// </summary>
     public string? SupportingDocumentUrl { get; set; }
 
+    // ===== Sick / Maternity fields =====
+
+    /// <summary>StartDate &lt; today. Set khi Create nếu LeaveType.AllowRetroactive=true.</summary>
+    public bool IsRetroactive { get; set; }
+
+    /// <summary>URL giấy chứng nhận nghỉ hưởng BHXH (mẫu C65-HD) hoặc giấy ra viện.</summary>
+    public string? MedicalCertificateUrl { get; set; }
+
+    /// <summary>Số hiệu giấy C65-HD — bắt buộc khi Approve Sick/Maternity.</summary>
+    public string? InsuranceCertNumber { get; set; }
+
     public string? ReviewNote { get; set; }
 
     public int? ReviewedByUserId { get; set; }
     public User? ReviewedByUser { get; set; }
     public DateTime? ReviewedAt { get; set; }
+
+    // ===== Cancellation audit =====
+    public DateTime? CancelledAt { get; set; }
+    public int? CancelledByUserId { get; set; }
+    public User? CancelledByUser { get; set; }
+    public string? CancelReason { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }

@@ -34,10 +34,9 @@ public class RoleEntityConfiguration : IEntityTypeConfiguration<Role>
         NewSystemRole(SystemRoles.HrId, SystemRoles.Hr, "Phòng Nhân sự — quản lý nhân viên & thông tin nhân sự."),
         NewSystemRole(SystemRoles.AccountantId, SystemRoles.Accountant, "Kế toán — đọc thông tin lương/thuế nhân viên."),
         NewSystemRole(SystemRoles.DirectorId, SystemRoles.Director, "Giám đốc — duyệt KPI, quản lý phòng ban."),
-        NewSystemRole(SystemRoles.DepartmentManagerId, SystemRoles.DepartmentManager, "Trưởng phòng — quản lý KPI nhân viên trong phòng."),
-        NewSystemRole(SystemRoles.ProjectManagerId, SystemRoles.ProjectManager, "Quản lý dự án — theo dõi KPI dự án."),
+        NewSystemRole(SystemRoles.DepartmentManagerId, SystemRoles.DepartmentManager, "Planning Manager — lập kế hoạch, tạo đơn, gán người, đặt tổ trưởng, sửa timeline. Scope xưởng."),
+        NewSystemRole(SystemRoles.ProjectManagerId, SystemRoles.ProjectManager, "Tổ trưởng sản xuất — chịu trách nhiệm đơn (ResponsibleUserId), cập nhật tiến độ + hoàn thành task/đơn."),
         NewSystemRole(SystemRoles.EmployeeId, SystemRoles.Employee, "Nhân viên — chỉ xem/sửa thông tin của chính mình."),
-        NewSystemRole(SystemRoles.AiServiceId, SystemRoles.AiService, "AI Service account — chấm công và đọc embedding từ camera nhận diện khuôn mặt."),
         NewSystemRole(SystemRoles.DeputyDirectorId, SystemRoles.DeputyDirector, "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình."),
     };
 

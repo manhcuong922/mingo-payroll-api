@@ -25,6 +25,11 @@ public class ScheduleTemplate
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
 
+    public ScheduleApplyTarget? ApplyTarget { get; set; }
+
+    /// <summary>CSV of DepartmentId ints. Only used when <c>ApplyTarget = Departments</c>; NULL when Employees mode or legacy record.</summary>
+    public string? TargetDepartmentIds { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public User CreatedByUser { get; set; } = null!;

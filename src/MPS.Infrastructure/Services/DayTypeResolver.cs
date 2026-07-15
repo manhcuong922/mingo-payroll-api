@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces;
-using MPS.Domain.Interfaces.Attendance;
 using MPS.Infrastructure.Persistence;
 using AttendanceEnums = MPS.Domain.Enums.Attendance;
 
@@ -8,17 +7,15 @@ namespace MPS.Infrastructure.Services;
 
 /// <summary>
 /// BR-23 — Resolve DayType theo thứ tự ưu tiên:
-/// (1) PublicHoliday → (2) PaidLeaveDay (LeaveRequest Approved + IsPaid) → (3) WeeklyRestDay (theo WeeklyDayOffRule) → (4) Normal.
+/// (1) PublicHoliday → (2) PaidLeaveDay (LeaveRequest Approved + IsPaid) → (3) WeeklyRestDay (Thứ 7 + Chủ nhật cố định) → (4) Normal.
 /// </summary>
 public class DayTypeResolver : IDayTypeResolver
 {
     private readonly AppDbContext _context;
-    private readonly IWeeklyDayOffRuleRepository _weeklyRuleRepository;
 
-    public DayTypeResolver(AppDbContext context, IWeeklyDayOffRuleRepository weeklyRuleRepository)
+    public DayTypeResolver(AppDbContext context)
     {
         _context = context;
-        _weeklyRuleRepository = weeklyRuleRepository;
     }
 
     public async Task<AttendanceEnums.DayType> ResolveAsync(
@@ -45,7 +42,7 @@ public class DayTypeResolver : IDayTypeResolver
         if (hasPaidLeave)
             return AttendanceEnums.DayType.PaidLeaveDay;
 
-        if (await IsWeeklyRestDayAsync(workDate, employeeInformationId, departmentId, cancellationToken))
+        if (IsWeekend(workDate))
             return AttendanceEnums.DayType.WeeklyRestDay;
 
         return AttendanceEnums.DayType.Normal;
@@ -100,16 +97,6 @@ public class DayTypeResolver : IDayTypeResolver
                 paidLeaveDays.Add(d);
         }
 
-        // Prefetch weekly rules for the entire range — avoid N+1.
-        var weeklyRules = await _weeklyRuleRepository.FindActiveInRangeAsync(fromDate, toDate, cancellationToken);
-        var applicableRules = weeklyRules
-            .Where(r => AppliesToEmployee(
-                new ScopeTarget(r.ApplyScope, r.TargetDepartmentIds, r.TargetEmployeeIds),
-                employeeInformationId,
-                departmentId))
-            .Select(r => new WeeklyRestRule(r.EffectiveFrom, r.EffectiveTo, ParseIds(r.DaysOfWeekMask)))
-            .ToList();
-
         var result = new Dictionary<DateOnly, AttendanceEnums.DayType>();
         for (var d = fromDate; d <= toDate; d = d.AddDays(1))
         {
@@ -117,7 +104,7 @@ public class DayTypeResolver : IDayTypeResolver
                 result[d] = AttendanceEnums.DayType.PublicHoliday;
             else if (paidLeaveDays.Contains(d))
                 result[d] = AttendanceEnums.DayType.PaidLeaveDay;
-            else if (IsWeeklyRestByPrefetched(applicableRules, d))
+            else if (IsWeekend(d))
                 result[d] = AttendanceEnums.DayType.WeeklyRestDay;
             else
                 result[d] = AttendanceEnums.DayType.Normal;
@@ -125,40 +112,8 @@ public class DayTypeResolver : IDayTypeResolver
         return result;
     }
 
-    private async Task<bool> IsWeeklyRestDayAsync(
-        DateOnly workDate,
-        int employeeInformationId,
-        int? departmentId,
-        CancellationToken cancellationToken)
-    {
-        var rules = await _weeklyRuleRepository.FindActiveOnDateAsync(workDate, cancellationToken);
-        var dow = (int)workDate.DayOfWeek;
-        foreach (var rule in rules)
-        {
-            if (!AppliesToEmployee(
-                new ScopeTarget(rule.ApplyScope, rule.TargetDepartmentIds, rule.TargetEmployeeIds),
-                employeeInformationId,
-                departmentId))
-                continue;
-            if (ParseIds(rule.DaysOfWeekMask).Contains(dow))
-                return true;
-        }
-        return false;
-    }
-
-    private static bool IsWeeklyRestByPrefetched(
-        IReadOnlyCollection<WeeklyRestRule> applicableRules,
-        DateOnly date)
-    {
-        var dow = (int)date.DayOfWeek;
-        foreach (var rule in applicableRules)
-        {
-            if (rule.EffectiveFrom > date) continue;
-            if (rule.EffectiveTo is DateOnly et && et < date) continue;
-            if (rule.Days.Contains(dow)) return true;
-        }
-        return false;
-    }
+    private static bool IsWeekend(DateOnly date) =>
+        date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
 
     private Task<int?> GetEmployeeDepartmentIdAsync(
         int employeeInformationId,
@@ -201,11 +156,6 @@ public class DayTypeResolver : IDayTypeResolver
         string? ApplyScope,
         string? TargetDepartmentIds,
         string? TargetEmployeeIds);
-
-    private sealed record WeeklyRestRule(
-        DateOnly EffectiveFrom,
-        DateOnly? EffectiveTo,
-        IReadOnlySet<int> Days);
 
     private sealed record HolidayTarget(
         DateOnly HolidayDate,

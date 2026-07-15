@@ -1,0 +1,54 @@
+using MediatR;
+using MPS.Application.Common.Interfaces;
+using MPS.Domain.Constants;
+using MPS.Domain.Enums.Employee;
+using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces.Employee;
+
+namespace MPS.Application.Features.Employee.Dependent.Commands;
+
+public class RejectDependentRegistrationRequestCommandHandler : IRequestHandler<RejectDependentRegistrationRequestCommand, bool>
+{
+    private readonly IDependentRegistrationRequestRepository _repository;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IClock _clock;
+
+    public RejectDependentRegistrationRequestCommandHandler(
+        IDependentRegistrationRequestRepository repository,
+        ICurrentUserService currentUser,
+        IClock clock)
+    {
+        _repository = repository;
+        _currentUser = currentUser;
+        _clock = clock;
+    }
+
+    public async Task<bool> Handle(RejectDependentRegistrationRequestCommand request, CancellationToken cancellationToken)
+    {
+        var userId = _currentUser.UserId
+            ?? throw new ForbiddenAccessException("Authenticated user context is required.");
+
+        if (_currentUser.RoleId != SystemRoles.HrId && _currentUser.RoleId != SystemRoles.SystemAdminId)
+            throw new ForbiddenAccessException("Chỉ HR/Admin được từ chối đơn đăng ký người phụ thuộc.");
+
+        var existing = await _repository.GetByIdAsync(request.Id, cancellationToken);
+        if (existing is null) return false;
+
+        if (existing.Status != DependentRequestStatus.Pending)
+            throw new DomainValidationException(
+                $"Dependent request {request.Id} cannot be rejected — current status is {existing.Status}.");
+
+        if (existing.CreatedByUserId == userId)
+            throw new DomainValidationException("BR-10: Self-review is forbidden.");
+
+        var now = _clock.UtcNow;
+        existing.Status = DependentRequestStatus.Rejected;
+        existing.ReviewedByUserId = userId;
+        existing.ReviewedAt = now;
+        existing.ReviewNote = request.ReviewNote;
+        existing.UpdatedAt = now;
+        existing.UpdatedByUserId = userId;
+
+        return await _repository.UpdateAsync(existing, cancellationToken);
+    }
+}

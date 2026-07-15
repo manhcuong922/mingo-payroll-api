@@ -36,7 +36,14 @@ public class ProjectEntityConfiguration : IEntityTypeConfiguration<Project>
             .HasForeignKey(p => p.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // ⭐ Tổ trưởng sản xuất chịu trách nhiệm đơn (refactor R/S) — nullable cho đơn cũ.
+        builder.HasOne(p => p.ResponsibleUser)
+            .WithMany()
+            .HasForeignKey(p => p.ResponsibleUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(p => p.DepartmentId);
+        builder.HasIndex(p => p.ResponsibleUserId);
         builder.HasIndex(p => p.DeletedAt);
     }
 }

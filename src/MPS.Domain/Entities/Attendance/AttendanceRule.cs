@@ -5,9 +5,6 @@ public class AttendanceRule
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public decimal WorkRateNormal { get; set; } = 1.00m;
-    public decimal WorkRateWeeklyRest { get; set; } = 2.00m;
-    public decimal WorkRateHoliday { get; set; } = 3.00m;
 
     public bool IsActive { get; set; } = true;
 
@@ -17,4 +14,7 @@ public class AttendanceRule
     public DateTime? UpdatedAt { get; set; }
     public int? UpdatedByUserId { get; set; }
     public User? UpdatedByUser { get; set; }
+
+    // Lịch sử hệ số theo thời gian (không overlap). Truy vấn qua IAttendanceRuleVersionRepository.
+    public ICollection<AttendanceRuleVersion> Versions { get; set; } = new List<AttendanceRuleVersion>();
 }

@@ -13,8 +13,24 @@ public interface IProjectTaskRepository
     Task<IReadOnlyList<ProjectTask>> GetAssignedToUserAsync(int userId, CancellationToken ct, bool includeCancelled = false);  // qua TaskAssignee
 
     Task<bool> HasChildrenAsync(int taskId, CancellationToken ct);
+    Task<bool> HasAnyByProjectAsync(int projectId, CancellationToken ct);        // idempotency guard cho generate
     Task<bool> AllChildrenDoneAsync(int parentTaskId, CancellationToken ct);      // cho persist cha Done
     Task<int> CountActiveByUserAsync(int userId, CancellationToken ct);           // gợi ý tải khi chia việc
+    // ⭐ refactor D: chỉ chặn gán khi người đó đang có task InProgress (nới luật "1 task mở").
+    Task<int> CountInProgressByUserAsync(int userId, CancellationToken ct);
+
+    // ⭐ OT workflow v3 (Q18): check NV được assign task nào trong 1 project cụ thể.
+    // Không lọc Status task — miễn có TaskAssignee row + task lá + task chưa soft-delete.
+    // Dùng ở CreateOvertimeRequestCommand.
+    Task<bool> HasAssignedTaskInProjectAsync(int userId, int projectId, CancellationToken ct);
+
+    // ⭐ OT workflow v3: list task NV được assign trong 1 project — dùng ở
+    // GetMyActiveOrdersForOtQuery để enrich context. Không lọc Status.
+    Task<IReadOnlyList<ProjectTask>> GetAssignedTasksByUserInProjectAsync(int userId, int projectId, CancellationToken ct);
+
+    // ⭐ OT workflow v3: distinct list ProjectId mà NV được assign task (bất kỳ Status).
+    // Dùng ở GetMyActiveOrdersForOtQuery — auto-derive đơn cho NV form đăng ký.
+    Task<IReadOnlyList<int>> GetAssignedProjectIdsByUserAsync(int userId, CancellationToken ct);
 
     // ⭐ Tổng PlannedQuantity các con Quantity hiện có của 1 công đoạn (không tính task đang sửa, nếu có) —
     // Gate (Milestone) không có sản lượng nên không tham gia.
@@ -25,12 +41,27 @@ public interface IProjectTaskRepository
     Task<bool> UpdateAsync(ProjectTask entity, CancellationToken ct);
     Task<bool> DeleteAsync(int id, CancellationToken ct);
 
+    // ⭐ Đồng bộ danh sách người gán của 1 task lá: xoá sạch dòng cũ rồi chèn mới. Tách riêng khỏi UpdateAsync
+    // vì TaskAssignee dùng KHÓA GHÉP (TaskId, UserId) — EF Update coi entity mới là Modified → UPDATE 0 dòng.
+    Task ReplaceAssigneesAsync(int taskId, IReadOnlyCollection<int> userIds, DateTime assignedAt, CancellationToken ct);
+
     // Update có kiểm optimistic concurrency: expectedRowVersion khớp mới ghi.
     // Trả false nếu RowVersion đã đổi (client cần reload) — handler ánh xạ sang 409.
     Task<bool> UpdateWithConcurrencyAsync(ProjectTask entity, byte[] expectedRowVersion, CancellationToken ct);
 
     // ⭐ Cha tự cộng: CompletedQuantity của cha = SUM(CompletedQuantity các con).
     Task RecomputeParentCompletedAsync(int parentTaskId, CancellationToken ct);
+
+    // ⭐ Cascade thời gian (refactor TM): Planning sửa StartDate/Deadline đơn → recompute Deadline mọi task
+    // có DeadlineOffsetRatio theo timeline mới (co giãn tỉ lệ). Đơn không Deadline ⇒ task có ratio về null.
+    Task RecomputeDeadlinesFromRatioAsync(int projectId, DateOnly startDate, DateTime? deadline, CancellationToken ct);
+
+    // ⭐ Rollup Done đệ quy lên tổ tiên (refactor): sau khi 1 leaf Done, đi ngược ParentTaskId — mỗi container
+    // tự cộng CompletedQuantity + tự Done khi mọi con Done + gate bắt buộc Done + đạt capacity.
+    Task RollupAncestorsAsync(int leafTaskId, DateTime completedAt, int completedByUserId, CancellationToken ct);
+
+    // ⭐ Chỉ cập nhật CompletedQuantity luỹ kế lên mọi tổ tiên (không đổi Status) — dùng khi UpdateProgress leaf.
+    Task RecomputeAncestorsCompletedAsync(int leafTaskId, CancellationToken ct);
 
     // ⭐ Persist cha Done bằng UPDATE có điều kiện nguyên tử: chỉ set khi mọi con đã Done.
     // Trả true nếu CHÍNH lệnh này chuyển cha sang Done (1 hàng ảnh hưởng) — để chạy side-effect đúng 1 lần.
