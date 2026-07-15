@@ -1,0 +1,54 @@
+using System.ComponentModel.DataAnnotations;
+using MPS.Domain.Attributes;
+using MPS.Domain.Enums.Payroll;
+
+namespace MPS.Domain.Entities.Payroll;
+
+/// <summary>
+/// 1 kỳ lương = (công ty, năm, tháng). Mỗi NV 1 dòng + 1 dòng tổng. Khi tạo: snapshot bảng công
+/// thức + version compliance + tham số + bảng hệ số năng suất để tái lập bất biến.
+/// </summary>
+[Auditable]
+public class PayrollPeriod
+{
+    public int Id { get; set; }
+
+    public int EmployerPartyId { get; set; }
+    public ContractParty EmployerParty { get; set; } = null!;
+
+    public int PeriodYear { get; set; }
+    public int PeriodMonth { get; set; }
+
+    /// <summary>Ngày dùng để lookup compliance version (mặc định = ngày cuối tháng kỳ).</summary>
+    public DateOnly PayDate { get; set; }
+
+    /// <summary>Công chuẩn tháng (mẫu số phân bổ thu nhập) — auto đếm ngày làm việc, cho sửa.</summary>
+    public decimal StandardWorkingDays { get; set; }
+
+    public PayrollPeriodStatus Status { get; set; } = PayrollPeriodStatus.Draft;
+
+    public int FormulaSetId { get; set; }
+    public PayrollFormulaSet FormulaSet { get; set; } = null!;
+
+    // ===== Snapshot bất biến (JSON) =====
+    public string FormulaSnapshotJson { get; set; } = string.Empty;
+    public string ParamsSnapshotJson { get; set; } = string.Empty;
+    public string ProductivitySnapshotJson { get; set; } = string.Empty;
+
+    /// <summary>Biểu thuế TNCN (PitBracketSnapshot) của kỳ — để recompute hàm THUE_LUYTIEN bất biến.</summary>
+    public string PitBracketsSnapshotJson { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; }
+    public int CreatedByUserId { get; set; }
+    public User CreatedByUser { get; set; } = null!;
+    public DateTime? UpdatedAt { get; set; }
+    public int? UpdatedByUserId { get; set; }
+    public User? UpdatedByUser { get; set; }
+
+    [Timestamp]
+    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    public ICollection<PayrollComplianceRef> ComplianceRefs { get; set; } = new List<PayrollComplianceRef>();
+    public ICollection<PayrollRow> Rows { get; set; } = new List<PayrollRow>();
+    public ICollection<PayrollNote> Notes { get; set; } = new List<PayrollNote>();
+}

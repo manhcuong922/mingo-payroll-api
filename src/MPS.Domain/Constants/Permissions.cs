@@ -331,6 +331,25 @@ public static class Permissions
     public const string MonthlyEvaluationScoreDirectAll = "MonthlyEvaluation.ScoreDirect.All";
     public const string MonthlyEvaluationApproveAll     = "MonthlyEvaluation.Approve.All";
     public const string MonthlyEvaluationReopenAll      = "MonthlyEvaluation.Reopen.All";
+
+    // ===== Payroll module (bảng lương hàng tháng) — IDs 252–265 =====
+    public const string PayrollReadAll   = "Payroll.Read.All";
+    public const string PayrollReadSelf  = "Payroll.Read.Self";
+    public const string PayrollCreateAll = "Payroll.Create.All";
+    public const string PayrollUpdateAll = "Payroll.Update.All";     // override cell / thêm-sửa cột / thêm note
+    public const string PayrollFinalizeAll = "Payroll.Finalize.All"; // chốt/khoá kỳ
+    public const string PayrollDeleteAll = "Payroll.Delete.All";
+
+    public const string PayrollFormulaSetReadAll   = "PayrollFormulaSet.Read.All";
+    public const string PayrollFormulaSetCreateAll = "PayrollFormulaSet.Create.All";
+    public const string PayrollFormulaSetUpdateAll = "PayrollFormulaSet.Update.All";
+    public const string PayrollFormulaSetDeleteAll = "PayrollFormulaSet.Delete.All";
+
+    public const string PayrollParameterReadAll   = "PayrollParameter.Read.All";
+    public const string PayrollParameterUpdateAll = "PayrollParameter.Update.All";
+
+    public const string ProductivityCoefficientReadAll   = "ProductivityCoefficient.Read.All";
+    public const string ProductivityCoefficientUpdateAll = "ProductivityCoefficient.Update.All";
 }
 
 public static class PermissionIds
@@ -635,4 +654,23 @@ public static class PermissionIds
     public const int DependentRequestCancelSelf      = 249;
     public const int EmployeeDependentReadAll        = 250;
     public const int EmployeeDependentReadSelf       = 251;
+
+    // ===== Payroll module (bảng lương hàng tháng) — IDs 252–265 =====
+    public const int PayrollReadAll     = 252;
+    public const int PayrollReadSelf    = 253;
+    public const int PayrollCreateAll   = 254;
+    public const int PayrollUpdateAll   = 255;
+    public const int PayrollFinalizeAll = 256;
+    public const int PayrollDeleteAll   = 257;
+
+    public const int PayrollFormulaSetReadAll   = 258;
+    public const int PayrollFormulaSetCreateAll = 259;
+    public const int PayrollFormulaSetUpdateAll = 260;
+    public const int PayrollFormulaSetDeleteAll = 261;
+
+    public const int PayrollParameterReadAll   = 262;
+    public const int PayrollParameterUpdateAll = 263;
+
+    public const int ProductivityCoefficientReadAll   = 264;
+    public const int ProductivityCoefficientUpdateAll = 265;
 }

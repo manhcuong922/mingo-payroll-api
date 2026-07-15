@@ -60,6 +60,9 @@ public sealed partial class DatabaseSeeder
         // Dữ liệu chấm điểm demo vài kỳ gần nhất (cần tiêu chí + nhân sự đã seed ở trên) —
         // xem DatabaseSeeder.EvaluationDemoData.cs.
         await SeedEvaluationDemoDataAsync(cancellationToken);
+        // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + 1 tháng demo chạy được —
+        // xem DatabaseSeeder.PayrollDemoData.cs.
+        await SeedPayrollAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)

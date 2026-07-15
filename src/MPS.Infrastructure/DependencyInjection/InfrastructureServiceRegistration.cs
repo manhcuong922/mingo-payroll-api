@@ -22,9 +22,14 @@ using MPS.Infrastructure.ComplianceAutoUpdate.Validation;
 using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Persistence.Interceptors;
+using MPS.Application.Common.Interfaces.Payroll;
+using MPS.Application.Common.Payroll;
+using MPS.Application.Common.Payroll.Formula;
+using MPS.Domain.Interfaces.Payroll;
 using MPS.Infrastructure.Repositories;
 using MPS.Infrastructure.Repositories.Attendance;
 using MPS.Infrastructure.Repositories.Compliance;
+using MPS.Infrastructure.Repositories.Payroll;
 using MPS.Infrastructure.Security;
 using MPS.Infrastructure.Services;
 using MPS.Infrastructure.Storage;
@@ -106,6 +111,22 @@ public static class InfrastructureServiceRegistration
         // Compliance module services
         services.AddSingleton<ComplianceCacheInvalidator>();
         services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
+
+        // ===== Payroll module (bảng lương hàng tháng) =====
+        services.AddScoped<IPayrollFormulaSetRepository, PayrollFormulaSetRepository>();
+        services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
+        services.AddScoped<IPayrollParameterRepository, PayrollParameterRepository>();
+        services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
+        services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
+        services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
+        // Formula engine + calculator (stateless → singleton).
+        services.AddSingleton<IFormulaFunctionRegistry, FormulaFunctionRegistry>();
+        services.AddSingleton<IFormulaEvaluator, FormulaEvaluator>();
+        services.AddSingleton<IColumnDependencyGraph, ColumnDependencyGraph>();
+        services.AddSingleton<IPayrollCalculator, PayrollCalculator>();
+        services.AddSingleton<IPayrollFieldCatalog, PayrollFieldCatalog>();
+        services.AddSingleton<IPayrollFormulaValidator, PayrollFormulaValidator>();
+        services.AddSingleton<IPayrollLawChangeNoteBuilder, PayrollLawChangeNoteBuilder>();
 
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
