@@ -3,6 +3,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Application.Features.Attendance.ShiftTemplate.Common;
+using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -107,6 +108,7 @@ public class UpdateScheduleTemplateCommandHandler
             excludeTemplateId: request.Id,
             cancellationToken);
 
+        var applyTarget = request.ApplyTarget ?? ScheduleApplyTarget.Employees;
         existing.Name = name;
         existing.ShiftTemplateId = shifts[0].Id;
         existing.EffectiveFrom = request.EffectiveFrom;
@@ -117,6 +119,10 @@ public class UpdateScheduleTemplateCommandHandler
         existing.DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth);
         existing.IsActive = request.IsActive;
         existing.Notes = request.Notes;
+        existing.ApplyTarget = applyTarget;
+        existing.TargetDepartmentIds = applyTarget == ScheduleApplyTarget.Departments
+            ? ScheduleTemplateValidation.ToCsvMask(request.DepartmentIds)
+            : null;
         existing.UpdatedAt = _clock.UtcNow;
         existing.UpdatedByUserId = userId;
 

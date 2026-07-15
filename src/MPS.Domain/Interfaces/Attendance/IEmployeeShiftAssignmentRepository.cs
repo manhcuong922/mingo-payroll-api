@@ -80,4 +80,15 @@ public interface IEmployeeShiftAssignmentRepository
     Task<int> DeleteUnlockedByScheduleTemplateAsync(
         int scheduleTemplateId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gỡ ca của (template, employee) từ <paramref name="fromDate"/> trở đi.
+    /// Skip assignment locked (có AttendanceRecord tương ứng). Dùng bởi
+    /// AutoApplyScheduleOnDepartmentChangeHandler khi NV rời dept.
+    /// </summary>
+    Task<int> DeleteUnlockedByTemplateEmployeeFromDateAsync(
+        int scheduleTemplateId,
+        int employeeInformationId,
+        DateOnly fromDate,
+        CancellationToken cancellationToken = default);
 }

@@ -361,4 +361,39 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
         await _context.SaveChangesAsync(cancellationToken);
         return toRemove.Count;
     }
+
+    public async Task<int> DeleteUnlockedByTemplateEmployeeFromDateAsync(
+        int scheduleTemplateId,
+        int employeeInformationId,
+        DateOnly fromDate,
+        CancellationToken cancellationToken = default)
+    {
+        var owned = await _context.EmployeeShiftAssignments
+            .Where(a => a.ScheduleTemplateId == scheduleTemplateId
+                     && a.EmployeeInformationId == employeeInformationId
+                     && a.WorkDate >= fromDate)
+            .ToListAsync(cancellationToken);
+        if (owned.Count == 0) return 0;
+
+        var minDate = owned.Min(a => a.WorkDate);
+        var maxDate = owned.Max(a => a.WorkDate);
+
+        var lockedRows = await _context.AttendanceRecords
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                     && r.WorkDate >= minDate
+                     && r.WorkDate <= maxDate)
+            .Select(r => new { r.WorkDate, r.ShiftTemplateId })
+            .ToListAsync(cancellationToken);
+        var lockedSet = lockedRows.Select(r => (r.WorkDate, r.ShiftTemplateId)).ToHashSet();
+
+        var toRemove = owned
+            .Where(a => !lockedSet.Contains((a.WorkDate, a.ShiftTemplateId)))
+            .ToList();
+        if (toRemove.Count == 0) return 0;
+
+        _context.EmployeeShiftAssignments.RemoveRange(toRemove);
+        await _context.SaveChangesAsync(cancellationToken);
+        return toRemove.Count;
+    }
 }

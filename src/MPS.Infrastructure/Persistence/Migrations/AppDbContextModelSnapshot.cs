@@ -314,15 +314,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AttendanceRuleId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AttendanceRuleVersions_OpenPerRule")
+                        .HasFilter("[EffectiveTo] IS NULL");
+
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("AttendanceRuleId", "EffectiveFrom")
                         .IsUnique();
-
-                    b.HasIndex("AttendanceRuleId")
-                        .IsUnique()
-                        .HasFilter("[EffectiveTo] IS NULL")
-                        .HasDatabaseName("IX_AttendanceRuleVersions_OpenPerRule");
 
                     b.ToTable("AttendanceRuleVersions", (string)null);
                 });
@@ -827,6 +827,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ApproverReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ApproverReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ApproverReviewedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<byte?>("ApproverRoute")
                         .HasColumnType("tinyint");
 
@@ -864,6 +874,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<TimeOnly>("OtStartTime")
                         .HasColumnType("time");
 
+                    b.Property<string>("PmReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("PmReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("PmReviewedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("ProjectId")
                         .HasColumnType("int");
 
@@ -895,11 +915,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ApproverReviewedByUserId");
+
                     b.HasIndex("BatchId");
 
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("LaborLawConstantsVersionId");
+
+                    b.HasIndex("PmReviewedByUserId");
 
                     b.HasIndex("ProjectId");
 
@@ -988,6 +1012,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ApplyTarget")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1030,6 +1057,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("ShiftTemplateId")
                         .HasColumnType("int");
+
+                    b.Property<string>("TargetDepartmentIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -7410,6 +7441,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeRequest", b =>
                 {
+                    b.HasOne("MPS.Domain.Entities.User", "ApproverReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApproverReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
@@ -7427,6 +7463,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasForeignKey("LaborLawConstantsVersionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("MPS.Domain.Entities.User", "PmReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("PmReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("MPS.Domain.Entities.Project", "Project")
                         .WithMany()
                         .HasForeignKey("ProjectId")
@@ -7442,11 +7483,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UpdatedByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.Navigation("ApproverReviewedByUser");
+
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("EmployeeInformation");
 
                     b.Navigation("LaborLawConstantsVersion");
+
+                    b.Navigation("PmReviewedByUser");
 
                     b.Navigation("Project");
 
@@ -8428,9 +8473,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("AttendanceAdjustments");
                 });
 
-            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeSlotTemplate", b =>
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
                 {
-                    b.Navigation("OvertimeRequests");
+                    b.Navigation("Versions");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>

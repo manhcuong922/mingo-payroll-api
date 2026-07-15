@@ -108,7 +108,9 @@ public sealed record ScheduleTemplateDto(
     IReadOnlyList<int> ShiftTemplateIds,
     IReadOnlyList<ScheduleTemplateShiftDto> Shifts,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    ScheduleApplyTarget? ApplyTarget,
+    IReadOnlyList<int> TargetDepartmentIds);
 
 public sealed record ScheduleTemplateApplyConflictDto(
     int EmployeeInformationId,

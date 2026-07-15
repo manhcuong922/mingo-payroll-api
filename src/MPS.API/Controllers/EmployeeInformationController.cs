@@ -44,7 +44,8 @@ public class EmployeeInformationController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 10;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 100) pageSize = 100;
 
         var result = await _mediator.Send(
             new EmployeeInformationGetPagedQuery(keyword, positionId, hasAccount, hasActiveUser, page, pageSize),

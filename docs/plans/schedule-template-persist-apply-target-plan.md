@@ -1,7 +1,8 @@
 # ScheduleTemplate — persist ApplyTarget + DepartmentIds
 
-**Trạng thái**: Chưa triển khai — lên plan, sửa sau.
+**Trạng thái**: Đang triển khai — 3 câu hỏi mở đã chốt (xem mục 7).
 **Ngày lập**: 2026-07-10
+**Ngày chốt quyết định**: 2026-07-15
 
 ---
 
@@ -74,8 +75,25 @@ Down migration: drop 2 cột.
 4. Thêm NV vào dept (Department admin flow):
    - Template Departments áp dụng X1 (5 NV) → HR thêm NV thứ 6 vào X1 → Reapply template → NV mới phải có shift.
 
-## 7. Câu hỏi mở (cần confirm khi implement)
+## 7. Quyết định (đã chốt 2026-07-15)
 
-- **Có cần trả `TargetDepartments: [{id, name}]` từ BE để FE hiển thị luôn tên** hay FE fetch qua `useDepartments()`? Đề xuất: fetch qua hook có sẵn để không mở rộng DTO. Nếu department bị deactive sau khi template được tạo → FE hiển thị "Phòng ban đã ngừng hoạt động".
-- **Có clear `targetDepartmentIds` khi user đổi sang Employees mode** hay giữ để nếu user đổi lại vẫn có sẵn? Đề xuất: clear để tránh stale data.
-- **UI có disable nút "Chọn NV" khi mode = Departments** không? Hiện tại NV được tự động resolve, user không cần chọn thủ công.
+### Q1. BE trả `TargetDepartments: [{id,name}]` hay FE fetch qua `useDepartments()`?
+
+**Chốt: FE fetch qua `useDepartments()`.**
+- Không phình DTO, không duplicate data (department đã có ở store FE cho dropdown khi tạo).
+- Dept bị deactivate: FE lookup không thấy → render "Phòng ban đã ngừng hoạt động".
+- BE chỉ trả `TargetDepartmentIds: int[]`.
+
+### Q2. Đổi Departments → Employees có clear `targetDepartmentIds` không?
+
+**Chốt: Clear (set NULL) khi save.**
+- Single source of truth: mode nào thì field đó có giá trị.
+- Query/report sau này đơn giản, không cần điều kiện thừa.
+- Update handler: khi `ApplyTarget = Employees` → set `TargetDepartmentIds = null`; khi `= Departments` → giữ `SelectedEmployeeIds` do resolver overwrite (không clear thủ công vì đó là data resolve).
+
+### Q3. UI disable "Chọn NV" khi mode = Departments?
+
+**Chốt: Disable picker chọn NV, nhưng hiển thị list NV được resolve ở dạng read-only.**
+- Tránh mâu thuẫn với logic auto-resolve.
+- Vẫn show list read-only (kèm tên dept) để user biết template áp dụng cho ai.
+- Thêm hint text: *"Danh sách nhân viên tự động cập nhật theo phòng ban đã chọn."*

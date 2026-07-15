@@ -5,6 +5,7 @@ using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Application.Features.Attendance.ShiftTemplate.Common;
+using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -116,6 +117,7 @@ public class CreateScheduleTemplateCommandHandler
             cancellationToken);
 
         var now = _clock.UtcNow;
+        var applyTarget = request.ApplyTarget ?? ScheduleApplyTarget.Employees;
         var entity = new ScheduleTemplateEntity
         {
             Name = name,
@@ -128,6 +130,10 @@ public class CreateScheduleTemplateCommandHandler
             DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth),
             IsActive = true,
             Notes = request.Notes,
+            ApplyTarget = applyTarget,
+            TargetDepartmentIds = applyTarget == ScheduleApplyTarget.Departments
+                ? ScheduleTemplateValidation.ToCsvMask(request.DepartmentIds)
+                : null,
             CreatedAt = now,
             CreatedByUserId = userId
         };
