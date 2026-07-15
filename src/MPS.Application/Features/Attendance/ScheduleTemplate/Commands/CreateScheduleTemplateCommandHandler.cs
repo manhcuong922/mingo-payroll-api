@@ -20,6 +20,7 @@ public class CreateScheduleTemplateCommandHandler
 {
     private readonly IScheduleTemplateRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IDepartmentRepository _departmentRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
@@ -31,6 +32,7 @@ public class CreateScheduleTemplateCommandHandler
     public CreateScheduleTemplateCommandHandler(
         IScheduleTemplateRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IDepartmentRepository departmentRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
         IEmployeeInformationRepository employeeRepository,
@@ -41,6 +43,7 @@ public class CreateScheduleTemplateCommandHandler
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _departmentRepository = departmentRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
         _employeeRepository = employeeRepository;
@@ -58,10 +61,6 @@ public class CreateScheduleTemplateCommandHandler
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
 
         var name = request.Name?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new DomainValidationException("Tên bảng phân ca không được rỗng.");
-        }
 
         var employeeIds = await ScheduleTemplateEmployeeResolver.ResolveAsync(
             request.ApplyTarget,
@@ -80,7 +79,24 @@ public class CreateScheduleTemplateCommandHandler
             request.DaysOfMonth,
             employeeIds);
 
-        if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
+        if (string.IsNullOrEmpty(name))
+        {
+            // Auto-sinh tên nếu user không nhập — luôn unique (generator tự append suffix).
+            name = await ScheduleTemplateNameGenerator.GenerateAsync(
+                request.ShiftTemplateIds,
+                request.ApplyTarget,
+                request.EmployeeInformationIds,
+                request.DepartmentIds,
+                request.EffectiveFrom,
+                request.EffectiveTo,
+                excludeTemplateId: null,
+                _shiftRepository,
+                _departmentRepository,
+                _employeeRepository,
+                _repository,
+                cancellationToken);
+        }
+        else if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
         {
             throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
         }

@@ -17,6 +17,7 @@ public class UpdateScheduleTemplateCommandHandler
 {
     private readonly IScheduleTemplateRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IDepartmentRepository _departmentRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
@@ -27,6 +28,7 @@ public class UpdateScheduleTemplateCommandHandler
     public UpdateScheduleTemplateCommandHandler(
         IScheduleTemplateRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IDepartmentRepository departmentRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
         IEmployeeInformationRepository employeeRepository,
@@ -36,6 +38,7 @@ public class UpdateScheduleTemplateCommandHandler
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _departmentRepository = departmentRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
         _employeeRepository = employeeRepository;
@@ -53,10 +56,6 @@ public class UpdateScheduleTemplateCommandHandler
             ?? throw new NotFoundException($"ScheduleTemplate {request.Id} not found.");
 
         var name = request.Name?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new DomainValidationException("Tên bảng phân ca không được rỗng.");
-        }
 
         var employeeIds = await ScheduleTemplateEmployeeResolver.ResolveAsync(
             request.ApplyTarget,
@@ -76,11 +75,28 @@ public class UpdateScheduleTemplateCommandHandler
             employeeIds,
             requireEmployees: false);
 
-        // Chỉ check trùng tên khi request muốn activate. Nếu giữ inactive → DB filtered unique
-        // index (§12) không enforce trên inactive rows, không cần chặn ở app layer. Xem §12.7.
-        if (request.IsActive
+        if (string.IsNullOrEmpty(name))
+        {
+            // Auto-sinh nếu user xoá tên — luôn unique (loại trừ chính template đang sửa).
+            name = await ScheduleTemplateNameGenerator.GenerateAsync(
+                request.ShiftTemplateIds,
+                request.ApplyTarget,
+                request.EmployeeInformationIds,
+                request.DepartmentIds,
+                request.EffectiveFrom,
+                request.EffectiveTo,
+                excludeTemplateId: request.Id,
+                _shiftRepository,
+                _departmentRepository,
+                _employeeRepository,
+                _repository,
+                cancellationToken);
+        }
+        else if (request.IsActive
             && await _repository.ExistsByNameAsync(name, excludeId: request.Id, cancellationToken))
         {
+            // Chỉ check trùng khi request muốn activate. Nếu giữ inactive → DB filtered unique index
+            // (§12) không enforce trên inactive rows, không cần chặn ở app layer. Xem §12.7.
             throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
         }
 
