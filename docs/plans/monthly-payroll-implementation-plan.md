@@ -1,9 +1,11 @@
 # Monthly Payroll Module — Implementation Plan
 
-> **Status:** APPROVED 2026-07-15
+> **Status:** ✅ Phase 1 + config APIs HOÀN THÀNH & verify live (2026-07-15). `602` test pass.
+> **Golden reconciliation ĐÃ khớp** file lương mẫu 08/2023 (F5-0001 → 47.049.000, F5-0003 → 23.549.000).
 > **Project:** `mingo-payroll-api` (.NET 8, Clean Architecture, EF Core, MediatR CQRS)
-> **Module:** Payroll (Bảng lương hàng tháng) — MỚI HOÀN TOÀN
-> **Branch:** `feature/monthly-payroll`
+> **Module:** Payroll (Bảng lương hàng tháng)
+> **Branch:** `feature/monthly-payroll` — commit: docs → module → config APIs → golden test
+> **➡️ UI (Phase 2):** xem spec chi tiết cho frontend tại [`monthly-payroll-ui-spec.md`](./monthly-payroll-ui-spec.md).
 
 ## Context
 
@@ -113,13 +115,13 @@ Controllers `[HasPermission]`, Requests `Requests/Payroll/`:
 ## 5. Testing (`tests/`)
 
 - **Unit** (`MPS.Application.Tests/Features/Payroll/`, `.../Common/Payroll/`): formula evaluator (số học, IF, function, arity), `IColumnDependencyGraph` topo + phát hiện chu trình, `THUE_LUYTIEN` khớp 7 bậc (§5), `BH_CO_TRAN` trần, `THUNHAP_PHANBO` cột Y, map hệ số năng suất, suy 4 công theo timeline HĐ, readiness (từng điều kiện thiếu), law-change diff.
-- **Golden reconciliation** (integration, `WebApplicationFactory` + DB test): seed tháng mẫu 08/2023 (gồm cột input tay + hệ số năng suất từ file mẫu) → `POST periods` → assert `BD` khớp: `F5-0001 → 47.049.000`, `F5-0003 → 23.549.000` (đặc tả §8). *(Cần cấp bộ input tay + hệ số của tháng mẫu để test khớp tuyệt đối.)*
+- **Golden reconciliation** ✅ ĐÃ LÀM: `PayrollGoldenReconciliationTests` — lấy input THẬT từ file mẫu `08.1 F_SALARY_AUG.xlsm` (giải mã, sheet "4. LUONG", 2 dòng F5-0001/F5-0003) → chạy engine với hằng số compliance + biểu thuế 7 bậc 2023 → assert `THUCNHAN` khớp **tuyệt đối**: `F5-0001 → 47.049.000`, `F5-0003 → 23.549.000`. Chứng minh `DefaultPayrollFormulaSet` tái hiện đúng sheet (đoàn phí công đoàn viên 2%×mức lương được trừ vào thực nhận qua field `union.phiCongDoanVien`).
 - **Recompute**: override 1 ô → downstream tính lại, override được giữ; dòng Total đúng.
 
 ## 6. Phasing
 
-- **Phase 1 (tính năng này — backend):** domain + migration, aggregation + readiness gate, formula engine + **bảng công thức mặc định seed đúng đặc tả**, tạo/đọc/recalc/override/notes + law-change diff, golden test. Xuất API đầy đủ.
-- **Phase 2:** thêm cột do user + wiring builder tuỳ chỉnh nâng cao, UI (`mingo-payroll-ui`), export.
+- **Phase 1 (backend)** ✅ XONG: domain + migration, aggregation + readiness gate, formula engine + bảng công thức mặc định (54 cột), tạo/đọc/recalc/override/notes + law-change diff, golden test, **+ config APIs** (CRUD bảng công thức/cột/tham số/hệ số + trình dựng qua field catalog + validator chống chu trình). Verify live trên SQL Server thật.
+- **Phase 2 (UI `mingo-payroll-ui`)** ⏳: build theo **[`monthly-payroll-ui-spec.md`](./monthly-payroll-ui-spec.md)** — 10 màn (list kỳ, readiness gate, sheet + hover explanation, sửa ô, chốt/xoá, CRUD bảng công thức, trình dựng công thức, tham số, hệ số). Xem §8 spec cho các endpoint backend còn thiếu (payslip cá nhân, note tay, export, tính lại toàn kỳ...).
 
 ## 7. Giả định cần xác nhận
 
