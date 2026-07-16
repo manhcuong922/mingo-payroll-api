@@ -1,8 +1,10 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models;
+using MPS.Application.Common.Models.Compliance;
 using MPS.Application.Common.Services;
 using MPS.Application.DTOs.Attendance;
+using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -16,15 +18,20 @@ namespace MPS.Application.Features.Attendance.Attendance.Queries;
 /// - Status-based counts (Present/Absent/Late/HalfDay/OnLeave/EarlyLeave/Total) — cho Báo cáo cũ.
 /// - DayType-based aggregations (Normal/WeeklyRest/Holiday/PaidLeave) — cho Bảng chấm công tháng.
 ///   Halfday cộng 0.5 vào DayType tương ứng.
-/// - Giờ (DayHours/NightHours/Total) + quy đổi × hệ số.
+/// - Quy đổi giờ, chia 2 nhánh:
+///   • Non-OT (record không có OvertimeRequestId) — dùng ShiftRate (AttendanceRuleVersion):
+///       - Normal day:      DayHours × Rate% / 100 + NightHours × (Rate% + NightSurcharge%) / 100
+///       - WeeklyRest/Holiday/PaidLeave: (DayHours + NightHours) × Rate% / 100  (không cộng surcharge)
+///   • OT (record có OvertimeRequestId) — dùng OvertimeMultiplierCalculator (LaborLaw floor + Điều 98.1/98.3):
+///       DayHours × OtCalc(dayType, isNight=false) + NightHours × OtCalc(dayType, isNight=true, hasPrevDayOt)
+///     hasPrevDayOt = true nếu cùng NV, cùng WorkDate có bất kỳ record OT nào chứa DayHours > 0.
 ///
-/// Perf: paginate ở tầng NV (không phải record). DayType resolve per-NV (max size query),
-/// records batch 1 query cho toàn page.
+/// Perf: paginate ở tầng NV. DayType resolve per-NV. Records batch 1 query cho toàn page.
+/// LaborLaw snapshot cache theo distinct WorkDate (chỉ prefetch ngày cần: NightHours>0 hoặc là OT).
 /// </summary>
 public class GetAttendanceSummaryQueryHandler
     : IRequestHandler<GetAttendanceSummaryQuery, PagedResult<EmployeeAttendanceSummaryDto>>
 {
-    private const decimal NightRateBonus = 1.30m;
     private const decimal HalfDayWeight = 0.5m;
     private const decimal FullDayWeight = 1.0m;
     private const int MaxPageSize = 1000;
@@ -34,17 +41,23 @@ public class GetAttendanceSummaryQueryHandler
     private readonly IAttendanceRecordRepository _attendanceRepository;
     private readonly IDayTypeResolver _dayTypeResolver;
     private readonly IAttendanceRateResolver _rateResolver;
+    private readonly IComplianceLookupService _complianceLookup;
+    private readonly IOvertimeMultiplierCalculator _otCalculator;
 
     public GetAttendanceSummaryQueryHandler(
         IEmployeeInformationRepository employeeRepository,
         IAttendanceRecordRepository attendanceRepository,
         IDayTypeResolver dayTypeResolver,
-        IAttendanceRateResolver rateResolver)
+        IAttendanceRateResolver rateResolver,
+        IComplianceLookupService complianceLookup,
+        IOvertimeMultiplierCalculator otCalculator)
     {
         _employeeRepository = employeeRepository;
         _attendanceRepository = attendanceRepository;
         _dayTypeResolver = dayTypeResolver;
         _rateResolver = rateResolver;
+        _complianceLookup = complianceLookup;
+        _otCalculator = otCalculator;
     }
 
     public async Task<PagedResult<EmployeeAttendanceSummaryDto>> Handle(
@@ -68,14 +81,18 @@ public class GetAttendanceSummaryQueryHandler
             cancellationToken);
 
         // Tầng 2b — prefetch versions cho toàn bộ rule liên quan (avoid N+1 khi resolve rate per record)
-        var ruleIds = recordsByEmp.Values
-            .SelectMany(list => list)
+        var allRecords = recordsByEmp.Values.SelectMany(list => list).ToList();
+        var ruleIds = allRecords
             .Select(r => r.ShiftTemplate?.AppliedAttendanceRuleId)
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
             .Distinct()
             .ToList();
         await _rateResolver.PrefetchAsync(ruleIds, cancellationToken);
+
+        // Tầng 2c — cache LaborLaw snapshot theo distinct WorkDate (versioned by date).
+        // Prefetch chỉ những ngày cần: có NightHours > 0 (surcharge non-OT) hoặc là record OT (calc dùng snapshot).
+        var laborLawByDate = await BuildLaborLawMapAsync(allRecords, cancellationToken);
 
         // Tầng 3 — mỗi NV: resolve DayType range (prefetch, no N+1 trong resolver) + aggregate
         var results = new List<EmployeeAttendanceSummaryDto>(employees.Count);
@@ -88,10 +105,25 @@ public class GetAttendanceSummaryQueryHandler
                 ? list
                 : Array.Empty<AttendanceRecordEntity>();
 
-            results.Add(Aggregate(emp, empRecords, dayMap, _rateResolver));
+            results.Add(Aggregate(emp, empRecords, dayMap, _rateResolver, _otCalculator, laborLawByDate));
         }
 
         return new PagedResult<EmployeeAttendanceSummaryDto>(results, total, page, size);
+    }
+
+    private async Task<IReadOnlyDictionary<DateOnly, LaborLawConstantsSnapshot>> BuildLaborLawMapAsync(
+        IReadOnlyList<AttendanceRecordEntity> records, CancellationToken ct)
+    {
+        var map = new Dictionary<DateOnly, LaborLawConstantsSnapshot>();
+        var dates = records
+            .Where(r => r.NightHours > 0m || r.OvertimeRequestId is not null)
+            .Select(r => r.WorkDate)
+            .Distinct();
+        foreach (var d in dates)
+        {
+            map[d] = await _complianceLookup.GetLaborLawConstantsAtAsync(d, ct);
+        }
+        return map;
     }
 
     private async Task<(IReadOnlyList<EmployeeInformationEntity> Employees, int Total)> LoadEmployeesAsync(
@@ -127,9 +159,17 @@ public class GetAttendanceSummaryQueryHandler
         EmployeeInformationEntity emp,
         IReadOnlyList<AttendanceRecordEntity> records,
         IReadOnlyDictionary<DateOnly, DayType> dayMap,
-        IAttendanceRateResolver rateResolver)
+        IAttendanceRateResolver rateResolver,
+        IOvertimeMultiplierCalculator otCalculator,
+        IReadOnlyDictionary<DateOnly, LaborLawConstantsSnapshot> laborLawByDate)
     {
         var bucket = new Bucket();
+
+        // Precompute: ngày nào NV này đã OT ban ngày → dùng cho hasPrevDayOt của OT đêm.
+        var otDayDates = records
+            .Where(r => r.OvertimeRequestId is not null && r.DayHours > 0m)
+            .Select(r => r.WorkDate)
+            .ToHashSet();
 
         foreach (var r in records)
         {
@@ -152,7 +192,6 @@ public class GetAttendanceSummaryQueryHandler
             var dayType = dayMap.TryGetValue(r.WorkDate, out var dt) ? dt : DayType.Normal;
             AccrueDayType(bucket, dayType, weight);
 
-            // Giờ + quy đổi × hệ số
             bucket.DayHours += r.DayHours;
             bucket.NightHours += r.NightHours;
 
@@ -160,8 +199,7 @@ public class GetAttendanceSummaryQueryHandler
             if (r.OvertimeRequestId is not null)
                 bucket.OtHours += r.DayHours + r.NightHours;
 
-            var rate = rateResolver.Resolve(r.ShiftTemplate?.AppliedAttendanceRuleId, r.WorkDate, dayType);
-            bucket.EquivalentHours += r.DayHours * rate + r.NightHours * rate * NightRateBonus;
+            bucket.EquivalentHours += ComputeEquivalentHours(r, dayType, otDayDates, rateResolver, otCalculator, laborLawByDate);
         }
 
         return new EmployeeAttendanceSummaryDto(
@@ -198,6 +236,36 @@ public class GetAttendanceSummaryQueryHandler
             case DayType.WeeklyRestDay:  bucket.WeeklyRestDays += weight; break;
             default:                     bucket.NormalDays += weight; break;
         }
+    }
+
+    private static decimal ComputeEquivalentHours(
+        AttendanceRecordEntity r,
+        DayType dayType,
+        HashSet<DateOnly> otDayDates,
+        IAttendanceRateResolver rateResolver,
+        IOvertimeMultiplierCalculator otCalculator,
+        IReadOnlyDictionary<DateOnly, LaborLawConstantsSnapshot> laborLawByDate)
+    {
+        if (r.OvertimeRequestId is not null)
+        {
+            // OT: LaborLaw floor + uplift (Điều 98.1/98.3). Không lấy ShiftRate.
+            if (!laborLawByDate.TryGetValue(r.WorkDate, out var law))
+                return 0m; // defensive — prefetch bao phủ mọi record OT nên không xảy ra trong flow bình thường.
+
+            var hasPrevDayOt = otDayDates.Contains(r.WorkDate);
+            var dayOtRate   = otCalculator.Calculate(dayType, isNight: false, hasPrevDayOt: false, law);
+            var nightOtRate = otCalculator.Calculate(dayType, isNight: true, hasPrevDayOt, law);
+            return r.DayHours * dayOtRate / 100m + r.NightHours * nightOtRate / 100m;
+        }
+
+        // Non-OT: ShiftRate. Phụ cấp đêm cộng chỉ cho Normal day (T7/CN/Lễ/PaidLeave đã flat theo ShiftRate).
+        var rate = rateResolver.Resolve(r.ShiftTemplate?.AppliedAttendanceRuleId, r.WorkDate, dayType);
+        if (dayType == DayType.Normal)
+        {
+            var surcharge = laborLawByDate.TryGetValue(r.WorkDate, out var law) ? law.NightWorkSurchargePercent : 0m;
+            return r.DayHours * rate / 100m + r.NightHours * (rate + surcharge) / 100m;
+        }
+        return (r.DayHours + r.NightHours) * rate / 100m;
     }
 
     private sealed class Bucket

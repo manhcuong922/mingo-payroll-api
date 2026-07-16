@@ -16,9 +16,6 @@ public class PublicHolidayEntityConfiguration : IEntityTypeConfiguration<PublicH
         builder.Property(e => e.HolidayDate).IsRequired();
         builder.Property(e => e.HolidayEndDate).IsRequired();
         builder.Property(e => e.Description).HasMaxLength(500);
-        builder.Property(e => e.ApplyScope).HasMaxLength(50).IsRequired().HasDefaultValue("AllEmployees");
-        builder.Property(e => e.TargetDepartmentIds).HasMaxLength(1000);
-        builder.Property(e => e.TargetEmployeeIds).HasMaxLength(1000);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
 
         builder.HasIndex(e => new { e.HolidayDate, e.HolidayEndDate });
