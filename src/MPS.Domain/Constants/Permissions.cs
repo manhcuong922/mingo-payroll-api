@@ -207,9 +207,14 @@ public static class Permissions
     public const string CompanyPolicyUpdateAll = "CompanyPolicy.Update.All";
     public const string CompanyPolicyDeleteAll = "CompanyPolicy.Delete.All";
 
-    // ===== FaceRegistration (IDs 134–136) — retired: module gỡ ở nhánh remove/face-attendance =====
+    // ===== FaceRegistration (Track B) — IDs 134–136 =====
+
+    public const string FaceRegistrationSubmitSelf = "FaceRegistration.Submit.Self";
+    public const string FaceRegistrationReadAll    = "FaceRegistration.Read.All";
+    public const string FaceRegistrationApproveAll = "FaceRegistration.Approve.All";
+
     // ===== OvertimeSlotTemplate (IDs 137–140) — retired: module gỡ ở nhánh dev =====
-    // IDs 134–140 giữ trống cho audit continuity (không tái sử dụng).
+    // IDs 137–140 giữ trống cho audit continuity (không tái sử dụng).
 
     // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
 
@@ -512,9 +517,14 @@ public static class PermissionIds
     public const int CompanyPolicyUpdateAll = 132;
     public const int CompanyPolicyDeleteAll = 133;
 
-    // ===== FaceRegistration (IDs 134–136) — retired: module gỡ ở nhánh remove/face-attendance =====
+    // ===== FaceRegistration (Track B) — IDs 134–136 =====
+
+    public const int FaceRegistrationSubmitSelf = 134;
+    public const int FaceRegistrationReadAll    = 135;
+    public const int FaceRegistrationApproveAll = 136;
+
     // ===== OvertimeSlotTemplate (IDs 137–140) — retired: module gỡ ở nhánh dev =====
-    // IDs 134–140 giữ trống cho audit continuity (không tái sử dụng).
+    // IDs 137–140 giữ trống cho audit continuity (không tái sử dụng).
 
     // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
 
