@@ -17,17 +17,20 @@ public sealed partial class DatabaseSeeder
     private readonly IPasswordHasher _passwordHasher;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DatabaseSeeder> _logger;
+    private readonly Services.PayrollDemoPeriodGenerator _payrollGenerator;
 
     public DatabaseSeeder(
         AppDbContext context,
         IPasswordHasher passwordHasher,
         IConfiguration configuration,
-        ILogger<DatabaseSeeder> logger)
+        ILogger<DatabaseSeeder> logger,
+        Services.PayrollDemoPeriodGenerator payrollGenerator)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _configuration = configuration;
         _logger = logger;
+        _payrollGenerator = payrollGenerator;
     }
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)

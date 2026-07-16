@@ -198,6 +198,7 @@ public static class InfrastructureServiceRegistration
         services.AddHttpClient<ICitizenIdOcrService, FptAiCitizenIdOcrService>();
 
         // Startup seeding
+        services.AddScoped<MPS.Infrastructure.Services.PayrollDemoPeriodGenerator>();
         services.AddScoped<DatabaseSeeder>();
 
         // Background jobs

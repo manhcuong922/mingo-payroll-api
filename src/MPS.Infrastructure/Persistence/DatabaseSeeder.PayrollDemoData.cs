@@ -30,7 +30,7 @@ public sealed partial class DatabaseSeeder
         await SeedPayrollFormulaSetAsync(adminId, ct);
         await SeedPayrollParametersAsync(ct);
         await SeedProductivityCoefficientsAsync(ct);
-        await SeedPayrollDemoMonthAsync(adminId, ct);
+        await SeedPayrollDemoPeriodsAsync(adminId, ct);
     }
 
     private async Task SeedPayrollFormulaSetAsync(int adminId, CancellationToken ct)
@@ -91,27 +91,24 @@ public sealed partial class DatabaseSeeder
         _logger.LogInformation("Seeded {Count} ProductivityCoefficient bands.", rows.Length);
     }
 
-    // Best-effort: chuẩn bị đủ liệu 1 tháng cho NV có HĐ Active → readiness pass, bấm sinh lương chạy ngay.
-    private async Task SeedPayrollDemoMonthAsync(int adminId, CancellationToken ct)
+    private const int PayrollDemoMonths = 3;   // 3 kỳ gần nhất (đủ dữ liệu, tránh kỳ hiện tại còn thiếu).
+
+    // Chuẩn bị đủ liệu + SINH nhiều kỳ lương demo hoàn chỉnh (readiness → engine thật) cho công ty có
+    // nhiều HĐ Active nhất → màn bảng lương có sẵn số liệu, không cần HR bấm. Best-effort từng kỳ.
+    private async Task SeedPayrollDemoPeriodsAsync(int adminId, CancellationToken ct)
     {
         if (await _context.PayrollPeriods.AsNoTracking().AnyAsync(ct)) return;
 
-        var now = DateTime.UtcNow;
-        var demo = new DateOnly(now.Year, now.Month, 1).AddMonths(-1); // tháng trước (đủ dữ liệu)
-        int year = demo.Year, month = demo.Month;
-        var periodStart = new DateOnly(year, month, 1);
-        var periodEnd = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-        var startDt = periodStart.ToDateTime(TimeOnly.MinValue);
-        var endDt = periodEnd.ToDateTime(TimeOnly.MaxValue);
-
-        var contracts = await _context.Contracts
-            .Include(c => c.EmployeeInformation).ThenInclude(e => e.User)
-            .Where(c => c.Status == ContractEnums.ContractStatus.Active
-                && c.EffectiveFrom <= endDt && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
-            .Take(6).ToListAsync(ct);
-        if (contracts.Count == 0)
+        // Party demo = pháp nhân có nhiều HĐ Active nhất (party mặc định thường 0 HĐ → readiness rỗng).
+        var partyId = await _context.Contracts.AsNoTracking()
+            .Where(c => c.Status == ContractEnums.ContractStatus.Active)
+            .GroupBy(c => c.EmployerPartyId)
+            .OrderByDescending(g => g.Count())
+            .Select(g => (int?)g.Key)
+            .FirstOrDefaultAsync(ct);
+        if (partyId is null)
         {
-            _logger.LogWarning("Payroll demo: no active contract overlaps {Month:D2}/{Year}; skipping demo month.", month, year);
+            _logger.LogWarning("Payroll demo: không có HĐ Active nào; bỏ qua sinh kỳ lương demo.");
             return;
         }
 
@@ -119,9 +116,55 @@ public sealed partial class DatabaseSeeder
             .Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
         if (shiftTemplateId is null)
         {
-            _logger.LogWarning("Payroll demo: no ShiftTemplate; skipping demo month.");
+            _logger.LogWarning("Payroll demo: chưa có ShiftTemplate; bỏ qua sinh kỳ lương demo.");
             return;
         }
+
+        var now = DateTime.UtcNow;
+        var generated = 0;
+        // Sinh từ CŨ → MỚI để law-change note kỳ sau so đúng kỳ trước.
+        for (var back = PayrollDemoMonths; back >= 1; back--)
+        {
+            var anchor = new DateOnly(now.Year, now.Month, 1).AddMonths(-back);
+            int year = anchor.Year, month = anchor.Month;
+
+            await PreparePayrollMonthDataAsync(partyId.Value, year, month, shiftTemplateId.Value, adminId, ct);
+            try
+            {
+                var id = await _payrollGenerator.TryGenerateAsync(partyId.Value, year, month, adminId, ct);
+                if (id is not null) generated++;
+            }
+            catch (Exception ex)
+            {
+                // Demo: KHÔNG để lỗi sinh kỳ chặn khởi động app (vd thiếu version compliance ở tháng đó).
+                _logger.LogWarning(ex, "Payroll demo: sinh kỳ {Month:D2}/{Year} thất bại — bỏ qua.", month, year);
+            }
+        }
+
+        _logger.LogInformation("Payroll demo: đã sinh {Count}/{Total} kỳ lương cho party {Party}.",
+            generated, PayrollDemoMonths, partyId);
+    }
+
+    // Chuẩn bị chấm công (đủ ngày công) + đánh giá tháng Approved + hồ sơ chi lương cho MỌI NV trong phạm
+    // vi readiness (HĐ non-Cancelled dưới party, overlap kỳ) → readiness pass để engine sinh được kỳ.
+    private async Task PreparePayrollMonthDataAsync(
+        int partyId, int year, int month, int shiftTemplateId, int adminId, CancellationToken ct)
+    {
+        var periodStart = new DateOnly(year, month, 1);
+        var periodEnd = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+        var startDt = periodStart.ToDateTime(TimeOnly.MinValue);
+        var endDt = periodEnd.ToDateTime(TimeOnly.MaxValue);
+
+        var empIds = await _context.Contracts.AsNoTracking()
+            .Where(c => c.EmployerPartyId == partyId
+                && c.Status != ContractEnums.ContractStatus.Cancelled
+                && c.EffectiveFrom <= endDt && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
+            .Select(c => c.EmployeeInformationId).Distinct().ToListAsync(ct);
+        if (empIds.Count == 0) return;
+
+        var emps = await _context.EmployeeInformations
+            .Include(e => e.User)
+            .Where(e => empIds.Contains(e.Id)).ToListAsync(ct);
 
         var workdays = new List<DateOnly>();
         for (var d = 1; d <= DateTime.DaysInMonth(year, month); d++)
@@ -130,12 +173,9 @@ public sealed partial class DatabaseSeeder
             if (day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday) workdays.Add(day);
         }
 
-        var seeded = 0;
-        foreach (var c in contracts)
+        var now = DateTime.UtcNow;
+        foreach (var emp in emps)
         {
-            var emp = c.EmployeeInformation;
-            if (emp is null) continue;
-
             if (string.IsNullOrWhiteSpace(emp.BankNumber)) emp.BankNumber = $"DEMO{emp.Id:D10}";
             if (string.IsNullOrWhiteSpace(emp.TaxNo)) emp.TaxNo = $"{emp.Id:D10}";
 
@@ -161,9 +201,11 @@ public sealed partial class DatabaseSeeder
 
             if (emp.UserId is int uid)
             {
-                var hasEval = await _context.MonthlyEvaluations
-                    .AnyAsync(m => m.EmployeeUserId == uid && m.PeriodYear == year && m.PeriodMonth == month, ct);
-                if (!hasEval)
+                // Unique (user, năm, tháng) — nếu đã có eval (vd từ eval demo) thì CHỈ nâng lên Approved,
+                // KHÔNG chèn dòng thứ 2 (tránh vi phạm unique index D11).
+                var existingEval = await _context.MonthlyEvaluations
+                    .FirstOrDefaultAsync(m => m.EmployeeUserId == uid && m.PeriodYear == year && m.PeriodMonth == month, ct);
+                if (existingEval is null)
                 {
                     await _context.MonthlyEvaluations.AddAsync(new MonthlyEvaluation
                     {
@@ -180,13 +222,15 @@ public sealed partial class DatabaseSeeder
                         CreatedAt = now,
                     }, ct);
                 }
+                else if (existingEval.Status != EvaluationEnums.EvaluationStatus.Approved)
+                {
+                    existingEval.Status = EvaluationEnums.EvaluationStatus.Approved;
+                    existingEval.ApprovedByUserId = adminId;
+                    existingEval.ApprovedAt = now;
+                }
             }
-            seeded++;
         }
 
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation(
-            "Payroll demo month {Month:D2}/{Year}: chuẩn bị chấm công + đánh giá cho {Count} NV (HĐ Active). " +
-            "HR có thể bấm sinh lương kỳ này.", month, year, seeded);
     }
 }
