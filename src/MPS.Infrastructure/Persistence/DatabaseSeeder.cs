@@ -48,8 +48,6 @@ public sealed partial class DatabaseSeeder
         // seed thêm trưởng phòng Kinh doanh + IT (role DepartmentManager) để test auto-routing
         // đơn từ nhân sự: HR tạo → Director; Trưởng phòng tạo → HR.
         await SeedOfficeWorkforceDemoAsync(cancellationToken);
-        // Dọn account/data demo theo công ty IT cũ (ngoài scope sản xuất) khỏi DB đã seed trước đó.
-        await CleanupOutOfScopeDemoAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
@@ -60,10 +58,16 @@ public sealed partial class DatabaseSeeder
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
+        // Module Task (LÕI sản xuất): quy trình mẫu "Khung tranh" + đơn 3 tầng/xưởng (cần xưởng + chức
+        // danh + công nhân đã seed ở trên) — xem DatabaseSeeder.ProductionTaskDemoData.cs.
+        await SeedProductionTaskDemoAsync(cancellationToken);
         // Dữ liệu chấm điểm demo vài kỳ gần nhất (cần tiêu chí + nhân sự đã seed ở trên) —
         // xem DatabaseSeeder.EvaluationDemoData.cs.
         await SeedEvaluationDemoDataAsync(cancellationToken);
-        // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + 1 tháng demo chạy được —
+        // HĐ lao động cho TOÀN BỘ workforce xưởng + văn phòng → payroll bao phủ cả công ty (không chỉ
+        // nhóm contract-test). Phải chạy TRƯỚC SeedPayrollAsync — xem DatabaseSeeder.WorkforceContractsData.cs.
+        await SeedWorkforceContractsAsync(cancellationToken);
+        // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
         // xem DatabaseSeeder.PayrollDemoData.cs.
         await SeedPayrollAsync(cancellationToken);
     }
@@ -201,8 +205,7 @@ public sealed partial class DatabaseSeeder
             new() { Code = "BGD", Name = "Ban Giám đốc", Description = "Ban điều hành công ty." },
             new() { Code = "HR", Name = "Phòng Nhân sự", Description = "Quản lý nhân sự, tuyển dụng, chế độ." },
             new() { Code = "ACC", Name = "Phòng Kế toán", Description = "Kế toán, tài chính, lương." },
-            new() { Code = "BIZ", Name = "Phòng Kinh doanh", Description = "Kinh doanh, dự án, khách hàng." },
-            new() { Code = "IT", Name = "Phòng Công nghệ thông tin", Description = "Phát triển & vận hành hệ thống." },
+            new() { Code = "BIZ", Name = "Phòng Kinh doanh", Description = "Kinh doanh, bán hàng, chăm sóc khách hàng." },
         };
 
         var toAdd = seeds.Where(d => !existing.Contains(d.Code)).ToList();
@@ -222,11 +225,12 @@ public sealed partial class DatabaseSeeder
     }
 
     // Dọn phòng ban thừa do migration DepartmentIsActive (bản cũ) seed với Code KHÁC DatabaseSeeder:
-    // KT/NS/KD. DatabaseSeeder là nguồn chính thức (KT→ACC, NS→HR, KD→BIZ). CHỈ xóa khi phòng đó
+    // KT/NS/KD + IT. DatabaseSeeder là nguồn chính thức (KT→ACC, NS→HR, KD→BIZ). IT (phần mềm nội bộ)
+    // bị loại vì công ty là xưởng sản xuất khung tranh, không có phòng CNTT dev. CHỈ xóa khi phòng đó
     // CHƯA có nhân viên gắn vào và CHƯA được đặt làm tổ trưởng — an toàn, không phá dữ liệu thật.
     private async Task CleanupLegacyDepartmentsAsync(CancellationToken cancellationToken)
     {
-        var legacyCodes = new[] { "KT", "NS", "KD" };
+        var legacyCodes = new[] { "KT", "NS", "KD", "IT" };
 
         var legacyDepartments = await _context.Departments
             .Where(d => legacyCodes.Contains(d.Code))
@@ -289,11 +293,6 @@ public sealed partial class DatabaseSeeder
             // Phòng Kinh doanh
             new() { Code = "TPKD", Name = "Trưởng phòng Kinh doanh", Description = "Quản lý phòng Kinh doanh." },
             new() { Code = "SALE", Name = "Nhân viên Kinh doanh", Description = "Kinh doanh, chăm sóc khách hàng." },
-
-            // Phòng IT
-            new() { Code = "TPIT", Name = "Trưởng phòng IT", Description = "Quản lý phòng Công nghệ thông tin." },
-            new() { Code = "DEV", Name = "Lập trình viên", Description = "Phát triển phần mềm." },
-            new() { Code = "QA", Name = "Kiểm thử viên", Description = "Kiểm thử chất lượng phần mềm." },
 
             // Chung
             new() { Code = "TT", Name = "Thực tập sinh", Description = "Thử việc, đào tạo — chưa thuộc phòng ban cố định." },
@@ -1341,90 +1340,4 @@ public sealed partial class DatabaseSeeder
     }
 
 
-    // Dọn account + dữ liệu demo theo công ty IT cũ (ngoài scope module sản xuất) khỏi DB đã seed trước đó.
-    // Giữ lại: admin, ai-service, hr, accountant, director + toàn bộ nhân sự sản xuất.
-    // Bọc try/catch: lỗi dọn KHÔNG được chặn khởi động app (worst case: data cũ còn, log cảnh báo).
-    private async Task CleanupOutOfScopeDemoAsync(CancellationToken ct)
-    {
-        // Account demo IT / role rỗng cần bỏ — role gắn xưởng (5/6/7) nay do nhân sự sản xuất đảm nhiệm.
-        var demoUsernames = new[]
-        {
-            "projmanager", "employee", "deptmanager",
-            "worker2", "worker3", "worker4", "worker5", "worker6",
-        };
-
-        try
-        {
-            // 1) Đơn demo [DEMO] + cây task + dòng gán (xoá set-based: assignee → task → project,
-            //    tôn trọng self-ref ParentTaskId Restrict vì xoá cả tập cùng lúc).
-            var demoProjectIds = await _context.Projects
-                .Where(p => p.Title.StartsWith("[DEMO]"))
-                .Select(p => p.Id)
-                .ToListAsync(ct);
-            if (demoProjectIds.Count > 0)
-            {
-                var demoTaskIds = await _context.ProjectTasks
-                    .Where(t => t.ProjectId != null && demoProjectIds.Contains(t.ProjectId.Value))
-                    .Select(t => t.Id)
-                    .ToListAsync(ct);
-                if (demoTaskIds.Count > 0)
-                    await _context.TaskAssignees.Where(a => demoTaskIds.Contains(a.TaskId)).ExecuteDeleteAsync(ct);
-                await _context.ProjectTasks
-                    .Where(t => t.ProjectId != null && demoProjectIds.Contains(t.ProjectId.Value))
-                    .ExecuteDeleteAsync(ct);
-                await _context.Projects.Where(p => demoProjectIds.Contains(p.Id)).ExecuteDeleteAsync(ct);
-            }
-
-            // 2) Quy trình mẫu demo IT (KHUNG-A4) + các bước.
-            var itTemplateIds = await _context.ProcessTemplates
-                .Where(t => t.Code == "KHUNG-A4")
-                .Select(t => t.Id)
-                .ToListAsync(ct);
-            if (itTemplateIds.Count > 0)
-            {
-                await _context.ProcessSteps.Where(s => itTemplateIds.Contains(s.ProcessTemplateId)).ExecuteDeleteAsync(ct);
-                await _context.ProcessTemplates.Where(t => itTemplateIds.Contains(t.Id)).ExecuteDeleteAsync(ct);
-            }
-
-            // 3) Account demo + hồ sơ NV. EmployeeInformation → User là Restrict ⇒ xoá NV trước; gỡ
-            //    Department.ManagerId nếu trỏ tới NV sắp xoá (VD xưởng IT đang lấy projmanager làm tổ trưởng).
-            var demoUserIds = await _context.Users
-                .Where(u => demoUsernames.Contains(u.Username))
-                .Select(u => u.Id)
-                .ToListAsync(ct);
-            if (demoUserIds.Count == 0)
-            {
-                _logger.LogDebug("Cleanup: không còn account demo IT nào để xoá.");
-                return;
-            }
-
-            var demoEmpIds = await _context.EmployeeInformations
-                .Where(e => e.UserId != null && demoUserIds.Contains(e.UserId.Value))
-                .Select(e => e.Id)
-                .ToListAsync(ct);
-            if (demoEmpIds.Count > 0)
-            {
-                var managedDepts = await _context.Departments
-                    .Where(d => d.ManagerId != null && demoEmpIds.Contains(d.ManagerId.Value))
-                    .ToListAsync(ct);
-                foreach (var dept in managedDepts) dept.ManagerId = null;
-                if (managedDepts.Count > 0) await _context.SaveChangesAsync(ct);
-
-                await _context.EmployeeInformations.Where(e => demoEmpIds.Contains(e.Id)).ExecuteDeleteAsync(ct);
-            }
-
-            // User: RefreshToken/PasswordResetToken cascade; AuditLog.UserId set-null → không vướng FK.
-            await _context.Users.Where(u => demoUserIds.Contains(u.Id)).ExecuteDeleteAsync(ct);
-
-            _logger.LogInformation(
-                "Cleanup: đã xoá {Users} account demo IT + đơn/template demo IT (ngoài scope sản xuất).",
-                demoUserIds.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Cleanup demo IT (ngoài scope) thất bại — bỏ qua, không chặn khởi động. " +
-                "Có thể account demo đang bị dữ liệu khác tham chiếu; dọn thủ công nếu cần.");
-        }
-    }
 }
