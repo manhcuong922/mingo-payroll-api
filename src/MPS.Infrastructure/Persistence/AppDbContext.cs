@@ -97,6 +97,16 @@ public class AppDbContext : DbContext
     public DbSet<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink> MonthlyEvaluationSourceLinks => Set<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink>();
     public DbSet<Domain.Entities.Evaluation.EvaluationScoreLine> EvaluationScoreLines => Set<Domain.Entities.Evaluation.EvaluationScoreLine>();
 
+    // ===== Payroll module (bảng lương hàng tháng) =====
+    public DbSet<Domain.Entities.Payroll.PayrollFormulaSet> PayrollFormulaSets => Set<Domain.Entities.Payroll.PayrollFormulaSet>();
+    public DbSet<Domain.Entities.Payroll.SalaryColumnDefinition> SalaryColumnDefinitions => Set<Domain.Entities.Payroll.SalaryColumnDefinition>();
+    public DbSet<Domain.Entities.Payroll.PayrollPeriod> PayrollPeriods => Set<Domain.Entities.Payroll.PayrollPeriod>();
+    public DbSet<Domain.Entities.Payroll.PayrollComplianceRef> PayrollComplianceRefs => Set<Domain.Entities.Payroll.PayrollComplianceRef>();
+    public DbSet<Domain.Entities.Payroll.PayrollRow> PayrollRows => Set<Domain.Entities.Payroll.PayrollRow>();
+    public DbSet<Domain.Entities.Payroll.PayrollCellValue> PayrollCellValues => Set<Domain.Entities.Payroll.PayrollCellValue>();
+    public DbSet<Domain.Entities.Payroll.PayrollNote> PayrollNotes => Set<Domain.Entities.Payroll.PayrollNote>();
+    public DbSet<Domain.Entities.Payroll.ProductivityCoefficient> ProductivityCoefficients => Set<Domain.Entities.Payroll.ProductivityCoefficient>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
