@@ -51,12 +51,16 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
 
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(existing.WorkDate, cancellationToken);
 
-        // OT record không có ShiftTemplate → split không có break; shift record dùng break từ shift.
-        var (dayHours, nightHours) = SplitHours(
-            request.Status, checkInAt, checkOutAt,
-            laborLaw.NightStartTime, laborLaw.NightEndTime,
-            existing.ShiftTemplate?.BreakStartTime,
-            existing.ShiftTemplate?.BreakEndTime);
+        // Shift record → dùng AttendanceHourCalculator (cap về khung ca + break).
+        // OT record (không có ShiftTemplate) → split trực tiếp, không cap.
+        var (dayHours, nightHours) = existing.ShiftTemplate is not null
+            ? AttendanceHourCalculator.Compute(
+                _splitter, request.Status, checkInAt, checkOutAt,
+                laborLaw.NightStartTime, laborLaw.NightEndTime,
+                existing.ShiftTemplate, existing.WorkDate)
+            : SplitHoursWithoutShift(
+                request.Status, checkInAt, checkOutAt,
+                laborLaw.NightStartTime, laborLaw.NightEndTime);
 
         existing.CheckInAt = checkInAt;
         existing.CheckOutAt = checkOutAt;
@@ -73,14 +77,13 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         return await _repository.UpdateAsync(existing, cancellationToken);
     }
 
-    private (decimal DayHours, decimal NightHours) SplitHours(
+    /// <summary>Chỉ dùng cho OT record (không có shift → không có break, không cap khung ca).</summary>
+    private (decimal DayHours, decimal NightHours) SplitHoursWithoutShift(
         AttendanceStatus status,
         DateTime? checkInAt,
         DateTime? checkOutAt,
         TimeOnly nightStart,
-        TimeOnly nightEnd,
-        TimeOnly? breakStart,
-        TimeOnly? breakEnd)
+        TimeOnly nightEnd)
     {
         if (status is AttendanceStatus.OnLeave or AttendanceStatus.Absent) return (0m, 0m);
         if (checkInAt is null || checkOutAt is null) return (0m, 0m);
@@ -88,8 +91,8 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         var breakdown = _splitter.Split(new WorkHourDateTimeSplitInput(
             CheckInAt: checkInAt.Value,
             CheckOutAt: checkOutAt.Value,
-            BreakStart: breakStart,
-            BreakEnd: breakEnd,
+            BreakStart: null,
+            BreakEnd: null,
             NightStart: nightStart,
             NightEnd: nightEnd));
         return (breakdown.DayHours, breakdown.NightHours);
