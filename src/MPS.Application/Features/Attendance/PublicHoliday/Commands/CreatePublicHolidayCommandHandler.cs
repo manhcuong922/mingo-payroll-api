@@ -40,9 +40,6 @@ public class CreatePublicHolidayCommandHandler : IRequestHandler<CreatePublicHol
             HolidayDate = request.HolidayDate,
             HolidayEndDate = request.HolidayEndDate,
             Description = request.Description,
-            ApplyScope = NormalizeScope(request.ApplyScope),
-            TargetDepartmentIds = NormalizeTargets(request.TargetDepartmentIds, request.ApplyScope, "SpecificDepartments"),
-            TargetEmployeeIds = NormalizeTargets(request.TargetEmployeeIds, request.ApplyScope, "SpecificEmployees"),
             CreatedAt = _clock.UtcNow,
             CreatedByUserId = userId
         };
@@ -59,12 +56,4 @@ public class CreatePublicHolidayCommandHandler : IRequestHandler<CreatePublicHol
         if (count > MaxRangeDays)
             throw new DomainValidationException($"Holiday range cannot exceed {MaxRangeDays} days.");
     }
-
-    private static string NormalizeScope(string? scope) =>
-        string.IsNullOrWhiteSpace(scope) ? "AllEmployees" : scope.Trim();
-
-    private static string? NormalizeTargets(string? ids, string? scope, string specificScope) =>
-        NormalizeScope(scope) == specificScope && !string.IsNullOrWhiteSpace(ids)
-            ? ids.Trim()
-            : null;
 }

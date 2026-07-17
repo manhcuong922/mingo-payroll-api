@@ -7,7 +7,8 @@ namespace MPS.Application.Common.Services;
 /// <summary>
 /// Resolve hệ số công theo (ruleId, workDate, dayType) — dùng cho attendance summary.
 /// Prefetch versions của các rule liên quan 1 lần trước khi gọi Resolve trong loop record để tránh N+1.
-/// Fallback 1.0m nếu không tìm được rule hoặc không có version phủ workDate.
+/// Fallback 100m (= 100%) nếu không tìm được rule hoặc không có version phủ workDate.
+/// Unit: percent (VD 100 = 100%, 200 = 200%) — đồng bộ với AttendanceRuleVersion.WorkRate*.
 /// </summary>
 public interface IAttendanceRateResolver
 {
@@ -17,6 +18,8 @@ public interface IAttendanceRateResolver
 
 public sealed class AttendanceRateResolver : IAttendanceRateResolver
 {
+    private const decimal FallbackRatePercent = 100m;
+
     private readonly IAttendanceRuleVersionRepository _versionRepository;
     private readonly Dictionary<int, List<AttendanceRuleVersion>> _cache = new();
 
@@ -41,16 +44,16 @@ public sealed class AttendanceRateResolver : IAttendanceRateResolver
 
     public decimal Resolve(int? ruleId, DateOnly workDate, DayType dayType)
     {
-        if (ruleId is null) return 1.0m;
+        if (ruleId is null) return FallbackRatePercent;
 
         if (!_cache.TryGetValue(ruleId.Value, out var versions) || versions.Count == 0)
-            return 1.0m;
+            return FallbackRatePercent;
 
         // Version phủ workDate: EffectiveFrom <= workDate <= (EffectiveTo ?? +∞).
         var version = versions.LastOrDefault(v =>
             v.EffectiveFrom <= workDate && (v.EffectiveTo == null || v.EffectiveTo >= workDate));
 
-        if (version is null) return 1.0m;
+        if (version is null) return FallbackRatePercent;
 
         return dayType switch
         {

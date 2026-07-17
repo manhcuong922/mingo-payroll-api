@@ -143,6 +143,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Common.Interfaces.IRegularHoursCapChecker, RegularHoursCapChecker>();
         services.AddScoped<MPS.Application.Common.Interfaces.IAttendanceEditLockChecker, MPS.Application.Features.Attendance.AttendanceSetting.Common.AttendanceEditLockChecker>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleExcelParser, MonthlyScheduleExcelParser>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IPublicHolidayExcelParser, PublicHolidayExcelParser>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleImportCache, MonthlyScheduleImportCache>();
 
         // Compliance options

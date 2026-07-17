@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MPS.API.Authorization;
 using MPS.API.Requests.Attendance;
+using MPS.API.Services;
+using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.PublicHoliday.Commands;
 using MPS.Application.Features.Attendance.PublicHoliday.Queries;
 using MPS.Domain.Constants;
@@ -43,8 +45,7 @@ public class PublicHolidayController : ControllerBase
         var endDate = request.HolidayEndDate ?? request.HolidayDate;
         var id = await _mediator.Send(new CreatePublicHolidayCommand(
             request.Name, request.HolidayDate, endDate,
-            request.Description, request.ApplyScope,
-            request.TargetDepartmentIds, request.TargetEmployeeIds), cancellationToken);
+            request.Description), cancellationToken);
         return Created($"/api/public-holidays/{id}", new { id });
     }
 
@@ -58,8 +59,7 @@ public class PublicHolidayController : ControllerBase
         var endDate = request.HolidayEndDate ?? request.HolidayDate;
         var updated = await _mediator.Send(new UpdatePublicHolidayCommand(
             id, request.Name, request.HolidayDate, endDate,
-            request.Description, request.ApplyScope,
-            request.TargetDepartmentIds, request.TargetEmployeeIds), cancellationToken);
+            request.Description, request.IsActive), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();
     }
@@ -72,4 +72,40 @@ public class PublicHolidayController : ControllerBase
         if (!deleted) return NotFound();
         return NoContent();
     }
+
+    [HttpGet("import/template")]
+    [HasPermission(Permissions.PublicHolidayCreateAll)]
+    public IActionResult DownloadTemplate()
+    {
+        var bytes = PublicHolidayImportTemplateGenerator.Generate();
+        return File(bytes, PublicHolidayImportTemplateGenerator.ExcelContentType, "public-holiday-import-template.xlsx");
+    }
+
+    [HttpPost("import/preview")]
+    [HasPermission(Permissions.PublicHolidayCreateAll)]
+    [RequestSizeLimit(5 * 1024 * 1024)]
+    public async Task<IActionResult> PreviewImport(IFormFile file, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Vui lòng chọn file Excel." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new PreviewPublicHolidayImportCommand(stream), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("import/confirm")]
+    [HasPermission(Permissions.PublicHolidayCreateAll)]
+    public async Task<IActionResult> ConfirmImport(
+        [FromBody] ConfirmPublicHolidayImportRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Rows is null || request.Rows.Count == 0)
+            return BadRequest(new { error = "Không có dòng nào để import." });
+
+        var result = await _mediator.Send(new ConfirmPublicHolidayImportCommand(request.Rows), cancellationToken);
+        return Ok(result);
+    }
 }
+
+public sealed record ConfirmPublicHolidayImportRequest(IReadOnlyList<PublicHolidayImportConfirmRow> Rows);

@@ -8,6 +8,4 @@ public sealed record UpdatePublicHolidayCommand(
     DateOnly HolidayDate,
     DateOnly HolidayEndDate,
     string? Description,
-    string ApplyScope,
-    string? TargetDepartmentIds,
-    string? TargetEmployeeIds) : IRequest<bool>, IPublicHolidayTargetCommand;
+    bool IsActive) : IRequest<bool>;

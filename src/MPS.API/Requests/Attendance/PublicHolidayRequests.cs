@@ -4,16 +4,11 @@ public sealed record CreatePublicHolidayRequest(
     string Name,
     DateOnly HolidayDate,
     DateOnly? HolidayEndDate,
-    string? Description,
-    string ApplyScope = "AllEmployees",
-    string? TargetDepartmentIds = null,
-    string? TargetEmployeeIds = null);
+    string? Description);
 
 public sealed record UpdatePublicHolidayRequest(
     string Name,
     DateOnly HolidayDate,
     DateOnly? HolidayEndDate,
     string? Description,
-    string ApplyScope = "AllEmployees",
-    string? TargetDepartmentIds = null,
-    string? TargetEmployeeIds = null);
+    bool IsActive = true);

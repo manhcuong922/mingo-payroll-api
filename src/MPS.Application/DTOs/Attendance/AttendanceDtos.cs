@@ -132,12 +132,58 @@ public sealed record PublicHolidayDto(
     DateOnly HolidayDate,
     DateOnly HolidayEndDate,
     string? Description,
-    string ApplyScope,
-    string? TargetDepartmentIds,
-    string? TargetEmployeeIds,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
+
+/// <summary>
+/// Kết quả parse file Excel import PublicHoliday (không xét DB).
+/// </summary>
+public sealed record PublicHolidayImportParseResult(
+    IReadOnlyList<PublicHolidayImportParsedRow> Rows,
+    IReadOnlyList<PublicHolidayImportRowError> GlobalErrors);
+
+public sealed record PublicHolidayImportParsedRow(
+    int RowIndex,
+    string? Name,
+    DateOnly? HolidayDate,
+    DateOnly? HolidayEndDate,
+    string? Description,
+    IReadOnlyList<PublicHolidayImportRowError> RowErrors);
+
+public sealed record PublicHolidayImportRowError(int? RowIndex, string Code, string Message);
+
+/// <summary>
+/// DTO trả về cho FE khi preview import: gồm các row hợp lệ + các row có lỗi (parse/validate/overlap).
+/// </summary>
+public sealed record PublicHolidayImportPreviewDto(
+    IReadOnlyList<PublicHolidayImportPreviewRow> Rows,
+    IReadOnlyList<PublicHolidayImportRowError> GlobalErrors,
+    int ValidCount,
+    int InvalidCount);
+
+public sealed record PublicHolidayImportPreviewRow(
+    int RowIndex,
+    string? Name,
+    DateOnly? HolidayDate,
+    DateOnly? HolidayEndDate,
+    string? Description,
+    bool IsValid,
+    IReadOnlyList<PublicHolidayImportRowError> Errors);
+
+/// <summary>
+/// DTO client gửi lên khi confirm — mỗi row là 1 holiday sẽ được insert. BE re-validate.
+/// </summary>
+public sealed record PublicHolidayImportConfirmRow(
+    string Name,
+    DateOnly HolidayDate,
+    DateOnly? HolidayEndDate,
+    string? Description);
+
+public sealed record PublicHolidayImportConfirmResultDto(
+    int Created,
+    int Skipped,
+    IReadOnlyList<PublicHolidayImportRowError> SkippedReasons);
 
 public sealed record AttendanceRecordDto(
     int Id,

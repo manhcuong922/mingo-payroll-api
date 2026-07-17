@@ -34,7 +34,9 @@ public class UpdatePublicHolidayCommandHandler : IRequestHandler<UpdatePublicHol
 
         EnsureValidRange(request.HolidayDate, request.HolidayEndDate);
 
-        if (await _repository.ExistsOverlapAsync(request.HolidayDate, request.HolidayEndDate, excludeId: request.Id, cancellationToken))
+        // Chỉ check overlap khi bật hoạt động (row inactive không tham gia tính toán, tự do trùng).
+        if (request.IsActive
+            && await _repository.ExistsOverlapAsync(request.HolidayDate, request.HolidayEndDate, excludeId: request.Id, cancellationToken))
             throw new ConflictException($"A public holiday already overlaps {request.HolidayDate:yyyy-MM-dd} - {request.HolidayEndDate:yyyy-MM-dd}.");
 
         var entity = new PublicHolidayEntity
@@ -44,10 +46,7 @@ public class UpdatePublicHolidayCommandHandler : IRequestHandler<UpdatePublicHol
             HolidayDate = request.HolidayDate,
             HolidayEndDate = request.HolidayEndDate,
             Description = request.Description,
-            ApplyScope = NormalizeScope(request.ApplyScope),
-            TargetDepartmentIds = NormalizeTargets(request.TargetDepartmentIds, request.ApplyScope, "SpecificDepartments"),
-            TargetEmployeeIds = NormalizeTargets(request.TargetEmployeeIds, request.ApplyScope, "SpecificEmployees"),
-            IsActive = existing.IsActive,
+            IsActive = request.IsActive,
             UpdatedAt = _clock.UtcNow,
             UpdatedByUserId = userId
         };
@@ -64,12 +63,4 @@ public class UpdatePublicHolidayCommandHandler : IRequestHandler<UpdatePublicHol
         if (count > MaxRangeDays)
             throw new DomainValidationException($"Holiday range cannot exceed {MaxRangeDays} days.");
     }
-
-    private static string NormalizeScope(string? scope) =>
-        string.IsNullOrWhiteSpace(scope) ? "AllEmployees" : scope.Trim();
-
-    private static string? NormalizeTargets(string? ids, string? scope, string specificScope) =>
-        NormalizeScope(scope) == specificScope && !string.IsNullOrWhiteSpace(ids)
-            ? ids.Trim()
-            : null;
 }
