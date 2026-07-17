@@ -2,7 +2,7 @@
 
 > **Đối tượng:** đội frontend (`mingo-payroll-ui`).
 > **Trạng thái backend:** Phase 1 + config APIs **đã build & verify live trên SQL Server thật**.
-> `640` test pass, **golden reconciliation khớp file lương mẫu 08/2023** (F5-0001 → 47.049.000,
+> `647` test pass, **golden reconciliation khớp file lương mẫu 08/2023** (F5-0001 → 47.049.000,
 > F5-0003 → 23.549.000). Mọi endpoint dưới đây đã tồn tại và chạy được — UI chỉ cần gọi.
 > **Xuất Excel (công thức Excel thật) đã có — xem §9.**
 > Kèm mục **§8 Khoảng trống** liệt kê thứ UI SẼ cần nhưng backend CHƯA có (đừng giả định).
@@ -16,7 +16,9 @@
 - **Response:** JSON thô (KHÔNG có envelope `{success,data}`); danh sách trả mảng trực tiếp. Property **camelCase**. Enum trả **chuỗi** (vd `"Draft"`, `"Money"`, `"Formula"`).
 - **Số tiền:** decimal VND, không đơn vị lẻ. Format hiển thị `1.234.567` (dấu chấm ngăn nghìn, locale vi-VN). Cột tiền đã được backend làm tròn đến đồng (một số đến nghìn).
 - **Content-Type:** `application/json` cho mọi POST/PUT.
-- **Không có pagination** trên các list hiện tại (kỳ lương, bảng công thức, tham số) — data nhỏ, load hết.
+- **Không có pagination** trên các list hiện tại (kỳ lương, bảng công thức) — data nhỏ, load hết.
+- **1 hệ thống = 1 công ty.** Kỳ lương = (năm, tháng), phủ MỌI nhân viên có HĐ hiệu lực — KHÔNG chọn công ty.
+- **Không có module tham số.** Mọi số đến từ HĐ / công chuẩn / hiệu suất; thiếu nguồn → cột bằng 0.
 
 ### Quyền → khả năng UI (ẩn/hiện nút theo permission trong JWT claim `perms`)
 
@@ -29,10 +31,9 @@
 | `Payroll.Delete.All` | Nút "Xoá kỳ" | SystemAdmin, Accountant |
 | `PayrollFormulaSet.Read.All` | Xem bảng công thức + catalog | SystemAdmin, Accountant, Director |
 | `PayrollFormulaSet.Create/Update/Delete.All` | CRUD bảng/cột công thức | SystemAdmin, Accountant |
-| `PayrollParameter.Read/Update.All` | Xem/sửa tham số | SA, Accountant (read: +Director) |
 | `ProductivityCoefficient.Read/Update.All` | Xem/sửa hệ số | SA, Accountant (read: +Director) |
 
-> Director = chỉ đọc (Read của Payroll/FormulaSet/Parameter/Productivity). HR = chỉ `Payroll.Read.All`.
+> Director = chỉ đọc (Read của Payroll/FormulaSet/Productivity). HR = chỉ `Payroll.Read.All`.
 > Backend chặn 403 nếu thiếu quyền — UI nên ẩn nút trước để tránh click hụt.
 
 ---
@@ -45,8 +46,7 @@
 /payroll/periods/:id                   → 2.3 Bảng lương (sheet)  → 2.4 hover, 2.5 sửa ô, 2.6 chốt/xoá
 /payroll/formula-sets                  → 2.7 Danh sách bảng công thức (+ clone/set-default/xoá)
 /payroll/formula-sets/:id              → 2.8 Sửa bảng + cột + trình dựng công thức
-/payroll/parameters                    → 2.9 Tham số công ty
-/payroll/productivity-coefficients     → 2.10 Hệ số năng suất
+/payroll/productivity-coefficients     → 2.9 Hệ số năng suất
 ```
 
 ---
@@ -62,7 +62,7 @@
 ## 2.2 Sinh kỳ lương — cổng đủ liệu (readiness gate)
 
 **Bước 1 — preview đủ liệu (khuyến nghị gọi trước khi cho bấm tạo):**
-`GET /api/payroll/periods/readiness?employerPartyId=&year=&month=` → `PayrollReadinessDto[]`:
+`GET /api/payroll/periods/readiness?year=&month=` → `PayrollReadinessDto[]`:
 ```jsonc
 [{ "employeeInformationId": 33, "employeeCode": "EMPT001", "fullName": "Nguyễn Văn Nam",
    "isReady": true, "missing": [] }, ...]
@@ -74,20 +74,19 @@
 **Bước 2 — tạo:**
 `POST /api/payroll/periods`
 ```jsonc
-{ "employerPartyId": 3, "year": 2026, "month": 6,
+{ "year": 2026, "month": 6,
   "formulaSetId": null,          // null = dùng bảng mặc định
   "standardWorkingDays": null }  // null = auto đếm ngày T2–T6 của tháng; cho sửa
 ```
 - **201** `{ "id": 1 }` → điều hướng sang màn 2.3.
 - **422** `{ code:"PAYROLL_NOT_READY", error, notReady:[{employeeInformationId,employeeCode,fullName,missing}] }` → hiện lại danh sách thiếu (chặn cả kỳ).
 - **409** `{ error }` nếu kỳ đã tồn tại. **400** nếu tháng không hợp lệ / không có NV.
-- `employerPartyId`: hiện tại chọn công ty (demo party = 3). Nếu hệ thống 1 công ty, có thể hardcode/chọn mặc định.
 
 ## 2.3 Bảng lương (sheet)
 
 `GET /api/payroll/periods/:id` → `PayrollSheetDto`:
 ```jsonc
-{ "id":1, "employerPartyId":3, "periodYear":2026, "periodMonth":6,
+{ "id":1, "periodYear":2026, "periodMonth":6,
   "payDate":"2026-06-30", "standardWorkingDays":22, "status":"Draft",
   "columns":[ PayrollColumnDto ... ],       // định nghĩa cột (thứ tự + nhóm)
   "rows":[ PayrollRowDto ... ],             // mỗi NV + 1 dòng Total
@@ -113,12 +112,12 @@ Mỗi note: `{ id, noteType, columnCode?, title, body, oldValue?, newValue?, leg
 - Mỗi `cell` có `explanation` = **chuỗi JSON** của `ExplanationNode` (null nếu ô không có công thức, vd cột Input/Lookup lá).
 - Parse `JSON.parse(cell.explanation)` → cây:
 ```jsonc
-{ "kind":"binary", "value":880000, "detail":"22 (Công tính cơm) × 40.000 (Đơn giá cơm/công) = 880.000",
+{ "kind":"binary", "value":32210200, "detail":"14.641.000 (Mức lương) × 2,2 (Hệ số năng suất) = 32.210.200",
   "children":[
-    { "kind":"column", "label":"Công tính cơm", "value":22, "detail":"22 (Công tính cơm)", "children":[] },
-    { "kind":"param",  "label":"Đơn giá cơm/công", "value":40000, "detail":"40.000 (...)", "children":[] } ] }
+    { "kind":"column", "label":"Mức lương", "value":14641000, "detail":"14.641.000 (Mức lương)", "children":[] },
+    { "kind":"field",  "label":"Hệ số năng suất", "value":2.2, "detail":"2,2 (Hệ số năng suất)", "children":[] } ] }
 ```
-- Tooltip/popover: hiện `detail` của node gốc (1 dòng đọc được), cho **expand** cây con (`children`) để xem chi tiết từng bậc. `kind` ∈ `number|text|column|field|param|binary|compare|if|function`. Đây chính là tính năng "hover thấy 200000 = 10 × 20000".
+- Tooltip/popover: hiện `detail` của node gốc (1 dòng đọc được), cho **expand** cây con (`children`) để xem chi tiết từng bậc. `kind` ∈ `number|text|column|field|binary|compare|if|function`. Đây chính là tính năng "hover thấy vì sao ra số này".
 
 ## 2.5 Sửa tay 1 ô (override) + tính lại
 
@@ -184,20 +183,12 @@ Mỗi note: `{ id, noteType, columnCode?, title, body, oldValue?, newValue?, leg
    - **Hằng số** (number) / **chuỗi** (text, để so cờ như `"xx"`).
    - **Tham chiếu cột** — chọn từ danh sách cột của bảng (dùng `columnCode`).
    - **Field** — chọn từ `/catalog/fields`.
-   - **Tham số** — chọn từ `GET /api/payroll/parameters` (dùng `key`).
    - **Phép toán** `+ - * /`, **so sánh** `= <> < <= > >=`, **IF(điều kiện, đúng, sai)**.
    - **Hàm dựng sẵn** từ `GET /api/payroll/catalog/functions` → `["ABS","BH_CO_TRAN","MAX","MIN","ROUND","SUM","THUE_LUYTIEN","THUNHAP_PHANBO"]`. Arity: `MIN/MAX/SUM` biến thiên; `ABS/THUE_LUYTIEN`=1; `ROUND`=2; `BH_CO_TRAN`=3; `THUNHAP_PHANBO`=9.
    - Serialize cây → `formulaJson` (xem §5) rồi gửi.
 - **Validate backend:** thêm/sửa cột trả **400** `{errors:[...]}` với message rõ (vd "Cột 'X' tham chiếu field không tồn tại: 'khong.co'", "hàm ROUND cần 2 tham số", "phụ thuộc vòng (chu trình)..."). Hiện nguyên message cạnh builder. **Không có preview tính thử** ở backend (§8) — builder tự kiểm sơ bộ nếu muốn.
 
-## 2.9 Tham số công ty
-
-- `GET /api/payroll/parameters?isActive=` → `[{ id, key, name, value, description?, isActive }]`.
-- Tạo: `POST /api/payroll/parameters {key, name, value, description?}` → 200 `{id}`. `key` phải `^[A-Z][A-Z0-9_]*$` (vd `MEAL_PRICE_PER_WORKDAY`), duy nhất — 409 nếu trùng.
-- Sửa: `PUT /api/payroll/parameters/:id {name, value, description?, isActive}` → 204 (key **bất biến**).
-- **Không có endpoint xoá** (cố ý — tham số bị công thức/snapshot tham chiếu). Muốn "tắt" → set `isActive=false`.
-
-## 2.10 Hệ số năng suất (điểm đánh giá → hệ số nhân cột Trợ cấp lương chính)
+## 2.9 Hệ số năng suất (điểm đánh giá → hệ số nhân cột Trợ cấp lương chính)
 
 - `GET /api/payroll/productivity-coefficients?isActive=` → `[{ id, minScore, maxScore, coefficient, label?, isActive }]` (sort giảm theo minScore).
 - Tạo: `POST {minScore, maxScore, coefficient, label?}` → 200 `{id}`. Validate: `0 ≤ minScore ≤ maxScore`, `coefficient ≥ 0`.
@@ -211,7 +202,7 @@ Mỗi note: `{ id, noteType, columnCode?, title, body, oldValue?, newValue?, leg
 
 | Method | Path | Body | Trả | Quyền |
 |---|---|---|---|---|
-| GET | `/api/payroll/periods/readiness?employerPartyId&year&month` | — | `PayrollReadinessDto[]` | Payroll.Read.All |
+| GET | `/api/payroll/periods/readiness?year&month` | — | `PayrollReadinessDto[]` | Payroll.Read.All |
 | GET | `/api/payroll/periods?year&month` | — | `PayrollPeriodSummaryDto[]` | Payroll.Read.All |
 | GET | `/api/payroll/periods/{id}` | — | `PayrollSheetDto` | Payroll.Read.All |
 | GET | `/api/payroll/periods/{id}/export` | — | `.xlsx` (file download) | Payroll.Read.All |
@@ -232,9 +223,6 @@ Mỗi note: `{ id, noteType, columnCode?, title, body, oldValue?, newValue?, leg
 | PUT | `/api/payroll/formula-sets/columns/{columnId}` | UpdateColumn | `204` / 400 | PayrollFormulaSet.Update.All |
 | DELETE | `/api/payroll/formula-sets/columns/{columnId}` | — | `204` / 409 | PayrollFormulaSet.Update.All |
 | PUT | `/api/payroll/formula-sets/{id}/columns/order` | `{orderedColumnIds:[]}` | `204` | PayrollFormulaSet.Update.All |
-| GET | `/api/payroll/parameters?isActive` | — | `PayrollParameterDto[]` | PayrollParameter.Read.All |
-| POST | `/api/payroll/parameters` | `{key,name,value,description?}` | `200 {id}` | PayrollParameter.Update.All |
-| PUT | `/api/payroll/parameters/{id}` | `{name,value,description?,isActive}` | `204` | PayrollParameter.Update.All |
 | GET | `/api/payroll/productivity-coefficients?isActive` | — | `ProductivityCoefficientDto[]` | ProductivityCoefficient.Read.All |
 | POST | `/api/payroll/productivity-coefficients` | `{minScore,maxScore,coefficient,label?}` | `200 {id}` | ProductivityCoefficient.Update.All |
 | PUT | `/api/payroll/productivity-coefficients/{id}` | `{minScore,maxScore,coefficient,label?,isActive}` | `204` | ProductivityCoefficient.Update.All |
@@ -263,7 +251,6 @@ Serialize thành chuỗi JSON đặt trong `formulaJson`. Cấu trúc đệ quy:
 | `Text` | chuỗi hằng (so cờ) | `text` |
 | `Column` | tham chiếu cột cùng dòng | `text` = columnCode |
 | `Field` | field module | `text` = fieldKey (từ /catalog/fields) |
-| `Param` | tham số công ty | `text` = paramKey |
 | `Binary` | `+ - * /` | `text`=op, `args`=[trái,phải] |
 | `Compare` | `= <> < <= > >=` | `text`=op, `args`=[trái,phải] |
 | `If` | điều kiện | `args`=[cond, then, else] |
@@ -309,7 +296,7 @@ Những thứ UI có thể cần nhưng **backend Phase 1 CHƯA làm** — báo 
 6. **Preview/tính thử công thức** (dry-run 1 ô) trước khi lưu: chưa có endpoint.
 7. **Export PDF**: chưa có. (Excel ĐÃ CÓ — xem §9.)
 8. **Pagination/filter nâng cao** trên list: chưa có.
-9. **Đa công ty**: `employerPartyId` là tham số nhưng chưa có endpoint liệt kê công ty — UI tự lấy từ module Party/Contract.
+9. **Đa công ty**: KHÔNG hỗ trợ (1 hệ thống = 1 công ty). Kỳ lương = (năm, tháng), phủ mọi NV có HĐ hiệu lực.
 10. **OT pay** trong collector còn ở mức baseline (×1.5 ngày/×2.0 đêm), chưa đủ nuance BLLĐ Điều 98 — số tăng ca có thể cần tinh chỉnh sau.
 ```
 

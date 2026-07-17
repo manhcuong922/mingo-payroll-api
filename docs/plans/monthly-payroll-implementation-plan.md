@@ -1,6 +1,9 @@
 # Monthly Payroll Module — Implementation Plan
 
-> **Status:** ✅ Phase 1 + config APIs + **xuất Excel** HOÀN THÀNH & verify live (2026-07-17). `640` test pass.
+> **Status:** ✅ Phase 1 + config APIs + **xuất Excel** HOÀN THÀNH & verify live (2026-07-17). `647` test pass.
+> **Đã sửa 2 lỗi thiết kế (2026-07-17):** (1) bỏ chọn công ty — ContractParty chỉ là phiên bản bên ký HĐ,
+> lọc theo nó bỏ sót 5/33 NV; kỳ lương nay = (năm, tháng). (2) bỏ module tham số — mọi số lấy từ
+> HĐ/công chuẩn/hiệu suất; cột Cơm = phụ cấp MEAL trong HĐ, không có → 0.
 > **Golden reconciliation ĐÃ khớp** file lương mẫu 08/2023 (F5-0001 → 47.049.000, F5-0003 → 23.549.000).
 > **Project:** `mingo-payroll-api` (.NET 8, Clean Architecture, EF Core, MediatR CQRS)
 > **Module:** Payroll (Bảng lương hàng tháng)
