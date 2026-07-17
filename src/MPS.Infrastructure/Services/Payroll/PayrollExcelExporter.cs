@@ -71,28 +71,20 @@ public sealed class PayrollExcelExporter : IPayrollExcelExporter
     }
 
     /// <summary>
-    /// Comment trên sheet lương: ghi chú gắn vào ô header cột liên quan (hàng 7); ghi chú CẤP BẢNG
-    /// (không thuộc cột nào — phần lớn note trần/đổi luật hiện nay) gom lên ô tiêu đề kỳ để vẫn
-    /// hover thấy ngay trong sheet lương; và giải thích trên từng ô đã sửa tay (ô đó không còn
-    /// công thức để bấm vào xem).
+    /// Comment trên sheet lương. Ghi chú của kỳ để RIÊNG (sheet GHI CHU + tóm tắt hover ở ô tiêu
+    /// đề), KHÔNG gắn vào từng cột — note auto không mang ColumnCode nên gắn theo cột chỉ là đoán.
+    /// Riêng ô đã sửa tay vẫn có comment giải thích vì ô đó không còn công thức để bấm vào xem.
     /// </summary>
     private static List<PayrollExcelComments.Note> CollectNotes(PayrollExcelBook book)
     {
         var notes = new List<PayrollExcelComments.Note>();
 
-        var tableLevel = book.Notes.Where(n => string.IsNullOrEmpty(n.ColumnCode)).ToList();
-        if (tableLevel.Count > 0)
+        if (book.Notes.Count > 0)
         {
-            var body = string.Join("\n\n", tableLevel.Select(n => $"• {n.Title}\n  {n.Body}"));
+            var body = string.Join("\n\n", book.Notes.Select(n => $"• {n.Title}\n  {n.Body}"));
             notes.Add(new PayrollExcelComments.Note(
                 $"A{L.RowSubTitle}",
-                $"GHI CHÚ ÁP DỤNG CHO KỲ NÀY ({tableLevel.Count}) — chi tiết ở sheet \"{L.SheetNotes}\":\n\n{body}"));
-        }
-
-        foreach (var col in book.Columns)
-        {
-            if (!book.HeaderComments.TryGetValue(col.ColumnCode, out var text)) continue;
-            notes.Add(new PayrollExcelComments.Note($"{col.Letter}{L.RowColumnLabel}", text));
+                $"GHI CHÚ ÁP DỤNG CHO KỲ NÀY ({book.Notes.Count}) — chi tiết ở sheet \"{L.SheetNotes}\":\n\n{body}"));
         }
 
         for (var r = 0; r < book.Rows.Count; r++)

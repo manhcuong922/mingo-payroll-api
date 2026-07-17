@@ -270,7 +270,7 @@ public sealed class PayrollExcelBookBuilderTests
     }
 
     [Fact]
-    public void Notes_attached_to_a_column_become_header_comments()
+    public void Law_change_notes_carry_old_new_and_legal_basis_into_the_book()
     {
         var period = BuildPeriod(Inputs(1, 14_641_000m, 2.2m));
         period.Notes.Add(new PayrollNote
@@ -288,9 +288,11 @@ public sealed class PayrollExcelBookBuilderTests
 
         var book = Build(period);
 
-        book.HeaderComments.Should().ContainKey(PayrollColumnCodes.GtBanThan);
-        book.HeaderComments[PayrollColumnCodes.GtBanThan].Should().Contain("9.000.000 → 11.000.000");
-        book.Notes.Should().ContainSingle(n => n.NoteType == nameof(PayrollNoteType.LawChange));
+        var note = book.Notes.Should().ContainSingle(n => n.NoteType == nameof(PayrollNoteType.LawChange)).Subject;
+        note.Body.Should().Contain("9.000.000 → 11.000.000");
+        note.OldValue.Should().Be(9_000_000m);
+        note.NewValue.Should().Be(11_000_000m);
+        note.LegalReference.Should().Be("NQ 954/2020/UBTVQH14");
     }
 
     [Fact]

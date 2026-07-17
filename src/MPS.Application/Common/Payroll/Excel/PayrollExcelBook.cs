@@ -72,8 +72,7 @@ public sealed record PayrollExcelBook(
     IReadOnlyList<PayrollExcelConstant> Constants,
     IReadOnlyList<PitBracketSnapshot> PitBrackets,
     IReadOnlyList<PayrollNoteDto> Notes,
-    IReadOnlyList<PayrollComplianceRefDto> ComplianceRefs,
-    IReadOnlyDictionary<string, string> HeaderComments)
+    IReadOnlyList<PayrollComplianceRefDto> ComplianceRefs)
 {
     public string FileName => $"bang-luong-{PeriodMonth:00}-{PeriodYear}.xlsx";
 }

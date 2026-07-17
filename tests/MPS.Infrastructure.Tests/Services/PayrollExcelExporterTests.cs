@@ -12,12 +12,12 @@ namespace MPS.Infrastructure.Tests.Services;
 /// Ghi ra .xlsx thật rồi MỞ LẠI để kiểm chứng: có công thức trong ô (không phải chỉ số chết),
 /// có named range, có comment ghi chú, và đủ 3 sheet. Bắt lỗi OpenXml (thứ tự phần tử, VML thiếu)
 /// mà unit test dựng workbook không thấy được.
+/// Ghi chú của kỳ để RIÊNG (sheet GHI CHU + tóm tắt hover ở tiêu đề), không gắn vào cột.
 /// </summary>
 public sealed class PayrollExcelExporterTests
 {
     private static PayrollExcelBook Book(
         IReadOnlyList<PayrollExcelConstant>? constants = null,
-        IReadOnlyDictionary<string, string>? headerComments = null,
         IReadOnlyList<PayrollNoteDto>? notes = null)
     {
         var columns = new List<PayrollExcelColumn>
@@ -77,8 +77,7 @@ public sealed class PayrollExcelExporterTests
             new List<PayrollComplianceRefDto>
             {
                 new("Pit", 7, new DateOnly(2020, 7, 1), "NQ 954/2020/UBTVQH14", "Giảm trừ bản thân", 11_000_000m),
-            },
-            headerComments ?? new Dictionary<string, string>());
+            });
     }
 
     private static SpreadsheetDocument Open(byte[] bytes) =>
@@ -97,10 +96,9 @@ public sealed class PayrollExcelExporterTests
     public void Workbook_passes_OpenXml_schema_validation_so_Excel_opens_it_without_repairing()
     {
         var bytes = new PayrollExcelExporter().Build(Book(
-            headerComments: new Dictionary<string, string> { ["THUCNHAN"] = "Ghi chú trần." },
             notes: new List<PayrollNoteDto>
             {
-                new(1, "CapThreshold", "THUCNHAN", "Trần BHXH", "29.800.000", null, 29_800_000m, "NĐ 38/2022", true),
+                new(1, "CapThreshold", null, "Trần BHXH", "29.800.000", null, 29_800_000m, "NĐ 38/2022", true),
             }));
 
         using var doc = Open(bytes);
@@ -181,27 +179,6 @@ public sealed class PayrollExcelExporterTests
         using var doc = Open(bytes);
         doc.WorkbookPart!.Workbook.Descendants<CalculationProperties>()
             .Single().FullCalculationOnLoad!.Value.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Column_notes_become_hoverable_comments_on_the_header_cell()
-    {
-        var bytes = new PayrollExcelExporter().Build(Book(
-            headerComments: new Dictionary<string, string>
-            {
-                ["THUCNHAN"] = "Thay đổi luật\nGiảm trừ bản thân: 9.000.000 → 11.000.000.",
-            }));
-
-        using var doc = Open(bytes);
-        var part = SheetPart(doc, PayrollExcelLayout.SheetSalary);
-        var comments = part.WorksheetCommentsPart!.Comments.Descendants<Comment>().ToList();
-
-        comments.Should().Contain(c => c.Reference! == $"D{PayrollExcelLayout.RowColumnLabel}");
-        comments.Single(c => c.Reference! == "D7").InnerText.Should().Contain("11.000.000");
-
-        // Excel chỉ hiện comment khi có đủ VML + thẻ legacyDrawing trỏ vào nó.
-        part.VmlDrawingParts.Should().NotBeEmpty();
-        part.Worksheet.Descendants<LegacyDrawing>().Should().ContainSingle();
     }
 
     [Fact]

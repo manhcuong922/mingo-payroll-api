@@ -72,7 +72,7 @@ public sealed class PayrollExcelBookBuilder
         return new PayrollExcelBook(
             companyName, period.PeriodYear, period.PeriodMonth, period.Status.ToString(),
             period.StandardWorkingDays, laidOut, dataRows, totals, constants, brackets,
-            notes, MapComplianceRefs(period), BuildHeaderComments(notes));
+            notes, MapComplianceRefs(period));
     }
 
     private static List<PayrollNoteDto> MapNotes(PayrollPeriod period) => period.Notes
@@ -353,11 +353,4 @@ public sealed class PayrollExcelBookBuilder
         }).ToList();
     }
 
-    private static Dictionary<string, string> BuildHeaderComments(IEnumerable<PayrollNoteDto> notes) =>
-        notes.Where(n => !string.IsNullOrEmpty(n.ColumnCode))
-            .GroupBy(n => n.ColumnCode!, StringComparer.Ordinal)
-            .ToDictionary(
-                g => g.Key,
-                g => string.Join("\n\n", g.Select(n => $"{n.Title}\n{n.Body}")),
-                StringComparer.Ordinal);
 }
