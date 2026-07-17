@@ -44,7 +44,7 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
     private static readonly string[] OffMarkers =
         ["OFF", "NGHỈ", "NGHI", "N", "-"];
     private static readonly string[] ReferenceSectionMarkers =
-        ["CA LÀM HIỆN CÓ", "DANH SÁCH CA", "MÃ CA"];
+        ["CA LÀM HIỆN CÓ", "CA LÀM", "DANH SÁCH CA", "MÃ CA"];
     private static readonly Regex MonthInTitleRegex =
         new(@"(?<month>\d{1,2})\s*/\s*(?<year>\d{4})", RegexOptions.Compiled);
     private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
