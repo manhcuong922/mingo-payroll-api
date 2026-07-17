@@ -112,6 +112,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.Common.AttendanceRequestDayConflictChecker>();
         services.AddScoped<
             MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,
             MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeMultiplierCalculator>();

@@ -542,6 +542,72 @@ Sau khi implement xong từng phần:
 
 ---
 
+---
+
+## Phần 6 — Cross-check chống trùng ngày Leave / WFH / LateEarly (đã triển khai)
+
+**Context / vấn đề**: Trước khi có cross-check, khi user gửi đơn hệ thống KHÔNG kiểm tra đã có đơn thuộc 3 loại (Leave, WFH, LateEarly) trong ngày đó hay chưa. Kết quả: có thể tồn tại nhiều đơn chồng chéo (VD: vừa Leave vừa WFH, hoặc 2 đơn LateEarly khác Kind cùng ngày) → payroll engine tính sai công + duyệt viên bị bối rối.
+
+**Yêu cầu nghiệp vụ**: 1 nhân viên chỉ được có **duy nhất 1** đơn ở trạng thái `Pending` hoặc `Approved` thuộc bất kỳ trong 3 loại (Leave / WFH / LateEarly) trên 1 ngày. Đơn ở trạng thái `Rejected` / `Cancelled` KHÔNG tính → cho phép nộp lại. `OvertimeRequest` và `DependentRegistrationRequest` **không** thuộc scope này (OT là ngày làm việc bổ sung, có thể chồng với các đơn khác; Dependent không gắn ngày công).
+
+### Kiến trúc
+
+Tách 1 shared service `AttendanceRequestDayConflictChecker` (application layer, cross-cutting 3 aggregate) thay vì mỗi handler tự query nhiều bảng — tránh lặp và tránh miss check.
+
+- **Domain**: mỗi `ILeaveRequestRepository` / `IWfhRequestRepository` / `ILateEarlyRequestRepository` bổ sung 1 method chung:
+  ```csharp
+  Task<bool> HasPendingOrApprovedInRangeAsync(
+      int employeeInformationId,
+      DateOnly startDate,
+      DateOnly endDate,
+      int? excludeRequestId,
+      CancellationToken cancellationToken = default);
+  ```
+  Ngữ nghĩa: trả `true` nếu tồn tại đơn của employee đó ở trạng thái `Pending`/`Approved` **chạm** khoảng `[startDate, endDate]`. `excludeRequestId` để tương lai dùng cho Update handler.
+
+- **Infrastructure**: 3 repo triển khai `EF Core AnyAsync` — chỉ 1 round-trip mỗi bảng. LateEarly filter theo `WorkDate BETWEEN start AND end`; Leave/WFH filter `StartDate ≤ end AND EndDate ≥ start`.
+
+- **Application** — `MPS.Application/Features/Attendance/Common/AttendanceRequestDayConflictChecker.cs`:
+  - Nhận 3 repo qua constructor.
+  - Enum nội bộ `AttendanceRequestKind { Leave, Wfh, LateEarly }` để handler khai báo loại đơn đang tạo → checker tự chọn `excludeRequestId` đúng bảng.
+  - Chạy 3 query **song song** (`Task<bool>` await sau khi cả 3 đã start), gom tên loại đơn conflict thành 1 message tiếng Việt kèm range date human-readable.
+  - Throw `DomainValidationException` với message:
+    > "Đã tồn tại đơn nghỉ phép, WFH (Pending/Approved) trong khoảng 12/07/2026 → 14/07/2026. Mỗi ngày chỉ được có 1 đơn Leave/WFH/LateEarly — vui lòng hủy đơn cũ trước khi tạo đơn mới."
+
+- **DI**: đăng ký `Scoped` trong [`InfrastructureServiceRegistration.cs`](src/MPS.Infrastructure/DependencyInjection/InfrastructureServiceRegistration.cs) cạnh `WfhQuotaChecker`.
+
+### Wire vào Create handlers
+
+Vị trí gọi: **sau** các validation cơ bản (date range, shift-assignment, notice-period, `IAttendanceEditLockChecker`) và **trước** khi build entity + `AddAsync`. Đây là "gate" cuối cùng trước khi persist.
+
+- [`CreateLeaveRequestCommandHandler`](src/MPS.Application/Features/Attendance/LeaveRequest/Commands/CreateLeaveRequestCommandHandler.cs) — thêm inject + gọi checker với `(StartDate, EndDate, Leave)`.
+- [`CreateWfhRequestCommandHandler`](src/MPS.Application/Features/Attendance/WfhRequest/Commands/CreateWfhRequestCommandHandler.cs) — thay 2 call cũ `HasOverlappingWfhAsync` + `HasOverlappingLeaveAsync` bằng 1 call checker `(StartDate, EndDate, Wfh)`. Method cũ trên repo **giữ lại** (không breaking, có thể còn code khác dùng sau này) — chỉ gỡ trong handler.
+- [`CreateLateEarlyRequestCommandHandler`](src/MPS.Application/Features/Attendance/LateEarlyRequest/Commands/CreateLateEarlyRequestCommandHandler.cs) — thay call cũ `HasOverlapAsync(WorkDate, Kind, …)` bằng checker `(WorkDate, WorkDate, LateEarly)`. Chú ý: check mới **nghiêm ngặt hơn** cái cũ — cái cũ chỉ chặn cùng Kind (Late vs Early), giờ chặn mọi Kind + cả Leave + WFH cùng ngày. Method cũ trên repo giữ nguyên.
+
+### Điểm cần lưu ý khi mở rộng sang Update handler
+
+Hiện chỉ áp cho **Create** theo yêu cầu. Khi các Update handler (UpdatePending…) muốn thay đổi range date, có thể gọi cùng checker với `excludeRequestId = existing.Id` để không self-conflict. Chưa làm trong PR này.
+
+### Files thay đổi
+
+- `src/MPS.Domain/Interfaces/Attendance/ILeaveRequestRepository.cs` — +1 method
+- `src/MPS.Domain/Interfaces/Attendance/IWfhRequestRepository.cs` — +1 method
+- `src/MPS.Domain/Interfaces/Attendance/ILateEarlyRequestRepository.cs` — +1 method
+- `src/MPS.Infrastructure/Repositories/Attendance/LeaveRequestRepository.cs` — +1 impl
+- `src/MPS.Infrastructure/Repositories/Attendance/WfhRequestRepository.cs` — +1 impl
+- `src/MPS.Infrastructure/Repositories/Attendance/LateEarlyRequestRepository.cs` — +1 impl
+- `src/MPS.Application/Features/Attendance/Common/AttendanceRequestDayConflictChecker.cs` — **NEW**
+- `src/MPS.Infrastructure/DependencyInjection/InfrastructureServiceRegistration.cs` — +1 register
+- 3 Create handlers ở Leave/WFH/LateEarly — inject + gọi + gỡ check cũ (WFH, LateEarly)
+
+### Test plan
+
+- **Unit**: mock 3 repo, verify với các tổ hợp `(hasLeave, hasWfh, hasLateEarly)` (2³ = 8 case) — chỉ trường hợp `(false,false,false)` mới pass; các case còn lại throw với message chứa đúng tên loại conflict.
+- **Integration**: 3 kịch bản E2E qua API — tạo Leave rồi tạo WFH cùng ngày → 400; tạo WFH rồi tạo LateEarly cùng ngày → 400; sau khi Reject/Cancel đơn đầu → tạo đơn khác OK.
+- **Regression**: các test hiện có của Leave/WFH/LateEarly tiếp tục pass (không đổi contract, chỉ thêm gate mới).
+
+---
+
 ## Thứ tự triển khai đề xuất (6 PR nhỏ, dễ review)
 
 1. **PR-0** (prerequisite): Phần 0 — Mở rộng `AttendanceSetting` + `LeaveType` với field cấu hình chính sách công ty. Chỉ add nullable columns + mở rộng payload endpoint có sẵn. Không tạo permission mới. Merge trước tiên vì các PR sau phụ thuộc vào field mới.
@@ -550,5 +616,6 @@ Sau khi implement xong từng phần:
 4. **PR-3**: Phần 3 — WfhRequest end-to-end (không kèm auto-create AttendanceRecord — để PR sau).
 5. **PR-4**: Phần 4 — EmployeeDependent + DependentRegistrationRequest.
 6. **PR-5** (optional): WFH ↔ AttendanceRecord integration nếu team muốn ghép vào phase 1.
+7. **PR-6** (đã merge): Phần 6 — Cross-check chống trùng ngày Leave/WFH/LateEarly. Chỉ application logic + 1 shared checker, không có migration.
 
 Mỗi PR đứng độc lập, build được, có test, có thể revert riêng.

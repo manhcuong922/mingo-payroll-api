@@ -21,6 +21,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
     private readonly IAttendanceSettingRepository _settingRepository;
     private readonly IAttendanceEditLockChecker _editLockChecker;
     private readonly WfhQuotaChecker _quotaChecker;
+    private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
@@ -31,6 +32,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         IAttendanceSettingRepository settingRepository,
         IAttendanceEditLockChecker editLockChecker,
         WfhQuotaChecker quotaChecker,
+        AttendanceRequestDayConflictChecker dayConflictChecker,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
         IClock clock)
@@ -40,6 +42,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         _settingRepository = settingRepository;
         _editLockChecker = editLockChecker;
         _quotaChecker = quotaChecker;
+        _dayConflictChecker = dayConflictChecker;
         _lookup = lookup;
         _currentUser = currentUser;
         _clock = clock;
@@ -84,11 +87,13 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
 
         await _editLockChecker.EnsureCanModifyAsync(request.StartDate, request.OverrideReason, cancellationToken);
 
-        if (await _repository.HasOverlappingWfhAsync(employeeId, request.StartDate, request.EndDate, excludeRequestId: null, cancellationToken))
-            throw new DomainValidationException("Đã tồn tại đơn WFH Pending/Approved chồng lấp khoảng ngày này.");
-
-        if (await _repository.HasOverlappingLeaveAsync(employeeId, request.StartDate, request.EndDate, cancellationToken))
-            throw new DomainValidationException("Có đơn nghỉ phép Approved chồng lấp — không thể WFH cùng ngày.");
+        await _dayConflictChecker.EnsureNoConflictAsync(
+            employeeId,
+            request.StartDate,
+            request.EndDate,
+            AttendanceRequestKind.Wfh,
+            excludeRequestId: null,
+            cancellationToken);
 
         await _quotaChecker.EnsureWithinQuotaAsync(
             employeeId, request.StartDate, request.EndDate, totalDays, _clock.UtcNow, cancellationToken);

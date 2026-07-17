@@ -17,6 +17,7 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
     private readonly IEmployeeShiftAssignmentRepository _shiftAssignmentRepository;
     private readonly IAttendanceSettingRepository _settingRepository;
     private readonly IAttendanceEditLockChecker _editLockChecker;
+    private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
@@ -26,6 +27,7 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
         IEmployeeShiftAssignmentRepository shiftAssignmentRepository,
         IAttendanceSettingRepository settingRepository,
         IAttendanceEditLockChecker editLockChecker,
+        AttendanceRequestDayConflictChecker dayConflictChecker,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
         IClock clock)
@@ -34,6 +36,7 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
         _shiftAssignmentRepository = shiftAssignmentRepository;
         _settingRepository = settingRepository;
         _editLockChecker = editLockChecker;
+        _dayConflictChecker = dayConflictChecker;
         _lookup = lookup;
         _currentUser = currentUser;
         _clock = clock;
@@ -70,9 +73,13 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
 
         await _editLockChecker.EnsureCanModifyAsync(request.WorkDate, request.OverrideReason, cancellationToken);
 
-        if (await _repository.HasOverlapAsync(employeeId, request.WorkDate, request.Kind, excludeRequestId: null, cancellationToken))
-            throw new DomainValidationException(
-                $"Đã tồn tại đơn {request.Kind} cho ngày {request.WorkDate:dd/MM/yyyy} (Pending/Approved).");
+        await _dayConflictChecker.EnsureNoConflictAsync(
+            employeeId,
+            request.WorkDate,
+            request.WorkDate,
+            AttendanceRequestKind.LateEarly,
+            excludeRequestId: null,
+            cancellationToken);
 
         var resolvedRoute = ApproverRouteResolver.Resolve(request.ApproverRoute, _currentUser.RoleId);
 
