@@ -205,6 +205,30 @@ public sealed class PayrollExcelExporterTests
     }
 
     [Fact]
+    public void Table_level_notes_are_hoverable_on_the_period_title_since_they_belong_to_no_column()
+    {
+        // Note auto do PayrollLawChangeNoteBuilder sinh ra đều KHÔNG có columnCode → nếu chỉ gắn
+        // comment theo cột thì trong sheet lương sẽ chẳng hover thấy ghi chú nào.
+        var notes = new List<PayrollNoteDto>
+        {
+            new(1, "CapThreshold", null, "Trần đóng BHXH/BHYT",
+                "Trần đóng BHXH/BHYT: 46.800.000 — NĐ 158/2025/NĐ-CP.", null, 46_800_000m, "NĐ 158/2025/NĐ-CP", true),
+            new(2, "LawChange", null, "Thay đổi luật: Thuế TNCN",
+                "Giảm trừ bản thân: 11.000.000 → 15.500.000.", 11_000_000m, 15_500_000m, "NQ 110/2025", true),
+        };
+        var bytes = new PayrollExcelExporter().Build(Book(notes: notes));
+
+        using var doc = Open(bytes);
+        var comment = SheetPart(doc, PayrollExcelLayout.SheetSalary)
+            .WorksheetCommentsPart!.Comments.Descendants<Comment>()
+            .Single(c => c.Reference! == $"A{PayrollExcelLayout.RowSubTitle}");
+
+        comment.InnerText.Should().Contain("Trần đóng BHXH/BHYT")
+            .And.Contain("11.000.000 → 15.500.000")
+            .And.Contain(PayrollExcelLayout.SheetNotes);
+    }
+
+    [Fact]
     public void Overridden_cells_get_a_comment_explaining_why_they_lost_their_formula()
     {
         var bytes = new PayrollExcelExporter().Build(Book());

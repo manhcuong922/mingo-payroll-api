@@ -19,6 +19,8 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
 
     public Task<PayrollPeriod?> GetFullAsync(int id, bool asNoTracking, CancellationToken ct = default)
     {
+        // EmployerParty: export cần tên công ty cho tiêu đề. Join 1 dòng, không đáng kể so với
+        // Rows→Cells bên dưới, nên dùng chung thay vì đẻ thêm 1 query song song.
         var q = _context.PayrollPeriods
             .Include(p => p.EmployerParty)
             .Include(p => p.ComplianceRefs)

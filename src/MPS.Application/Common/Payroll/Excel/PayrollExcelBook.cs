@@ -76,6 +76,4 @@ public sealed record PayrollExcelBook(
     IReadOnlyDictionary<string, string> HeaderComments)
 {
     public string FileName => $"bang-luong-{PeriodMonth:00}-{PeriodYear}.xlsx";
-
-    public int LastDataRow => PayrollExcelLayout.RowFirstData + Math.Max(Rows.Count, 1) - 1;
 }

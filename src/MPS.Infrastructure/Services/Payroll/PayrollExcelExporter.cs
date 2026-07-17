@@ -71,12 +71,23 @@ public sealed class PayrollExcelExporter : IPayrollExcelExporter
     }
 
     /// <summary>
-    /// Comment trên sheet lương: ghi chú trần/đổi luật gắn vào ô header cột liên quan (hàng 7),
-    /// và giải thích trên từng ô đã sửa tay (vì ô đó không còn công thức để bấm vào xem).
+    /// Comment trên sheet lương: ghi chú gắn vào ô header cột liên quan (hàng 7); ghi chú CẤP BẢNG
+    /// (không thuộc cột nào — phần lớn note trần/đổi luật hiện nay) gom lên ô tiêu đề kỳ để vẫn
+    /// hover thấy ngay trong sheet lương; và giải thích trên từng ô đã sửa tay (ô đó không còn
+    /// công thức để bấm vào xem).
     /// </summary>
     private static List<PayrollExcelComments.Note> CollectNotes(PayrollExcelBook book)
     {
         var notes = new List<PayrollExcelComments.Note>();
+
+        var tableLevel = book.Notes.Where(n => string.IsNullOrEmpty(n.ColumnCode)).ToList();
+        if (tableLevel.Count > 0)
+        {
+            var body = string.Join("\n\n", tableLevel.Select(n => $"• {n.Title}\n  {n.Body}"));
+            notes.Add(new PayrollExcelComments.Note(
+                $"A{L.RowSubTitle}",
+                $"GHI CHÚ ÁP DỤNG CHO KỲ NÀY ({tableLevel.Count}) — chi tiết ở sheet \"{L.SheetNotes}\":\n\n{body}"));
+        }
 
         foreach (var col in book.Columns)
         {
