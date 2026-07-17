@@ -28,7 +28,6 @@ public sealed partial class DatabaseSeeder
         }
 
         await SeedPayrollFormulaSetAsync(adminId, ct);
-        await SeedPayrollParametersAsync(ct);
         await SeedProductivityCoefficientsAsync(ct);
         await SeedPayrollDemoPeriodsAsync(adminId, ct);
     }
@@ -54,24 +53,6 @@ public sealed partial class DatabaseSeeder
         await _context.PayrollFormulaSets.AddAsync(set, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded default PayrollFormulaSet with {Count} columns.", set.Columns.Count);
-    }
-
-    private async Task SeedPayrollParametersAsync(CancellationToken ct)
-    {
-        if (await _context.PayrollParameters.AsNoTracking().AnyAsync(p => p.Key == PayrollParameterKeys.MealPricePerWorkday, ct))
-            return;
-
-        await _context.PayrollParameters.AddAsync(new PayrollParameter
-        {
-            Key = PayrollParameterKeys.MealPricePerWorkday,
-            Name = "Đơn giá cơm mỗi công",
-            Value = 40_000m,
-            Description = "Tiền cơm 1 công (đặc tả V9). Chính sách công ty — không phải luật.",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-        }, ct);
-        await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded PayrollParameter MEAL_PRICE_PER_WORKDAY = 40,000.");
     }
 
     private async Task SeedProductivityCoefficientsAsync(CancellationToken ct)

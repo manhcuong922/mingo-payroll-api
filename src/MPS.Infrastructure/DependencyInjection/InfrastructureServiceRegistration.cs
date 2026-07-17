@@ -115,7 +115,6 @@ public static class InfrastructureServiceRegistration
         // ===== Payroll module (bảng lương hàng tháng) =====
         services.AddScoped<IPayrollFormulaSetRepository, PayrollFormulaSetRepository>();
         services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
-        services.AddScoped<IPayrollParameterRepository, PayrollParameterRepository>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
         services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();

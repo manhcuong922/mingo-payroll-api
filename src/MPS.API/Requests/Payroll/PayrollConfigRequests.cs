@@ -36,8 +36,6 @@ public sealed record UpdateColumnRequest(
 public sealed record ReorderColumnsRequest(IReadOnlyList<int> OrderedColumnIds);
 
 // ===== Tham số công ty =====
-public sealed record CreatePayrollParameterRequest(string Key, string Name, decimal Value, string? Description);
-public sealed record UpdatePayrollParameterRequest(string Name, decimal Value, string? Description, bool IsActive);
 
 // ===== Hệ số năng suất =====
 public sealed record CreateProductivityCoefficientRequest(decimal MinScore, decimal MaxScore, decimal Coefficient, string? Label);

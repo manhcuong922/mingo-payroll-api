@@ -4,7 +4,6 @@ using N = MPS.Application.Common.Payroll.Formula.FormulaNode;
 using Cc = MPS.Domain.Constants.PayrollColumnCodes;
 using Fk = MPS.Application.Common.Payroll.PayrollFieldKeys;
 using Fn = MPS.Domain.Constants.PayrollFunctions;
-using Pk = MPS.Domain.Constants.PayrollParameterKeys;
 using FormulaNode = MPS.Application.Common.Payroll.Formula.FormulaNode;
 
 namespace MPS.Application.Common.Payroll;
@@ -92,9 +91,11 @@ public static class DefaultPayrollFormulaSet
 
         // ===== Khối D — phụ cấp không tính lương T13 =====
         Add(Cc.XangXe, "Xăng xe", GD, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceXangXe, money: true);
+        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) ghi trong HĐ của NV — nguyên tháng, KHÔNG nhân số công.
+        // Không có phụ cấp MEAL trong HĐ → 0. Cờ BH "xx" = không tính cơm (đặc tả §3-Khối D).
         Add(Cc.Com, "Cơm", GD, ColumnDataType.Money, ColumnValueSource.Formula,
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagBh), N.Literal(InsuranceFlags.NoMealFlatTax)),
-                N.Const(0m), N.Mul(N.Col(Cc.CongTinhCom), N.Param(Pk.MealPricePerWorkday))), money: true);
+                N.Const(0m), N.Field(Fk.ContractAllowanceCom)), money: true);
         Add(Cc.CongTac, "Hỗ trợ công tác", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.Khac, "Khác (cưới/sinh...)", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
 

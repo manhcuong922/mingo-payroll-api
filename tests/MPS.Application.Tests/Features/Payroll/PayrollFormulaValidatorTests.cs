@@ -9,7 +9,6 @@ namespace MPS.Application.Tests.Features.Payroll;
 
 public sealed class PayrollFormulaValidatorTests
 {
-    private static readonly string[] NoParams = Array.Empty<string>();
 
     private static PayrollFormulaValidator NewValidator() =>
         new(new PayrollFieldCatalog(), new FormulaFunctionRegistry(), new ColumnDependencyGraph());
@@ -41,7 +40,7 @@ public sealed class PayrollFormulaValidatorTests
             Lookup("HESO", PayrollFieldKeys.ProductivityCoefficient),
         };
 
-        NewValidator().Validate(columns, NoParams).Should().BeEmpty();
+        NewValidator().Validate(columns).Should().BeEmpty();
     }
 
     [Fact]
@@ -53,7 +52,7 @@ public sealed class PayrollFormulaValidatorTests
             Formula("B", FormulaNode.Col("A")),
         };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().ContainSingle().Which.Should().ContainAny("vòng", "chu trình");
     }
 
@@ -62,7 +61,7 @@ public sealed class PayrollFormulaValidatorTests
     {
         var columns = new List<SalaryColumnDefinition> { Formula("X", FormulaNode.Field("khong.ton.tai")) };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().ContainSingle().Which.Should().Contain("field không tồn tại");
     }
 
@@ -71,7 +70,7 @@ public sealed class PayrollFormulaValidatorTests
     {
         var columns = new List<SalaryColumnDefinition> { Formula("X", FormulaNode.Func("KHONGCO", FormulaNode.Const(1))) };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().ContainSingle().Which.Should().Contain("hàm không tồn tại");
     }
 
@@ -84,28 +83,8 @@ public sealed class PayrollFormulaValidatorTests
             Formula("X", FormulaNode.Func(PayrollFunctions.Round, FormulaNode.Const(1))),
         };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().ContainSingle().Which.Should().Contain("cần 2 tham số");
-    }
-
-    [Fact]
-    public void Validate_UnknownParam_ReportsError()
-    {
-        var columns = new List<SalaryColumnDefinition> { Formula("X", FormulaNode.Param("NOPE")) };
-
-        NewValidator().Validate(columns, NoParams)
-            .Should().ContainSingle().Which.Should().Contain("tham số công ty không tồn tại");
-    }
-
-    [Fact]
-    public void Validate_KnownParam_Passes()
-    {
-        var columns = new List<SalaryColumnDefinition>
-        {
-            Formula("X", FormulaNode.Mul(FormulaNode.Const(2), FormulaNode.Param("MEAL_PRICE_PER_WORKDAY"))),
-        };
-
-        NewValidator().Validate(columns, new[] { "MEAL_PRICE_PER_WORKDAY" }).Should().BeEmpty();
     }
 
     [Fact]
@@ -113,7 +92,7 @@ public sealed class PayrollFormulaValidatorTests
     {
         var columns = new List<SalaryColumnDefinition> { Formula("X", FormulaNode.Col("GHOST")) };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().ContainSingle().Which.Should().Contain("cột không tồn tại");
     }
 
@@ -122,7 +101,7 @@ public sealed class PayrollFormulaValidatorTests
     {
         var columns = new List<SalaryColumnDefinition> { Input("DUP"), Input("DUP") };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().Contain(e => e.Contains("trùng"));
     }
 
@@ -131,7 +110,7 @@ public sealed class PayrollFormulaValidatorTests
     {
         var columns = new List<SalaryColumnDefinition> { Input("1BAD") };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().Contain(e => e.Contains("không hợp lệ"));
     }
 
@@ -140,7 +119,7 @@ public sealed class PayrollFormulaValidatorTests
     {
         var columns = new List<SalaryColumnDefinition> { Lookup("X", "bogus.key") };
 
-        NewValidator().Validate(columns, NoParams)
+        NewValidator().Validate(columns)
             .Should().ContainSingle().Which.Should().Contain("field không tồn tại");
     }
 }

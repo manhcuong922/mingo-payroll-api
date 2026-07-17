@@ -57,7 +57,6 @@ public static class PayrollExcelFormulaTranslator
         FormulaNodeType.Text => Quote(node.Text ?? string.Empty),
         FormulaNodeType.Column => Lookup(refs.ColumnRefs, node.Text, "cột"),
         FormulaNodeType.Field => Lookup(refs.FieldRefs, node.Text, "field"),
-        FormulaNodeType.Param => Lookup(refs.ParamRefs, node.Text, "tham số"),
         FormulaNodeType.Binary => Binary(node, refs),
         FormulaNodeType.Compare => Compare(node, refs),
         FormulaNodeType.If =>

@@ -124,16 +124,14 @@ public sealed record CloneFormulaSetCommand(int SourceId, string NewName, string
 public sealed class CloneFormulaSetCommandHandler : IRequestHandler<CloneFormulaSetCommand, int>
 {
     private readonly IPayrollFormulaSetRepository _repo;
-    private readonly IPayrollParameterRepository _parameters;
     private readonly IPayrollFormulaValidator _validator;
     private readonly ICurrentUserService _currentUser;
 
     public CloneFormulaSetCommandHandler(
-        IPayrollFormulaSetRepository repo, IPayrollParameterRepository parameters,
+        IPayrollFormulaSetRepository repo,
         IPayrollFormulaValidator validator, ICurrentUserService currentUser)
     {
         _repo = repo;
-        _parameters = parameters;
         _validator = validator;
         _currentUser = currentUser;
     }
@@ -169,8 +167,7 @@ public sealed class CloneFormulaSetCommandHandler : IRequestHandler<CloneFormula
             })
             .ToList();
 
-        var paramKeys = (await _parameters.GetAllAsync(null, ct)).Select(p => p.Key).ToList();
-        _validator.EnsureValidOrThrow(clonedColumns, paramKeys);
+        _validator.EnsureValidOrThrow(clonedColumns);
 
         return await _repo.AddAsync(new PayrollFormulaSet
         {

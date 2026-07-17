@@ -6,6 +6,5 @@ namespace MPS.Application.Common.Payroll;
 public sealed class PayrollCalcContext
 {
     public required IReadOnlyDictionary<string, ResolvedValue> Fields { get; init; }
-    public required IReadOnlyDictionary<string, ResolvedValue> Params { get; init; }
     public required PayrollFunctionContext FunctionContext { get; init; }
 }

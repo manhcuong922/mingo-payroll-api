@@ -52,23 +52,6 @@ public sealed class GetFormulaSetByIdQueryHandler
     }
 }
 
-// ===== Tham số công ty =====
-public sealed record GetPayrollParametersQuery(bool? IsActive) : IRequest<IReadOnlyList<PayrollParameterDto>>;
-
-public sealed class GetPayrollParametersQueryHandler
-    : IRequestHandler<GetPayrollParametersQuery, IReadOnlyList<PayrollParameterDto>>
-{
-    private readonly IPayrollParameterRepository _repo;
-    public GetPayrollParametersQueryHandler(IPayrollParameterRepository repo) => _repo = repo;
-
-    public async Task<IReadOnlyList<PayrollParameterDto>> Handle(GetPayrollParametersQuery request, CancellationToken ct)
-    {
-        var items = await _repo.GetAllAsync(request.IsActive, ct);
-        return items.Select(p => new PayrollParameterDto(
-            p.Id, p.Key, p.Name, p.Value, p.Description, p.IsActive)).ToList();
-    }
-}
-
 // ===== Hệ số năng suất =====
 public sealed record GetProductivityCoefficientsQuery(bool? IsActive)
     : IRequest<IReadOnlyList<ProductivityCoefficientDto>>;

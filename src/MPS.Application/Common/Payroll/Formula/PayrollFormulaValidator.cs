@@ -6,7 +6,7 @@ namespace MPS.Application.Common.Payroll.Formula;
 
 /// <summary>
 /// Kiểm tra whitelist + cấu trúc AST + chu trình. Stateless → đăng ký singleton.
-/// KHÔNG tự bịa: field/param/hàm phải nằm trong danh mục đã đăng ký; ref cột phải tồn tại trong bảng.
+/// KHÔNG tự bịa: field/hàm phải nằm trong danh mục đã đăng ký; ref cột phải tồn tại trong bảng.
 /// </summary>
 public sealed partial class PayrollFormulaValidator : IPayrollFormulaValidator
 {
@@ -28,13 +28,10 @@ public sealed partial class PayrollFormulaValidator : IPayrollFormulaValidator
         _graph = graph;
     }
 
-    public IReadOnlyList<string> Validate(
-        IReadOnlyList<SalaryColumnDefinition> columns,
-        IReadOnlyCollection<string> knownParamKeys)
+    public IReadOnlyList<string> Validate(IReadOnlyList<SalaryColumnDefinition> columns)
     {
         var errors = new List<string>();
         var knownCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var paramKeys = new HashSet<string>(knownParamKeys, StringComparer.Ordinal);
 
         // ===== Mã cột: hợp lệ + không trùng =====
         foreach (var c in columns)
@@ -79,7 +76,7 @@ public sealed partial class PayrollFormulaValidator : IPayrollFormulaValidator
                         if (node is null)
                             errors.Add($"Cột '{c.ColumnCode}' có công thức rỗng/không đọc được.");
                         else
-                            ValidateNode(node, c.ColumnCode, knownCodes, paramKeys, errors);
+                            ValidateNode(node, c.ColumnCode, knownCodes, errors);
                     }
                     formulasByCode[c.ColumnCode] = node;
                     break;
@@ -98,8 +95,7 @@ public sealed partial class PayrollFormulaValidator : IPayrollFormulaValidator
     }
 
     private void ValidateNode(
-        FormulaNode node, string ownerCode, HashSet<string> knownCodes,
-        HashSet<string> paramKeys, List<string> errors)
+        FormulaNode node, string ownerCode, HashSet<string> knownCodes, List<string> errors)
     {
         switch (node.Type)
         {
@@ -123,30 +119,23 @@ public sealed partial class PayrollFormulaValidator : IPayrollFormulaValidator
                     errors.Add($"Cột '{ownerCode}' tham chiếu field không tồn tại: '{node.Text}'.");
                 break;
 
-            case FormulaNodeType.Param:
-                if (string.IsNullOrWhiteSpace(node.Text))
-                    errors.Add($"Cột '{ownerCode}': tham số trống.");
-                else if (!paramKeys.Contains(node.Text))
-                    errors.Add($"Cột '{ownerCode}' tham chiếu tham số công ty không tồn tại: '{node.Text}'.");
-                break;
-
             case FormulaNodeType.Binary:
                 if (!BinaryOps.Contains(node.Text ?? ""))
                     errors.Add($"Cột '{ownerCode}': phép toán không hợp lệ '{node.Text}'.");
                 RequireArity(node, 2, ownerCode, "phép toán 2 ngôi", errors);
-                RecurseArgs(node, ownerCode, knownCodes, paramKeys, errors);
+                RecurseArgs(node, ownerCode, knownCodes, errors);
                 break;
 
             case FormulaNodeType.Compare:
                 if (!CompareOps.Contains(node.Text ?? ""))
                     errors.Add($"Cột '{ownerCode}': phép so sánh không hợp lệ '{node.Text}'.");
                 RequireArity(node, 2, ownerCode, "phép so sánh", errors);
-                RecurseArgs(node, ownerCode, knownCodes, paramKeys, errors);
+                RecurseArgs(node, ownerCode, knownCodes, errors);
                 break;
 
             case FormulaNodeType.If:
                 RequireArity(node, 3, ownerCode, "IF(điều kiện, đúng, sai)", errors);
-                RecurseArgs(node, ownerCode, knownCodes, paramKeys, errors);
+                RecurseArgs(node, ownerCode, knownCodes, errors);
                 break;
 
             case FormulaNodeType.Function:
@@ -158,7 +147,7 @@ public sealed partial class PayrollFormulaValidator : IPayrollFormulaValidator
                 {
                     errors.Add($"Cột '{ownerCode}': hàm {fn.Name} cần {arity} tham số, đang có {node.Args.Count}.");
                 }
-                RecurseArgs(node, ownerCode, knownCodes, paramKeys, errors);
+                RecurseArgs(node, ownerCode, knownCodes, errors);
                 break;
 
             default:
@@ -174,10 +163,9 @@ public sealed partial class PayrollFormulaValidator : IPayrollFormulaValidator
     }
 
     private void RecurseArgs(
-        FormulaNode node, string ownerCode, HashSet<string> knownCodes,
-        HashSet<string> paramKeys, List<string> errors)
+        FormulaNode node, string ownerCode, HashSet<string> knownCodes, List<string> errors)
     {
         foreach (var arg in node.Args)
-            ValidateNode(arg, ownerCode, knownCodes, paramKeys, errors);
+            ValidateNode(arg, ownerCode, knownCodes, errors);
     }
 }

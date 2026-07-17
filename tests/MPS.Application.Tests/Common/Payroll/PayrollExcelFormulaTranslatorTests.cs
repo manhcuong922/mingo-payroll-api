@@ -32,20 +32,17 @@ public sealed class PayrollExcelFormulaTranslatorTests
             [PayrollFieldKeys.ProductivityCoefficient] = "P13",
             [PayrollFieldKeys.ContractInsuranceFlag] = "I13",
         },
-        ParamRefs: new Dictionary<string, string>
-        {
-            [PayrollParameterKeys.MealPricePerWorkday] = "GIA_COM",
-        },
         TextColumns: new HashSet<string> { PayrollColumnCodes.FlagBh },
         TextFields: new HashSet<string> { PayrollFieldKeys.ContractInsuranceFlag },
         PitBrackets: brackets ?? Array.Empty<PitBracketSnapshot>());
 
     [Fact]
-    public void Translate_maps_column_field_and_param_to_cells_and_named_ranges()
+    public void Translate_maps_column_and_field_to_cells_and_named_ranges()
     {
-        var ast = N.Mul(N.Col(PayrollColumnCodes.CongTinhCom), N.Param(PayrollParameterKeys.MealPricePerWorkday));
+        // field hằng-số-của-kỳ → named range; cột → ô cùng dòng.
+        var ast = N.Mul(N.Col(PayrollColumnCodes.MucLuong), N.Field(PayrollFieldKeys.BhxhNldRate));
 
-        PayrollExcelFormulaTranslator.Translate(ast, Refs()).Should().Be("(K13*GIA_COM)");
+        PayrollExcelFormulaTranslator.Translate(ast, Refs()).Should().Be("(O13*TYLE_BHXH_NLD)");
     }
 
     [Fact]

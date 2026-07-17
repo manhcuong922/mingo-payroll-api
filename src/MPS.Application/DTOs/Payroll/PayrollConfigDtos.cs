@@ -38,14 +38,6 @@ public sealed record FormulaSetDetailDto(
     DateTime? UpdatedAt,
     IReadOnlyList<SalaryColumnDto> Columns);
 
-public sealed record PayrollParameterDto(
-    int Id,
-    string Key,
-    string Name,
-    decimal Value,
-    string? Description,
-    bool IsActive);
-
 public sealed record ProductivityCoefficientDto(
     int Id,
     decimal MinScore,

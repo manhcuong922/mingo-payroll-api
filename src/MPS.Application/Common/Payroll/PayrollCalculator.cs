@@ -99,7 +99,6 @@ public sealed class PayrollCalculator : IPayrollCalculator
         {
             Columns = columnValues,
             Fields = ctx.Fields,
-            Params = ctx.Params,
             FunctionContext = ctx.FunctionContext,
         };
         var result = _evaluator.Evaluate(node, evalCtx);

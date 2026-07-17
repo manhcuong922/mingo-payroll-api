@@ -39,6 +39,7 @@ public sealed class PayrollCalculatorSmokeTests
                 [PayrollFieldKeys.ProductivityCoefficient] = 1.0m,
                 [PayrollFieldKeys.CongChuan] = 23m,
                 [PayrollFieldKeys.CongTinhCom] = 20m,
+                [PayrollFieldKeys.ContractAllowanceCom] = 800_000m,   // phụ cấp ăn ca trong HĐ
                 [PayrollFieldKeys.CongThuViec] = 0m,
                 [PayrollFieldKeys.CongChinhThuc] = 23m,
                 [PayrollFieldKeys.CongHocViec] = 0m,
@@ -68,10 +69,6 @@ public sealed class PayrollCalculatorSmokeTests
         var ctx = new PayrollCalcContext
         {
             Fields = inputs.ToFields(catalog),
-            Params = new Dictionary<string, ResolvedValue>
-            {
-                [PayrollParameterKeys.MealPricePerWorkday] = new(40_000m, "Đơn giá cơm/công"),
-            },
             FunctionContext = new PayrollFunctionContext
             {
                 PitBrackets = new List<PitBracketSnapshot>
@@ -110,16 +107,20 @@ public sealed class PayrollCalculatorSmokeTests
         var columns = DefaultPayrollFormulaSet.BuildColumns();
         var plan = PayrollColumnPlan.Build(columns, graph);
 
+        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) trong HĐ, nguyên tháng — KHÔNG nhân số công.
         var inputs = new PayrollEmployeeInputs
         {
             EmployeeInformationId = 1,
-            Numbers = { [PayrollFieldKeys.CongTinhCom] = 10m },
+            Numbers =
+            {
+                [PayrollFieldKeys.CongTinhCom] = 10m,
+                [PayrollFieldKeys.ContractAllowanceCom] = 730_000m,
+            },
             Texts = { [PayrollFieldKeys.ContractInsuranceFlag] = InsuranceFlags.Full },
         };
         var ctx = new PayrollCalcContext
         {
             Fields = inputs.ToFields(catalog),
-            Params = new Dictionary<string, ResolvedValue> { [PayrollParameterKeys.MealPricePerWorkday] = new(20_000m, "Giá cơm 1 bữa") },
             FunctionContext = new PayrollFunctionContext(),
         };
         var row = new PayrollRow();
@@ -127,9 +128,36 @@ public sealed class PayrollCalculatorSmokeTests
         calculator.ComputeAll(plan, ctx, row);
 
         var com = row.Cells.Single(c => c.ColumnCode == PayrollColumnCodes.Com);
-        com.ComputedValue.Should().Be(200_000m);
+        com.ComputedValue.Should().Be(730_000m);
         com.ExplanationJson.Should().NotBeNull();
         var explanation = PayrollJson.Deserialize<ExplanationNode>(com.ExplanationJson!)!;
-        explanation.Detail.Should().Contain("10").And.Contain("20.000").And.Contain("200.000");
+        explanation.Detail.Should().Contain("730.000").And.Contain("Phụ cấp cơm");
+    }
+
+    [Fact]
+    public void ComputeAll_MealColumn_IsZero_WhenContractHasNoMealAllowance()
+    {
+        var graph = new ColumnDependencyGraph();
+        var calculator = new PayrollCalculator(new FormulaEvaluator(new FormulaFunctionRegistry()), graph);
+        var catalog = new PayrollFieldCatalog();
+        var plan = PayrollColumnPlan.Build(DefaultPayrollFormulaSet.BuildColumns(), graph);
+
+        // HĐ không có phụ cấp MEAL → cột Cơm = 0 (không có nguồn thì bằng 0).
+        var inputs = new PayrollEmployeeInputs
+        {
+            EmployeeInformationId = 1,
+            Numbers = { [PayrollFieldKeys.CongTinhCom] = 22m },
+            Texts = { [PayrollFieldKeys.ContractInsuranceFlag] = InsuranceFlags.Full },
+        };
+        var ctx = new PayrollCalcContext
+        {
+            Fields = inputs.ToFields(catalog),
+            FunctionContext = new PayrollFunctionContext(),
+        };
+        var row = new PayrollRow();
+
+        calculator.ComputeAll(plan, ctx, row);
+
+        row.Cells.Single(c => c.ColumnCode == PayrollColumnCodes.Com).ComputedValue.Should().Be(0m);
     }
 }

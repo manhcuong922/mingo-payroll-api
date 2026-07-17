@@ -1,4 +1,3 @@
-using MPS.Domain.Constants;
 using Fk = MPS.Application.Common.Payroll.PayrollFieldKeys;
 
 namespace MPS.Application.Common.Payroll.Excel;
@@ -37,17 +36,8 @@ public static class PayrollExcelConstantCatalog
         [Fk.MealExemptThreshold] = new("NGUONG_COM_MIENTHUE", false, false),
     };
 
-    private static readonly Dictionary<string, ConstantPlacement> Params = new(StringComparer.Ordinal)
-    {
-        [PayrollParameterKeys.MealPricePerWorkday] = new("GIA_COM", true, false),
-    };
-
     public static bool TryGetField(string key, out ConstantPlacement placement) =>
         Fields.TryGetValue(key, out placement!);
-
-    /// <summary>Param lạ (kế toán tự thêm) vẫn thành hằng số — tên named range suy từ khoá, coi là tiền.</summary>
-    public static ConstantPlacement GetParam(string key) =>
-        Params.TryGetValue(key, out var known) ? known : new ConstantPlacement(Sanitize(key), true, false);
 
     /// <summary>Đưa khoá về tên hợp lệ cho named range Excel (chữ/số/gạch dưới, không mở đầu bằng số).</summary>
     public static string Sanitize(string key)

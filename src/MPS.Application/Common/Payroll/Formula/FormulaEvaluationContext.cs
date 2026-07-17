@@ -8,6 +8,5 @@ public sealed class FormulaEvaluationContext
 {
     public required IReadOnlyDictionary<string, ResolvedValue> Columns { get; init; }
     public required IReadOnlyDictionary<string, ResolvedValue> Fields { get; init; }
-    public required IReadOnlyDictionary<string, ResolvedValue> Params { get; init; }
     public required PayrollFunctionContext FunctionContext { get; init; }
 }

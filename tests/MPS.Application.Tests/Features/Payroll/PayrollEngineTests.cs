@@ -36,10 +36,6 @@ public sealed class PayrollEngineTests
         var ctx = new PayrollCalcContext
         {
             Fields = inputs.ToFields(catalog),
-            Params = new Dictionary<string, ResolvedValue>
-            {
-                [PayrollParameterKeys.MealPricePerWorkday] = new(40_000m, "Đơn giá cơm/công"),
-            },
             FunctionContext = new PayrollFunctionContext(),
         };
         var row = new PayrollRow();

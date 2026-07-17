@@ -7,7 +7,8 @@ public enum FormulaNodeType
     Text = 2,      // chuỗi hằng (vd so cờ "xx")
     Column = 3,    // tham chiếu cột khác cùng dòng (Text = ColumnCode)
     Field = 4,     // field từ IPayrollFieldCatalog (Text = FieldKey)
-    Param = 5,     // tham số công ty (Text = ParamKey)
+    // 5 = Param (tham số công ty) — ĐÃ BỎ: mọi số đến từ HĐ/công chuẩn/hiệu suất.
+    //     Số cũ giữ nguyên để FormulaJson đã lưu trong DB không bị đọc lệch kind.
     Binary = 6,    // Text = "+","-","*","/"; Args = [left,right]
     Compare = 7,   // Text = "=","<>","<","<=",">",">="; Args = [left,right]
     If = 8,        // Args = [cond, then, else]

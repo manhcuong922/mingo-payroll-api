@@ -49,23 +49,6 @@ public class SalaryColumnDefinitionEntityConfiguration : IEntityTypeConfiguratio
     }
 }
 
-public class PayrollParameterEntityConfiguration : IEntityTypeConfiguration<PayrollParameter>
-{
-    public void Configure(EntityTypeBuilder<PayrollParameter> builder)
-    {
-        builder.ToTable("PayrollParameters");
-        builder.HasKey(e => e.Id);
-        builder.Property(e => e.Key).HasMaxLength(128).IsRequired();
-        builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
-        builder.Property(e => e.Value).HasColumnType("decimal(18,4)").IsRequired();
-        builder.Property(e => e.Description).HasMaxLength(1000);
-        builder.Property(e => e.IsActive).HasDefaultValue(true);
-        builder.Property(e => e.CreatedAt).IsRequired();
-
-        builder.HasIndex(e => e.Key).IsUnique();
-    }
-}
-
 public class ProductivityCoefficientEntityConfiguration : IEntityTypeConfiguration<ProductivityCoefficient>
 {
     public void Configure(EntityTypeBuilder<ProductivityCoefficient> builder)

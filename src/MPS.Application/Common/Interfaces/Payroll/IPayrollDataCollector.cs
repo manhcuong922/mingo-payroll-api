@@ -20,8 +20,6 @@ public sealed class PayrollCollectionResult
     public required IReadOnlyList<PayrollEmployeeInputs> Employees { get; init; }
     public required IReadOnlyList<PayrollComplianceRef> ComplianceRefs { get; init; }
     public required PayrollFunctionContext FunctionContext { get; init; }
-    public required IReadOnlyDictionary<string, ResolvedValue> ParamValues { get; init; }
-    public required string ParamsSnapshotJson { get; init; }
     public required string ProductivitySnapshotJson { get; init; }
 }
 

@@ -28,14 +28,12 @@ public sealed record AddColumnCommand(
 public sealed class AddColumnCommandHandler : IRequestHandler<AddColumnCommand, int>
 {
     private readonly IPayrollFormulaSetRepository _repo;
-    private readonly IPayrollParameterRepository _parameters;
     private readonly IPayrollFormulaValidator _validator;
 
     public AddColumnCommandHandler(
-        IPayrollFormulaSetRepository repo, IPayrollParameterRepository parameters, IPayrollFormulaValidator validator)
+        IPayrollFormulaSetRepository repo, IPayrollFormulaValidator validator)
     {
         _repo = repo;
-        _parameters = parameters;
         _validator = validator;
     }
 
@@ -70,8 +68,7 @@ public sealed class AddColumnCommandHandler : IRequestHandler<AddColumnCommand, 
             CreatedAt = DateTime.UtcNow,
         };
 
-        var paramKeys = (await _parameters.GetAllAsync(null, ct)).Select(p => p.Key).ToList();
-        _validator.EnsureValidOrThrow(existing.Append(column).ToList(), paramKeys);
+        _validator.EnsureValidOrThrow(existing.Append(column).ToList());
 
         return await _repo.AddColumnAsync(column, ct);
     }
@@ -94,14 +91,12 @@ public sealed record UpdateColumnCommand(
 public sealed class UpdateColumnCommandHandler : IRequestHandler<UpdateColumnCommand>
 {
     private readonly IPayrollFormulaSetRepository _repo;
-    private readonly IPayrollParameterRepository _parameters;
     private readonly IPayrollFormulaValidator _validator;
 
     public UpdateColumnCommandHandler(
-        IPayrollFormulaSetRepository repo, IPayrollParameterRepository parameters, IPayrollFormulaValidator validator)
+        IPayrollFormulaSetRepository repo, IPayrollFormulaValidator validator)
     {
         _repo = repo;
-        _parameters = parameters;
         _validator = validator;
     }
 
@@ -131,8 +126,7 @@ public sealed class UpdateColumnCommandHandler : IRequestHandler<UpdateColumnCom
             IsEditable = request.IsEditable,
         };
 
-        var paramKeys = (await _parameters.GetAllAsync(null, ct)).Select(p => p.Key).ToList();
-        _validator.EnsureValidOrThrow(siblings.Append(edited).ToList(), paramKeys);
+        _validator.EnsureValidOrThrow(siblings.Append(edited).ToList());
 
         var ok = await _repo.UpdateColumnAsync(edited, ct);
         if (!ok) throw new NotFoundException($"Không tìm thấy cột #{request.ColumnId}.");

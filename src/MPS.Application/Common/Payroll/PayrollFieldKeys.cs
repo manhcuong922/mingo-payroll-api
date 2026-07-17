@@ -21,6 +21,7 @@ public static class PayrollFieldKeys
     public const string ContractAllowanceThueNha = "contract.allowanceThueNha";
     public const string ContractAllowanceDienThoai = "contract.allowanceDienThoai";
     public const string ContractAllowanceXangXe = "contract.allowanceXangXe";
+    public const string ContractAllowanceCom = "contract.allowanceCom";
 
     // ===== Chấm công =====
     public const string CongChuan = "period.congChuan";

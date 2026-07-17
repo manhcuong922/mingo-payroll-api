@@ -16,7 +16,6 @@ public sealed class FormulaNode
     public static FormulaNode Literal(string text) => new() { Type = FormulaNodeType.Text, Text = text };
     public static FormulaNode Col(string columnCode) => new() { Type = FormulaNodeType.Column, Text = columnCode };
     public static FormulaNode Field(string fieldKey) => new() { Type = FormulaNodeType.Field, Text = fieldKey };
-    public static FormulaNode Param(string paramKey) => new() { Type = FormulaNodeType.Param, Text = paramKey };
 
     public static FormulaNode Bin(string op, FormulaNode left, FormulaNode right) =>
         new() { Type = FormulaNodeType.Binary, Text = op, Args = { left, right } };

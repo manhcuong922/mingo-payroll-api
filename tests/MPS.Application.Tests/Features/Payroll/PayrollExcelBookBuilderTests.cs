@@ -40,6 +40,7 @@ public sealed class PayrollExcelBookBuilderTests
             [PayrollFieldKeys.CongChuan] = 23m,
             [PayrollFieldKeys.CongChinhThuc] = 23m,
             [PayrollFieldKeys.CongTinhCom] = 24m,
+            [PayrollFieldKeys.ContractAllowanceCom] = 960_000m,
             [PayrollFieldKeys.ContractAllowanceDienThoai] = 500_000m,
             [PayrollFieldKeys.ContractAllowanceXangXe] = 500_000m,
             [PayrollFieldKeys.DependentsCount] = 2m,
@@ -85,10 +86,6 @@ public sealed class PayrollExcelBookBuilderTests
             StandardWorkingDays = 23m,
             Status = PayrollPeriodStatus.Draft,
             FormulaSnapshotJson = PayrollColumnSnapshotMapper.Serialize(columns),
-            ParamsSnapshotJson = PayrollJson.Serialize(new[]
-            {
-                new { Key = PayrollParameterKeys.MealPricePerWorkday, Name = "Đơn giá cơm/công", Value = 40_000m },
-            }),
             ProductivitySnapshotJson = "[]",
             PitBracketsSnapshotJson = PayrollJson.Serialize(Pit2023()),
         };
@@ -100,10 +97,6 @@ public sealed class PayrollExcelBookBuilderTests
             var ctx = new PayrollCalcContext
             {
                 Fields = e.ToFields(catalog),
-                Params = new Dictionary<string, ResolvedValue>
-                {
-                    [PayrollParameterKeys.MealPricePerWorkday] = new(40_000m, "Đơn giá cơm/công"),
-                },
                 FunctionContext = new PayrollFunctionContext { PitBrackets = Pit2023() },
             };
             var row = new PayrollRow
@@ -184,12 +177,12 @@ public sealed class PayrollExcelBookBuilderTests
         rate.CellRef.Should().EndWith("9");           // tỷ lệ → hàng 9
         rate.IsPercent.Should().BeTrue();
 
-        // Giá cơm nằm hàng 9 nhưng là TIỀN, không phải phần trăm.
-        var giaCom = book.Constants.Single(k => k.Key == PayrollParameterKeys.MealPricePerWorkday);
-        giaCom.Name.Should().Be("GIA_COM");
-        giaCom.Value.Should().Be(40_000m);
-        giaCom.CellRef.Should().EndWith("9");
-        giaCom.IsPercent.Should().BeFalse();
+        // Ngưỡng cơm miễn thuế là TIỀN nằm hàng 10, không phải phần trăm.
+        var nguongCom = book.Constants.Single(k => k.Key == PayrollFieldKeys.MealExemptThreshold);
+        nguongCom.Name.Should().Be("NGUONG_COM_MIENTHUE");
+        nguongCom.Value.Should().Be(730_000m);
+        nguongCom.CellRef.Should().EndWith("10");
+        nguongCom.IsPercent.Should().BeFalse();
     }
 
     [Fact]
@@ -197,22 +190,22 @@ public sealed class PayrollExcelBookBuilderTests
     {
         var book = Build(BuildPeriod(Inputs(1, 14_641_000m, 2.2m)));
 
-        book.Constants.Single(k => k.Key == PayrollParameterKeys.MealPricePerWorkday)
+        book.Constants.Single(k => k.Key == PayrollFieldKeys.BhxhNldRate)
             .AbsoluteRef.Should().MatchRegex(@"^'4\. LUONG'!\$[A-Z]+\$9$");
     }
 
     [Fact]
-    public void Meal_cell_formula_reads_the_named_range_and_the_insurance_flag()
+    public void Meal_cell_formula_reads_the_contract_allowance_column_and_the_insurance_flag()
     {
         var book = Build(BuildPeriod(Inputs(1, 14_641_000m, 2.2m)));
 
-        var com = Column(book, PayrollColumnCodes.Com);
-        var congTinhCom = Column(book, PayrollColumnCodes.CongTinhCom);
         var flag = Column(book, PayrollColumnCodes.FlagBh);
+        // Phụ cấp ăn ca là dữ liệu theo từng NV → cột phụ trợ, không phải hằng số của kỳ.
+        var phuCapCom = Column(book, PayrollFieldKeys.ContractAllowanceCom);
 
         // Cột tiền không khai báo làm tròn vẫn được engine làm tròn về đồng nguyên → phải có ROUND(,0).
         Cell(book, 0, PayrollColumnCodes.Com).Formula.Should()
-            .Be($"ROUND(IF(EXACT({flag.Letter}13,\"xx\"),0,({congTinhCom.Letter}13*GIA_COM)),0)");
+            .Be($"ROUND(IF(EXACT({flag.Letter}13,\"xx\"),0,{phuCapCom.Letter}13),0)");
     }
 
     [Fact]

@@ -34,7 +34,7 @@ public sealed class PayrollGoldenReconciliationTests
     private static PayrollRow Compute(
         decimal mucLuong, decimal heSoNangSuat, decimal congChuan, decimal congChinhThuc,
         decimal congTinhCom, decimal dienThoai, decimal xangXe, decimal tangCa,
-        decimal chenhLechLtg, decimal soNpt, decimal doanPhi)
+        decimal chenhLechLtg, decimal soNpt, decimal doanPhi, decimal phuCapCom)
     {
         var graph = new ColumnDependencyGraph();
         var calculator = new PayrollCalculator(new FormulaEvaluator(new FormulaFunctionRegistry()), graph);
@@ -53,6 +53,8 @@ public sealed class PayrollGoldenReconciliationTests
                 [PayrollFieldKeys.CongThuViec] = 0m,
                 [PayrollFieldKeys.CongHocViec] = 0m,
                 [PayrollFieldKeys.CongTinhCom] = congTinhCom,
+                // Cơm nay lấy từ phụ cấp MEAL của HĐ; file mẫu: 24 công × 40.000 = 960.000.
+                [PayrollFieldKeys.ContractAllowanceCom] = phuCapCom,
                 [PayrollFieldKeys.ContractAllowanceDienThoai] = dienThoai,
                 [PayrollFieldKeys.ContractAllowanceXangXe] = xangXe,
                 [PayrollFieldKeys.OtTangCa] = tangCa,
@@ -83,10 +85,6 @@ public sealed class PayrollGoldenReconciliationTests
         var ctx = new PayrollCalcContext
         {
             Fields = inputs.ToFields(catalog),
-            Params = new Dictionary<string, ResolvedValue>
-            {
-                [PayrollParameterKeys.MealPricePerWorkday] = new(40_000m, "Đơn giá cơm/công (kỳ mẫu)"),
-            },
             FunctionContext = new PayrollFunctionContext { PitBrackets = Pit2023() },
         };
 
@@ -103,7 +101,8 @@ public sealed class PayrollGoldenReconciliationTests
         var row = Compute(
             mucLuong: 14_641_000m, heSoNangSuat: 2.2m, congChuan: 23m, congChinhThuc: 23m,
             congTinhCom: 24m, dienThoai: 500_000m, xangXe: 500_000m,
-            tangCa: 4_074_017.392m, chenhLechLtg: 2_037_008.696m, soNpt: 2m, doanPhi: 292_820m);
+            tangCa: 4_074_017.392m, chenhLechLtg: 2_037_008.696m, soNpt: 2m, doanPhi: 292_820m,
+            phuCapCom: 960_000m);
 
         Cell(row, PayrollColumnCodes.PhuCapLuong).Should().Be(32_210_200m);   // P
         Cell(row, PayrollColumnCodes.ThuNhap).Should().Be(48_811_200m);        // Y
@@ -119,7 +118,8 @@ public sealed class PayrollGoldenReconciliationTests
         var row = Compute(
             mucLuong: 7_700_000m, heSoNangSuat: 2.0m, congChuan: 23m, congChinhThuc: 23m,
             congTinhCom: 23m, dienThoai: 500_000m, xangXe: 500_000m,
-            tangCa: 0m, chenhLechLtg: 0m, soNpt: 1m, doanPhi: 154_000m);
+            tangCa: 0m, chenhLechLtg: 0m, soNpt: 1m, doanPhi: 154_000m,
+            phuCapCom: 920_000m);
 
         Cell(row, PayrollColumnCodes.PhuCapLuong).Should().Be(15_400_000m);   // P
         Cell(row, PayrollColumnCodes.ThuNhap).Should().Be(25_020_000m);        // Y

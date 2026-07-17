@@ -16,7 +16,6 @@ public sealed class FormulaEvaluator : IFormulaEvaluator
         FormulaNodeType.Text => TextNode(node),
         FormulaNodeType.Column => ResolveRef("column", node.Text, ctx.Columns),
         FormulaNodeType.Field => ResolveRef("field", node.Text, ctx.Fields),
-        FormulaNodeType.Param => ResolveRef("param", node.Text, ctx.Params),
         FormulaNodeType.Binary => Binary(node, ctx),
         FormulaNodeType.Compare => Compare(node, ctx),
         FormulaNodeType.If => IfNode(node, ctx),

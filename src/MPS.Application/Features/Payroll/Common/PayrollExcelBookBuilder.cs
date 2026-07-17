@@ -19,8 +19,6 @@ public sealed class PayrollExcelBookBuilder
 
     public PayrollExcelBookBuilder(IPayrollFieldCatalog catalog) => _catalog = catalog;
 
-    private sealed record ParamSnap(string Key, string Name, decimal Value);
-
     public PayrollExcelBook Build(PayrollPeriod period)
     {
         var columns = PayrollColumnSnapshotMapper.Deserialize(period.FormulaSnapshotJson)
@@ -34,11 +32,9 @@ public sealed class PayrollExcelBookBuilder
         var inputs = employeeRows.ToDictionary(
             r => r.Id, r => PayrollEmployeeInputs.FromSnapshotJson(r.EmployeeInformationId ?? 0, r.InputSnapshotJson));
 
-        var paramSnaps = (PayrollJson.Deserialize<List<ParamSnap>>(period.ParamsSnapshotJson) ?? new())
-            .ToDictionary(p => p.Key, StringComparer.Ordinal);
         var brackets = PayrollJson.Deserialize<List<PitBracketSnapshot>>(period.PitBracketsSnapshotJson) ?? new();
 
-        var (fieldRefs, paramRefs) = CollectReferences(columns, asts);
+        var fieldRefs = CollectFieldReferences(columns, asts);
 
         // Field là hằng số của kỳ → hàng 9/10; còn lại (hệ số năng suất, số công…) → cột phụ trợ.
         var constantFields = fieldRefs.Keys
@@ -47,7 +43,7 @@ public sealed class PayrollExcelBookBuilder
         var helperFields = fieldRefs.Keys.Where(k => !constantFields.Contains(k)).ToList();
 
         var laidOut = LayOutColumns(columns, fieldRefs, helperFields);
-        var constants = PlaceConstants(laidOut, constantFields, fieldRefs, paramRefs, paramSnaps, inputs.Values);
+        var constants = PlaceConstants(laidOut, constantFields, fieldRefs, inputs.Values);
 
         var refsByRow = new Dictionary<int, PayrollExcelRefs>();
         PayrollExcelRefs RefsFor(int excelRow)
@@ -102,29 +98,23 @@ public sealed class PayrollExcelBookBuilder
         return map;
     }
 
-    /// <summary>Khoá field/param → chỉ số cột ĐẦU TIÊN tham chiếu nó (dùng làm cột neo cho hằng số).</summary>
-    private static (Dictionary<string, int> Fields, Dictionary<string, int> Params) CollectReferences(
+    /// <summary>Khoá field → chỉ số cột ĐẦU TIÊN tham chiếu nó (dùng làm cột neo cho hằng số).</summary>
+    private static Dictionary<string, int> CollectFieldReferences(
         IReadOnlyList<SalaryColumnDefinition> columns, IReadOnlyDictionary<string, FormulaNode> asts)
     {
         var fields = new Dictionary<string, int>(StringComparer.Ordinal);
-        var @params = new Dictionary<string, int>(StringComparer.Ordinal);
-
         for (var i = 0; i < columns.Count; i++)
         {
             if (!asts.TryGetValue(columns[i].ColumnCode, out var ast)) continue;
-            foreach (var (key, isParam) in Walk(ast))
-            {
-                var target = isParam ? @params : fields;
-                if (!target.ContainsKey(key)) target[key] = i;
-            }
+            foreach (var key in Walk(ast))
+                if (!fields.ContainsKey(key)) fields[key] = i;
         }
-        return (fields, @params);
+        return fields;
     }
 
-    private static IEnumerable<(string Key, bool IsParam)> Walk(FormulaNode node)
+    private static IEnumerable<string> Walk(FormulaNode node)
     {
-        if (node.Type == FormulaNodeType.Field && node.Text is { Length: > 0 }) yield return (node.Text, false);
-        if (node.Type == FormulaNodeType.Param && node.Text is { Length: > 0 }) yield return (node.Text, true);
+        if (node.Type == FormulaNodeType.Field && node.Text is { Length: > 0 }) yield return node.Text;
         foreach (var child in node.Args)
             foreach (var found in Walk(child))
                 yield return found;
@@ -191,8 +181,6 @@ public sealed class PayrollExcelBookBuilder
         IReadOnlyList<PayrollExcelColumn> laidOut,
         IReadOnlySet<string> constantFields,
         IReadOnlyDictionary<string, int> fieldRefs,
-        IReadOnlyDictionary<string, int> paramRefs,
-        IReadOnlyDictionary<string, ParamSnap> paramSnaps,
         IEnumerable<PayrollEmployeeInputs> inputs)
     {
         var firstInputs = inputs.FirstOrDefault();
@@ -225,13 +213,6 @@ public sealed class PayrollExcelBookBuilder
             result.Add(Place(key, placement, _catalog.LabelOf(key), value, fieldRefs[key]));
         }
 
-        foreach (var key in paramRefs.Keys.OrderBy(k => paramRefs[k]))
-        {
-            var snap = paramSnaps.GetValueOrDefault(key);
-            result.Add(Place(key, PayrollExcelConstantCatalog.GetParam(key),
-                snap?.Name ?? key, snap?.Value ?? 0m, paramRefs[key]));
-        }
-
         return result;
     }
 
@@ -258,15 +239,11 @@ public sealed class PayrollExcelBookBuilder
             }
         }
 
-        var paramRefs = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var k in constants)
-        {
-            if (PayrollExcelConstantCatalog.TryGetField(k.Key, out _)) fieldRefs[k.Key] = k.Name;
-            else paramRefs[k.Key] = k.Name;
-        }
+        // Hằng số của kỳ → công thức trỏ bằng named range thay vì ô cột phụ trợ.
+        foreach (var k in constants) fieldRefs[k.Key] = k.Name;
 
         var textFields = _catalog.GetAll().Where(f => f.IsText).Select(f => f.Key).ToHashSet(StringComparer.Ordinal);
-        return new PayrollExcelRefs(columnRefs, fieldRefs, paramRefs, textColumns, textFields, brackets);
+        return new PayrollExcelRefs(columnRefs, fieldRefs, textColumns, textFields, brackets);
     }
 
     // ===================== Dữ liệu =====================

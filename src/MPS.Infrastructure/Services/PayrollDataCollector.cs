@@ -57,12 +57,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var bhtnCap = regionMinWage * si.UnemploymentCapMultiplier;
         var mealExempt = mealThreshold?.MonthlyExemptAmount ?? 0m;
 
-        // ===== Params + productivity map (active) + snapshot JSON =====
-        var parameters = await _db.PayrollParameters.AsNoTracking().Where(p => p.IsActive).ToListAsync(ct);
-        var paramValues = parameters.ToDictionary(
-            p => p.Key, p => new ResolvedValue(p.Value, p.Name), StringComparer.OrdinalIgnoreCase);
-        var paramsSnapshotJson = PayrollJson.Serialize(parameters.Select(p => new { p.Key, p.Name, p.Value }));
-
+        // ===== Bảng hệ số năng suất (active) + snapshot JSON =====
         var prodMap = await _db.ProductivityCoefficients.AsNoTracking()
             .Where(p => p.IsActive).OrderBy(p => p.MinScore).ToListAsync(ct);
         var prodSnapshotJson = PayrollJson.Serialize(prodMap.Select(p => new { p.MinScore, p.MaxScore, p.Coefficient, p.Label }));
@@ -163,6 +158,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractAllowanceThueNha] = AllowanceByCode("HOUSING");
             n[ContractAllowanceDienThoai] = AllowanceByCode("PHONE");
             n[ContractAllowanceXangXe] = AllowanceByCode("FUEL");
+            n[ContractAllowanceCom] = AllowanceByCode("MEAL");
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
             n[CongThuViec] = congThuViec;
@@ -213,8 +209,6 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             Employees = result,
             ComplianceRefs = refs,
             FunctionContext = new PayrollFunctionContext { PitBrackets = pit.Brackets },
-            ParamValues = paramValues,
-            ParamsSnapshotJson = paramsSnapshotJson,
             ProductivitySnapshotJson = prodSnapshotJson,
         };
     }

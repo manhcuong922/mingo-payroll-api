@@ -345,9 +345,6 @@ public static class Permissions
     public const string PayrollFormulaSetUpdateAll = "PayrollFormulaSet.Update.All";
     public const string PayrollFormulaSetDeleteAll = "PayrollFormulaSet.Delete.All";
 
-    public const string PayrollParameterReadAll   = "PayrollParameter.Read.All";
-    public const string PayrollParameterUpdateAll = "PayrollParameter.Update.All";
-
     public const string ProductivityCoefficientReadAll   = "ProductivityCoefficient.Read.All";
     public const string ProductivityCoefficientUpdateAll = "ProductivityCoefficient.Update.All";
 }
@@ -668,8 +665,8 @@ public static class PermissionIds
     public const int PayrollFormulaSetUpdateAll = 260;
     public const int PayrollFormulaSetDeleteAll = 261;
 
-    public const int PayrollParameterReadAll   = 262;
-    public const int PayrollParameterUpdateAll = 263;
+    // 262, 263 = PayrollParameter Read/Update — ĐÃ BỎ (mọi tham số lấy từ HĐ/công chuẩn/hiệu suất).
+    // KHÔNG tái dùng 2 ID này cho quyền mới.
 
     public const int ProductivityCoefficientReadAll   = 264;
     public const int ProductivityCoefficientUpdateAll = 265;

@@ -11,22 +11,15 @@ namespace MPS.Application.Features.Payroll.Common;
 /// </summary>
 public static class PayrollRecomputeContext
 {
-    private sealed record ParamSnap(string Key, string Name, decimal Value);
-
     public static PayrollCalcContext Build(PayrollPeriod period, PayrollRow row, IPayrollFieldCatalog catalog)
     {
         var inputs = PayrollEmployeeInputs.FromSnapshotJson(row.EmployeeInformationId ?? 0, row.InputSnapshotJson);
-
-        var paramList = PayrollJson.Deserialize<List<ParamSnap>>(period.ParamsSnapshotJson) ?? new();
-        var paramValues = paramList.ToDictionary(
-            p => p.Key, p => new ResolvedValue(p.Value, p.Name), StringComparer.OrdinalIgnoreCase);
 
         var brackets = PayrollJson.Deserialize<List<PitBracketSnapshot>>(period.PitBracketsSnapshotJson) ?? new();
 
         return new PayrollCalcContext
         {
             Fields = inputs.ToFields(catalog),
-            Params = paramValues,
             FunctionContext = new PayrollFunctionContext { PitBrackets = brackets },
         };
     }

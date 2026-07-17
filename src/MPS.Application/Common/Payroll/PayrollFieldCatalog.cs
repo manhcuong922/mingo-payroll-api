@@ -24,6 +24,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(ContractAllowanceThueNha, "Phụ cấp thuê nhà (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceDienThoai, "Phụ cấp điện thoại (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceXangXe, "Phụ cấp xăng xe (HĐ)", "Hợp đồng", ColumnDataType.Money),
+        new(ContractAllowanceCom, "Phụ cấp cơm/ăn ca (HĐ)", "Hợp đồng", ColumnDataType.Money),
 
         // Chấm công
         new(CongChuan, "Công chuẩn tháng", "Kỳ lương", ColumnDataType.Number),

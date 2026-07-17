@@ -107,14 +107,11 @@ public sealed class PayrollConfigCommandTests
         repo.Setup(r => r.AddAsync(It.IsAny<PayrollFormulaSet>(), It.IsAny<CancellationToken>()))
             .Callback<PayrollFormulaSet, CancellationToken>((s, _) => captured = s)
             .ReturnsAsync(99);
-        var parameters = new Mock<IPayrollParameterRepository>();
-        parameters.Setup(p => p.GetAllAsync(It.IsAny<bool?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<PayrollParameter>());
         var validator = new Mock<IPayrollFormulaValidator>();
-        validator.Setup(v => v.Validate(It.IsAny<IReadOnlyList<SalaryColumnDefinition>>(), It.IsAny<IReadOnlyCollection<string>>()))
+        validator.Setup(v => v.Validate(It.IsAny<IReadOnlyList<SalaryColumnDefinition>>()))
             .Returns(Array.Empty<string>());
 
-        var handler = new CloneFormulaSetCommandHandler(repo.Object, parameters.Object, validator.Object, User().Object);
+        var handler = new CloneFormulaSetCommandHandler(repo.Object, validator.Object, User().Object);
 
         var newId = await handler.Handle(new CloneFormulaSetCommand(1, "Bản của kế toán", null), default);
 

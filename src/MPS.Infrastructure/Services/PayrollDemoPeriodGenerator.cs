@@ -96,7 +96,6 @@ public sealed class PayrollDemoPeriodGenerator
             Status = PayrollPeriodStatus.Draft,
             FormulaSetId = formulaSet.Id,
             FormulaSnapshotJson = PayrollColumnSnapshotMapper.Serialize(columns),
-            ParamsSnapshotJson = collection.ParamsSnapshotJson,
             ProductivitySnapshotJson = collection.ProductivitySnapshotJson,
             PitBracketsSnapshotJson = PayrollJson.Serialize(collection.FunctionContext.PitBrackets),
             CreatedByUserId = userId,
@@ -115,7 +114,6 @@ public sealed class PayrollDemoPeriodGenerator
             var ctx = new PayrollCalcContext
             {
                 Fields = inputs.ToFields(_catalog),
-                Params = collection.ParamValues,
                 FunctionContext = collection.FunctionContext,
             };
             var row = new PayrollRow
