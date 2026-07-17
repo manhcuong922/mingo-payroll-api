@@ -126,6 +126,8 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IPayrollCalculator, PayrollCalculator>();
         services.AddSingleton<IPayrollFieldCatalog, PayrollFieldCatalog>();
         services.AddSingleton<IPayrollFormulaValidator, PayrollFormulaValidator>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IPayrollExcelExporter,
+            MPS.Infrastructure.Services.Payroll.PayrollExcelExporter>();
         services.AddSingleton<IPayrollLawChangeNoteBuilder, PayrollLawChangeNoteBuilder>();
 
         // Attendance module — orchestrators

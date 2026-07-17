@@ -20,6 +20,7 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
     public Task<PayrollPeriod?> GetFullAsync(int id, bool asNoTracking, CancellationToken ct = default)
     {
         var q = _context.PayrollPeriods
+            .Include(p => p.EmployerParty)
             .Include(p => p.ComplianceRefs)
             .Include(p => p.Notes)
             .Include(p => p.Rows).ThenInclude(r => r.Cells)

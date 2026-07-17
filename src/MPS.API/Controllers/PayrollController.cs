@@ -33,6 +33,18 @@ public class PayrollController : ControllerBase
     public async Task<IActionResult> GetSheet(int id, CancellationToken ct)
         => Ok(await _mediator.Send(new GetPayrollSheetQuery(id), ct));
 
+    /// <summary>
+    /// Tải bảng lương .xlsx — công thức Excel thật (bấm vào ô là thấy, sửa input Excel tự tính lại),
+    /// kèm sheet tham số (trần/tỷ lệ/biểu thuế) và sheet ghi chú (trần + thay đổi luật so kỳ trước).
+    /// </summary>
+    [HttpGet("periods/{id:int}/export")]
+    [HasPermission(Permissions.PayrollReadAll)]
+    public async Task<IActionResult> Export(int id, CancellationToken ct)
+    {
+        var file = await _mediator.Send(new ExportPayrollPeriodQuery(id), ct);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
     /// <summary>Sinh bảng lương tháng. Thiếu liệu → 422 kèm danh sách NV thiếu.</summary>
     [HttpPost("periods")]
     [HasPermission(Permissions.PayrollCreateAll)]
