@@ -27,6 +27,18 @@ public interface ILeaveRequestRepository
     Task<bool> UpdateAsync(LeaveRequest entity, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Trả về true nếu tồn tại đơn nghỉ phép Pending hoặc Approved của employee
+    /// chồng lấp bất kỳ ngày nào trong khoảng [startDate, endDate].
+    /// Dùng cho cross-check chống trùng ngày giữa Leave/WFH/LateEarly.
+    /// </summary>
+    Task<bool> HasPendingOrApprovedInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// FT-13: atomically approve a pending leave request.
     /// Performs a transactional operation that:
     /// 1. Re-checks remaining balance for leave types where LeaveType.DeductsBalance = true (race-safe under read-committed).

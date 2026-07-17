@@ -36,4 +36,16 @@ public interface ILateEarlyRequestRepository
         LateEarlyKind kind,
         int? excludeRequestId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Trả về true nếu tồn tại đơn LateEarly Pending hoặc Approved của employee
+    /// trong khoảng [startDate, endDate] (kiểm mọi Kind).
+    /// Dùng cho cross-check chống trùng ngày giữa Leave/WFH/LateEarly.
+    /// </summary>
+    Task<bool> HasPendingOrApprovedInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default);
 }

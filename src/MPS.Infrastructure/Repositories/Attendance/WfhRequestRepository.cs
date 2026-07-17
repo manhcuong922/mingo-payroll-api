@@ -155,4 +155,22 @@ public class WfhRequestRepository : IWfhRequestRepository
                 && r.StartDate <= endDate
                 && r.EndDate >= startDate, cancellationToken);
     }
+
+    public Task<bool> HasPendingOrApprovedInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.WfhRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                && (r.Status == WfhRequestStatus.Pending || r.Status == WfhRequestStatus.Approved)
+                && r.StartDate <= endDate
+                && r.EndDate >= startDate);
+        if (excludeRequestId.HasValue)
+            query = query.Where(r => r.Id != excludeRequestId.Value);
+        return query.AnyAsync(cancellationToken);
+    }
 }

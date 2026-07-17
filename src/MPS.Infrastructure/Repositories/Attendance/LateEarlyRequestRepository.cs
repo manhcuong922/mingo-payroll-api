@@ -134,4 +134,23 @@ public class LateEarlyRequestRepository : ILateEarlyRequestRepository
             query = query.Where(r => r.Id != excludeRequestId.Value);
         return query.AnyAsync(cancellationToken);
     }
+
+    public Task<bool> HasPendingOrApprovedInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.LateEarlyRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                && (r.Status == LateEarlyRequestStatus.Pending
+                    || r.Status == LateEarlyRequestStatus.Approved)
+                && r.WorkDate >= startDate
+                && r.WorkDate <= endDate);
+        if (excludeRequestId.HasValue)
+            query = query.Where(r => r.Id != excludeRequestId.Value);
+        return query.AnyAsync(cancellationToken);
+    }
 }
