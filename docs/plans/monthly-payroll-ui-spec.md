@@ -367,7 +367,7 @@ công thức đọc được: `GIA_COM`, `TRAN_BHXH_BHYT`, `TYLE_BHXH_NLD`, `GIA
 | Giải thích ô | chuỗi `explanation` (hover) | công thức Excel thật (thanh công thức) |
 | Hệ số năng suất | là `field`, không phải cột | **thành cột hiện** (trước "Trợ cấp lương chính") — công thức cần ô để trỏ |
 | Ô sửa tay | cờ `isOverridden` | số cứng, **không có công thức**, tô vàng + comment giải thích |
-| Ghi chú theo cột | panel notes | comment hover trên ô header (hàng 7) + sheet `GHI CHU` |
+| Ghi chú | panel notes | sheet `GHI CHU` + tóm tắt hover ở ô tiêu đề `A2` (không gắn vào cột) |
 
 Cột thêm vào file so với 54 cột của bảng công thức: chỉ **STT** (`=ROW()-12`) và
 **Hệ số năng suất**. Không có cột nào bịa thêm.
