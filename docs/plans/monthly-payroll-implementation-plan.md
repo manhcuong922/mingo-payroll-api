@@ -1,10 +1,10 @@
 # Monthly Payroll Module — Implementation Plan
 
-> **Status:** ✅ Phase 1 + config APIs HOÀN THÀNH & verify live (2026-07-15). `602` test pass.
+> **Status:** ✅ Phase 1 + config APIs + **xuất Excel** HOÀN THÀNH & verify live (2026-07-17). `640` test pass.
 > **Golden reconciliation ĐÃ khớp** file lương mẫu 08/2023 (F5-0001 → 47.049.000, F5-0003 → 23.549.000).
 > **Project:** `mingo-payroll-api` (.NET 8, Clean Architecture, EF Core, MediatR CQRS)
 > **Module:** Payroll (Bảng lương hàng tháng)
-> **Branch:** `feature/monthly-payroll` — commit: docs → module → config APIs → golden test
+> **Branch:** `feature/monthly-payroll` — commit: docs → module → config APIs → golden test → seed → export Excel
 > **➡️ UI (Phase 2):** xem spec chi tiết cho frontend tại [`monthly-payroll-ui-spec.md`](./monthly-payroll-ui-spec.md).
 
 ## Context
@@ -121,7 +121,8 @@ Controllers `[HasPermission]`, Requests `Requests/Payroll/`:
 ## 6. Phasing
 
 - **Phase 1 (backend)** ✅ XONG: domain + migration, aggregation + readiness gate, formula engine + bảng công thức mặc định (54 cột), tạo/đọc/recalc/override/notes + law-change diff, golden test, **+ config APIs** (CRUD bảng công thức/cột/tham số/hệ số + trình dựng qua field catalog + validator chống chu trình). Verify live trên SQL Server thật.
-- **Phase 2 (UI `mingo-payroll-ui`)** ⏳: build theo **[`monthly-payroll-ui-spec.md`](./monthly-payroll-ui-spec.md)** — 10 màn (list kỳ, readiness gate, sheet + hover explanation, sửa ô, chốt/xoá, CRUD bảng công thức, trình dựng công thức, tham số, hệ số). Xem §8 spec cho các endpoint backend còn thiếu (payslip cá nhân, note tay, export, tính lại toàn kỳ...).
+- **Xuất Excel** ✅ XONG: `GET /api/payroll/periods/{id}/export` → .xlsx 3 sheet (`4. LUONG` clone bố cục file mẫu + `THAM SO` + `GHI CHU`), **công thức Excel THẬT** dịch từ AST (bấm vào ô là thấy, sửa input Excel tự tính lại), hằng số kỳ đặt named range (`GIA_COM`, `TRAN_BHXH_BHYT`…), ghi chú trần/đổi luật thành comment hover trên header. Spec cho UI: §9 của ui-spec.
+- **Phase 2 (UI `mingo-payroll-ui`)** ⏳: build theo **[`monthly-payroll-ui-spec.md`](./monthly-payroll-ui-spec.md)** — 10 màn (list kỳ, readiness gate, sheet + hover explanation, sửa ô, chốt/xoá, CRUD bảng công thức, trình dựng công thức, tham số, hệ số) + nút Xuất Excel. Xem §8 spec cho các endpoint backend còn thiếu (payslip cá nhân, note tay, export PDF, tính lại toàn kỳ...).
 
 ## 7. Giả định cần xác nhận
 

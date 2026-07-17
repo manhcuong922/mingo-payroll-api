@@ -2,8 +2,9 @@
 
 > **Đối tượng:** đội frontend (`mingo-payroll-ui`).
 > **Trạng thái backend:** Phase 1 + config APIs **đã build & verify live trên SQL Server thật**.
-> `602` test pass, **golden reconciliation khớp file lương mẫu 08/2023** (F5-0001 → 47.049.000,
+> `640` test pass, **golden reconciliation khớp file lương mẫu 08/2023** (F5-0001 → 47.049.000,
 > F5-0003 → 23.549.000). Mọi endpoint dưới đây đã tồn tại và chạy được — UI chỉ cần gọi.
+> **Xuất Excel (công thức Excel thật) đã có — xem §9.**
 > Kèm mục **§8 Khoảng trống** liệt kê thứ UI SẼ cần nhưng backend CHƯA có (đừng giả định).
 
 ---
@@ -213,6 +214,7 @@ Mỗi note: `{ id, noteType, columnCode?, title, body, oldValue?, newValue?, leg
 | GET | `/api/payroll/periods/readiness?employerPartyId&year&month` | — | `PayrollReadinessDto[]` | Payroll.Read.All |
 | GET | `/api/payroll/periods?year&month` | — | `PayrollPeriodSummaryDto[]` | Payroll.Read.All |
 | GET | `/api/payroll/periods/{id}` | — | `PayrollSheetDto` | Payroll.Read.All |
+| GET | `/api/payroll/periods/{id}/export` | — | `.xlsx` (file download) | Payroll.Read.All |
 | POST | `/api/payroll/periods` | CreatePeriod | `201 {id}` / 422 | Payroll.Create.All |
 | PUT | `/api/payroll/periods/{id}/cells` | EditCell | `204` | Payroll.Update.All |
 | POST | `/api/payroll/periods/{id}/finalize` | — | `204` | Payroll.Finalize.All |
@@ -305,8 +307,67 @@ Những thứ UI có thể cần nhưng **backend Phase 1 CHƯA làm** — báo 
 4. **Tính lại toàn kỳ** (recalculate all): chưa có; hiện chỉ tính lại downstream khi sửa 1 ô.
 5. **Thêm/sửa CỘT ngay trong 1 kỳ đã tạo**: kỳ snapshot công thức lúc tạo → sửa bảng công thức KHÔNG ảnh hưởng kỳ cũ. Muốn thêm cột cho kỳ đang mở cần cơ chế riêng (chưa có) — hiện phải sửa bảng công thức rồi tạo kỳ mới.
 6. **Preview/tính thử công thức** (dry-run 1 ô) trước khi lưu: chưa có endpoint.
-7. **Export** (Excel/PDF bảng lương): chưa có.
+7. **Export PDF**: chưa có. (Excel ĐÃ CÓ — xem §9.)
 8. **Pagination/filter nâng cao** trên list: chưa có.
 9. **Đa công ty**: `employerPartyId` là tham số nhưng chưa có endpoint liệt kê công ty — UI tự lấy từ module Party/Contract.
 10. **OT pay** trong collector còn ở mức baseline (×1.5 ngày/×2.0 đêm), chưa đủ nuance BLLĐ Điều 98 — số tăng ca có thể cần tinh chỉnh sau.
 ```
+
+---
+
+## 9. Xuất Excel bảng lương
+
+`GET /api/payroll/periods/{id}/export` → tải `bang-luong-{MM}-{YYYY}.xlsx` (quyền `Payroll.Read.All`).
+UI chỉ cần 1 nút **"Xuất Excel"** trên màn sheet (§2.3) — không có tham số, không cần body.
+
+```ts
+const res = await fetch(`/api/payroll/periods/${id}/export`, { headers: { Authorization: `Bearer ${token}` } });
+const blob = await res.blob();            // Content-Disposition đã có sẵn tên file
+```
+
+Lỗi: `404` kỳ không tồn tại (shape `{error}` như mọi endpoint khác).
+
+### File chứa gì
+
+Ba sheet:
+
+| Sheet | Nội dung |
+|---|---|
+| `4. LUONG` | Bảng lương — **clone bố cục file mẫu** (đặc tả §2) |
+| `THAM SO` | Hằng số của kỳ + biểu thuế TNCN (snapshot) + căn cứ pháp lý |
+| `GHI CHU` | Ghi chú trần/ngưỡng + **thay đổi luật so kỳ trước** (từ số → đến số + căn cứ) |
+
+Bố cục `4. LUONG` (đúng file mẫu): tiêu đề hàng 1–3 · **TỔNG CỘNG hàng 6** (trên header) ·
+nhãn cột hàng 7 · nhóm cột cha hàng 8 · **tham số hàng 9–10** · số thứ tự cột `[n]` hàng 11 ·
+tên field kỹ thuật hàng 12 · dữ liệu từ hàng 13. Đóng băng 12 hàng đầu + 2 cột đầu.
+
+### Công thức Excel THẬT (không phải chuỗi Explanation của UI)
+
+Bấm vào 1 ô là thấy công thức trong thanh công thức; sửa input thì Excel tự tính lại
+(`fullCalcOnLoad` bật). Mỗi ô công thức ghi **cả công thức lẫn giá trị cache** nên mở file
+là thấy ngay số đúng, không phải 0.
+
+```
+V13  Cơm            =IF(EXACT(H13,"xx"),0,(J13*GIA_COM))
+P13  Trợ cấp lương  =(N13*O13)                          ← O = cột "Hệ số năng suất"
+AJ13 BHYT – NLĐ     =IF(EXACT(H13,"x1"),0,IF(EXACT(H13,"TS"),0,
+                      (IF(TRAN_BHXH_BHYT>0,MIN(N13,TRAN_BHXH_BHYT),N13)*TYLE_BHYT_NLD)))
+BD13 THỰC NHẬN      =ROUND((((((((AF13-AO13)-AP13)-AY13)+AZ13)+BA13)-BB13)-BC13),-3)
+BD6  (tổng)         =SUM(BD13:BD14)
+```
+
+Hằng số của kỳ nằm ở hàng 9/10 ngay trên sheet lương **và** được đặt tên (named range) nên
+công thức đọc được: `GIA_COM`, `TRAN_BHXH_BHYT`, `TYLE_BHXH_NLD`, `GIAMTRU_BANTHAN`,
+`GIAMTRU_NPT`, `NGUONG_COM_MIENTHUE`, `TYLE_KPCD`… Sửa ô `V9` → mọi dòng tính lại.
+
+### Khác biệt UI ↔ Excel mà UI nên biết
+
+| Thứ | Trên UI | Trong file Excel |
+|---|---|---|
+| Giải thích ô | chuỗi `explanation` (hover) | công thức Excel thật (thanh công thức) |
+| Hệ số năng suất | là `field`, không phải cột | **thành cột hiện** (trước "Trợ cấp lương chính") — công thức cần ô để trỏ |
+| Ô sửa tay | cờ `isOverridden` | số cứng, **không có công thức**, tô vàng + comment giải thích |
+| Ghi chú theo cột | panel notes | comment hover trên ô header (hàng 7) + sheet `GHI CHU` |
+
+Cột thêm vào file so với 54 cột của bảng công thức: chỉ **STT** (`=ROW()-12`) và
+**Hệ số năng suất**. Không có cột nào bịa thêm.
