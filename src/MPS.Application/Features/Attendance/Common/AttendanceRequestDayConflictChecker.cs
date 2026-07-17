@@ -43,16 +43,15 @@ public sealed class AttendanceRequestDayConflictChecker
         var wfhExclude = requestKind == AttendanceRequestKind.Wfh ? excludeRequestId : null;
         var lateEarlyExclude = requestKind == AttendanceRequestKind.LateEarly ? excludeRequestId : null;
 
-        var leaveTask = _leaveRepository.HasPendingOrApprovedInRangeAsync(
+        // Await tuần tự — 3 repository share cùng 1 AppDbContext scoped;
+        // EF Core DbContext không thread-safe, chạy song song sẽ throw
+        // "A second operation started on this context before a previous operation completed".
+        var hasLeave = await _leaveRepository.HasPendingOrApprovedInRangeAsync(
             employeeInformationId, startDate, endDate, leaveExclude, cancellationToken);
-        var wfhTask = _wfhRepository.HasPendingOrApprovedInRangeAsync(
+        var hasWfh = await _wfhRepository.HasPendingOrApprovedInRangeAsync(
             employeeInformationId, startDate, endDate, wfhExclude, cancellationToken);
-        var lateEarlyTask = _lateEarlyRepository.HasPendingOrApprovedInRangeAsync(
+        var hasLateEarly = await _lateEarlyRepository.HasPendingOrApprovedInRangeAsync(
             employeeInformationId, startDate, endDate, lateEarlyExclude, cancellationToken);
-
-        var hasLeave = await leaveTask;
-        var hasWfh = await wfhTask;
-        var hasLateEarly = await lateEarlyTask;
 
         if (!hasLeave && !hasWfh && !hasLateEarly) return;
 
