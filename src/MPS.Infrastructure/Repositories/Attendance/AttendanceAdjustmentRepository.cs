@@ -143,7 +143,8 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
             record.CheckOutAt,
             laborLaw.NightStartTime,
             laborLaw.NightEndTime,
-            record.ShiftTemplate);
+            record.ShiftTemplate,
+            record.WorkDate);
         record.DayHours = dayHours;
         record.NightHours = nightHours;
         record.UpdatedAt = nowUtc;
@@ -201,7 +202,8 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
             record.CheckOutAt,
             laborLaw.NightStartTime,
             laborLaw.NightEndTime,
-            record.ShiftTemplate);
+            record.ShiftTemplate,
+            record.WorkDate);
         record.DayHours = dayHours;
         record.NightHours = nightHours;
         record.OverrideReason = adjustment.Reason;

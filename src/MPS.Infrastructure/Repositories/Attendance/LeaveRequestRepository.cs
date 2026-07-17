@@ -141,6 +141,24 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         return entity.Id;
     }
 
+    public Task<bool> HasPendingOrApprovedInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.LeaveRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                && (r.Status == LeaveRequestStatus.Pending || r.Status == LeaveRequestStatus.Approved)
+                && r.StartDate <= endDate
+                && r.EndDate >= startDate);
+        if (excludeRequestId.HasValue)
+            query = query.Where(r => r.Id != excludeRequestId.Value);
+        return query.AnyAsync(cancellationToken);
+    }
+
     public async Task<bool> UpdateAsync(LeaveRequest entity, CancellationToken cancellationToken = default)
     {
         var tracked = await _context.LeaveRequests.FirstOrDefaultAsync(r => r.Id == entity.Id, cancellationToken);

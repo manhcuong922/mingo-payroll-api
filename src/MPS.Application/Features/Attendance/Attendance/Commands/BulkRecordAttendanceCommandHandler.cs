@@ -92,7 +92,8 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                     rowCheckOutAt,
                     laborLaw.NightStartTime,
                     laborLaw.NightEndTime,
-                    shift);
+                    shift,
+                    request.WorkDate);
 
                 if (existing is null)
                 {

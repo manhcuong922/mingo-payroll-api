@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Attendance;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces.Attendance;
@@ -17,6 +18,8 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     private readonly IAttendanceRecordRepository _attendanceRepository;
     private readonly IEmployeeShiftAssignmentRepository _shiftAssignmentRepository;
     private readonly ICurrentUserService _currentUser;
+    private readonly IWorkHourSplitter _splitter;
+    private readonly IComplianceLookupService _complianceLookup;
     private readonly IClock _clock;
     private readonly ILogger<FaceCheckinCommandHandler> _logger;
     private readonly AttendanceCheckinSettings _checkinSettings;
@@ -25,6 +28,8 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         IAttendanceRecordRepository attendanceRepository,
         IEmployeeShiftAssignmentRepository shiftAssignmentRepository,
         ICurrentUserService currentUser,
+        IWorkHourSplitter splitter,
+        IComplianceLookupService complianceLookup,
         IClock clock,
         ILogger<FaceCheckinCommandHandler> logger,
         IOptions<AttendanceCheckinSettings> checkinSettings)
@@ -32,6 +37,8 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         _attendanceRepository = attendanceRepository;
         _shiftAssignmentRepository = shiftAssignmentRepository;
         _currentUser = currentUser;
+        _splitter = splitter;
+        _complianceLookup = complianceLookup;
         _clock = clock;
         _logger = logger;
         _checkinSettings = checkinSettings.Value;
@@ -161,7 +168,16 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         var updateUserId = _currentUser.UserId
             ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
+        // Tính DayHours/NightHours giống hệt luồng chấm công tay
+        // (RecordAttendanceCommandHandler): splitter + break của ca + khung giờ đêm theo luật.
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(workDate, cancellationToken);
+        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+            _splitter, existing.Status, existing.CheckInAt, localTime,
+            laborLaw.NightStartTime, laborLaw.NightEndTime, existing.ShiftTemplate!, workDate);
+
         existing.CheckOutAt      = localTime;
+        existing.DayHours        = dayHours;
+        existing.NightHours      = nightHours;
         existing.UpdatedAt       = _clock.UtcNow;
         existing.UpdatedByUserId = updateUserId;
 

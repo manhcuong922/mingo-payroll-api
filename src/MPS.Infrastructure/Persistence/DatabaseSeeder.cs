@@ -17,17 +17,20 @@ public sealed partial class DatabaseSeeder
     private readonly IPasswordHasher _passwordHasher;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DatabaseSeeder> _logger;
+    private readonly Services.PayrollDemoPeriodGenerator _payrollGenerator;
 
     public DatabaseSeeder(
         AppDbContext context,
         IPasswordHasher passwordHasher,
         IConfiguration configuration,
-        ILogger<DatabaseSeeder> logger)
+        ILogger<DatabaseSeeder> logger,
+        Services.PayrollDemoPeriodGenerator payrollGenerator)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _configuration = configuration;
         _logger = logger;
+        _payrollGenerator = payrollGenerator;
     }
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
@@ -46,8 +49,6 @@ public sealed partial class DatabaseSeeder
         // seed thêm trưởng phòng Kinh doanh + IT (role DepartmentManager) để test auto-routing
         // đơn từ nhân sự: HR tạo → Director; Trưởng phòng tạo → HR.
         await SeedOfficeWorkforceDemoAsync(cancellationToken);
-        // Dọn account/data demo theo công ty IT cũ (ngoài scope sản xuất) khỏi DB đã seed trước đó.
-        await CleanupOutOfScopeDemoAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
@@ -58,9 +59,18 @@ public sealed partial class DatabaseSeeder
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
+        // Module Task (LÕI sản xuất): quy trình mẫu "Khung tranh" + đơn 3 tầng/xưởng (cần xưởng + chức
+        // danh + công nhân đã seed ở trên) — xem DatabaseSeeder.ProductionTaskDemoData.cs.
+        await SeedProductionTaskDemoAsync(cancellationToken);
         // Dữ liệu chấm điểm demo vài kỳ gần nhất (cần tiêu chí + nhân sự đã seed ở trên) —
         // xem DatabaseSeeder.EvaluationDemoData.cs.
         await SeedEvaluationDemoDataAsync(cancellationToken);
+        // HĐ lao động cho TOÀN BỘ workforce xưởng + văn phòng → payroll bao phủ cả công ty (không chỉ
+        // nhóm contract-test). Phải chạy TRƯỚC SeedPayrollAsync — xem DatabaseSeeder.WorkforceContractsData.cs.
+        await SeedWorkforceContractsAsync(cancellationToken);
+        // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
+        // xem DatabaseSeeder.PayrollDemoData.cs.
+        await SeedPayrollAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)
@@ -196,8 +206,7 @@ public sealed partial class DatabaseSeeder
             new() { Code = "BGD", Name = "Ban Giám đốc", Description = "Ban điều hành công ty." },
             new() { Code = "HR", Name = "Phòng Nhân sự", Description = "Quản lý nhân sự, tuyển dụng, chế độ." },
             new() { Code = "ACC", Name = "Phòng Kế toán", Description = "Kế toán, tài chính, lương." },
-            new() { Code = "BIZ", Name = "Phòng Kinh doanh", Description = "Kinh doanh, dự án, khách hàng." },
-            new() { Code = "IT", Name = "Phòng Công nghệ thông tin", Description = "Phát triển & vận hành hệ thống." },
+            new() { Code = "BIZ", Name = "Phòng Kinh doanh", Description = "Kinh doanh, bán hàng, chăm sóc khách hàng." },
         };
 
         var toAdd = seeds.Where(d => !existing.Contains(d.Code)).ToList();
@@ -217,11 +226,12 @@ public sealed partial class DatabaseSeeder
     }
 
     // Dọn phòng ban thừa do migration DepartmentIsActive (bản cũ) seed với Code KHÁC DatabaseSeeder:
-    // KT/NS/KD. DatabaseSeeder là nguồn chính thức (KT→ACC, NS→HR, KD→BIZ). CHỈ xóa khi phòng đó
+    // KT/NS/KD + IT. DatabaseSeeder là nguồn chính thức (KT→ACC, NS→HR, KD→BIZ). IT (phần mềm nội bộ)
+    // bị loại vì công ty là xưởng sản xuất khung tranh, không có phòng CNTT dev. CHỈ xóa khi phòng đó
     // CHƯA có nhân viên gắn vào và CHƯA được đặt làm tổ trưởng — an toàn, không phá dữ liệu thật.
     private async Task CleanupLegacyDepartmentsAsync(CancellationToken cancellationToken)
     {
-        var legacyCodes = new[] { "KT", "NS", "KD" };
+        var legacyCodes = new[] { "KT", "NS", "KD", "IT" };
 
         var legacyDepartments = await _context.Departments
             .Where(d => legacyCodes.Contains(d.Code))
@@ -284,11 +294,6 @@ public sealed partial class DatabaseSeeder
             // Phòng Kinh doanh
             new() { Code = "TPKD", Name = "Trưởng phòng Kinh doanh", Description = "Quản lý phòng Kinh doanh." },
             new() { Code = "SALE", Name = "Nhân viên Kinh doanh", Description = "Kinh doanh, chăm sóc khách hàng." },
-
-            // Phòng IT
-            new() { Code = "TPIT", Name = "Trưởng phòng IT", Description = "Quản lý phòng Công nghệ thông tin." },
-            new() { Code = "DEV", Name = "Lập trình viên", Description = "Phát triển phần mềm." },
-            new() { Code = "QA", Name = "Kiểm thử viên", Description = "Kiểm thử chất lượng phần mềm." },
 
             // Chung
             new() { Code = "TT", Name = "Thực tập sinh", Description = "Thử việc, đào tạo — chưa thuộc phòng ban cố định." },

@@ -52,6 +52,23 @@ public class ExceptionHandlingMiddleware
             await context.Response.WriteAsync(
                 JsonSerializer.Serialize(new { error = nfex.Message }));
         }
+        catch (PayrollNotReadyException prex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.UnprocessableEntity;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = "PAYROLL_NOT_READY",
+                error = prex.Message,
+                notReady = prex.NotReady.Select(r => new
+                {
+                    r.EmployeeInformationId,
+                    r.EmployeeCode,
+                    r.FullName,
+                    r.Missing,
+                }),
+            }, JsonOptions));
+        }
         catch (ConflictException cfex)
         {
             context.Response.StatusCode = (int)HttpStatusCode.Conflict;

@@ -221,9 +221,13 @@ builder.Services.AddCors(options =>
                 .GetSection("Cors:AllowedOrigins")
                 .Get<string[]>() ?? Array.Empty<string>();
 
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              // Không expose thì trình duyệt giấu header này khỏi JS, mọi endpoint tải file
+              // (bảng lương, mẫu phân ca...) mất tên file do server đặt và phải đoán lại ở FE.
+              .WithExposedHeaders("Content-Disposition");
+              
         }
     });
 });

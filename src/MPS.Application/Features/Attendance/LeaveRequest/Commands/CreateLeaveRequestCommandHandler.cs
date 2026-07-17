@@ -27,6 +27,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly IEmployeeShiftAssignmentRepository _shiftAssignmentRepository;
     private readonly IAttendanceEditLockChecker _editLockChecker;
     private readonly LeaveBalanceFallbackResolver _fallbackResolver;
+    private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -39,6 +40,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         IEmployeeShiftAssignmentRepository shiftAssignmentRepository,
         IAttendanceEditLockChecker editLockChecker,
         LeaveBalanceFallbackResolver fallbackResolver,
+        AttendanceRequestDayConflictChecker dayConflictChecker,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -50,6 +52,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _shiftAssignmentRepository = shiftAssignmentRepository;
         _editLockChecker = editLockChecker;
         _fallbackResolver = fallbackResolver;
+        _dayConflictChecker = dayConflictChecker;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -103,6 +106,14 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             LeaveNoticePeriodChecker.EnsureCompliant(leaveType, request.StartDate, today, totalDays);
             await _editLockChecker.EnsureCanModifyAsync(request.StartDate, request.OverrideReason, cancellationToken);
         }
+
+        await _dayConflictChecker.EnsureNoConflictAsync(
+            employeeId,
+            request.StartDate,
+            request.EndDate,
+            AttendanceRequestKind.Leave,
+            excludeRequestId: null,
+            cancellationToken);
 
         var finalType = leaveType;
         var switched = false;

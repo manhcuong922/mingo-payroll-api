@@ -104,7 +104,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
 
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter, request.Status, checkInAt, checkOutAt,
-            laborLaw.NightStartTime, laborLaw.NightEndTime, shift);
+            laborLaw.NightStartTime, laborLaw.NightEndTime, shift, request.WorkDate);
 
         var entity = BuildEntity(request, userId, checkInAt, checkOutAt, dayHours, nightHours);
         entity.ShiftTemplateId = shiftId;

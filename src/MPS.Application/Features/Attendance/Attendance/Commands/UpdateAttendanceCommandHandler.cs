@@ -62,7 +62,8 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
             checkOutAt,
             laborLaw.NightStartTime,
             laborLaw.NightEndTime,
-            existing.ShiftTemplate);
+            existing.ShiftTemplate,
+            existing.WorkDate);
 
         existing.CheckInAt = checkInAt;
         existing.CheckOutAt = checkOutAt;

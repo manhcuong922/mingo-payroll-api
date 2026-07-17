@@ -47,4 +47,16 @@ public interface IWfhRequestRepository
         DateOnly startDate,
         DateOnly endDate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Trả về true nếu tồn tại đơn WFH Pending hoặc Approved của employee
+    /// chồng lấp bất kỳ ngày nào trong khoảng [startDate, endDate].
+    /// Dùng cho cross-check chống trùng ngày giữa Leave/WFH/LateEarly.
+    /// </summary>
+    Task<bool> HasPendingOrApprovedInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default);
 }
