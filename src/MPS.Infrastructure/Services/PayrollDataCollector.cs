@@ -75,7 +75,6 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var contracts = await _db.Contracts.AsNoTracking()
             .Include(c => c.ContractAllowances).ThenInclude(a => a.AllowanceType)
             .Where(c => empIds.Contains(c.EmployeeInformationId)
-                && c.EmployerPartyId == req.EmployerPartyId
                 && c.Status != ContractEnums.ContractStatus.Cancelled)
             .ToListAsync(ct);
         var contractsByEmp = contracts.GroupBy(c => c.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());

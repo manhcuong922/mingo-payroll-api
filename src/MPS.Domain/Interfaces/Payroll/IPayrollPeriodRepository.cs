@@ -11,10 +11,10 @@ public interface IPayrollPeriodRepository
     Task<PayrollPeriod?> GetFullAsync(int id, bool asNoTracking, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PayrollPeriod>> GetAllAsync(int? year, int? month, CancellationToken cancellationToken = default);
-    Task<bool> ExistsForPeriodAsync(int employerPartyId, int year, int month, CancellationToken cancellationToken = default);
+    Task<bool> ExistsForPeriodAsync(int year, int month, CancellationToken cancellationToken = default);
 
     /// <summary>Kỳ liền trước cùng công ty (dùng diff đổi luật). Kèm ComplianceRefs.</summary>
-    Task<PayrollPeriod?> GetPreviousAsync(int employerPartyId, int year, int month, CancellationToken cancellationToken = default);
+    Task<PayrollPeriod?> GetPreviousAsync(int year, int month, CancellationToken cancellationToken = default);
 
     /// <summary>Persist toàn bộ aggregate (rows/cells/notes/refs) trong 1 transaction.</summary>
     Task<int> AddAsync(PayrollPeriod period, CancellationToken cancellationToken = default);

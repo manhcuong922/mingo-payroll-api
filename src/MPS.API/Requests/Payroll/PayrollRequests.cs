@@ -1,7 +1,6 @@
 namespace MPS.API.Requests.Payroll;
 
 public sealed record CreatePayrollPeriodRequest(
-    int EmployerPartyId,
     int Year,
     int Month,
     int? FormulaSetId,

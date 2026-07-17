@@ -45,9 +45,9 @@ public sealed class PayrollDemoPeriodGenerator
     }
 
     /// <summary>Trả về Id kỳ vừa sinh, hoặc null nếu bỏ qua (đã tồn tại / thiếu liệu / không có NV).</summary>
-    public async Task<int?> TryGenerateAsync(int employerPartyId, int year, int month, int userId, CancellationToken ct)
+    public async Task<int?> TryGenerateAsync(int year, int month, int userId, CancellationToken ct)
     {
-        if (await _periods.ExistsForPeriodAsync(employerPartyId, year, month, ct))
+        if (await _periods.ExistsForPeriodAsync(year, month, ct))
         {
             _logger.LogDebug("Payroll demo: kỳ {Month:D2}/{Year} đã tồn tại; bỏ qua.", month, year);
             return null;
@@ -60,11 +60,10 @@ public sealed class PayrollDemoPeriodGenerator
             return null;
         }
 
-        var readiness = await _readiness.CheckAsync(new PayrollReadinessRequest(employerPartyId, year, month), ct);
+        var readiness = await _readiness.CheckAsync(new PayrollReadinessRequest(year, month), ct);
         if (readiness.Count == 0)
         {
-            _logger.LogWarning("Payroll demo: không có NV cần tính lương kỳ {Month:D2}/{Year} (party {Party}).",
-                month, year, employerPartyId);
+            _logger.LogWarning("Payroll demo: không có NV cần tính lương kỳ {Month:D2}/{Year}.", month, year);
             return null;
         }
         var notReady = readiness.Where(r => !r.IsReady).ToList();
@@ -82,7 +81,7 @@ public sealed class PayrollDemoPeriodGenerator
         var standardDays = PayrollWorkingDays.CountWeekdays(year, month);
 
         var collection = await _collector.CollectAsync(
-            new PayrollCollectionRequest(employerPartyId, year, month, payDate, standardDays, readyIds), ct);
+            new PayrollCollectionRequest(year, month, payDate, standardDays, readyIds), ct);
 
         var columns = formulaSet.Columns.ToList();
         var plan = PayrollColumnPlan.Build(columns, _graph);
@@ -90,7 +89,6 @@ public sealed class PayrollDemoPeriodGenerator
 
         var period = new PayrollPeriod
         {
-            EmployerPartyId = employerPartyId,
             PeriodYear = year,
             PeriodMonth = month,
             PayDate = payDate,
@@ -136,7 +134,7 @@ public sealed class PayrollDemoPeriodGenerator
         _calculator.ComputeTotals(plan, employeeRows, totalRow);
         period.Rows.Add(totalRow);
 
-        var previous = await _periods.GetPreviousAsync(employerPartyId, year, month, ct);
+        var previous = await _periods.GetPreviousAsync(year, month, ct);
         foreach (var note in _noteBuilder.Build(collection.ComplianceRefs, previous?.ComplianceRefs.ToList()))
             period.Notes.Add(note);
 

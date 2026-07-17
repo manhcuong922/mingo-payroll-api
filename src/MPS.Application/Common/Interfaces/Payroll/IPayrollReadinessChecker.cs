@@ -1,7 +1,7 @@
 namespace MPS.Application.Common.Interfaces.Payroll;
 
 /// <summary>Yêu cầu kiểm tra đủ liệu cho 1 kỳ lương (công ty + tháng).</summary>
-public sealed record PayrollReadinessRequest(int EmployerPartyId, int Year, int Month);
+public sealed record PayrollReadinessRequest(int Year, int Month);
 
 /// <summary>Kết quả đủ liệu 1 nhân viên. <c>Missing</c> rỗng ⇒ đủ.</summary>
 public sealed record PayrollEmployeeReadiness(

@@ -21,7 +21,7 @@ public sealed class PayrollExcelBookBuilder
 
     private sealed record ParamSnap(string Key, string Name, decimal Value);
 
-    public PayrollExcelBook Build(PayrollPeriod period, string companyName)
+    public PayrollExcelBook Build(PayrollPeriod period)
     {
         var columns = PayrollColumnSnapshotMapper.Deserialize(period.FormulaSnapshotJson)
             .OrderBy(c => c.DisplayOrder).ToList();
@@ -70,7 +70,7 @@ public sealed class PayrollExcelBookBuilder
         var notes = MapNotes(period);
 
         return new PayrollExcelBook(
-            companyName, period.PeriodYear, period.PeriodMonth, period.Status.ToString(),
+            period.PeriodYear, period.PeriodMonth, period.Status.ToString(),
             period.StandardWorkingDays, laidOut, dataRows, totals, constants, brackets,
             notes, MapComplianceRefs(period));
     }

@@ -19,8 +19,6 @@ public class PayrollPeriodEntityConfiguration : IEntityTypeConfiguration<Payroll
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.RowVersion).IsRowVersion();
 
-        builder.HasOne(e => e.EmployerParty).WithMany().HasForeignKey(e => e.EmployerPartyId)
-            .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(e => e.FormulaSet).WithMany().HasForeignKey(e => e.FormulaSetId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(e => e.CreatedByUser).WithMany().HasForeignKey(e => e.CreatedByUserId)
@@ -35,7 +33,8 @@ public class PayrollPeriodEntityConfiguration : IEntityTypeConfiguration<Payroll
         builder.HasMany(e => e.Notes).WithOne(n => n.PayrollPeriod).HasForeignKey(n => n.PayrollPeriodId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(e => new { e.EmployerPartyId, e.PeriodYear, e.PeriodMonth }).IsUnique();
+        // 1 công ty ⇒ mỗi tháng đúng 1 kỳ lương.
+        builder.HasIndex(e => new { e.PeriodYear, e.PeriodMonth }).IsUnique();
     }
 }
 

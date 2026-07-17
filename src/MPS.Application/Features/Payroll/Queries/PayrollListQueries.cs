@@ -6,7 +6,7 @@ using MPS.Domain.Interfaces.Payroll;
 namespace MPS.Application.Features.Payroll.Queries;
 
 // ===== Đủ liệu (preview trước khi tạo) =====
-public sealed record GetPayrollReadinessQuery(int EmployerPartyId, int Year, int Month)
+public sealed record GetPayrollReadinessQuery(int Year, int Month)
     : IRequest<IReadOnlyList<PayrollReadinessDto>>;
 
 public sealed class GetPayrollReadinessQueryHandler
@@ -18,7 +18,7 @@ public sealed class GetPayrollReadinessQueryHandler
     public async Task<IReadOnlyList<PayrollReadinessDto>> Handle(GetPayrollReadinessQuery request, CancellationToken ct)
     {
         var result = await _readiness.CheckAsync(
-            new PayrollReadinessRequest(request.EmployerPartyId, request.Year, request.Month), ct);
+            new PayrollReadinessRequest(request.Year, request.Month), ct);
         return result.Select(r => new PayrollReadinessDto(
             r.EmployeeInformationId, r.EmployeeCode, r.FullName, r.IsReady, r.Missing)).ToList();
     }

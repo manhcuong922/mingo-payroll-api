@@ -5,16 +5,16 @@ using MPS.Domain.Enums.Payroll;
 namespace MPS.Domain.Entities.Payroll;
 
 /// <summary>
-/// 1 kỳ lương = (công ty, năm, tháng). Mỗi NV 1 dòng + 1 dòng tổng. Khi tạo: snapshot bảng công
-/// thức + version compliance + tham số + bảng hệ số năng suất để tái lập bất biến.
+/// 1 kỳ lương = (năm, tháng) — hệ thống dùng cho DUY NHẤT 1 công ty nên kỳ không gắn bên ký hợp
+/// đồng: mỗi tháng đúng 1 kỳ, phủ MỌI nhân viên có HĐ hiệu lực. (ContractParty chỉ là phiên bản
+/// bên ký/người đại diện theo thời kỳ; lọc kỳ lương theo nó sẽ bỏ sót nhân viên.)
+/// Mỗi NV 1 dòng + 1 dòng tổng. Khi tạo: snapshot bảng công thức + version compliance + bảng hệ
+/// số năng suất để tái lập bất biến.
 /// </summary>
 [Auditable]
 public class PayrollPeriod
 {
     public int Id { get; set; }
-
-    public int EmployerPartyId { get; set; }
-    public ContractParty EmployerParty { get; set; } = null!;
 
     public int PeriodYear { get; set; }
     public int PeriodMonth { get; set; }

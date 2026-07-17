@@ -19,10 +19,7 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
 
     public Task<PayrollPeriod?> GetFullAsync(int id, bool asNoTracking, CancellationToken ct = default)
     {
-        // EmployerParty: export cần tên công ty cho tiêu đề. Join 1 dòng, không đáng kể so với
-        // Rows→Cells bên dưới, nên dùng chung thay vì đẻ thêm 1 query song song.
         var q = _context.PayrollPeriods
-            .Include(p => p.EmployerParty)
             .Include(p => p.ComplianceRefs)
             .Include(p => p.Notes)
             .Include(p => p.Rows).ThenInclude(r => r.Cells)
@@ -40,16 +37,16 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
         return await q.OrderByDescending(p => p.PeriodYear).ThenByDescending(p => p.PeriodMonth).ToListAsync(ct);
     }
 
-    public Task<bool> ExistsForPeriodAsync(int employerPartyId, int year, int month, CancellationToken ct = default) =>
+    public Task<bool> ExistsForPeriodAsync(int year, int month, CancellationToken ct = default) =>
         _context.PayrollPeriods.AsNoTracking()
-            .AnyAsync(p => p.EmployerPartyId == employerPartyId && p.PeriodYear == year && p.PeriodMonth == month, ct);
+            .AnyAsync(p => p.PeriodYear == year && p.PeriodMonth == month, ct);
 
-    public Task<PayrollPeriod?> GetPreviousAsync(int employerPartyId, int year, int month, CancellationToken ct = default)
+    public Task<PayrollPeriod?> GetPreviousAsync(int year, int month, CancellationToken ct = default)
     {
         var current = year * 12 + month;
         return _context.PayrollPeriods.AsNoTracking()
             .Include(p => p.ComplianceRefs)
-            .Where(p => p.EmployerPartyId == employerPartyId && (p.PeriodYear * 12 + p.PeriodMonth) < current)
+            .Where(p => (p.PeriodYear * 12 + p.PeriodMonth) < current)
             .OrderByDescending(p => p.PeriodYear * 12 + p.PeriodMonth)
             .FirstOrDefaultAsync(ct);
     }

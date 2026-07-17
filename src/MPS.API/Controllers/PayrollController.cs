@@ -19,8 +19,8 @@ public class PayrollController : ControllerBase
     [HttpGet("periods/readiness")]
     [HasPermission(Permissions.PayrollReadAll)]
     public async Task<IActionResult> GetReadiness(
-        [FromQuery] int employerPartyId, [FromQuery] int year, [FromQuery] int month, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetPayrollReadinessQuery(employerPartyId, year, month), ct));
+        [FromQuery] int year, [FromQuery] int month, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetPayrollReadinessQuery(year, month), ct));
 
     [HttpGet("periods")]
     [HasPermission(Permissions.PayrollReadAll)]
@@ -51,7 +51,7 @@ public class PayrollController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreatePayrollPeriodRequest request, CancellationToken ct)
     {
         var id = await _mediator.Send(new CreatePayrollPeriodCommand(
-            request.EmployerPartyId, request.Year, request.Month, request.FormulaSetId, request.StandardWorkingDays), ct);
+            request.Year, request.Month, request.FormulaSetId, request.StandardWorkingDays), ct);
         return CreatedAtAction(nameof(GetSheet), new { id }, new { id });
     }
 

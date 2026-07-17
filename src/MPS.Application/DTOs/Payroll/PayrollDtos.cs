@@ -45,7 +45,6 @@ public sealed record PayrollComplianceRefDto(
 
 public sealed record PayrollSheetDto(
     int Id,
-    int EmployerPartyId,
     int PeriodYear,
     int PeriodMonth,
     DateOnly PayDate,

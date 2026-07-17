@@ -99,14 +99,8 @@ public sealed partial class DatabaseSeeder
     {
         if (await _context.PayrollPeriods.AsNoTracking().AnyAsync(ct)) return;
 
-        // Party demo = pháp nhân có nhiều HĐ Active nhất (party mặc định thường 0 HĐ → readiness rỗng).
-        var partyId = await _context.Contracts.AsNoTracking()
-            .Where(c => c.Status == ContractEnums.ContractStatus.Active)
-            .GroupBy(c => c.EmployerPartyId)
-            .OrderByDescending(g => g.Count())
-            .Select(g => (int?)g.Key)
-            .FirstOrDefaultAsync(ct);
-        if (partyId is null)
+        if (!await _context.Contracts.AsNoTracking()
+                .AnyAsync(c => c.Status == ContractEnums.ContractStatus.Active, ct))
         {
             _logger.LogWarning("Payroll demo: không có HĐ Active nào; bỏ qua sinh kỳ lương demo.");
             return;
@@ -128,10 +122,10 @@ public sealed partial class DatabaseSeeder
             var anchor = new DateOnly(now.Year, now.Month, 1).AddMonths(-back);
             int year = anchor.Year, month = anchor.Month;
 
-            await PreparePayrollMonthDataAsync(partyId.Value, year, month, shiftTemplateId.Value, adminId, ct);
+            await PreparePayrollMonthDataAsync(year, month, shiftTemplateId.Value, adminId, ct);
             try
             {
-                var id = await _payrollGenerator.TryGenerateAsync(partyId.Value, year, month, adminId, ct);
+                var id = await _payrollGenerator.TryGenerateAsync(year, month, adminId, ct);
                 if (id is not null) generated++;
             }
             catch (Exception ex)
@@ -141,14 +135,13 @@ public sealed partial class DatabaseSeeder
             }
         }
 
-        _logger.LogInformation("Payroll demo: đã sinh {Count}/{Total} kỳ lương cho party {Party}.",
-            generated, PayrollDemoMonths, partyId);
+        _logger.LogInformation("Payroll demo: đã sinh {Count}/{Total} kỳ lương.", generated, PayrollDemoMonths);
     }
 
     // Chuẩn bị chấm công (đủ ngày công) + đánh giá tháng Approved + hồ sơ chi lương cho MỌI NV trong phạm
-    // vi readiness (HĐ non-Cancelled dưới party, overlap kỳ) → readiness pass để engine sinh được kỳ.
+    // vi readiness (HĐ non-Cancelled overlap kỳ) → readiness pass để engine sinh được kỳ.
     private async Task PreparePayrollMonthDataAsync(
-        int partyId, int year, int month, int shiftTemplateId, int adminId, CancellationToken ct)
+        int year, int month, int shiftTemplateId, int adminId, CancellationToken ct)
     {
         var periodStart = new DateOnly(year, month, 1);
         var periodEnd = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
@@ -156,8 +149,7 @@ public sealed partial class DatabaseSeeder
         var endDt = periodEnd.ToDateTime(TimeOnly.MaxValue);
 
         var empIds = await _context.Contracts.AsNoTracking()
-            .Where(c => c.EmployerPartyId == partyId
-                && c.Status != ContractEnums.ContractStatus.Cancelled
+            .Where(c => c.Status != ContractEnums.ContractStatus.Cancelled
                 && c.EffectiveFrom <= endDt && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
             .Select(c => c.EmployeeInformationId).Distinct().ToListAsync(ct);
         if (empIds.Count == 0) return;

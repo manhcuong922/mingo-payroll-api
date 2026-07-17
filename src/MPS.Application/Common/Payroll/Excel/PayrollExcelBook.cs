@@ -61,7 +61,6 @@ public sealed record PayrollExcelConstant(
 /// Tách vậy để test được toàn bộ logic bố cục + công thức mà không cần mở file Excel.
 /// </summary>
 public sealed record PayrollExcelBook(
-    string CompanyName,
     int PeriodYear,
     int PeriodMonth,
     string Status,

@@ -21,8 +21,7 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
         var endDt = periodEnd.ToDateTime(TimeOnly.MaxValue);
 
         var contracts = await _db.Contracts.AsNoTracking()
-            .Where(c => c.EmployerPartyId == req.EmployerPartyId
-                && c.Status != ContractStatus.Cancelled
+            .Where(c => c.Status != ContractStatus.Cancelled
                 && c.EffectiveFrom <= endDt
                 && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
             .Select(c => new { c.EmployeeInformationId, c.Status })

@@ -126,7 +126,7 @@ public sealed class PayrollExcelBookBuilderTests
     }
 
     private static PayrollExcelBook Build(PayrollPeriod period) =>
-        new PayrollExcelBookBuilder(new PayrollFieldCatalog()).Build(period, "Công ty TNHH Mingo");
+        new PayrollExcelBookBuilder(new PayrollFieldCatalog()).Build(period);
 
     private static PayrollExcelColumn Column(PayrollExcelBook book, string code) =>
         book.Columns.Single(c => c.ColumnCode == code);

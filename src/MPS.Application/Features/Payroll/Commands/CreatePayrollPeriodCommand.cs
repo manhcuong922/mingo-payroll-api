@@ -14,7 +14,6 @@ namespace MPS.Application.Features.Payroll.Commands;
 
 /// <summary>Tạo kỳ lương: chặn nếu thiếu liệu; snapshot compliance/param/công thức; tính mọi dòng + ghi chú.</summary>
 public sealed record CreatePayrollPeriodCommand(
-    int EmployerPartyId,
     int Year,
     int Month,
     int? FormulaSetId,
@@ -56,7 +55,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         if (request.Month is < 1 or > 12)
             throw new DomainValidationException("Tháng không hợp lệ.");
 
-        if (await _periods.ExistsForPeriodAsync(request.EmployerPartyId, request.Year, request.Month, ct))
+        if (await _periods.ExistsForPeriodAsync(request.Year, request.Month, ct))
             throw new ConflictException($"Kỳ lương {request.Month:D2}/{request.Year} đã tồn tại.");
 
         var formulaSet = request.FormulaSetId.HasValue
@@ -67,7 +66,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
 
         // ===== Cổng đủ liệu — chặn cả kỳ nếu thiếu =====
         var readiness = await _readiness.CheckAsync(
-            new PayrollReadinessRequest(request.EmployerPartyId, request.Year, request.Month), ct);
+            new PayrollReadinessRequest(request.Year, request.Month), ct);
         if (readiness.Count == 0)
             throw new DomainValidationException("Không có nhân viên nào cần tính lương trong kỳ (chưa có HĐ hiệu lực).");
         var notReady = readiness.Where(r => !r.IsReady).ToList();
@@ -81,7 +80,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         var standardDays = request.StandardWorkingDays ?? PayrollWorkingDays.CountWeekdays(request.Year, request.Month);
 
         var collection = await _collector.CollectAsync(
-            new PayrollCollectionRequest(request.EmployerPartyId, request.Year, request.Month, payDate, standardDays, readyIds), ct);
+            new PayrollCollectionRequest(request.Year, request.Month, payDate, standardDays, readyIds), ct);
 
         var columns = formulaSet.Columns.ToList();
         var plan = PayrollColumnPlan.Build(columns, _graph);
@@ -89,7 +88,6 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
 
         var period = new PayrollPeriod
         {
-            EmployerPartyId = request.EmployerPartyId,
             PeriodYear = request.Year,
             PeriodMonth = request.Month,
             PayDate = payDate,
@@ -139,7 +137,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         period.Rows.Add(totalRow);
 
         // ===== Ghi chú: trần/ngưỡng + thay đổi luật so kỳ trước =====
-        var previous = await _periods.GetPreviousAsync(request.EmployerPartyId, request.Year, request.Month, ct);
+        var previous = await _periods.GetPreviousAsync(request.Year, request.Month, ct);
         foreach (var note in _noteBuilder.Build(collection.ComplianceRefs, previous?.ComplianceRefs.ToList()))
             period.Notes.Add(note);
 

@@ -4041,9 +4041,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("CreatedByUserId")
                         .HasColumnType("int");
 
-                    b.Property<int>("EmployerPartyId")
-                        .HasColumnType("int");
-
                     b.Property<int>("FormulaSetId")
                         .HasColumnType("int");
 
@@ -4098,7 +4095,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UpdatedByUserId");
 
-                    b.HasIndex("EmployerPartyId", "PeriodYear", "PeriodMonth")
+                    b.HasIndex("PeriodYear", "PeriodMonth")
                         .IsUnique();
 
                     b.ToTable("PayrollPeriods", (string)null);
@@ -8769,12 +8766,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("MPS.Domain.Entities.ContractParty", "EmployerParty")
-                        .WithMany()
-                        .HasForeignKey("EmployerPartyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("MPS.Domain.Entities.Payroll.PayrollFormulaSet", "FormulaSet")
                         .WithMany()
                         .HasForeignKey("FormulaSetId")
@@ -8787,8 +8778,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("CreatedByUser");
-
-                    b.Navigation("EmployerParty");
 
                     b.Navigation("FormulaSet");
 

@@ -59,7 +59,7 @@ public sealed class PayrollExcelExporterTests
         };
 
         return new PayrollExcelBook(
-            "Công ty TNHH Mingo", 2023, 8, "Draft", 23m,
+            2023, 8, "Draft", 23m,
             columns, rows, totals,
             constants ?? new List<PayrollExcelConstant>
             {

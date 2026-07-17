@@ -63,7 +63,7 @@ public static class PayrollSheetMapper
             .ToList();
 
         return new PayrollSheetDto(
-            period.Id, period.EmployerPartyId, period.PeriodYear, period.PeriodMonth,
+            period.Id, period.PeriodYear, period.PeriodMonth,
             period.PayDate, period.StandardWorkingDays, period.Status.ToString(),
             columns, rows, notes, refs);
     }

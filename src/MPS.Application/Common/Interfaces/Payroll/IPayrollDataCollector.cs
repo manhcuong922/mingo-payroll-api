@@ -5,7 +5,6 @@ using MPS.Domain.Entities.Payroll;
 namespace MPS.Application.Common.Interfaces.Payroll;
 
 public sealed record PayrollCollectionRequest(
-    int EmployerPartyId,
     int Year,
     int Month,
     DateOnly PayDate,

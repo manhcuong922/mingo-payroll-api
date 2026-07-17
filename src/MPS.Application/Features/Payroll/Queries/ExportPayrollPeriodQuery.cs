@@ -35,8 +35,7 @@ public sealed class ExportPayrollPeriodQueryHandler
         var period = await _periods.GetFullAsync(request.PeriodId, asNoTracking: true, ct)
             ?? throw new NotFoundException($"Không tìm thấy kỳ lương #{request.PeriodId}.");
 
-        var companyName = period.EmployerParty?.LegalName ?? string.Empty;
-        var book = new PayrollExcelBookBuilder(_catalog).Build(period, companyName);
+        var book = new PayrollExcelBookBuilder(_catalog).Build(period);
 
         return new PayrollExportFileDto(_exporter.Build(book), book.FileName, XlsxContentType);
     }

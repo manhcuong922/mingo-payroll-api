@@ -48,7 +48,6 @@ internal static class PayrollExcelSalarySheet
 
     private static void AppendTitle(SheetData sd, PayrollExcelBook book)
     {
-        sd.Append(C.Row(L.RowTitle, C.Text("A1", book.CompanyName, S.Title)));
         sd.Append(C.Row(L.RowSubTitle,
             C.Text("A2", $"BẢNG LƯƠNG THÁNG {book.PeriodMonth:00}/{book.PeriodYear}", S.Title)));
         sd.Append(C.Row(L.RowPeriod,
