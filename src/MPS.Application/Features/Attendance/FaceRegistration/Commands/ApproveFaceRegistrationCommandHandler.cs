@@ -50,16 +50,7 @@ public class ApproveFaceRegistrationCommandHandler
         var photoUrl = await _storage.GeneratePresignedDownloadUrlAsync(
             entity.PhotoObjectKey, TimeSpan.FromMinutes(15), cancellationToken: cancellationToken);
 
-        return new FaceRegistrationDto(
-            entity.Id,
-            entity.EmployeeInformationId,
-            entity.EmployeeInformation?.FullName ?? string.Empty,
-            photoUrl,
-            entity.Status,
-            entity.RejectReason,
-            entity.SubmittedAt,
-            entity.ReviewedAt,
-            entity.ReviewedByUser?.FullName);
+        return entity.ToDto(photoUrl);
     }
 }
 

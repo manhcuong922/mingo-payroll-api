@@ -45,16 +45,7 @@ public class GetMyFaceRegistrationsQueryHandler
             var photoUrl = await _storage.GeneratePresignedDownloadUrlAsync(
                 item.PhotoObjectKey, TimeSpan.FromMinutes(15), cancellationToken: cancellationToken);
 
-            dtos.Add(new FaceRegistrationDto(
-                item.Id,
-                item.EmployeeInformationId,
-                item.EmployeeInformation?.FullName ?? string.Empty,
-                photoUrl,
-                item.Status,
-                item.RejectReason,
-                item.SubmittedAt,
-                item.ReviewedAt,
-                item.ReviewedByUser?.FullName));
+            dtos.Add(item.ToDto(photoUrl));
         }
 
         return dtos;

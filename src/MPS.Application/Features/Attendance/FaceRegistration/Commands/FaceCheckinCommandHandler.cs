@@ -52,49 +52,92 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         var utcTime    = DateTime.SpecifyKind(request.CheckinTime, DateTimeKind.Utc);
         var vnZone     = TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh");
         var localTime  = TimeZoneInfo.ConvertTimeFromUtc(utcTime, vnZone);
-        var workDate   = DateOnly.FromDateTime(localTime);
+        var scanDate   = DateOnly.FromDateTime(localTime);
 
         _logger.LogInformation(
-            "[FaceCheckin] employeeId={EmployeeId} checkinTimeRaw={Raw} utcTime={Utc} vnTime={Local} workDate={WorkDate}",
-            employeeInformationId, request.CheckinTime, utcTime, localTime, workDate);
+            "[FaceCheckin] employeeId={EmployeeId} checkinTimeRaw={Raw} utcTime={Utc} vnTime={Local} scanDate={ScanDate}",
+            employeeInformationId, request.CheckinTime, utcTime, localTime, scanDate);
 
-        var assignments = await _shiftAssignmentRepository.GetByEmployeeAndDateAsync(
-            employeeInformationId, workDate, cancellationToken);
-
-        _logger.LogInformation(
-            "[FaceCheckin] shift lookup: employeeId={EmployeeId} workDate={WorkDate} → {Count} assignment(s)",
-            employeeInformationId, workDate, assignments.Count);
-
-        if (assignments.Count == 0)
-            return Fail($"Nhân viên {employeeInformationId} chưa được phân ca cho ngày {workDate:yyyy-MM-dd}.");
-
-        var shift = assignments[0]; // ca sớm nhất trong ngày
-
-        // ── Kiểm tra cửa sổ thời gian ────────────────────────────────────────────
-        var vnNow        = localTime.TimeOfDay;
-        var shiftStart   = shift.ShiftTemplate.StartTime.ToTimeSpan();
-        var shiftEnd     = shift.ShiftTemplate.EndTime.ToTimeSpan();
-        var earliestOpen = shiftStart - TimeSpan.FromMinutes(_checkinSettings.EarlyCheckinMinutes);
-        if (earliestOpen < TimeSpan.Zero) earliestOpen = TimeSpan.Zero;
-        var latestClose  = shiftEnd + TimeSpan.FromMinutes(_checkinSettings.LateCheckoutMinutes);
-
-        if (vnNow < earliestOpen)
+        // Ca đêm (EndTime ≤ StartTime) kéo sang ngày hôm sau — quy ước chung của
+        // module attendance (xem AttendanceHourCalculator.ClampToShiftWindow) — nên
+        // thời điểm quét lúc rạng sáng có thể thuộc ca của NGÀY HÔM TRƯỚC. Gom
+        // assignment của hôm qua lẫn hôm nay rồi chọn theo cửa sổ chấm công tuyệt đối.
+        var candidates = new List<ShiftWindow>();
+        foreach (var date in new[] { scanDate.AddDays(-1), scanDate })
         {
-            var opensAt = TimeOnly.FromTimeSpan(earliestOpen);
-            return Fail(
-                $"Chưa đến giờ chấm công. Ca bắt đầu lúc {shift.ShiftTemplate.StartTime:HH\\:mm}, " +
-                $"mở cổng từ {opensAt:HH\\:mm}.");
+            var assignments = await _shiftAssignmentRepository.GetByEmployeeAndDateAsync(
+                employeeInformationId, date, cancellationToken);
+
+            foreach (var assignment in assignments)
+            {
+                var template = assignment.ShiftTemplate;
+                var startAt  = date.ToDateTime(template.StartTime);
+                var endAt    = template.EndTime <= template.StartTime
+                    ? date.AddDays(1).ToDateTime(template.EndTime)
+                    : date.ToDateTime(template.EndTime);
+
+                candidates.Add(new ShiftWindow(
+                    date, assignment, startAt, endAt,
+                    OpenAt:  startAt.AddMinutes(-_checkinSettings.EarlyCheckinMinutes),
+                    CloseAt: endAt.AddMinutes(_checkinSettings.LateCheckoutMinutes)));
+            }
         }
 
-        if (vnNow > latestClose)
+        _logger.LogInformation(
+            "[FaceCheckin] shift lookup: employeeId={EmployeeId} scanDate={ScanDate} → {Count} assignment(s) (gồm cả hôm trước)",
+            employeeInformationId, scanDate, candidates.Count);
+
+        if (candidates.Count == 0)
+            return Fail($"Nhân viên {employeeInformationId} chưa được phân ca cho ngày {scanDate:yyyy-MM-dd}.");
+
+        // ── Chọn ca có cửa sổ chấm công chứa thời điểm quét ──────────────────────
+        var inWindow = candidates
+            .Where(c => localTime >= c.OpenAt && localTime <= c.CloseAt)
+            .OrderBy(c => c.StartAt)
+            .ToList();
+
+        if (inWindow.Count == 0)
         {
+            var next = candidates.Where(c => localTime < c.OpenAt).OrderBy(c => c.OpenAt).FirstOrDefault();
+            if (next is not null)
+            {
+                return Fail(
+                    $"Chưa đến giờ chấm công. Ca bắt đầu lúc {next.Assignment.ShiftTemplate.StartTime:HH\\:mm}, " +
+                    $"mở cổng từ {TimeOnly.FromDateTime(next.OpenAt):HH\\:mm}.");
+            }
+
+            var last = candidates.OrderByDescending(c => c.CloseAt).First();
             return Fail(
-                $"Đã quá giờ chấm công. Ca kết thúc lúc {shift.ShiftTemplate.EndTime:HH\\:mm}, " +
+                $"Đã quá giờ chấm công. Ca kết thúc lúc {last.Assignment.ShiftTemplate.EndTime:HH\\:mm}, " +
                 $"đóng cổng sau {_checkinSettings.LateCheckoutMinutes / 60} giờ.");
         }
 
-        var existing = await _attendanceRepository.GetByKeyAsync(
-            employeeInformationId, workDate, shift.ShiftTemplateId, cancellationToken);
+        // Nhiều ca cùng mở cổng (cửa sổ chồng nhau) → ưu tiên ca đang chờ checkout,
+        // rồi ca chưa chấm công, cuối cùng mới tới ca đã hoàn thành.
+        var chosen   = inWindow[0];
+        var existing = default(AttendanceRecord);
+        var bestRank = int.MaxValue;
+        foreach (var candidate in inWindow)
+        {
+            var record = await _attendanceRepository.GetByKeyAsync(
+                employeeInformationId, candidate.WorkDate, candidate.Assignment.ShiftTemplateId, cancellationToken);
+            var rank = record switch
+            {
+                { CheckInAt: not null, CheckOutAt: null } => 0,
+                null => 1,
+                _ => 2,
+            };
+            if (rank < bestRank)
+            {
+                bestRank = rank;
+                chosen   = candidate;
+                existing = record;
+                if (rank == 0) break;
+            }
+        }
+
+        var workDate = chosen.WorkDate;
+        var shift    = chosen.Assignment;
 
         // ── Case 1: Chưa có record → Chấm công vào ca ────────────────────────────
         if (existing is null)
@@ -196,4 +239,17 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
 
     private static FaceCheckinResultDto Fail(string message) =>
         new(false, FaceCheckinType.Failed, null, message, null, null, null, null);
+
+    /// <summary>
+    /// Cửa sổ chấm công tuyệt đối của 1 assignment: StartAt/EndAt là giờ ca gắn với
+    /// ngày cụ thể (ca đêm → EndAt sang ngày hôm sau); OpenAt/CloseAt nới thêm
+    /// EarlyCheckinMinutes/LateCheckoutMinutes.
+    /// </summary>
+    private sealed record ShiftWindow(
+        DateOnly WorkDate,
+        EmployeeShiftAssignment Assignment,
+        DateTime StartAt,
+        DateTime EndAt,
+        DateTime OpenAt,
+        DateTime CloseAt);
 }
