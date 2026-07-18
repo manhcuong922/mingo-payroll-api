@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MPS.Domain.Enums.Contract;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.Persistence;
 
@@ -37,6 +38,17 @@ public sealed class ContractLookupReader : IContractLookupReader
             .Where(e => e.UserId == userId)
             .Select(e => (int?)e.Id)
             .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<DateTime?> GetEmployeeJoinDateAsync(int employeeInformationId, CancellationToken cancellationToken)
+    {
+        var dates = await _context.Contracts
+            .AsNoTracking()
+            .Where(c => c.EmployeeInformationId == employeeInformationId
+                && c.Status != ContractStatus.Cancelled)
+            .Select(c => c.EffectiveFrom)
+            .ToListAsync(cancellationToken);
+        return dates.Count == 0 ? null : dates.Min();
+    }
 
     public Task<bool> IsActiveUserAsync(int userId, CancellationToken cancellationToken) =>
         _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && u.Status == 1, cancellationToken);

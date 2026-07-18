@@ -59,6 +59,16 @@ public sealed class AppendixSchemaValidatorTests
             .WithMessage("*FORBIDDEN_APPENDIX_KEY*ContractCategory*");
     }
 
+    /// <summary>Cấm "Kind" — không thể đổi loại HĐ (HĐLĐ → HĐ dịch vụ...) qua phụ lục.</summary>
+    [Fact]
+    public void Throws_When_Forbidden_Key_Kind_Present()
+    {
+        var json = """{"Kind": "Service", "JobDescription": "x"}""";
+        var act = () => AppendixSchemaValidator.ParseAndValidate(json);
+        act.Should().Throw<DomainValidationException>()
+            .WithMessage("*FORBIDDEN_APPENDIX_KEY*Kind*");
+    }
+
     /// <summary>Tên key cấm có thể đến dưới dạng camelCase — vẫn phải chặn (case-insensitive).</summary>
     [Fact]
     public void Throws_When_Forbidden_Key_CamelCase()

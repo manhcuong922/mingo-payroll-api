@@ -109,6 +109,63 @@ public class PermissionEntityConfiguration : IEntityTypeConfiguration<Permission
 
         P(PermissionIds.ContractPartyReadAll, Permissions.ContractPartyReadAll, "ContractParty", "Read", PermissionScope.All, "Xem pháp nhân NSDLĐ."),
         P(PermissionIds.ContractPartyCreateAll, Permissions.ContractPartyCreateAll, "ContractParty", "Create", PermissionScope.All, "Tạo phiên bản pháp nhân NSDLĐ mới (append-only)."),
+
+        // ===== Department module - IDs 143-147 =====
+        // LegalDocument (89/91), AuditLog (90), ComplianceAutoUpdate (92-94) được seed
+        // qua migrations riêng — KHÔNG đặt ở đây để tránh EF sinh INSERT duplicate.
+
+        P(PermissionIds.DepartmentReadAll,   Permissions.DepartmentReadAll,   "Department", "Read",   PermissionScope.All, "Xem danh sách phòng ban."),
+        P(PermissionIds.DepartmentCreateAll, Permissions.DepartmentCreateAll, "Department", "Create", PermissionScope.All, "Tạo phòng ban."),
+        P(PermissionIds.DepartmentUpdateAll, Permissions.DepartmentUpdateAll, "Department", "Update", PermissionScope.All, "Cập nhật phòng ban."),
+        P(PermissionIds.DepartmentDeleteAll, Permissions.DepartmentDeleteAll, "Department", "Delete", PermissionScope.All, "Xóa phòng ban."),
+
+        P(PermissionIds.EmployeeInformationReadDepartment, Permissions.EmployeeInformationReadDepartment,
+            "EmployeeInformation", "Read", "Department", "Xem nhân viên trong phòng ban mình quản lý."),
+
+        // ===== Task/Production module - IDs 148-173 =====
+        P(PermissionIds.ProcessTemplateReadAll,   Permissions.ProcessTemplateReadAll,   "ProcessTemplate", "Read",   PermissionScope.All, "Xem quy trình mẫu."),
+        P(PermissionIds.ProcessTemplateCreateAll, Permissions.ProcessTemplateCreateAll, "ProcessTemplate", "Create", PermissionScope.All, "Tạo quy trình mẫu."),
+        P(PermissionIds.ProcessTemplateUpdateAll, Permissions.ProcessTemplateUpdateAll, "ProcessTemplate", "Update", PermissionScope.All, "Cập nhật quy trình mẫu."),
+        P(PermissionIds.ProcessTemplateDeleteAll, Permissions.ProcessTemplateDeleteAll, "ProcessTemplate", "Delete", PermissionScope.All, "Xóa quy trình mẫu."),
+
+        P(PermissionIds.ProjectReadAll,        Permissions.ProjectReadAll,        "Project", "Read",          PermissionScope.All,        "Xem mọi đơn hàng."),
+        P(PermissionIds.ProjectReadDepartment, Permissions.ProjectReadDepartment, "Project", "Read",          "Department",               "Xem đơn hàng của xưởng mình."),
+        P(PermissionIds.ProjectCreateAll,      Permissions.ProjectCreateAll,      "Project", "Create",        PermissionScope.All,        "Tạo đơn hàng."),
+        P(PermissionIds.ProjectUpdateAll,      Permissions.ProjectUpdateAll,      "Project", "Update",        PermissionScope.All,        "Cập nhật đơn hàng."),
+        P(PermissionIds.ProjectDeleteAll,      Permissions.ProjectDeleteAll,      "Project", "Delete",        PermissionScope.All,        "Xóa đơn hàng."),
+        P(PermissionIds.ProjectGenerateTasks,  Permissions.ProjectGenerateTasks,  "Project", "GenerateTasks", PermissionScope.All,        "Sinh task từ quy trình mẫu."),
+        P(PermissionIds.ProjectCompleteDepartment, Permissions.ProjectCompleteDepartment, "Project", "Complete", "Department",       "Đóng đơn của xưởng mình."),
+
+        P(PermissionIds.TaskReadAll,          Permissions.TaskReadAll,          "Task", "Read", PermissionScope.All, "Xem mọi task."),
+        P(PermissionIds.TaskReadDepartment,   Permissions.TaskReadDepartment,   "Task", "Read", "Department",        "Xem task của xưởng mình."),
+        P(PermissionIds.TaskReadAssigned,     Permissions.TaskReadAssigned,     "Task", "Read", "Assigned",          "Xem task được giao cho mình."),
+        P(PermissionIds.TaskReadConfidential, Permissions.TaskReadConfidential, "Task", "Read", "Confidential",      "Xem task nhạy cảm."),
+
+        P(PermissionIds.TaskCreateDepartment,         Permissions.TaskCreateDepartment,         "Task", "Create",         "Department",   "Tạo task (1 người / nhóm) trong xưởng mình."),
+        P(PermissionIds.TaskCreateConfidential,       Permissions.TaskCreateConfidential,       "Task", "Create",         "Confidential", "Tạo task nhạy cảm."),
+        P(PermissionIds.TaskUpdateDepartment,         Permissions.TaskUpdateDepartment,         "Task", "Update",         "Department",   "Sửa task của xưởng mình."),
+        P(PermissionIds.TaskUpdateProgressDepartment, Permissions.TaskUpdateProgressDepartment, "Task", "UpdateProgress", "Department",   "Cập nhật sản lượng task xưởng mình."),
+        P(PermissionIds.TaskCompleteDepartment,       Permissions.TaskCompleteDepartment,       "Task", "Complete",       "Department",   "Hoàn thành task xưởng mình."),
+        P(PermissionIds.TaskDeleteDepartment,         Permissions.TaskDeleteDepartment,         "Task", "Delete",         "Department",   "Xóa task lá của xưởng mình."),
+
+        P(PermissionIds.ProductionAttachmentReadDepartment,  Permissions.ProductionAttachmentReadDepartment,  "ProductionAttachment", "Read",  "Department", "Xem tài liệu/ảnh của xưởng mình."),
+        P(PermissionIds.ProductionAttachmentWriteDepartment, Permissions.ProductionAttachmentWriteDepartment, "ProductionAttachment", "Write", "Department", "Tải lên/xóa tài liệu của xưởng mình."),
+        P(PermissionIds.ProductionAttachmentReadAll,         Permissions.ProductionAttachmentReadAll,         "ProductionAttachment", "Read",  PermissionScope.All, "Xem tài liệu/ảnh mọi xưởng."),
+
+        P(PermissionIds.TaskAuditReadAll,        Permissions.TaskAuditReadAll,        "Task", "Audit.Read", PermissionScope.All, "Xem lịch sử chỉnh sửa task/đơn mọi xưởng."),
+        P(PermissionIds.TaskAuditReadDepartment, Permissions.TaskAuditReadDepartment, "Task", "Audit.Read", "Department",        "Xem lịch sử chỉnh sửa task/đơn xưởng mình."),
+
+        // ===== Evaluation module (chấm điểm nhân sự theo tháng) — IDs 224–233 =====
+        P(PermissionIds.OrderEvaluationReadOwn,   Permissions.OrderEvaluationReadOwn,   "OrderEvaluation", "Read",   "Own",                "Xem bảng đánh giá theo đơn mình phụ trách."),
+        P(PermissionIds.OrderEvaluationReadAll,   Permissions.OrderEvaluationReadAll,   "OrderEvaluation", "Read",   PermissionScope.All,  "Xem mọi bảng đánh giá theo đơn."),
+        P(PermissionIds.OrderEvaluationScoreOwn,  Permissions.OrderEvaluationScoreOwn,  "OrderEvaluation", "Score",  "Own",                "Chấm điểm bảng đánh giá đơn mình phụ trách."),
+        P(PermissionIds.OrderEvaluationSubmitOwn, Permissions.OrderEvaluationSubmitOwn, "OrderEvaluation", "Submit", "Own",                "Chốt (submit) bảng đánh giá theo đơn."),
+        P(PermissionIds.MonthlyEvaluationReadAll,        Permissions.MonthlyEvaluationReadAll,        "MonthlyEvaluation", "Read",        PermissionScope.All,  "Xem mọi bảng đánh giá tháng."),
+        P(PermissionIds.MonthlyEvaluationReadSelf,       Permissions.MonthlyEvaluationReadSelf,       "MonthlyEvaluation", "Read",        PermissionScope.Self, "Xem bảng đánh giá tháng của chính mình."),
+        P(PermissionIds.MonthlyEvaluationAggregateAll,   Permissions.MonthlyEvaluationAggregateAll,   "MonthlyEvaluation", "Aggregate",   PermissionScope.All,  "Tổng hợp bảng tháng từ các bảng theo đơn."),
+        P(PermissionIds.MonthlyEvaluationScoreDirectAll, Permissions.MonthlyEvaluationScoreDirectAll, "MonthlyEvaluation", "ScoreDirect", PermissionScope.All,  "Director chấm trực tiếp tổ trưởng/văn phòng."),
+        P(PermissionIds.MonthlyEvaluationApproveAll,     Permissions.MonthlyEvaluationApproveAll,     "MonthlyEvaluation", "Approve",     PermissionScope.All,  "Duyệt & khóa bảng đánh giá tháng."),
+        P(PermissionIds.MonthlyEvaluationReopenAll,      Permissions.MonthlyEvaluationReopenAll,      "MonthlyEvaluation", "Reopen",      PermissionScope.All,  "Mở lại bảng tháng đã khóa."),
     };
 
     private static Permission P(int id, string code, string resource, string action, string scope, string description) => new()

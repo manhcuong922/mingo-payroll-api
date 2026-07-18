@@ -1,12 +1,15 @@
 using FluentValidation;
 using MPS.Application.Features.EmployeeInformation.Commands;
+using MPS.Domain.Constants;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.EmployeeInformation.Validators;
 
 public class EmployeeInformationUpdateCommandValidator : AbstractValidator<EmployeeInformationUpdateCommand>
 {
-    public EmployeeInformationUpdateCommandValidator(IEmployeeInformationRepository repository)
+    public EmployeeInformationUpdateCommandValidator(
+        IEmployeeInformationRepository repository,
+        IDepartmentRepository departmentRepository)
     {
         RuleFor(x => x.Id)
             .GreaterThan(0).WithMessage("Id must be greater than 0.");
@@ -60,6 +63,24 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
             .GreaterThan(0).WithMessage("PositionId is required.")
             .MustAsync(async (positionId, ct) => await repository.PositionExistsAsync(positionId, ct))
             .WithMessage("Position does not exist.");
+
+        RuleFor(x => x.DepartmentId)
+            .Must(departmentId => departmentId == null || departmentId > 0)
+            .WithMessage("DepartmentId must be greater than 0 when specified.")
+            .MustAsync(async (departmentId, ct) =>
+                !departmentId.HasValue || await departmentRepository.GetByIdAsync(departmentId.Value, ct) is not null)
+            .WithMessage("Department does not exist.");
+
+        // Cấu trúc xưởng: chỉ role sản xuất (ProjectManager/Employee) được trực thuộc xưởng.
+        // Loại nhóm quản trị cấp công ty. Chỉ áp khi vừa gán xưởng vừa có tài khoản.
+        RuleFor(x => x)
+            .MustAsync(async (cmd, ct) =>
+            {
+                if (cmd.DepartmentId is null || cmd.UserId is null) return true;
+                var roleId = await repository.GetUserRoleIdAsync(cmd.UserId.Value, ct);
+                return roleId is null || SystemRoles.DepartmentMemberRoleIds.Contains(roleId.Value);
+            })
+            .WithMessage("Only production roles (workshop manager or employee) can belong to a department. Company-level admin roles are not allowed.");
 
         RuleFor(x => x.DependentsNo)
             .GreaterThanOrEqualTo(0).WithMessage("DependentsNo must be 0 or greater.");

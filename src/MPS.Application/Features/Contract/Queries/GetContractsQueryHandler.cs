@@ -52,6 +52,7 @@ public class GetContractsQueryHandler : IRequestHandler<GetContractsQuery, Paged
             effectiveEmployeeInformationId,
             request.Status,
             request.Category,
+            request.Kind,
             page,
             size,
             cancellationToken);

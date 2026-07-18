@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
+using MPS.Domain.Enums.Contract;
 using MPS.Domain.Interfaces;
 using MPS.Infrastructure.Persistence;
 
@@ -28,6 +29,30 @@ public class UserRepository : IUserRepository
             .Include(u => u.Role)
             .Include(u => u.EmployeeInformation)
             .FirstOrDefaultAsync(u => u.EmployeeCode == employeeCode, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<string, int>> GetEmployeeInformationIdsByCodesAsync(
+        IEnumerable<string> employeeCodes,
+        CancellationToken cancellationToken = default)
+    {
+        var distinct = employeeCodes
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinct.Length == 0)
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        var rows = await _context.Users
+            .AsNoTracking()
+            .Where(u => distinct.Contains(u.EmployeeCode) && u.EmployeeInformation != null)
+            .Select(u => new { u.EmployeeCode, EmployeeInformationId = u.EmployeeInformation!.Id })
+            .ToListAsync(cancellationToken);
+
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+            map[row.EmployeeCode] = row.EmployeeInformationId;
+        return map;
+    }
 
     public Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default) =>
         _context.Users
@@ -192,5 +217,38 @@ public class UserRepository : IUserRepository
 
         await tx.CommitAsync(cancellationToken);
         return user.Id;
+    }
+
+    public async Task<int> DeactivateForEmployeesWithoutActiveContractAsync(
+        IReadOnlyCollection<int> employeeInformationIds,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (employeeInformationIds.Count == 0) return 0;
+
+        var stillHasActive = await _context.Contracts
+            .AsNoTracking()
+            .Where(c => employeeInformationIds.Contains(c.EmployeeInformationId)
+                && c.Status == ContractStatus.Active)
+            .Select(c => c.EmployeeInformationId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var stillActiveSet = stillHasActive.ToHashSet();
+        var toDeactivate = employeeInformationIds.Where(id => !stillActiveSet.Contains(id)).ToList();
+        if (toDeactivate.Count == 0) return 0;
+
+        var users = await _context.Users
+            .Where(u => u.Status == 1
+                && u.EmployeeInformation != null
+                && toDeactivate.Contains(u.EmployeeInformation.Id))
+            .ToListAsync(cancellationToken);
+        if (users.Count == 0) return 0;
+
+        foreach (var user in users)
+            user.Status = 0;
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return users.Count;
     }
 }

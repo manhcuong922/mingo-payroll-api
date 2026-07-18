@@ -30,22 +30,27 @@ public sealed class ContractNoGeneratorTests
         using var db = CreateDb();
         var gen = new ContractNoGenerator(db);
 
-        var result = await gen.GenerateAsync(ContractCategory.Definite, ContractSubtype.Official, 2026, default);
+        var result = await gen.GenerateAsync(ContractKind.LaborFullTime, ContractCategory.Definite, 2026, default);
 
         result.Should().Be("HDLD-CTXD-2026-0001");
     }
 
     [Theory]
-    [InlineData(ContractCategory.Definite, ContractSubtype.Official, "CTXD")]
-    [InlineData(ContractCategory.Indefinite, ContractSubtype.Official, "CTKXD")]
-    [InlineData(ContractCategory.Definite, ContractSubtype.Probation, "TV")]
+    [InlineData(ContractKind.LaborFullTime, ContractCategory.Definite, "CTXD")]
+    [InlineData(ContractKind.LaborFullTime, ContractCategory.Indefinite, "CTKXD")]
+    [InlineData(ContractKind.Probation, null, "TV")]
+    [InlineData(ContractKind.LaborPartTime, null, "PT")]
+    [InlineData(ContractKind.VocationalTraining, null, "DT")]
+    [InlineData(ContractKind.PieceWork, null, "KV")]
+    [InlineData(ContractKind.Service, null, "DV")]
+    [InlineData(ContractKind.Collaborator, null, "CTV")]
     public async Task GenerateAsync_Uses_Correct_TypeCode(
-        ContractCategory category, ContractSubtype subtype, string expectedTypeCode)
+        ContractKind kind, ContractCategory? category, string expectedTypeCode)
     {
         using var db = CreateDb();
         var gen = new ContractNoGenerator(db);
 
-        var result = await gen.GenerateAsync(category, subtype, 2026, default);
+        var result = await gen.GenerateAsync(kind, category, 2026, default);
 
         result.Should().StartWith($"HDLD-{expectedTypeCode}-2026-");
     }
@@ -62,7 +67,7 @@ public sealed class ContractNoGeneratorTests
         await db.SaveChangesAsync();
 
         var gen = new ContractNoGenerator(db);
-        var result = await gen.GenerateAsync(ContractCategory.Definite, ContractSubtype.Official, 2026, default);
+        var result = await gen.GenerateAsync(ContractKind.LaborFullTime, ContractCategory.Definite, 2026, default);
 
         result.Should().Be("HDLD-CTXD-2026-0004");
     }
@@ -78,7 +83,7 @@ public sealed class ContractNoGeneratorTests
         await db.SaveChangesAsync();
 
         var gen = new ContractNoGenerator(db);
-        var result = await gen.GenerateAsync(ContractCategory.Definite, ContractSubtype.Official, 2026, default);
+        var result = await gen.GenerateAsync(ContractKind.LaborFullTime, ContractCategory.Definite, 2026, default);
 
         result.Should().Be("HDLD-CTXD-2026-0001");
     }
@@ -94,7 +99,7 @@ public sealed class ContractNoGeneratorTests
         await db.SaveChangesAsync();
 
         var gen = new ContractNoGenerator(db);
-        var result = await gen.GenerateAsync(ContractCategory.Definite, ContractSubtype.Official, 2026, default);
+        var result = await gen.GenerateAsync(ContractKind.LaborFullTime, ContractCategory.Definite, 2026, default);
 
         result.Should().Be("HDLD-CTXD-2026-0001");
     }
@@ -104,6 +109,7 @@ public sealed class ContractNoGeneratorTests
         db.Contracts.Add(new MPS.Domain.Entities.Contract
         {
             ContractNo = contractNo,
+            Kind = ContractKind.LaborFullTime,
             ContractCategory = ContractCategory.Definite,
             ContractSubtype = ContractSubtype.Official,
             Form = ContractForm.Written,

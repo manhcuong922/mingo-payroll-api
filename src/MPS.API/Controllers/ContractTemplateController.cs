@@ -1,3 +1,4 @@
+
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using MPS.API.Authorization;
@@ -24,18 +25,20 @@ public class ContractTemplateController : ControllerBase
     [HttpGet]
     [HasPermission(Permissions.ContractTemplateReadAll)]
     public async Task<IActionResult> GetAll(
+        [FromQuery] ContractKind? kind,
         [FromQuery] ContractCategory? category,
         [FromQuery] ContractSubtype? subtype,
         [FromQuery] bool? isActive,
         CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ContractTemplateGetAllQuery(category, subtype, isActive), cancellationToken);
+        var result = await _mediator.Send(new ContractTemplateGetAllQuery(kind, category, subtype, isActive), cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("paged")]
     [HasPermission(Permissions.ContractTemplateReadAll)]
     public async Task<IActionResult> GetPaged(
+        [FromQuery] ContractKind? kind,
         [FromQuery] ContractCategory? category,
         [FromQuery] ContractSubtype? subtype,
         [FromQuery] bool? isActive,
@@ -47,7 +50,7 @@ public class ContractTemplateController : ControllerBase
         if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
         var result = await _mediator.Send(
-            new ContractTemplateGetPagedQuery(category, subtype, isActive, page, pageSize), cancellationToken);
+            new ContractTemplateGetPagedQuery(kind, category, subtype, isActive, page, pageSize), cancellationToken);
         return Ok(result);
     }
 
@@ -68,6 +71,7 @@ public class ContractTemplateController : ControllerBase
     {
         var id = await _mediator.Send(new ContractTemplateCreateCommand(
             request.Name,
+            request.Kind,
             request.ContractCategory,
             request.ContractSubtype,
             request.IsActive), cancellationToken);
@@ -84,6 +88,7 @@ public class ContractTemplateController : ControllerBase
         var updated = await _mediator.Send(new ContractTemplateUpdateCommand(
             id,
             request.Name,
+            request.Kind,
             request.ContractCategory,
             request.ContractSubtype,
             request.IsActive), cancellationToken);

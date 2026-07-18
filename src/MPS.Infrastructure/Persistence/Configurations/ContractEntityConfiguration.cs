@@ -16,9 +16,11 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(e => e.ContractNo).HasMaxLength(50).IsRequired();
         builder.HasIndex(e => e.ContractNo).IsUnique();
 
-        builder.Property(e => e.ContractCategory).HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(e => e.ContractSubtype).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.Kind).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(e => e.ContractCategory).HasConversion<string>().HasMaxLength(20);
+        builder.Property(e => e.ContractSubtype).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.Form).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.TaxPolicy).HasConversion<string>().HasMaxLength(30);
         builder.Property(e => e.JobDescription).IsRequired();
         builder.Property(e => e.WorkLocation).HasMaxLength(500).IsRequired();
         builder.Property(e => e.EffectiveFrom).IsRequired();
@@ -54,6 +56,7 @@ public class ContractEntityConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(e => e.ArchivedAt);
 
         builder.HasIndex(e => new { e.EmployeeInformationId, e.Status });
+        builder.HasIndex(e => new { e.EmployeeInformationId, e.Kind, e.Status });
         builder.HasIndex(e => new { e.EffectiveFrom, e.EffectiveTo });
         builder.HasIndex(e => e.ArchivedAt);
 

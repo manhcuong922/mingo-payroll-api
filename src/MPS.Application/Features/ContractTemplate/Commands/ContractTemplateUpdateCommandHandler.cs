@@ -18,6 +18,7 @@ public class ContractTemplateUpdateCommandHandler : IRequestHandler<ContractTemp
         {
             Id = request.Id,
             Name = request.Name.Trim(),
+            Kind = request.Kind,
             ContractCategory = request.ContractCategory,
             ContractSubtype = request.ContractSubtype,
             IsActive = request.IsActive,

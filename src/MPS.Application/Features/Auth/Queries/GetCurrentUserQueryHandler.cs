@@ -9,13 +9,16 @@ public sealed class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQ
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
 
     public GetCurrentUserQueryHandler(
         ICurrentUserService currentUserService,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        IEmployeeInformationRepository employeeRepository)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
+        _employeeRepository = employeeRepository;
     }
 
     public async Task<CurrentUserDto?> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
@@ -25,6 +28,10 @@ public sealed class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQ
 
         var user = await _userRepository.GetByIdAsync(_currentUserService.UserId.Value, cancellationToken);
         if (user is null) return null;
+
+        // Join EmployeeInformation theo UserId để lấy Gender. Nullable — user hệ thống
+        // (SystemAdmin, ai-service...) không có EmployeeInformation gắn kèm.
+        var employee = await _employeeRepository.GetByUserIdAsync(user.Id, cancellationToken);
 
         return new CurrentUserDto(
             Id: user.Id,
@@ -36,6 +43,7 @@ public sealed class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQ
             Email: user.Email,
             Dob: user.Dob,
             PhoneNo: user.PhoneNo,
+            Gender: employee?.Gender,
             Status: user.Status,
             LastLoginAt: user.LastLoginAt,
             Permissions: _currentUserService.Permissions);

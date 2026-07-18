@@ -128,9 +128,10 @@ public sealed class ContractRepositoryJobLogicTests
         await fx.Db.SaveChangesAsync();
 
         var repo = new ContractRepository(fx.Db);
-        var expired = await repo.ExpireOverdueContractsAsync(Now, CancellationToken.None);
+        var (expired, affectedEmployeeIds) = await repo.ExpireOverdueContractsAsync(Now, CancellationToken.None);
 
         expired.Should().Be(1);
+        affectedEmployeeIds.Should().ContainSingle().Which.Should().Be(employeeInfo.Id);
 
         var parentSaved = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == parentContract.Id);
         parentSaved.Status.Should().Be(ContractStatus.Expired);
@@ -157,9 +158,10 @@ public sealed class ContractRepositoryJobLogicTests
         await fx.Db.SaveChangesAsync();
 
         var repo = new ContractRepository(fx.Db);
-        var expired = await repo.ExpireOverdueContractsAsync(Now, CancellationToken.None);
+        var (expired, affectedEmployeeIds) = await repo.ExpireOverdueContractsAsync(Now, CancellationToken.None);
 
         expired.Should().Be(0);
+        affectedEmployeeIds.Should().BeEmpty();
 
         var saved = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contract.Id);
         saved.Status.Should().Be(ContractStatus.Active);
@@ -248,6 +250,71 @@ public sealed class ContractRepositoryJobLogicTests
         var archived = await repo.ArchiveOldContractsAsync(Now, CancellationToken.None);
 
         archived.Should().Be(0);
+    }
+
+    /// <summary>
+    /// Deactivate: NLĐ có HĐ vừa Expire và không còn HĐ Active nào → User.Status chuyển 1 → 0.
+    /// </summary>
+    [Fact]
+    public async Task DeactivateForEmployeesWithoutActiveContract_Sets_User_Inactive_When_No_Active_Contract_Remains()
+    {
+        using var fx = new ContractIntegrationFixture();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
+
+        var expired = NewActiveContract(
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
+            ContractCategory.Definite,
+            effectiveFrom: Now.AddYears(-1),
+            effectiveTo: Now.AddDays(-1));
+        expired.Status = ContractStatus.Expired;
+        await fx.Db.Contracts.AddAsync(expired);
+        await fx.Db.SaveChangesAsync();
+
+        var repo = new UserRepository(fx.Db);
+        var deactivated = await repo.DeactivateForEmployeesWithoutActiveContractAsync(
+            new[] { employeeInfo.Id }, Now, CancellationToken.None);
+
+        deactivated.Should().Be(1);
+
+        var employeeUser = await fx.Db.Users.AsNoTracking().FirstAsync(u => u.Id == employeeInfo.UserId!.Value);
+        employeeUser.Status.Should().Be(0);
+    }
+
+    /// <summary>
+    /// Deactivate: NLĐ vẫn còn 1 HĐ Active khác → giữ nguyên User.Status = 1 (không khoá nhầm).
+    /// </summary>
+    [Fact]
+    public async Task DeactivateForEmployeesWithoutActiveContract_Keeps_User_Active_When_Another_Active_Contract_Exists()
+    {
+        using var fx = new ContractIntegrationFixture();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
+
+        var expired = NewActiveContract(
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
+            ContractCategory.Definite,
+            effectiveFrom: Now.AddYears(-1),
+            effectiveTo: Now.AddDays(-1));
+        expired.Status = ContractStatus.Expired;
+        expired.ContractNo = "OLD-001";
+        await fx.Db.Contracts.AddAsync(expired);
+
+        var stillActive = NewActiveContract(
+            employeeInfo.Id, party.Id, actor.Id, position.Id, grade.Id,
+            ContractCategory.Indefinite,
+            effectiveFrom: Now.AddDays(-30),
+            effectiveTo: null);
+        stillActive.ContractNo = "NEW-001";
+        await fx.Db.Contracts.AddAsync(stillActive);
+        await fx.Db.SaveChangesAsync();
+
+        var repo = new UserRepository(fx.Db);
+        var deactivated = await repo.DeactivateForEmployeesWithoutActiveContractAsync(
+            new[] { employeeInfo.Id }, Now, CancellationToken.None);
+
+        deactivated.Should().Be(0);
+
+        var employeeUser = await fx.Db.Users.AsNoTracking().FirstAsync(u => u.Id == employeeInfo.UserId!.Value);
+        employeeUser.Status.Should().Be(1);
     }
 
     private static Contract NewActiveContract(

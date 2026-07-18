@@ -18,6 +18,7 @@ public static class AppendixSchemaValidator
         "EffectiveTo",
         "ContractCategory",
         "ContractSubtype",
+        "Kind",
     };
 
     private static readonly JsonSerializerOptions s_options = new(JsonSerializerDefaults.Web)

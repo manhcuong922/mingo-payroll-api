@@ -20,10 +20,15 @@ public class EmployeeInformationController : ControllerBase
     }
 
     [HttpGet]
-    [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    [HasAnyPermission(
+        Permissions.EmployeeInformationReadAll,
+        Permissions.EmployeeInformationReadDepartment,
+        Permissions.EmployeeInformationReadSelf)]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] bool? hasActiveUser,
+        CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new EmployeeInformationGetAllQuery(), cancellationToken);
+        var result = await _mediator.Send(new EmployeeInformationGetAllQuery(hasActiveUser), cancellationToken);
         return Ok(result);
     }
 
@@ -33,21 +38,26 @@ public class EmployeeInformationController : ControllerBase
         [FromQuery] string? keyword,
         [FromQuery] int? positionId,
         [FromQuery] bool? hasAccount,
+        [FromQuery] bool? hasActiveUser,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 10;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 100) pageSize = 100;
 
         var result = await _mediator.Send(
-            new EmployeeInformationGetPagedQuery(keyword, positionId, hasAccount, page, pageSize),
+            new EmployeeInformationGetPagedQuery(keyword, positionId, hasAccount, hasActiveUser, page, pageSize),
             cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("{id:int}")]
-    [HasAnyPermission(Permissions.EmployeeInformationReadAll, Permissions.EmployeeInformationReadSelf)]
+    [HasAnyPermission(
+        Permissions.EmployeeInformationReadAll,
+        Permissions.EmployeeInformationReadDepartment,
+        Permissions.EmployeeInformationReadSelf)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new EmployeeInformationGetByIdQuery(id), cancellationToken);
@@ -75,6 +85,7 @@ public class EmployeeInformationController : ControllerBase
             request.PhoneNo,
             request.EducationLevel,
             request.PositionId,
+            request.DepartmentId,
             request.DependentsNo,
             request.TaxNo,
             request.SocialNo,
@@ -110,6 +121,7 @@ public class EmployeeInformationController : ControllerBase
             request.PhoneNo,
             request.EducationLevel,
             request.PositionId,
+            request.DepartmentId,
             request.DependentsNo,
             request.TaxNo,
             request.SocialNo,

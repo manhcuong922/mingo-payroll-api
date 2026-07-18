@@ -4,6 +4,7 @@ namespace MPS.API.Requests.ContractTemplate;
 
 public sealed record CreateContractTemplateRequest(
     string Name,
-    ContractCategory ContractCategory,
-    ContractSubtype ContractSubtype,
+    ContractKind Kind,
+    ContractCategory? ContractCategory,
+    ContractSubtype? ContractSubtype,
     bool IsActive = true);

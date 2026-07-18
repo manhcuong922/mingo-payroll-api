@@ -17,7 +17,8 @@
       "Bash(env)",
       "Bash(docker port *)",
       "Bash(docker exec *)",
-      "Bash(docker cp *)"
+      "Bash(docker cp *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

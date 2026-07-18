@@ -1,4 +1,6 @@
 using MediatR;
+using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Attendance;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.EmployeeInformation.Commands;
@@ -6,10 +8,17 @@ namespace MPS.Application.Features.EmployeeInformation.Commands;
 public class EmployeeInformationCreateCommandHandler : IRequestHandler<EmployeeInformationCreateCommand, int>
 {
     private readonly IEmployeeInformationRepository _repository;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IMediator _mediator;
 
-    public EmployeeInformationCreateCommandHandler(IEmployeeInformationRepository repository)
+    public EmployeeInformationCreateCommandHandler(
+        IEmployeeInformationRepository repository,
+        ICurrentUserService currentUserService,
+        IMediator mediator)
     {
         _repository = repository;
+        _currentUserService = currentUserService;
+        _mediator = mediator;
     }
 
     public async Task<int> Handle(EmployeeInformationCreateCommand request, CancellationToken cancellationToken)
@@ -29,6 +38,7 @@ public class EmployeeInformationCreateCommandHandler : IRequestHandler<EmployeeI
             PhoneNo = request.PhoneNo?.Trim(),
             EducationLevel = request.EducationLevel?.Trim(),
             PositionId = request.PositionId,
+            DepartmentId = request.DepartmentId,
             DependentsNo = request.DependentsNo,
             TaxNo = request.TaxNo?.Trim(),
             SocialNo = request.SocialNo?.Trim(),
@@ -39,6 +49,21 @@ public class EmployeeInformationCreateCommandHandler : IRequestHandler<EmployeeI
             GuardianAddress = request.GuardianAddress?.Trim(),
         };
 
-        return await _repository.AddAsync(entity, cancellationToken);
+        var newId = await _repository.AddAsync(entity, cancellationToken);
+
+        // Fresh assign: NV mới có dept ngay từ đầu → publish để auto-apply lịch phân ca.
+        if (request.DepartmentId is int newDeptId)
+        {
+            await _mediator.Publish(
+                new EmployeeDepartmentChangedNotification(
+                    EmployeeInformationId: newId,
+                    OldDepartmentId: null,
+                    NewDepartmentId: newDeptId,
+                    ChangedByUserId: _currentUserService.UserId ?? 0,
+                    ChangedAtUtc: DateTime.UtcNow),
+                cancellationToken);
+        }
+
+        return newId;
     }
 }

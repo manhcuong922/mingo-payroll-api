@@ -64,8 +64,9 @@ public sealed class ContractPreflightCheckerTests
     }
 
     private ContractCheckInput BuildInput(
-        ContractCategory category = ContractCategory.Definite,
-        ContractSubtype subtype = ContractSubtype.Official,
+        ContractKind kind = ContractKind.LaborFullTime,
+        ContractCategory? category = ContractCategory.Definite,
+        ContractSubtype? subtype = ContractSubtype.Official,
         bool hasProbation = false,
         decimal? probationSalary = null,
         IReadOnlyList<int>? allowanceIds = null,
@@ -77,6 +78,7 @@ public sealed class ContractPreflightCheckerTests
             PositionId: PositionId,
             SalaryGradeId: SalaryGradeId,
             EffectiveFrom: EffectiveFrom,
+            Kind: kind,
             ContractCategory: category,
             ContractSubtype: subtype,
             HasProbation: hasProbation,

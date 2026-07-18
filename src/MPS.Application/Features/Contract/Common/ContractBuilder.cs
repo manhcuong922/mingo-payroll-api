@@ -18,11 +18,15 @@ internal static class ContractBuilder
         int createdByUserId,
         DateTime nowUtc)
     {
+        var meta = MPS.Domain.Constants.ContractKindMetadata.Get(cmd.Kind);
+        var (si, hi, ui, tax) = ResolveInsuranceAndTax(cmd, meta);
+
         return new Domain.Entities.Contract
         {
             ContractNo = contractNo,
+            Kind = cmd.Kind,
             ContractCategory = cmd.ContractCategory,
-            ContractSubtype = cmd.ContractSubtype,
+            ContractSubtype = ResolveContractSubtype(cmd.Kind, cmd.ContractSubtype),
             Form = Domain.Enums.Contract.ContractForm.Written,
             EmployeeInformationId = cmd.EmployeeInformationId,
             EmployerPartyId = cmd.EmployerPartyId,
@@ -40,9 +44,10 @@ internal static class ContractBuilder
             PromotionPolicy = cmd.PromotionPolicy,
             WorkingTimeJson = cmd.WorkingTimeJson,
             PpePolicy = cmd.PpePolicy,
-            SocialInsuranceFlag = cmd.SocialInsuranceFlag,
-            HealthInsuranceFlag = cmd.HealthInsuranceFlag,
-            UnemploymentInsuranceFlag = cmd.UnemploymentInsuranceFlag,
+            SocialInsuranceFlag = si,
+            HealthInsuranceFlag = hi,
+            UnemploymentInsuranceFlag = ui,
+            TaxPolicy = tax,
             TrainingPolicy = cmd.TrainingPolicy,
             ConfidentialityClause = cmd.ConfidentialityClause,
             TemplateId = cmd.TemplateId,
@@ -68,8 +73,12 @@ internal static class ContractBuilder
         string salaryCurrencySnapshot,
         DateTime nowUtc)
     {
+        var meta = MPS.Domain.Constants.ContractKindMetadata.Get(cmd.Kind);
+        var (si, hi, ui, tax) = ResolveInsuranceAndTax(cmd, meta);
+
+        entity.Kind = cmd.Kind;
         entity.ContractCategory = cmd.ContractCategory;
-        entity.ContractSubtype = cmd.ContractSubtype;
+        entity.ContractSubtype = ResolveContractSubtype(cmd.Kind, cmd.ContractSubtype);
         entity.Form = Domain.Enums.Contract.ContractForm.Written;
         entity.EmployeeInformationId = cmd.EmployeeInformationId;
         entity.EmployerPartyId = cmd.EmployerPartyId;
@@ -87,9 +96,10 @@ internal static class ContractBuilder
         entity.PromotionPolicy = cmd.PromotionPolicy;
         entity.WorkingTimeJson = cmd.WorkingTimeJson;
         entity.PpePolicy = cmd.PpePolicy;
-        entity.SocialInsuranceFlag = cmd.SocialInsuranceFlag;
-        entity.HealthInsuranceFlag = cmd.HealthInsuranceFlag;
-        entity.UnemploymentInsuranceFlag = cmd.UnemploymentInsuranceFlag;
+        entity.SocialInsuranceFlag = si;
+        entity.HealthInsuranceFlag = hi;
+        entity.UnemploymentInsuranceFlag = ui;
+        entity.TaxPolicy = tax;
         entity.TrainingPolicy = cmd.TrainingPolicy;
         entity.ConfidentialityClause = cmd.ConfidentialityClause;
         entity.TemplateId = cmd.TemplateId;
@@ -100,6 +110,51 @@ internal static class ContractBuilder
         entity.ProbationSalary = cmd.ProbationSalary;
         entity.ProbationResultStatus = cmd.ProbationResultStatus;
         entity.UpdatedAt = nowUtc;
+    }
+
+    /// <summary>
+    /// Workaround (F3.a): compliance module đang query eligibility bằng ContractSubtype cũ
+    /// (Official/Probation). Khi Kind=Probation, tự set ContractSubtype=Probation nếu user
+    /// không gửi để rule "eligible if Subtype=Probation" vẫn match. Rename sang
+    /// EligibleContractKindsCsv là refactor lâu dài (F3.b), scope PR riêng.
+    /// </summary>
+    private static Domain.Enums.Contract.ContractSubtype? ResolveContractSubtype(
+        Domain.Enums.Contract.ContractKind kind,
+        Domain.Enums.Contract.ContractSubtype? requested) =>
+        kind == Domain.Enums.Contract.ContractKind.Probation
+            ? Domain.Enums.Contract.ContractSubtype.Probation
+            : requested;
+
+    /// <summary>
+    /// Resolve the 3 insurance flags + TaxPolicy according to the kind's <see cref="Domain.Enums.Contract.InsuranceDeterminationMode"/>.
+    /// - RuleDriven: use metadata defaults, ignoring anything from the command.
+    /// - UserChoice: use the command's values (validator has already ensured they are non-null).
+    /// </summary>
+    private static (bool Si, bool Hi, bool Ui, Domain.Enums.Contract.TaxPolicy? Tax) ResolveInsuranceAndTax(
+        CreateContractCommand cmd, MPS.Domain.Constants.ContractKindMeta meta) =>
+        ResolveInsuranceAndTax(
+            cmd.SocialInsuranceFlag, cmd.HealthInsuranceFlag, cmd.UnemploymentInsuranceFlag, cmd.TaxPolicy, meta);
+
+    private static (bool Si, bool Hi, bool Ui, Domain.Enums.Contract.TaxPolicy? Tax) ResolveInsuranceAndTax(
+        UpdateContractCommand cmd, MPS.Domain.Constants.ContractKindMeta meta) =>
+        ResolveInsuranceAndTax(
+            cmd.SocialInsuranceFlag, cmd.HealthInsuranceFlag, cmd.UnemploymentInsuranceFlag, cmd.TaxPolicy, meta);
+
+    private static (bool Si, bool Hi, bool Ui, Domain.Enums.Contract.TaxPolicy? Tax) ResolveInsuranceAndTax(
+        bool? si, bool? hi, bool? ui, Domain.Enums.Contract.TaxPolicy? tax,
+        MPS.Domain.Constants.ContractKindMeta meta)
+    {
+        if (meta.InsuranceMode == Domain.Enums.Contract.InsuranceDeterminationMode.RuleDriven)
+        {
+            return (
+                meta.DefaultSocialInsurance ?? false,
+                meta.DefaultHealthInsurance ?? false,
+                meta.DefaultUnemploymentInsurance ?? false,
+                meta.DefaultTaxPolicy);
+        }
+
+        // UserChoice — validator guarantees non-null; fall back to false / null defensively.
+        return (si ?? false, hi ?? false, ui ?? false, tax);
     }
 
     public static IEnumerable<ContractAllowance> BuildAllowances(

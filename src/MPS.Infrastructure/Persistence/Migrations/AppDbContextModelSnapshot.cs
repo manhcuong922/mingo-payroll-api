@@ -76,6 +76,1215 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("AllowanceTypes", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceAdjustment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendanceRecordId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("NewCheckInAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("NewCheckOutAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("NewStatus")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("OriginalCheckInAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("OriginalCheckOutAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte?>("OriginalStatus")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceRecordId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "Status");
+
+                    b.ToTable("AttendanceAdjustments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CheckInAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CheckOutAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("DayHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("NightHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("OvertimeRequestId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("OvertimeRequestId")
+                        .IsUnique()
+                        .HasFilter("[OvertimeRequestId] IS NOT NULL");
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("WorkDate");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "ShiftTemplateId")
+                        .IsUnique()
+                        .HasFilter("[ShiftTemplateId] IS NOT NULL");
+
+                    b.ToTable("AttendanceRecords", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("AttendanceRules", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRuleVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendanceRuleId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("WorkRateHoliday")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("WorkRateNormal")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("WorkRateWeeklyRest")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceRuleId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AttendanceRuleVersions_OpenPerRule")
+                        .HasFilter("[EffectiveTo] IS NULL");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("AttendanceRuleId", "EffectiveFrom")
+                        .IsUnique();
+
+                    b.ToTable("AttendanceRuleVersions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AllowAdminOverride")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("DailyEditCutoffTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsEditLockEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<int?>("LateEarlyBackdateDaysAllowed")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LateEarlyMaxMinutesPerOccurrence")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LateEarlyMaxOccurrencesPerMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LockAfterDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("RequireOverrideReason")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("WfhMaxDaysPerMonth")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<decimal?>("WfhMaxDaysPerRequest")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<int?>("WfhMinNoticeDays")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WfhWorkPlanMinLength")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("AttendanceSettings", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.EmployeeShiftAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ScheduleTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ScheduleTemplateId");
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.HasIndex("WorkDate");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "ShiftTemplateId")
+                        .IsUnique();
+
+                    b.ToTable("EmployeeShiftAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LateEarlyRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<byte?>("ApproverRoute")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CancelledByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("DeductFromLeaveBalance")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsUnplanned")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<byte>("Kind")
+                        .HasColumnType("tinyint");
+
+                    b.Property<short>("Minutes")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CancelledByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("Status", "ApproverRoute");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "Status");
+
+                    b.ToTable("LateEarlyRequests", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveBalance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BaseDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,1)")
+                        .HasDefaultValue(12m);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LeaveTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SeniorityBonusDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,1)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("TotalDays")
+                        .HasColumnType("decimal(4,1)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UsedDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,1)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LeaveTypeId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "Year", "LeaveTypeId")
+                        .IsUnique();
+
+                    b.ToTable("LeaveBalances", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<byte?>("ApproverRoute")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CancelledByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("InsuranceCertNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRetroactive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("LeaveTypeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MedicalCertificateUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("SupportingDocumentUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("TotalDays")
+                        .HasColumnType("decimal(4,1)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CancelledByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LeaveTypeId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "Status");
+
+                    b.HasIndex("StartDate", "EndDate");
+
+                    b.HasIndex("Status", "ApproverRoute");
+
+                    b.ToTable("LeaveRequests", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AllowEmployeeSelection")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("AllowRetroactive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("ApplyScope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("AllEmployees");
+
+                    b.Property<bool>("AutoFallbackToUnpaid")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("DeductsBalance")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("MaxDaysPerMonth")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<decimal?>("MaxDaysPerRequest")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<decimal?>("MaxDaysPerWeek")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<decimal?>("MaxDaysPerYear")
+                        .HasColumnType("decimal(5,1)");
+
+                    b.Property<int?>("MinNoticeDaysForLong")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MinNoticeDaysForMedium")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("MinNoticeDaysForShort")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<decimal?>("PaidRate")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<bool>("RequireDocument")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("TargetDepartmentIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("TargetEmployeeIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("LeaveTypes", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApproverReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ApproverReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ApproverReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte?>("ApproverRoute")
+                        .HasColumnType("tinyint");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LaborLawConstantsVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("OtDayHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<TimeOnly>("OtEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<decimal>("OtHours")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<decimal>("OtNightHours")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<TimeOnly>("OtStartTime")
+                        .HasColumnType("time");
+
+                    b.Property<string>("PmReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("PmReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("PmReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApproverReviewedByUserId");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LaborLawConstantsVersionId");
+
+                    b.HasIndex("PmReviewedByUserId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("Status", "ApproverRoute");
+
+                    b.HasIndex("EmployeeInformationId", "WorkDate", "Status");
+
+                    b.ToTable("OvertimeRequests", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.PublicHoliday", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("HolidayDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("HolidayEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("HolidayDate", "HolidayEndDate");
+
+                    b.ToTable("PublicHolidays", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ApplyTarget")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DaysOfMonthMask")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("DaysOfWeekMask")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IncludeRestDaysAndHolidays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("RepeatEvery")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("RepeatUnit")
+                        .HasColumnType("tinyint");
+
+                    b.Property<int>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TargetDepartmentIds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("ScheduleTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateEmployee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ScheduleTemplateId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeInformationId");
+
+                    b.HasIndex("ScheduleTemplateId", "EmployeeInformationId")
+                        .IsUnique();
+
+                    b.ToTable("ScheduleTemplateEmployees", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateShift", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ScheduleTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShiftTemplateId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShiftTemplateId");
+
+                    b.HasIndex("ScheduleTemplateId", "ShiftTemplateId")
+                        .IsUnique();
+
+                    b.ToTable("ScheduleTemplateShifts", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AppliedAttendanceRuleId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly?>("BreakEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("BreakStartTime")
+                        .HasColumnType("time");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("StandardDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(3,2)")
+                        .HasDefaultValue(1.00m);
+
+                    b.Property<decimal>("StandardHours")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliedAttendanceRuleId");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasFilter("[IsActive] = 1");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("ShiftTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.WfhRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<byte?>("ApproverRoute")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CancelledByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<decimal>("TotalDays")
+                        .HasColumnType("decimal(4,1)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("WorkPlan")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CancelledByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("Status", "ApproverRoute");
+
+                    b.HasIndex("EmployeeInformationId", "StartDate", "EndDate");
+
+                    b.ToTable("WfhRequests", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -226,6 +1435,158 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_AuditLogsArchive_Record");
 
                     b.ToTable("AuditLogsArchive", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Comment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AuthorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OwnerType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("OwnerType", "OwnerId");
+
+                    b.ToTable("Comments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.CompanyPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("CompanyPolicies", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.CompanyPolicyFile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompanyPolicyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsCurrent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("MinioBucket")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("MinioObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UploadedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyPolicyId")
+                        .IsUnique()
+                        .HasFilter("[IsCurrent] = 1");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("CompanyPolicyId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("CompanyPolicyFiles", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>
@@ -621,7 +1982,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<decimal>("NightShiftSurchargePercent")
+                    b.Property<decimal>("MaxRegularHoursPerWeek")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<TimeOnly>("NightEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly>("NightStartTime")
+                        .HasColumnType("time");
+
+                    b.Property<decimal>("NightWorkSurchargePercent")
                         .HasColumnType("decimal(5,2)");
 
                     b.Property<string>("Note")
@@ -631,8 +2001,17 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("OvertimeMaxHoursPerDay")
                         .HasColumnType("decimal(4,2)");
 
+                    b.Property<decimal>("OvertimeMaxHoursPerMonth")
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<int>("OvertimeMaxHoursPerYear")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("OvertimeNightExtraPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("OvertimeNormalUpliftPercent")
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<decimal>("ProbationSalaryMinPercent")
                         .HasColumnType("decimal(5,2)");
@@ -651,6 +2030,15 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("ValidFrom")
                         .HasColumnType("date");
+
+                    b.Property<decimal>("WorkRateHolidayFloor")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("WorkRateNormalFloor")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("WorkRateWeeklyRestFloor")
+                        .HasColumnType("decimal(6,2)");
 
                     b.HasKey("Id");
 
@@ -1119,7 +2507,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ContractCategory")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
@@ -1129,7 +2516,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("ContractSubtype")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
@@ -1177,6 +2563,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<string>("JobDescription")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<int?>("ParentContractId")
                         .HasColumnType("int");
@@ -1249,6 +2640,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
+                    b.Property<string>("TaxPolicy")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.Property<int?>("TemplateId")
                         .HasColumnType("int");
 
@@ -1296,6 +2691,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("EffectiveFrom", "EffectiveTo");
 
                     b.HasIndex("EmployeeInformationId", "Status");
+
+                    b.HasIndex("EmployeeInformationId", "Kind", "Status");
 
                     b.ToTable("Contracts", (string)null);
                 });
@@ -1543,12 +2940,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ContractCategory")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("ContractSubtype")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
@@ -1557,6 +2952,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1572,6 +2972,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TemplateFileId");
+
+                    b.HasIndex("Kind", "IsActive");
 
                     b.ToTable("ContractTemplates", (string)null);
                 });
@@ -1762,6 +3164,227 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int?>("ManagerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("ManagerId");
+
+                    b.ToTable("Departments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Employee.DependentRegistrationRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CancelledByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CitizenId")
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Gender")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly?>("RegisteredFromDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("RegisteredToDate")
+                        .HasColumnType("date");
+
+                    b.Property<byte?>("Relationship")
+                        .HasColumnType("tinyint");
+
+                    b.Property<byte>("RequestType")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("SupportingDocumentUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("TargetDependentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TaxIdentificationNumber")
+                        .HasMaxLength(13)
+                        .HasColumnType("nvarchar(13)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CancelledByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TargetDependentId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "Status");
+
+                    b.ToTable("DependentRegistrationRequests", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Employee.EmployeeDependent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CitizenId")
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("DateOfBirth")
+                        .HasColumnType("date");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Gender")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateOnly>("RegisteredFromDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("RegisteredToDate")
+                        .HasColumnType("date");
+
+                    b.Property<byte>("Relationship")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("TaxIdentificationNumber")
+                        .HasMaxLength(13)
+                        .HasColumnType("nvarchar(13)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CitizenId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("TaxIdentificationNumber");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("EmployeeInformationId", "IsActive");
+
+                    b.ToTable("EmployeeDependents", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.EmployeeInformation", b =>
                 {
                     b.Property<int>("Id")
@@ -1789,6 +3412,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<string>("ContactAddress")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
 
                     b.Property<int>("DependentsNo")
                         .HasColumnType("int");
@@ -1858,6 +3484,8 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("CitizenId")
                         .IsUnique();
 
+                    b.HasIndex("DepartmentId");
+
                     b.HasIndex("PositionId");
 
                     b.HasIndex("UserId")
@@ -1865,6 +3493,248 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasFilter("[UserId] IS NOT NULL");
 
                     b.ToTable("EmployeeInformations", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.EvaluationScoreLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("MetricNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("MetricWeightSnapshot")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<int?>("MonthlyEvaluationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("OrderEvaluationSubjectId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Scale")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Score")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SourceMetricId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TypeNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("TypeWeightSnapshot")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("decimal(6,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MonthlyEvaluationId");
+
+                    b.HasIndex("OrderEvaluationSubjectId");
+
+                    b.HasIndex("SourceMetricId");
+
+                    b.ToTable("EvaluationScoreLines", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ApprovedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("FinalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReopenReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("ReopenedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReopenedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("SubjectRoleIdSnapshot")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PeriodYear", "PeriodMonth");
+
+                    b.HasIndex("EmployeeUserId", "PeriodYear", "PeriodMonth")
+                        .IsUnique();
+
+                    b.ToTable("MonthlyEvaluations", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluationSourceLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ContributedScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<int>("MonthlyEvaluationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrderEvaluationSubjectId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MonthlyEvaluationId");
+
+                    b.HasIndex("OrderEvaluationSubjectId");
+
+                    b.ToTable("MonthlyEvaluationSourceLinks", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("EvaluatorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("SubmittedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EvaluatorUserId");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique();
+
+                    b.HasIndex("PeriodYear", "PeriodMonth");
+
+                    b.ToTable("OrderEvaluations", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("FinalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("OrderEvaluationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SubjectRoleIdSnapshot")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeUserId");
+
+                    b.HasIndex("OrderEvaluationId", "EmployeeUserId")
+                        .IsUnique();
+
+                    b.ToTable("OrderEvaluationSubjects", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.PasswordResetToken", b =>
@@ -1904,6 +3774,420 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "ExpiresAt");
 
                     b.ToTable("PasswordResetTokens", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollCellValue", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ColumnCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<decimal?>("ComputedValue")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("ExplanationJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FormulaSnapshotJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsOverridden")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("OverriddenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("OverriddenByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("OverrideValue")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("PayrollRowId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TextValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OverriddenByUserId");
+
+                    b.HasIndex("PayrollRowId", "ColumnCode")
+                        .IsUnique();
+
+                    b.ToTable("PayrollCellValues", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollComplianceRef", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("HeadlineLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal?>("HeadlineValue")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("LegalReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PayrollPeriodId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ScopeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.Property<int>("VersionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("VersionType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PayrollPeriodId");
+
+                    b.ToTable("PayrollComplianceRefs", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollFormulaSet", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsDefault")
+                        .IsUnique()
+                        .HasFilter("[IsDefault] = 1");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("PayrollFormulaSets", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollNote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AutoGenerated")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ColumnCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LegalReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal?>("NewValue")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("NoteType")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("OldValue")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("PayrollPeriodId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<int?>("VersionType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("PayrollPeriodId");
+
+                    b.ToTable("PayrollNotes", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollPeriod", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FormulaSetId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FormulaSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ParamsSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateOnly>("PayDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PitBracketsSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ProductivitySnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<decimal>("StandardWorkingDays")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("FormulaSetId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("PeriodYear", "PeriodMonth")
+                        .IsUnique();
+
+                    b.ToTable("PayrollPeriods", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollRow", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("InputSnapshotJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("PayrollPeriodId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RowType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeInformationId");
+
+                    b.HasIndex("PayrollPeriodId", "RowType");
+
+                    b.ToTable("PayrollRows", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.ProductivityCoefficient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Coefficient")
+                        .HasColumnType("decimal(6,3)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("MaxScore")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<decimal>("MinScore")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ProductivityCoefficients", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.SalaryColumnDefinition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ColumnCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DataType")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FormulaJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("FormulaSetId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsEditable")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsMoney")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("LookupKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("Rounding")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ValueSource")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FormulaSetId", "ColumnCode")
+                        .IsUnique();
+
+                    b.ToTable("SalaryColumnDefinitions", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.PerformanceMetric", b =>
@@ -2558,6 +4842,375 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "Tạo phiên bản pháp nhân NSDLĐ mới (append-only).",
                             Resource = "ContractParty",
                             Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 143,
+                            Action = "Read",
+                            Code = "Department.Read.All",
+                            Description = "Xem danh sách phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 144,
+                            Action = "Create",
+                            Code = "Department.Create.All",
+                            Description = "Tạo phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 145,
+                            Action = "Update",
+                            Code = "Department.Update.All",
+                            Description = "Cập nhật phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 146,
+                            Action = "Delete",
+                            Code = "Department.Delete.All",
+                            Description = "Xóa phòng ban.",
+                            Resource = "Department",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 147,
+                            Action = "Read",
+                            Code = "EmployeeInformation.Read.Department",
+                            Description = "Xem nhân viên trong phòng ban mình quản lý.",
+                            Resource = "EmployeeInformation",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 148,
+                            Action = "Read",
+                            Code = "ProcessTemplate.Read.All",
+                            Description = "Xem quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 149,
+                            Action = "Create",
+                            Code = "ProcessTemplate.Create.All",
+                            Description = "Tạo quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 150,
+                            Action = "Update",
+                            Code = "ProcessTemplate.Update.All",
+                            Description = "Cập nhật quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 151,
+                            Action = "Delete",
+                            Code = "ProcessTemplate.Delete.All",
+                            Description = "Xóa quy trình mẫu.",
+                            Resource = "ProcessTemplate",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 152,
+                            Action = "Read",
+                            Code = "Project.Read.All",
+                            Description = "Xem mọi đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 153,
+                            Action = "Read",
+                            Code = "Project.Read.Department",
+                            Description = "Xem đơn hàng của xưởng mình.",
+                            Resource = "Project",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 154,
+                            Action = "Create",
+                            Code = "Project.Create.All",
+                            Description = "Tạo đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 155,
+                            Action = "Update",
+                            Code = "Project.Update.All",
+                            Description = "Cập nhật đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 156,
+                            Action = "Delete",
+                            Code = "Project.Delete.All",
+                            Description = "Xóa đơn hàng.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 157,
+                            Action = "GenerateTasks",
+                            Code = "Project.GenerateTasks",
+                            Description = "Sinh task từ quy trình mẫu.",
+                            Resource = "Project",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 158,
+                            Action = "Complete",
+                            Code = "Project.Complete.Department",
+                            Description = "Đóng đơn của xưởng mình.",
+                            Resource = "Project",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 159,
+                            Action = "Read",
+                            Code = "Task.Read.All",
+                            Description = "Xem mọi task.",
+                            Resource = "Task",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 160,
+                            Action = "Read",
+                            Code = "Task.Read.Department",
+                            Description = "Xem task của xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 161,
+                            Action = "Read",
+                            Code = "Task.Read.Assigned",
+                            Description = "Xem task được giao cho mình.",
+                            Resource = "Task",
+                            Scope = "Assigned"
+                        },
+                        new
+                        {
+                            Id = 162,
+                            Action = "Read",
+                            Code = "Task.Read.Confidential",
+                            Description = "Xem task nhạy cảm.",
+                            Resource = "Task",
+                            Scope = "Confidential"
+                        },
+                        new
+                        {
+                            Id = 163,
+                            Action = "Create",
+                            Code = "Task.Create.Department",
+                            Description = "Tạo task (1 người / nhóm) trong xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 164,
+                            Action = "Create",
+                            Code = "Task.Create.Confidential",
+                            Description = "Tạo task nhạy cảm.",
+                            Resource = "Task",
+                            Scope = "Confidential"
+                        },
+                        new
+                        {
+                            Id = 165,
+                            Action = "Update",
+                            Code = "Task.Update.Department",
+                            Description = "Sửa task của xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 166,
+                            Action = "UpdateProgress",
+                            Code = "Task.UpdateProgress.Department",
+                            Description = "Cập nhật sản lượng task xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 167,
+                            Action = "Complete",
+                            Code = "Task.Complete.Department",
+                            Description = "Hoàn thành task xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 168,
+                            Action = "Delete",
+                            Code = "Task.Delete.Department",
+                            Description = "Xóa task lá của xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 169,
+                            Action = "Read",
+                            Code = "ProductionAttachment.Read.Department",
+                            Description = "Xem tài liệu/ảnh của xưởng mình.",
+                            Resource = "ProductionAttachment",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 205,
+                            Action = "Write",
+                            Code = "ProductionAttachment.Write.Department",
+                            Description = "Tải lên/xóa tài liệu của xưởng mình.",
+                            Resource = "ProductionAttachment",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 206,
+                            Action = "Read",
+                            Code = "ProductionAttachment.Read.All",
+                            Description = "Xem tài liệu/ảnh mọi xưởng.",
+                            Resource = "ProductionAttachment",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 207,
+                            Action = "Audit.Read",
+                            Code = "Task.Audit.Read.All",
+                            Description = "Xem lịch sử chỉnh sửa task/đơn mọi xưởng.",
+                            Resource = "Task",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 208,
+                            Action = "Audit.Read",
+                            Code = "Task.Audit.Read.Department",
+                            Description = "Xem lịch sử chỉnh sửa task/đơn xưởng mình.",
+                            Resource = "Task",
+                            Scope = "Department"
+                        },
+                        new
+                        {
+                            Id = 224,
+                            Action = "Read",
+                            Code = "OrderEvaluation.Read.Own",
+                            Description = "Xem bảng đánh giá theo đơn mình phụ trách.",
+                            Resource = "OrderEvaluation",
+                            Scope = "Own"
+                        },
+                        new
+                        {
+                            Id = 225,
+                            Action = "Read",
+                            Code = "OrderEvaluation.Read.All",
+                            Description = "Xem mọi bảng đánh giá theo đơn.",
+                            Resource = "OrderEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 226,
+                            Action = "Score",
+                            Code = "OrderEvaluation.Score.Own",
+                            Description = "Chấm điểm bảng đánh giá đơn mình phụ trách.",
+                            Resource = "OrderEvaluation",
+                            Scope = "Own"
+                        },
+                        new
+                        {
+                            Id = 227,
+                            Action = "Submit",
+                            Code = "OrderEvaluation.Submit.Own",
+                            Description = "Chốt (submit) bảng đánh giá theo đơn.",
+                            Resource = "OrderEvaluation",
+                            Scope = "Own"
+                        },
+                        new
+                        {
+                            Id = 228,
+                            Action = "Read",
+                            Code = "MonthlyEvaluation.Read.All",
+                            Description = "Xem mọi bảng đánh giá tháng.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 229,
+                            Action = "Read",
+                            Code = "MonthlyEvaluation.Read.Self",
+                            Description = "Xem bảng đánh giá tháng của chính mình.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "Self"
+                        },
+                        new
+                        {
+                            Id = 230,
+                            Action = "Aggregate",
+                            Code = "MonthlyEvaluation.Aggregate.All",
+                            Description = "Tổng hợp bảng tháng từ các bảng theo đơn.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 231,
+                            Action = "ScoreDirect",
+                            Code = "MonthlyEvaluation.ScoreDirect.All",
+                            Description = "Director chấm trực tiếp tổ trưởng/văn phòng.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 232,
+                            Action = "Approve",
+                            Code = "MonthlyEvaluation.Approve.All",
+                            Description = "Duyệt & khóa bảng đánh giá tháng.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
+                        },
+                        new
+                        {
+                            Id = 233,
+                            Action = "Reopen",
+                            Code = "MonthlyEvaluation.Reopen.All",
+                            Description = "Mở lại bảng tháng đã khóa.",
+                            Resource = "MonthlyEvaluation",
+                            Scope = "All"
                         });
                 });
 
@@ -2588,6 +5241,386 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Positions", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<double?>("DefaultDeadlineOffsetRatio")
+                        .HasColumnType("float");
+
+                    b.Property<bool>("DefaultIsRequiredGate")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("DefaultPlannedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DefaultPlannedWorkUnits")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DefaultProgressType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("DefaultWeight")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int?>("ParentProcessStepId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlannedHeadcount")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProcessTemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RequiredPositionId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ScalesWithQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequiredPositionId");
+
+                    b.HasIndex("ParentProcessStepId", "StepOrder");
+
+                    b.HasIndex("ProcessTemplateId", "StepOrder");
+
+                    b.ToTable("ProcessSteps", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BaseQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("DefaultDepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("DefaultDepartmentId");
+
+                    b.ToTable("ProcessTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProductionAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Bucket")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OwnerType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Sha256Hex")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UploadedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("OwnerType", "OwnerId");
+
+                    b.ToTable("ProductionAttachments", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Project", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CompletionNote")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ResponsibleUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("StatusBeforePause")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("DeletedAt");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("ResponsibleUserId");
+
+                    b.ToTable("Projects", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProjectTask", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CompletedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("datetime2");
+
+                    b.Property<double?>("DeadlineOffsetRatio")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsBatchParent")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsConfidential")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequiredGate")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("ParentTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PausedByCascadeFromId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlannedHeadcount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlannedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlannedWorkUnits")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProgressType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("ProgressUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RequiredPositionId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresHandover")
+                        .HasColumnType("bit");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("StatusBeforePause")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<bool>("WasLate")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Weight")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("DeletedAt");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex("ParentTaskId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("RequiredPositionId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ProjectTasks", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.RefreshToken", b =>
@@ -2711,17 +5744,17 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             Id = 5,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Trưởng phòng — quản lý KPI nhân viên trong phòng.",
+                            Description = "Planning Manager — lập kế hoạch, tạo đơn, gán người, đặt tổ trưởng, sửa timeline. Scope xưởng.",
                             IsSystem = true,
-                            Name = "DepartmentManager"
+                            Name = "Planning Manager"
                         },
                         new
                         {
                             Id = 6,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Quản lý dự án — theo dõi KPI dự án.",
+                            Description = "Tổ trưởng sản xuất — chịu trách nhiệm đơn (ResponsibleUserId), cập nhật tiến độ + hoàn thành task/đơn.",
                             IsSystem = true,
-                            Name = "ProjectManager"
+                            Name = "Production Team Leader"
                         },
                         new
                         {
@@ -2730,6 +5763,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "Nhân viên — chỉ xem/sửa thông tin của chính mình.",
                             IsSystem = true,
                             Name = "Employee"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình.",
+                            IsSystem = true,
+                            Name = "DeputyDirector"
                         });
                 });
 
@@ -3070,6 +6111,231 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 1,
+                            PermissionId = 143
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 144
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 145
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 146
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 147
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 148
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 149
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 150
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 151
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 152
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 153
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 154
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 155
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 156
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 157
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 158
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 159
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 160
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 161
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 162
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 163
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 164
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 165
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 166
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 167
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 168
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 169
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 205
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 206
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 220
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 221
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 222
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 223
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 207
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 208
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 224
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 225
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 226
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 227
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 228
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 229
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 230
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 231
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 232
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 233
+                        },
+                        new
+                        {
                             RoleId = 2,
                             PermissionId = 1
                         },
@@ -3147,6 +6413,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 2,
                             PermissionId = 16
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 143
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 144
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 145
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 146
                         },
                         new
                         {
@@ -3290,6 +6576,51 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 2,
+                            PermissionId = 152
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 159
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 164
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 225
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 228
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 229
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 230
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 232
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionId = 233
+                        },
+                        new
+                        {
                             RoleId = 3,
                             PermissionId = 2
                         },
@@ -3321,6 +6652,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 3,
+                            PermissionId = 143
+                        },
+                        new
+                        {
+                            RoleId = 3,
                             PermissionId = 33
                         },
                         new
@@ -3337,6 +6673,21 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 3,
                             PermissionId = 47
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 152
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 159
+                        },
+                        new
+                        {
+                            RoleId = 3,
+                            PermissionId = 229
                         },
                         new
                         {
@@ -3391,6 +6742,26 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 4,
+                            PermissionId = 143
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 144
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 145
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 146
+                        },
+                        new
+                        {
+                            RoleId = 4,
                             PermissionId = 17
                         },
                         new
@@ -3425,26 +6796,286 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
-                            RoleId = 5,
-                            PermissionId = 1
+                            RoleId = 4,
+                            PermissionId = 148
                         },
                         new
                         {
-                            RoleId = 5,
+                            RoleId = 4,
+                            PermissionId = 149
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 150
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 151
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 152
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 154
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 155
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 156
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 157
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 158
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 159
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 162
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 164
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 163
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 165
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 166
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 167
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 168
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 206
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 220
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 221
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 222
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 223
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 207
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 225
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 228
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 229
+                        },
+                        new
+                        {
+                            RoleId = 4,
+                            PermissionId = 231
+                        },
+                        new
+                        {
+                            RoleId = 9,
                             PermissionId = 2
                         },
                         new
                         {
-                            RoleId = 5,
+                            RoleId = 9,
                             PermissionId = 5
                         },
                         new
                         {
-                            RoleId = 5,
+                            RoleId = 9,
                             PermissionId = 7
                         },
                         new
                         {
+                            RoleId = 9,
+                            PermissionId = 8
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 11
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 143
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 148
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 152
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 154
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 157
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 158
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 159
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 162
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 164
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 163
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 165
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 166
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 167
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 168
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 206
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 220
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 221
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 222
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 223
+                        },
+                        new
+                        {
+                            RoleId = 9,
+                            PermissionId = 207
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 2
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 5
+                        },
+                        new
+                        {
                             RoleId = 5,
                             PermissionId = 8
                         },
@@ -3461,7 +7092,7 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 5,
-                            PermissionId = 17
+                            PermissionId = 143
                         },
                         new
                         {
@@ -3471,27 +7102,42 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 5,
-                            PermissionId = 19
-                        },
-                        new
-                        {
-                            RoleId = 5,
-                            PermissionId = 20
-                        },
-                        new
-                        {
-                            RoleId = 5,
-                            PermissionId = 21
-                        },
-                        new
-                        {
-                            RoleId = 5,
-                            PermissionId = 22
-                        },
-                        new
-                        {
-                            RoleId = 5,
                             PermissionId = 23
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 218
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 219
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 220
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 221
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 222
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 223
+                        },
+                        new
+                        {
+                            RoleId = 5,
+                            PermissionId = 229
                         },
                         new
                         {
@@ -3506,6 +7152,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 6,
+                            PermissionId = 147
+                        },
+                        new
+                        {
+                            RoleId = 6,
                             PermissionId = 8
                         },
                         new
@@ -3517,6 +7168,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 6,
                             PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 143
                         },
                         new
                         {
@@ -3550,6 +7206,76 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 6,
+                            PermissionId = 153
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 160
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 163
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 165
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 166
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 167
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 168
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 222
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 223
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 208
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 224
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 226
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 227
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionId = 229
+                        },
+                        new
+                        {
                             RoleId = 7,
                             PermissionId = 2
                         },
@@ -3572,6 +7298,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionId = 13
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 143
                         },
                         new
                         {
@@ -3602,6 +7333,21 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionId = 48
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 161
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 222
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionId = 229
                         });
                 });
 
@@ -3662,6 +7408,24 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasFilter("[IsActive] = 1");
 
                     b.ToTable("SalaryGrades", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.TaskAssignee", b =>
+                {
+                    b.Property<int>("TaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("TaskId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TaskAssignees", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.TypePerformanceMetric", b =>
@@ -3770,6 +7534,524 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("PerformanceMetricRoles", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceAdjustment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.AttendanceRecord", "AttendanceRecord")
+                        .WithMany("AttendanceAdjustments")
+                        .HasForeignKey("AttendanceRecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AttendanceRecord");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRecord", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.OvertimeRequest", "OvertimeRequest")
+                        .WithMany()
+                        .HasForeignKey("OvertimeRequestId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany("AttendanceRecords")
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("OvertimeRequest");
+
+                    b.Navigation("ShiftTemplate");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRuleVersion", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.AttendanceRule", "AttendanceRule")
+                        .WithMany("Versions")
+                        .HasForeignKey("AttendanceRuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AttendanceRule");
+
+                    b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceSetting", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.EmployeeShiftAssignment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ScheduleTemplate", "ScheduleTemplate")
+                        .WithMany()
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany("EmployeeShiftAssignments")
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ScheduleTemplate");
+
+                    b.Navigation("ShiftTemplate");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LateEarlyRequest", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CancelledByUser")
+                        .WithMany()
+                        .HasForeignKey("CancelledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CancelledByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveBalance", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.LeaveType", "LeaveType")
+                        .WithMany()
+                        .HasForeignKey("LeaveTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("LeaveType");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveRequest", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CancelledByUser")
+                        .WithMany()
+                        .HasForeignKey("CancelledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.LeaveType", "LeaveType")
+                        .WithMany()
+                        .HasForeignKey("LeaveTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CancelledByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("LeaveType");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.LeaveType", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.OvertimeRequest", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "ApproverReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApproverReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Compliance.LaborLawConstantsVersion", "LaborLawConstantsVersion")
+                        .WithMany()
+                        .HasForeignKey("LaborLawConstantsVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "PmReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("PmReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ApproverReviewedByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("LaborLawConstantsVersion");
+
+                    b.Navigation("PmReviewedByUser");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.PublicHoliday", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany()
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("ShiftTemplate");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateEmployee", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ScheduleTemplate", "ScheduleTemplate")
+                        .WithMany("Employees")
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ScheduleTemplate");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplateShift", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.ScheduleTemplate", "ScheduleTemplate")
+                        .WithMany("Shifts")
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Attendance.ShiftTemplate", "ShiftTemplate")
+                        .WithMany()
+                        .HasForeignKey("ShiftTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ScheduleTemplate");
+
+                    b.Navigation("ShiftTemplate");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Attendance.AttendanceRule", "AppliedAttendanceRule")
+                        .WithMany()
+                        .HasForeignKey("AppliedAttendanceRuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AppliedAttendanceRule");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.WfhRequest", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CancelledByUser")
+                        .WithMany()
+                        .HasForeignKey("CancelledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CancelledByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.AuditLog", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.User", "User")
@@ -3778,6 +8060,54 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Comment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "AuthorUser")
+                        .WithMany()
+                        .HasForeignKey("AuthorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AuthorUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.CompanyPolicy", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.CompanyPolicyFile", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.CompanyPolicy", "CompanyPolicy")
+                        .WithMany("Files")
+                        .HasForeignKey("CompanyPolicyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UploadedByUser")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CompanyPolicy");
+
+                    b.Navigation("UploadedByUser");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.AllowanceExemptThresholdVersion", b =>
@@ -4105,8 +8435,96 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("WrittenNoticeFile");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "Manager")
+                        .WithMany()
+                        .HasForeignKey("ManagerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Manager");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Employee.DependentRegistrationRequest", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CancelledByUser")
+                        .WithMany()
+                        .HasForeignKey("CancelledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Employee.EmployeeDependent", "TargetDependent")
+                        .WithMany()
+                        .HasForeignKey("TargetDependentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CancelledByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("TargetDependent");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Employee.EmployeeDependent", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.EmployeeInformation", b =>
                 {
+                    b.HasOne("MPS.Domain.Entities.Department", "Department")
+                        .WithMany("Employees")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("MPS.Domain.Entities.Position", "Position")
                         .WithMany("EmployeeInformations")
                         .HasForeignKey("PositionId")
@@ -4118,9 +8536,103 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasForeignKey("MPS.Domain.Entities.EmployeeInformation", "UserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.Navigation("Department");
+
                     b.Navigation("Position");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.EvaluationScoreLine", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", "MonthlyEvaluation")
+                        .WithMany("Scores")
+                        .HasForeignKey("MonthlyEvaluationId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", "OrderEvaluationSubject")
+                        .WithMany("Scores")
+                        .HasForeignKey("OrderEvaluationSubjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MPS.Domain.Entities.PerformanceMetric", "SourceMetric")
+                        .WithMany()
+                        .HasForeignKey("SourceMetricId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("MonthlyEvaluation");
+
+                    b.Navigation("OrderEvaluationSubject");
+
+                    b.Navigation("SourceMetric");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluationSourceLink", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", "MonthlyEvaluation")
+                        .WithMany("SourceLinks")
+                        .HasForeignKey("MonthlyEvaluationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", "OrderEvaluationSubject")
+                        .WithMany()
+                        .HasForeignKey("OrderEvaluationSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MonthlyEvaluation");
+
+                    b.Navigation("OrderEvaluationSubject");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluation", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "Evaluator")
+                        .WithMany()
+                        .HasForeignKey("EvaluatorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Evaluator");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Evaluation.OrderEvaluation", "OrderEvaluation")
+                        .WithMany("Subjects")
+                        .HasForeignKey("OrderEvaluationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("OrderEvaluation");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.PasswordResetToken", b =>
@@ -4134,6 +8646,126 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollCellValue", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "OverriddenByUser")
+                        .WithMany()
+                        .HasForeignKey("OverriddenByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollRow", "PayrollRow")
+                        .WithMany("Cells")
+                        .HasForeignKey("PayrollRowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OverriddenByUser");
+
+                    b.Navigation("PayrollRow");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollComplianceRef", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollPeriod", "PayrollPeriod")
+                        .WithMany("ComplianceRefs")
+                        .HasForeignKey("PayrollPeriodId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PayrollPeriod");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollFormulaSet", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollNote", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollPeriod", "PayrollPeriod")
+                        .WithMany("Notes")
+                        .HasForeignKey("PayrollPeriodId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("PayrollPeriod");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollPeriod", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollFormulaSet", "FormulaSet")
+                        .WithMany()
+                        .HasForeignKey("FormulaSetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("FormulaSet");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollRow", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollPeriod", "PayrollPeriod")
+                        .WithMany("Rows")
+                        .HasForeignKey("PayrollPeriodId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("PayrollPeriod");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.SalaryColumnDefinition", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollFormulaSet", "FormulaSet")
+                        .WithMany("Columns")
+                        .HasForeignKey("FormulaSetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FormulaSet");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.PerformanceMetric", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.TypePerformanceMetric", "TypePerformanceMetric")
@@ -4143,6 +8775,130 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("TypePerformanceMetric");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessStep", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.ProcessStep", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentProcessStepId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.ProcessTemplate", "ProcessTemplate")
+                        .WithMany("Steps")
+                        .HasForeignKey("ProcessTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Position", "RequiredPosition")
+                        .WithMany()
+                        .HasForeignKey("RequiredPositionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Parent");
+
+                    b.Navigation("ProcessTemplate");
+
+                    b.Navigation("RequiredPosition");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessTemplate", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Department", "DefaultDepartment")
+                        .WithMany()
+                        .HasForeignKey("DefaultDepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DefaultDepartment");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProductionAttachment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Project", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CompletedBy")
+                        .WithMany()
+                        .HasForeignKey("CompletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "ResponsibleUser")
+                        .WithMany()
+                        .HasForeignKey("ResponsibleUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CompletedBy");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("ResponsibleUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProjectTask", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CompletedBy")
+                        .WithMany()
+                        .HasForeignKey("CompletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.ProjectTask", "ParentTask")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentTaskId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Project", "Project")
+                        .WithMany("Tasks")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MPS.Domain.Entities.Position", "RequiredPosition")
+                        .WithMany()
+                        .HasForeignKey("RequiredPositionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CompletedBy");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("ParentTask");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("RequiredPosition");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.RefreshToken", b =>
@@ -4186,6 +8942,25 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("Position");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.TaskAssignee", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.ProjectTask", "Task")
+                        .WithMany("Assignees")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Task");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.User", b =>
                 {
                     b.HasOne("MPS.Domain.Entities.Role", "Role")
@@ -4215,6 +8990,35 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.AllowanceType", b =>
                 {
                     b.Navigation("ContractAllowances");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRecord", b =>
+                {
+                    b.Navigation("AttendanceAdjustments");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.AttendanceRule", b =>
+                {
+                    b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ScheduleTemplate", b =>
+                {
+                    b.Navigation("Employees");
+
+                    b.Navigation("Shifts");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.ShiftTemplate", b =>
+                {
+                    b.Navigation("AttendanceRecords");
+
+                    b.Navigation("EmployeeShiftAssignments");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.CompanyPolicy", b =>
+                {
+                    b.Navigation("Files");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Compliance.LegalDocument", b =>
@@ -4268,6 +9072,47 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("ContractTerminations");
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Department", b =>
+                {
+                    b.Navigation("Employees");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.MonthlyEvaluation", b =>
+                {
+                    b.Navigation("Scores");
+
+                    b.Navigation("SourceLinks");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluation", b =>
+                {
+                    b.Navigation("Subjects");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", b =>
+                {
+                    b.Navigation("Scores");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollFormulaSet", b =>
+                {
+                    b.Navigation("Columns");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollPeriod", b =>
+                {
+                    b.Navigation("ComplianceRefs");
+
+                    b.Navigation("Notes");
+
+                    b.Navigation("Rows");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollRow", b =>
+                {
+                    b.Navigation("Cells");
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Permission", b =>
                 {
                     b.Navigation("RolePermissions");
@@ -4276,6 +9121,28 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.Position", b =>
                 {
                     b.Navigation("EmployeeInformations");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessStep", b =>
+                {
+                    b.Navigation("Children");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProcessTemplate", b =>
+                {
+                    b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Project", b =>
+                {
+                    b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.ProjectTask", b =>
+                {
+                    b.Navigation("Assignees");
+
+                    b.Navigation("Children");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Role", b =>

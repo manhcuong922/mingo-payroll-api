@@ -6,6 +6,7 @@ namespace MPS.Application.Features.ContractTemplate.Commands;
 public sealed record ContractTemplateUpdateCommand(
     int Id,
     string Name,
-    ContractCategory ContractCategory,
-    ContractSubtype ContractSubtype,
+    ContractKind Kind,
+    ContractCategory? ContractCategory,
+    ContractSubtype? ContractSubtype,
     bool IsActive) : IRequest<bool>;

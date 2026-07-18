@@ -1,7 +1,12 @@
 namespace MPS.Domain.Constants;
 
+// Chú ý: ID trong PermissionIds đã được seed vào DB — KHÔNG đổi giá trị ID cũ.
+// Khi thêm permission mới, dùng ID tiếp theo trong dải trống (xem comment "reserved").
+
 public static class Permissions
 {
+    // ===== Core: User + EmployeeInformation + Position + Metric + Role + RefreshToken — IDs 1–32 =====
+
     public const string UserReadAll = "User.Read.All";
     public const string UserReadSelf = "User.Read.Self";
     public const string UserCreateAll = "User.Create.All";
@@ -41,7 +46,7 @@ public static class Permissions
 
     public const string RefreshTokenRevokeAll = "RefreshToken.Revoke.All";
 
-    // ===== Contract module (Phase 1) =====
+    // ===== Contract module (Phase 1) — IDs 33–64 =====
 
     public const string ContractReadAll = "Contract.Read.All";
     public const string ContractReadSelf = "Contract.Read.Self";
@@ -83,7 +88,7 @@ public static class Permissions
     public const string ContractPartyReadAll = "ContractParty.Read.All";
     public const string ContractPartyCreateAll = "ContractParty.Create.All";
 
-    // ===== Compliance module (FE-06) — IDs 65–94 =====
+    // ===== Compliance module (FE-06) — IDs 65–88 =====
 
     public const string SocialInsuranceRateReadAll = "SocialInsuranceRate.Read.All";
     public const string SocialInsuranceRateCreateAll = "SocialInsuranceRate.Create.All";
@@ -105,28 +110,249 @@ public static class Permissions
     public const string AllowanceExemptThresholdUpdateAll = "AllowanceExemptThreshold.Update.All";
     public const string AllowanceExemptThresholdDeleteAll = "AllowanceExemptThreshold.Delete.All";
 
+    // (81–84 reserved unused)
+
     public const string LaborLawConstantsReadAll = "LaborLawConstants.Read.All";
     public const string LaborLawConstantsCreateAll = "LaborLawConstants.Create.All";
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
     public const string LaborLawConstantsDeleteAll = "LaborLawConstants.Delete.All";
 
-    // ===== Audit Log module (FT-39) — System Admin only =====
+    // ===== AuditLog + LegalDocument + Compliance Auto-Update — IDs 89–94 =====
 
     public const string AuditLogReadAll = "AuditLog.Read.All";
-    // ===== LegalDocument module — IDs 89–90 =====
 
     public const string LegalDocumentReadAll = "LegalDocument.Read.All";
     public const string LegalDocumentWriteAll = "LegalDocument.Write.All";
 
-    // ===== Compliance Auto-Update module (crawl + AI đề xuất) =====
-
     public const string ComplianceAutoUpdateRunAll = "ComplianceAutoUpdate.Run.All";
     public const string ComplianceAutoUpdateReadAll = "ComplianceAutoUpdate.Read.All";
     public const string ComplianceAutoUpdateApproveAll = "ComplianceAutoUpdate.Approve.All";
+
+    // ===== Attendance module (FE-ATT) — IDs 95–129 =====
+    // Note: EmployeeShiftReadSelf thêm sau ở ID 179 (100 đã bị EmployeeShiftCreateAll chiếm).
+
+    public const string ShiftTemplateReadAll = "ShiftTemplate.Read.All";
+    public const string ShiftTemplateCreateAll = "ShiftTemplate.Create.All";
+    public const string ShiftTemplateUpdateAll = "ShiftTemplate.Update.All";
+    public const string ShiftTemplateDeleteAll = "ShiftTemplate.Delete.All";
+
+    public const string EmployeeShiftReadAll = "EmployeeShift.Read.All";
+    public const string EmployeeShiftCreateAll = "EmployeeShift.Create.All";
+    public const string EmployeeShiftDeleteAll = "EmployeeShift.Delete.All";
+
+    public const string PublicHolidayReadAll = "PublicHoliday.Read.All";
+    public const string PublicHolidayCreateAll = "PublicHoliday.Create.All";
+    public const string PublicHolidayUpdateAll = "PublicHoliday.Update.All";
+    public const string PublicHolidayDeleteAll = "PublicHoliday.Delete.All";
+
+    public const string AttendanceReadAll = "Attendance.Read.All";
+    public const string AttendanceReadSelf = "Attendance.Read.Self";
+    public const string AttendanceCreateAll = "Attendance.Create.All";
+    public const string AttendanceUpdateAll = "Attendance.Update.All";
+
+    public const string OvertimeRequestReadAll = "OvertimeRequest.Read.All";
+    public const string OvertimeRequestReadSelf = "OvertimeRequest.Read.Self";
+
+    /// <summary>NV tự đăng ký OT trong đơn mình đang có task InProgress.</summary>
+    public const string OvertimeRequestCreateSelf = "OvertimeRequest.Create.Self";
+
+    /// <summary>DM duyệt cuối request OT khi PM chọn route = DepartmentManager.</summary>
+    public const string OvertimeRequestApproveDepartment = "OvertimeRequest.Approve.Department";
+
+    public const string LeaveRequestReadAll = "LeaveRequest.Read.All";
+    public const string LeaveRequestReadSelf = "LeaveRequest.Read.Self";
+    public const string LeaveRequestCreateSelf = "LeaveRequest.Create.Self";
+    public const string LeaveRequestApproveAll = "LeaveRequest.Approve.All";
+    public const string LeaveRequestCancelSelf = "LeaveRequest.Cancel.Self";
+
+    public const string LateEarlyRequestReadAll = "LateEarlyRequest.Read.All";
+    public const string LateEarlyRequestReadSelf = "LateEarlyRequest.Read.Self";
+    public const string LateEarlyRequestCreateSelf = "LateEarlyRequest.Create.Self";
+    public const string LateEarlyRequestApproveAll = "LateEarlyRequest.Approve.All";
+    public const string LateEarlyRequestCancelSelf = "LateEarlyRequest.Cancel.Self";
+
+    public const string WfhRequestReadAll = "WfhRequest.Read.All";
+    public const string WfhRequestReadSelf = "WfhRequest.Read.Self";
+    public const string WfhRequestCreateSelf = "WfhRequest.Create.Self";
+    public const string WfhRequestApproveAll = "WfhRequest.Approve.All";
+    public const string WfhRequestCancelSelf = "WfhRequest.Cancel.Self";
+
+    public const string DependentRequestReadAll = "DependentRequest.Read.All";
+    public const string DependentRequestReadSelf = "DependentRequest.Read.Self";
+    public const string DependentRequestCreateSelf = "DependentRequest.Create.Self";
+    public const string DependentRequestApproveAll = "DependentRequest.Approve.All";
+    public const string DependentRequestCancelSelf = "DependentRequest.Cancel.Self";
+    public const string EmployeeDependentReadAll = "EmployeeDependent.Read.All";
+    public const string EmployeeDependentReadSelf = "EmployeeDependent.Read.Self";
+
+    public const string AttendanceAdjustmentReadAll = "AttendanceAdjustment.Read.All";
+    public const string AttendanceAdjustmentCreateSelf = "AttendanceAdjustment.Create.Self";
+    public const string AttendanceAdjustmentApproveAll = "AttendanceAdjustment.Approve.All";
+    public const string AttendanceAdjustmentOverrideAll = "AttendanceAdjustment.Override.All";
+
+    public const string AttendanceRuleReadAll = "AttendanceRule.Read.All";
+    public const string AttendanceRuleCreateAll = "AttendanceRule.Create.All";
+    public const string AttendanceRuleUpdateAll = "AttendanceRule.Update.All";
+    public const string AttendanceRuleDeleteAll = "AttendanceRule.Delete.All";
+
+    public const string LeaveTypeReadAll = "LeaveType.Read.All";
+    public const string LeaveTypeCreateAll = "LeaveType.Create.All";
+    public const string LeaveTypeUpdateAll = "LeaveType.Update.All";
+    public const string LeaveTypeDeleteAll = "LeaveType.Delete.All";
+
+    // ===== Company Policy module — IDs 130–133 =====
+
+    public const string CompanyPolicyReadAll = "CompanyPolicy.Read.All";
+    public const string CompanyPolicyCreateAll = "CompanyPolicy.Create.All";
+    public const string CompanyPolicyUpdateAll = "CompanyPolicy.Update.All";
+    public const string CompanyPolicyDeleteAll = "CompanyPolicy.Delete.All";
+
+    // ===== FaceRegistration (IDs 134–136) — retired: module gỡ ở nhánh remove/face-attendance =====
+    // ===== OvertimeSlotTemplate (IDs 137–140) — retired: module gỡ ở nhánh dev =====
+    // IDs 134–140 giữ trống cho audit continuity (không tái sử dụng).
+
+    // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
+
+    public const string AttendanceSettingReadAll = "AttendanceSetting.Read.All";
+    public const string AttendanceSettingUpdateAll = "AttendanceSetting.Update.All";
+
+    // ===== Department module — IDs 143–147 =====
+
+    public const string DepartmentReadAll   = "Department.Read.All";
+    public const string DepartmentCreateAll = "Department.Create.All";
+    public const string DepartmentUpdateAll = "Department.Update.All";
+    public const string DepartmentDeleteAll = "Department.Delete.All";
+
+    public const string EmployeeInformationReadDepartment = "EmployeeInformation.Read.Department";
+
+    // ===== Task/Production module (v5) — IDs 148–169 =====
+    // ProcessTemplate (quy trình mẫu) — GĐ định nghĩa dùng chung; PM đọc để áp.
+
+    public const string ProcessTemplateReadAll   = "ProcessTemplate.Read.All";
+    public const string ProcessTemplateCreateAll = "ProcessTemplate.Create.All";
+    public const string ProcessTemplateUpdateAll = "ProcessTemplate.Update.All";
+    public const string ProcessTemplateDeleteAll = "ProcessTemplate.Delete.All";
+
+    // Project/Order (đơn hàng)
+    public const string ProjectReadAll          = "Project.Read.All";
+    public const string ProjectReadDepartment   = "Project.Read.Department";
+    public const string ProjectCreateAll        = "Project.Create.All";
+    public const string ProjectUpdateAll        = "Project.Update.All";
+    public const string ProjectDeleteAll        = "Project.Delete.All";
+    public const string ProjectGenerateTasks    = "Project.GenerateTasks";
+    public const string ProjectCompleteDepartment = "Project.Complete.Department"; // đóng đơn thủ công
+
+    // Task — xem theo scope
+    public const string TaskReadAll          = "Task.Read.All";
+    public const string TaskReadDepartment   = "Task.Read.Department";
+    public const string TaskReadAssigned     = "Task.Read.Assigned";
+    public const string TaskReadConfidential = "Task.Read.Confidential";
+
+    // Task — thao tác (PM xưởng; nhân viên KHÔNG có quyền ghi task nào)
+    public const string TaskCreateDepartment      = "Task.Create.Department";        // tạo task lá 1 người/nhóm (PM)
+    public const string TaskCreateConfidential    = "Task.Create.Confidential";
+    public const string TaskUpdateDepartment      = "Task.Update.Department";
+    public const string TaskUpdateProgressDepartment = "Task.UpdateProgress.Department"; // cập nhật CompletedQuantity
+    public const string TaskCompleteDepartment    = "Task.Complete.Department";      // bấm hoàn thành (+ WasLate)
+    public const string TaskDeleteDepartment      = "Task.Delete.Department";
+
+    // Attachment (tài liệu/ảnh) — LEGACY, giữ để tương thích ngược. Không seed cho role nào nữa —
+    // dùng Read/Write.Project (tầng 1) và Read/Write.Stage (tầng 2+3) thay thế ở IDs 220–223.
+    public const string ProductionAttachmentReadDepartment  = "ProductionAttachment.Read.Department";
+
+    // (170–177 reserved unused — WeeklyDayOff module removed 2026-07-10)
+
+    // ===== OT 2-tầng workflow (v3) + EmployeeShift self-read — IDs 178–180 =====
+
+    /// <summary>PM (tổ trưởng đơn = Project.ResponsibleUserId) review tầng đầu, Forward chọn HR/DM hoặc Reject.</summary>
+    public const string OvertimeRequestReviewProject = "OvertimeRequest.Review.Project";
+
+    /// <summary>NV xem lịch phân ca kế hoạch của chính mình.</summary>
+    public const string EmployeeShiftReadSelf = "EmployeeShift.Read.Self";
+
+    /// <summary>HR duyệt cuối request OT khi PM chọn route = Hr.</summary>
+    public const string OvertimeRequestApproveHr = "OvertimeRequest.Approve.Hr";
+
+    // (181–204 reserved unused)
+
+    // ===== Task/Production extensions — IDs 205–213 =====
+
+    public const string ProductionAttachmentWriteDepartment = "ProductionAttachment.Write.Department"; // LEGACY
+    public const string ProductionAttachmentReadAll         = "ProductionAttachment.Read.All";         // LEGACY
+
+    // Audit — xem lịch sử chỉnh sửa task/đơn (scoped theo xưởng)
+    public const string TaskAuditReadAll        = "Task.Audit.Read.All";
+    public const string TaskAuditReadDepartment = "Task.Audit.Read.Department";
+
+    // Task v7 (tách Create theo IsBatchParent) + Comment module.
+    // Quyền xem/viết đi theo entity gốc (Project/Task) — CHỈ Employee cần permission riêng
+    // vì đây là ngoại lệ duy nhất phá vỡ "Employee không có quyền ghi" (plan ràng buộc 6).
+    public const string TaskCreateStageDepartment = "Task.CreateStage.Department";   // tạo Công đoạn (Manager/GĐ)
+    public const string CommentReadAll           = "Comment.Read.All";               // GĐ/Phó GĐ — mọi tầng, mọi xưởng
+    public const string CommentCreateOwn         = "Comment.Create.Own";             // Employee — CHỈ Task của chính mình
+    public const string CommentCreateDepartment  = "Comment.Create.Department";      // Manager/PM — theo scope
+
+    /// <summary>
+    /// Chỉ cho phép ĐỌC quy trình mẫu để chọn khi "Áp quy trình" (GenerateTasksModal).
+    /// KHÔNG cho vào màn quản lý/CRUD quy trình mẫu (vẫn cần ProcessTemplateReadAll).
+    /// </summary>
+    public const string ProcessTemplateReadForApply = "ProcessTemplate.ReadForApply.All";
+
+    // (214–217 reserved unused)
+
+    // ===== Task/Production full-department reads — IDs 218–219 =====
+    // Xem TOÀN BỘ đơn/công đoạn/task của 1 xưởng (3 tầng, bỏ qua filter theo AssignedPmUserId).
+    // Dành cho vai trò quản lý cấp xưởng không trực tiếp phụ trách công đoạn (vd. DepartmentManager).
+
+    public const string ProjectReadFullDepartment = "Project.Read.FullDepartment";
+    public const string TaskReadFullDepartment    = "Task.Read.FullDepartment";
+
+    // ===== ProductionAttachment tier split — IDs 220–223 =====
+    // Tách theo tầng: Project = Đơn hàng (tầng 1, Director+DepartmentManager);
+    // Stage = Công đoạn/Task lá gộp chung (tầng 2+3, quyền xem/ghi giống nhau).
+
+    // Tầng 1 (Đơn hàng) — chỉ Director/DeputyDirector/DepartmentManager.
+    public const string ProductionAttachmentReadProject  = "ProductionAttachment.Read.Project";
+    public const string ProductionAttachmentWriteProject = "ProductionAttachment.Write.Project";
+
+    // Tầng 2+3 (Công đoạn/Task lá) — Director/DeputyDirector/DepartmentManager/ProjectManager ghi được;
+    // Employee chỉ có Read (xem tài liệu mẫu của Công đoạn/task được giao, không đăng tải).
+    public const string ProductionAttachmentReadStage  = "ProductionAttachment.Read.Stage";
+    public const string ProductionAttachmentWriteStage = "ProductionAttachment.Write.Stage";
+
+    // ===== Evaluation module (chấm điểm nhân sự theo tháng) — IDs 224–233 =====
+    public const string OrderEvaluationReadOwn          = "OrderEvaluation.Read.Own";
+    public const string OrderEvaluationReadAll          = "OrderEvaluation.Read.All";
+    public const string OrderEvaluationScoreOwn         = "OrderEvaluation.Score.Own";
+    public const string OrderEvaluationSubmitOwn        = "OrderEvaluation.Submit.Own";
+    public const string MonthlyEvaluationReadAll        = "MonthlyEvaluation.Read.All";
+    public const string MonthlyEvaluationReadSelf       = "MonthlyEvaluation.Read.Self";
+    public const string MonthlyEvaluationAggregateAll   = "MonthlyEvaluation.Aggregate.All";
+    public const string MonthlyEvaluationScoreDirectAll = "MonthlyEvaluation.ScoreDirect.All";
+    public const string MonthlyEvaluationApproveAll     = "MonthlyEvaluation.Approve.All";
+    public const string MonthlyEvaluationReopenAll      = "MonthlyEvaluation.Reopen.All";
+
+    // ===== Payroll module (bảng lương hàng tháng) — IDs 252–265 =====
+    public const string PayrollReadAll   = "Payroll.Read.All";
+    public const string PayrollReadSelf  = "Payroll.Read.Self";
+    public const string PayrollCreateAll = "Payroll.Create.All";
+    public const string PayrollUpdateAll = "Payroll.Update.All";     // override cell / thêm-sửa cột / thêm note
+    public const string PayrollFinalizeAll = "Payroll.Finalize.All"; // chốt/khoá kỳ
+    public const string PayrollDeleteAll = "Payroll.Delete.All";
+
+    public const string PayrollFormulaSetReadAll   = "PayrollFormulaSet.Read.All";
+    public const string PayrollFormulaSetCreateAll = "PayrollFormulaSet.Create.All";
+    public const string PayrollFormulaSetUpdateAll = "PayrollFormulaSet.Update.All";
+    public const string PayrollFormulaSetDeleteAll = "PayrollFormulaSet.Delete.All";
+
+    public const string ProductivityCoefficientReadAll   = "ProductivityCoefficient.Read.All";
+    public const string ProductivityCoefficientUpdateAll = "ProductivityCoefficient.Update.All";
 }
 
 public static class PermissionIds
 {
+    // ===== Core: User + EmployeeInformation + Position + Metric + Role + RefreshToken — IDs 1–32 =====
+
     public const int UserReadAll = 1;
     public const int UserReadSelf = 2;
     public const int UserCreateAll = 3;
@@ -166,7 +392,7 @@ public static class PermissionIds
 
     public const int RefreshTokenRevokeAll = 32;
 
-    // ===== Contract module (Phase 1) — IDs 33–64 (reserved range 33–100) =====
+    // ===== Contract module (Phase 1) — IDs 33–64 =====
 
     public const int ContractReadAll = 33;
     public const int ContractReadSelf = 34;
@@ -208,7 +434,7 @@ public static class PermissionIds
     public const int ContractPartyReadAll = 63;
     public const int ContractPartyCreateAll = 64;
 
-    // ===== Compliance module (FE-06) — IDs 65–94 =====
+    // ===== Compliance module (FE-06) — IDs 65–88 =====
 
     public const int SocialInsuranceRateReadAll = 65;
     public const int SocialInsuranceRateCreateAll = 66;
@@ -230,23 +456,218 @@ public static class PermissionIds
     public const int AllowanceExemptThresholdUpdateAll = 79;
     public const int AllowanceExemptThresholdDeleteAll = 80;
 
+    // (81–84 reserved unused)
+
     public const int LaborLawConstantsReadAll = 85;
     public const int LaborLawConstantsCreateAll = 86;
     public const int LaborLawConstantsUpdateAll = 87;
     public const int LaborLawConstantsDeleteAll = 88;
 
-    // ===== Audit Log module (FT-39) =====
+    // ===== AuditLog + LegalDocument + Compliance Auto-Update — IDs 89–94 =====
 
     public const int AuditLogReadAll = 89;
-
-    // ===== LegalDocument module — IDs 89–90 =====
 
     public const int LegalDocumentReadAll = 90;
     public const int LegalDocumentWriteAll = 91;
 
-    // ===== Compliance Auto-Update module — IDs 92–93 =====
-
     public const int ComplianceAutoUpdateRunAll = 92;
     public const int ComplianceAutoUpdateReadAll = 93;
     public const int ComplianceAutoUpdateApproveAll = 94;
+
+    // ===== Attendance module (FE-ATT) — IDs 95–129 =====
+    // Note: EmployeeShiftReadSelf thêm sau ở ID 179 (100 đã bị EmployeeShiftCreateAll chiếm).
+
+    public const int ShiftTemplateReadAll = 95;
+    public const int ShiftTemplateCreateAll = 96;
+    public const int ShiftTemplateUpdateAll = 97;
+    public const int ShiftTemplateDeleteAll = 98;
+
+    public const int EmployeeShiftReadAll = 99;
+    public const int EmployeeShiftCreateAll = 100;
+    public const int EmployeeShiftDeleteAll = 101;
+
+    public const int PublicHolidayReadAll = 102;
+    public const int PublicHolidayCreateAll = 103;
+    public const int PublicHolidayUpdateAll = 104;
+    public const int PublicHolidayDeleteAll = 105;
+
+    public const int AttendanceReadAll = 106;
+    public const int AttendanceReadSelf = 107;
+    public const int AttendanceCreateAll = 108;
+    public const int AttendanceUpdateAll = 109;
+
+    public const int OvertimeRequestReadAll = 110;
+    public const int OvertimeRequestReadSelf = 111;
+    public const int OvertimeRequestCreateSelf = 112;               // v3: NV self-create
+    public const int OvertimeRequestApproveDepartment = 113;        // v3: DM route (renamed from ApproveAll)
+
+    public const int LeaveRequestReadAll = 114;
+    public const int LeaveRequestReadSelf = 115;
+    public const int LeaveRequestCreateSelf = 116;
+    public const int LeaveRequestApproveAll = 117;
+
+    public const int AttendanceAdjustmentReadAll = 118;
+    public const int AttendanceAdjustmentCreateSelf = 119;
+    public const int AttendanceAdjustmentApproveAll = 120;
+    public const int AttendanceAdjustmentOverrideAll = 121;
+
+    public const int AttendanceRuleReadAll = 122;
+    public const int AttendanceRuleCreateAll = 123;
+    public const int AttendanceRuleUpdateAll = 124;
+    public const int AttendanceRuleDeleteAll = 125;
+
+    public const int LeaveTypeReadAll = 126;
+    public const int LeaveTypeCreateAll = 127;
+    public const int LeaveTypeUpdateAll = 128;
+    public const int LeaveTypeDeleteAll = 129;
+
+    // ===== Company Policy module — IDs 130–133 =====
+
+    public const int CompanyPolicyReadAll = 130;
+    public const int CompanyPolicyCreateAll = 131;
+    public const int CompanyPolicyUpdateAll = 132;
+    public const int CompanyPolicyDeleteAll = 133;
+
+    // ===== FaceRegistration (IDs 134–136) — retired: module gỡ ở nhánh remove/face-attendance =====
+    // ===== OvertimeSlotTemplate (IDs 137–140) — retired: module gỡ ở nhánh dev =====
+    // IDs 134–140 giữ trống cho audit continuity (không tái sử dụng).
+
+    // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
+
+    public const int AttendanceSettingReadAll = 141;
+    public const int AttendanceSettingUpdateAll = 142;
+
+    // ===== Department module — IDs 143–147 =====
+
+    public const int DepartmentReadAll   = 143;
+    public const int DepartmentCreateAll = 144;
+    public const int DepartmentUpdateAll = 145;
+    public const int DepartmentDeleteAll = 146;
+
+    public const int EmployeeInformationReadDepartment = 147;
+
+    // ===== Task/Production module (v5) — IDs 148–169 =====
+
+    public const int ProcessTemplateReadAll     = 148;
+    public const int ProcessTemplateCreateAll   = 149;
+    public const int ProcessTemplateUpdateAll   = 150;
+    public const int ProcessTemplateDeleteAll   = 151;
+
+    public const int ProjectReadAll             = 152;
+    public const int ProjectReadDepartment      = 153;
+    public const int ProjectCreateAll           = 154;
+    public const int ProjectUpdateAll           = 155;
+    public const int ProjectDeleteAll           = 156;
+    public const int ProjectGenerateTasks       = 157;
+    public const int ProjectCompleteDepartment  = 158;
+
+    public const int TaskReadAll                = 159;
+    public const int TaskReadDepartment         = 160;
+    public const int TaskReadAssigned           = 161;
+    public const int TaskReadConfidential       = 162;
+
+    public const int TaskCreateDepartment          = 163;
+    public const int TaskCreateConfidential        = 164;
+    public const int TaskUpdateDepartment          = 165;
+    public const int TaskUpdateProgressDepartment  = 166;
+    public const int TaskCompleteDepartment        = 167;
+    public const int TaskDeleteDepartment          = 168;
+
+    public const int ProductionAttachmentReadDepartment  = 169; // LEGACY
+
+    // (170–177 reserved unused — WeeklyDayOff module removed 2026-07-10)
+
+    // ===== OT 2-tầng workflow (v3) + EmployeeShift self-read — IDs 178–180 =====
+
+    public const int OvertimeRequestReviewProject = 178;    // v3: PM review (Forward/Reject) — repurposed from batch-create
+    public const int EmployeeShiftReadSelf = 179;
+    public const int OvertimeRequestApproveHr = 180;        // v3: HR route
+
+    // (181–204 reserved unused)
+
+    // ===== Task/Production extensions — IDs 205–213 =====
+
+    public const int ProductionAttachmentWriteDepartment = 205; // LEGACY
+    public const int ProductionAttachmentReadAll         = 206; // LEGACY
+
+    public const int TaskAuditReadAll           = 207;
+    public const int TaskAuditReadDepartment    = 208;
+
+    public const int TaskCreateStageDepartment  = 209;
+    public const int CommentReadAll             = 210;
+    public const int CommentCreateOwn           = 211;
+    public const int CommentCreateDepartment    = 212;
+
+    public const int ProcessTemplateReadForApply = 213;
+
+    // (214–217 reserved unused)
+
+    // ===== Task/Production full-department reads — IDs 218–219 =====
+
+    public const int ProjectReadFullDepartment = 218;
+    public const int TaskReadFullDepartment    = 219;
+
+    // ===== ProductionAttachment tier split — IDs 220–223 =====
+
+    public const int ProductionAttachmentReadProject   = 220;
+    public const int ProductionAttachmentWriteProject  = 221;
+    public const int ProductionAttachmentReadStage     = 222;
+    public const int ProductionAttachmentWriteStage    = 223;
+
+    // ===== Evaluation module (chấm điểm nhân sự theo tháng) — IDs 224–233 =====
+    public const int OrderEvaluationReadOwn          = 224;
+    public const int OrderEvaluationReadAll          = 225;
+    public const int OrderEvaluationScoreOwn         = 226;
+    public const int OrderEvaluationSubmitOwn        = 227;
+    public const int MonthlyEvaluationReadAll        = 228;
+    public const int MonthlyEvaluationReadSelf       = 229;
+    public const int MonthlyEvaluationAggregateAll   = 230;
+    public const int MonthlyEvaluationScoreDirectAll = 231;
+    public const int MonthlyEvaluationApproveAll     = 232;
+    public const int MonthlyEvaluationReopenAll      = 233;
+
+    // ===== LeaveRequest ext — Cancel — ID 234 =====
+    public const int LeaveRequestCancelSelf          = 234;
+
+    // ===== LateEarlyRequest — IDs 235–239 =====
+    public const int LateEarlyRequestReadAll         = 235;
+    public const int LateEarlyRequestReadSelf        = 236;
+    public const int LateEarlyRequestCreateSelf      = 237;
+    public const int LateEarlyRequestApproveAll      = 238;
+    public const int LateEarlyRequestCancelSelf      = 239;
+
+    // ===== WfhRequest — IDs 240–244 =====
+    public const int WfhRequestReadAll               = 240;
+    public const int WfhRequestReadSelf              = 241;
+    public const int WfhRequestCreateSelf            = 242;
+    public const int WfhRequestApproveAll            = 243;
+    public const int WfhRequestCancelSelf            = 244;
+
+    // ===== Dependent module — IDs 245–251 =====
+    public const int DependentRequestReadAll         = 245;
+    public const int DependentRequestReadSelf        = 246;
+    public const int DependentRequestCreateSelf      = 247;
+    public const int DependentRequestApproveAll      = 248;
+    public const int DependentRequestCancelSelf      = 249;
+    public const int EmployeeDependentReadAll        = 250;
+    public const int EmployeeDependentReadSelf       = 251;
+
+    // ===== Payroll module (bảng lương hàng tháng) — IDs 252–265 =====
+    public const int PayrollReadAll     = 252;
+    public const int PayrollReadSelf    = 253;
+    public const int PayrollCreateAll   = 254;
+    public const int PayrollUpdateAll   = 255;
+    public const int PayrollFinalizeAll = 256;
+    public const int PayrollDeleteAll   = 257;
+
+    public const int PayrollFormulaSetReadAll   = 258;
+    public const int PayrollFormulaSetCreateAll = 259;
+    public const int PayrollFormulaSetUpdateAll = 260;
+    public const int PayrollFormulaSetDeleteAll = 261;
+
+    // 262, 263 = PayrollParameter Read/Update — ĐÃ BỎ (mọi tham số lấy từ HĐ/công chuẩn/hiệu suất).
+    // KHÔNG tái dùng 2 ID này cho quyền mới.
+
+    public const int ProductivityCoefficientReadAll   = 264;
+    public const int ProductivityCoefficientUpdateAll = 265;
 }

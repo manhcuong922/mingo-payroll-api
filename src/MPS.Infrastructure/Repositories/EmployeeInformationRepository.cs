@@ -20,6 +20,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 
     public Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default) =>
@@ -27,45 +28,100 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.UserId == userId, cancellationToken);
 
-    public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        await _context.EmployeeInformations
-            .AsNoTracking()
-            .Include(e => e.Position)
-            .Include(e => e.User)
-            .ToListAsync(cancellationToken);
-
-    public async Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
-        string? keyword,
-        int? positionId,
-        bool? hasAccount,
-        int page,
-        int pageSize,
+    public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
+        bool? hasActiveUser = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.EmployeeInformations
             .AsNoTracking()
             .Include(e => e.Position)
             .Include(e => e.User)
+            .Include(e => e.Department)
+            .AsQueryable();
+
+        query = ApplyActiveUserFilter(query, hasActiveUser);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    public Task<bool> HasActiveUserAsync(int employeeInformationId, CancellationToken cancellationToken = default) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.Id == employeeInformationId
+                        && e.UserId != null
+                        && e.User!.Status == 1, cancellationToken);
+
+    public async Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithActiveUserAsync(
+        IEnumerable<int> employeeInformationIds,
+        CancellationToken cancellationToken = default)
+    {
+        var idSet = employeeInformationIds?.Distinct().ToArray() ?? Array.Empty<int>();
+        if (idSet.Length == 0) return Array.Empty<int>();
+
+        return await _context.EmployeeInformations
+            .AsNoTracking()
+            .Where(e => idSet.Contains(e.Id)
+                     && e.UserId != null
+                     && e.User!.Status == 1)
+            .Select(e => e.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<EmployeeInformation>> GetByDepartmentIdAsync(
+        int departmentId, CancellationToken cancellationToken = default) =>
+        await _context.EmployeeInformations
+            .AsNoTracking()
+            .Include(e => e.Position)
+            .Include(e => e.User)
+            .Include(e => e.Department)
+            .Where(e => e.DepartmentId == departmentId)
+            .ToListAsync(cancellationToken);
+
+    public async Task<(IReadOnlyList<EmployeeInformation> Items, int TotalCount)> GetPagedAsync(
+        string? keyword,
+        int? positionId,
+        bool? hasAccount,
+        bool? hasActiveUser,
+        int page,
+        int pageSize,
+        int? departmentId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.EmployeeInformations
+            .AsNoTracking()
+            .Include(e => e.Position)
+            .Include(e => e.User)
+            .Include(e => e.Department)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
             var kw = keyword.Trim();
+            // COLLATE Latin1_General_CI_AI: case + accent insensitive, phân rã cả chữ Việt đặc biệt
+            // (ư→u, ơ→o, đ→d, ă/â→a, ê→e, ô→o) nên "xuong" match "xưởng", "dat" match "Đạt".
+            // Vietnamese_CI_AI KHÔNG làm được vì nó coi ư/ơ/đ… là chữ cái riêng của bảng chữ VN.
+            // Non-sargable (bỏ qua index trên cột), OK vì bảng NV không lớn và search chỉ ở modal picker.
             query = query.Where(e =>
-                EF.Functions.Like(e.FullName, $"%{kw}%") ||
-                EF.Functions.Like(e.CitizenId, $"%{kw}%") ||
-                (e.Email != null && EF.Functions.Like(e.Email, $"%{kw}%")));
+                EF.Functions.Like(EF.Functions.Collate(e.FullName, "Latin1_General_CI_AI"), $"%{kw}%") ||
+                EF.Functions.Like(EF.Functions.Collate(e.CitizenId, "Latin1_General_CI_AI"), $"%{kw}%") ||
+                (e.Email != null && EF.Functions.Like(EF.Functions.Collate(e.Email, "Latin1_General_CI_AI"), $"%{kw}%")));
         }
 
         if (positionId.HasValue)
             query = query.Where(e => e.PositionId == positionId.Value);
 
+        if (departmentId.HasValue)
+            query = query.Where(e => e.DepartmentId == departmentId.Value);
+
         if (hasAccount.HasValue)
             query = hasAccount.Value
                 ? query.Where(e => e.UserId != null)
                 : query.Where(e => e.UserId == null);
+
+        query = ApplyActiveUserFilter(query, hasActiveUser);
 
         var total = await query.CountAsync(cancellationToken);
 
@@ -78,8 +134,28 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         return (items, total);
     }
 
+    private static IQueryable<EmployeeInformation> ApplyActiveUserFilter(
+        IQueryable<EmployeeInformation> query,
+        bool? hasActiveUser)
+    {
+        if (!hasActiveUser.HasValue) return query;
+
+        return hasActiveUser.Value
+            ? query.Where(e => e.UserId != null && e.User!.Status == 1)
+            : query.Where(e => e.UserId == null || e.User!.Status != 1);
+    }
+
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default) =>
         _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId, cancellationToken);
+
+    public async Task<int?> GetUserRoleIdAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var role = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => (int?)u.RoleId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return role;
+    }
 
     public Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken = default) =>
         _context.Positions.AsNoTracking().AnyAsync(p => p.Id == positionId, cancellationToken);
@@ -135,6 +211,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         existing.SocialNo = entity.SocialNo;
         existing.BankNumber = entity.BankNumber;
         existing.PositionId = entity.PositionId;
+        existing.DepartmentId = entity.DepartmentId;
         existing.DependentsNo = entity.DependentsNo;
         existing.GuardianFullName = entity.GuardianFullName;
         existing.GuardianRelationship = entity.GuardianRelationship;

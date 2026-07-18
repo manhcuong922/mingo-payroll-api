@@ -217,6 +217,7 @@ public sealed class TerminationNoticeValidatorTests
         // Build trực tiếp — helper Input tự default EffectiveTo cho Definite.
         var result = TerminationNoticeValidator.Validate(new TerminationNoticeCheckInput(
             Party: TerminationParty.Employee,
+            Kind: ContractKind.LaborFullTime,
             Category: ContractCategory.Definite,
             EffectiveFrom: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             EffectiveTo: null,
@@ -232,6 +233,7 @@ public sealed class TerminationNoticeValidatorTests
     private static TerminationNoticeCheckInput Input(
         TerminationParty party,
         ContractCategory category,
+        ContractKind kind = ContractKind.LaborFullTime,
         DateTime? effectiveFrom = null,
         DateTime? effectiveTo = null,
         DateTime? noticeSentAt = null,
@@ -249,6 +251,7 @@ public sealed class TerminationNoticeValidatorTests
 
         return new TerminationNoticeCheckInput(
             Party: party,
+            Kind: kind,
             Category: category,
             EffectiveFrom: from,
             EffectiveTo: to,

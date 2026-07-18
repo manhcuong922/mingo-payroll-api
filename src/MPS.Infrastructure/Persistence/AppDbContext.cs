@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities;
+using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Entities.Compliance;
 using MPS.Domain.Entities.Compliance.AutoUpdate;
 
@@ -15,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<EmployeeInformation> EmployeeInformations => Set<EmployeeInformation>();
     public DbSet<Position> Positions => Set<Position>();
+    public DbSet<Department> Departments => Set<Department>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -36,6 +38,10 @@ public class AppDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AuditLogArchive> AuditLogsArchive => Set<AuditLogArchive>();
 
+    // Company Policy module
+    public DbSet<CompanyPolicy> CompanyPolicies => Set<CompanyPolicy>();
+    public DbSet<CompanyPolicyFile> CompanyPolicyFiles => Set<CompanyPolicyFile>();
+
     // Compliance module (FE-06)
     public DbSet<SocialInsuranceRateVersion> SocialInsuranceRateVersions => Set<SocialInsuranceRateVersion>();
     public DbSet<SocialInsuranceFundEntry> SocialInsuranceFundEntries => Set<SocialInsuranceFundEntry>();
@@ -54,6 +60,52 @@ public class AppDbContext : DbContext
     public DbSet<ComplianceUpdateProposal> ComplianceUpdateProposals => Set<ComplianceUpdateProposal>();
     public DbSet<ComplianceAuthoritativeSource> ComplianceAuthoritativeSources => Set<ComplianceAuthoritativeSource>();
     public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
+
+    // Attendance module (FE-ATT)
+    public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
+    public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
+    public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<AttendanceSetting> AttendanceSettings => Set<AttendanceSetting>();
+    public DbSet<OvertimeRequest> OvertimeRequests => Set<OvertimeRequest>();
+    public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
+    public DbSet<LateEarlyRequest> LateEarlyRequests => Set<LateEarlyRequest>();
+    public DbSet<WfhRequest> WfhRequests => Set<WfhRequest>();
+    public DbSet<MPS.Domain.Entities.Employee.EmployeeDependent> EmployeeDependents => Set<MPS.Domain.Entities.Employee.EmployeeDependent>();
+    public DbSet<MPS.Domain.Entities.Employee.DependentRegistrationRequest> DependentRegistrationRequests => Set<MPS.Domain.Entities.Employee.DependentRegistrationRequest>();
+    public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
+    public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
+    public DbSet<AttendanceRuleVersion> AttendanceRuleVersions => Set<AttendanceRuleVersion>();
+    public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
+    public DbSet<ScheduleTemplateEmployee> ScheduleTemplateEmployees => Set<ScheduleTemplateEmployee>();
+    public DbSet<ScheduleTemplateShift> ScheduleTemplateShifts => Set<ScheduleTemplateShift>();
+    // ===== Task/Production module =====
+    public DbSet<ProcessTemplate> ProcessTemplates => Set<ProcessTemplate>();
+    public DbSet<ProcessStep> ProcessSteps => Set<ProcessStep>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<TaskAssignee> TaskAssignees => Set<TaskAssignee>();
+    public DbSet<ProductionAttachment> ProductionAttachments => Set<ProductionAttachment>();
+    public DbSet<Comment> Comments => Set<Comment>();
+
+    // ===== Evaluation module (chấm điểm nhân sự theo tháng) =====
+    public DbSet<Domain.Entities.Evaluation.OrderEvaluation> OrderEvaluations => Set<Domain.Entities.Evaluation.OrderEvaluation>();
+    public DbSet<Domain.Entities.Evaluation.OrderEvaluationSubject> OrderEvaluationSubjects => Set<Domain.Entities.Evaluation.OrderEvaluationSubject>();
+    public DbSet<Domain.Entities.Evaluation.MonthlyEvaluation> MonthlyEvaluations => Set<Domain.Entities.Evaluation.MonthlyEvaluation>();
+    public DbSet<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink> MonthlyEvaluationSourceLinks => Set<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink>();
+    public DbSet<Domain.Entities.Evaluation.EvaluationScoreLine> EvaluationScoreLines => Set<Domain.Entities.Evaluation.EvaluationScoreLine>();
+
+    // ===== Payroll module (bảng lương hàng tháng) =====
+    public DbSet<Domain.Entities.Payroll.PayrollFormulaSet> PayrollFormulaSets => Set<Domain.Entities.Payroll.PayrollFormulaSet>();
+    public DbSet<Domain.Entities.Payroll.SalaryColumnDefinition> SalaryColumnDefinitions => Set<Domain.Entities.Payroll.SalaryColumnDefinition>();
+    public DbSet<Domain.Entities.Payroll.PayrollPeriod> PayrollPeriods => Set<Domain.Entities.Payroll.PayrollPeriod>();
+    public DbSet<Domain.Entities.Payroll.PayrollComplianceRef> PayrollComplianceRefs => Set<Domain.Entities.Payroll.PayrollComplianceRef>();
+    public DbSet<Domain.Entities.Payroll.PayrollRow> PayrollRows => Set<Domain.Entities.Payroll.PayrollRow>();
+    public DbSet<Domain.Entities.Payroll.PayrollCellValue> PayrollCellValues => Set<Domain.Entities.Payroll.PayrollCellValue>();
+    public DbSet<Domain.Entities.Payroll.PayrollNote> PayrollNotes => Set<Domain.Entities.Payroll.PayrollNote>();
+    public DbSet<Domain.Entities.Payroll.ProductivityCoefficient> ProductivityCoefficients => Set<Domain.Entities.Payroll.ProductivityCoefficient>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

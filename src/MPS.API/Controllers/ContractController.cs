@@ -29,12 +29,13 @@ public class ContractController : ControllerBase
         [FromQuery] int? employeeInformationId,
         [FromQuery] ContractStatus? status,
         [FromQuery] ContractCategory? category,
+        [FromQuery] ContractKind? kind,
         [FromQuery] int page = 1,
         [FromQuery] int size = 20,
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(
-            new GetContractsQuery(employeeInformationId, status, category, page, size),
+            new GetContractsQuery(employeeInformationId, status, category, kind, page, size),
             cancellationToken);
         return Ok(result);
     }
@@ -55,37 +56,39 @@ public class ContractController : ControllerBase
         CancellationToken cancellationToken)
     {
         var cmd = new CreateContractCommand(
-            request.ContractCategory,
-            request.ContractSubtype,
-            request.EmployeeInformationId,
-            request.EmployerPartyId,
-            request.EmployerSignerUserId,
-            request.PositionId,
-            request.JobDescription,
-            request.WorkLocation,
-            request.EffectiveFrom,
-            request.EffectiveTo,
-            request.SalaryGradeId,
-            request.SalaryPayCycle,
-            request.PromotionPolicy,
-            request.WorkingTimeJson,
-            request.PpePolicy,
-            request.SocialInsuranceFlag,
-            request.HealthInsuranceFlag,
-            request.UnemploymentInsuranceFlag,
-            request.TrainingPolicy,
-            request.ConfidentialityClause,
-            request.TemplateId,
-            request.HasProbation,
-            request.ProbationStartDate,
-            request.ProbationEndDate,
-            request.ProbationSalary,
-            request.ProbationResultStatus,
-            request.ParentContractId,
-            (request.Allowances ?? Array.Empty<ContractAllowanceItemRequest>())
+            Kind: request.Kind,
+            ContractCategory: request.ContractCategory,
+            ContractSubtype: request.ContractSubtype,
+            EmployeeInformationId: request.EmployeeInformationId,
+            EmployerPartyId: request.EmployerPartyId,
+            EmployerSignerUserId: request.EmployerSignerUserId,
+            PositionId: request.PositionId,
+            JobDescription: request.JobDescription,
+            WorkLocation: request.WorkLocation,
+            EffectiveFrom: request.EffectiveFrom,
+            EffectiveTo: request.EffectiveTo,
+            SalaryGradeId: request.SalaryGradeId,
+            SalaryPayCycle: request.SalaryPayCycle,
+            PromotionPolicy: request.PromotionPolicy,
+            WorkingTimeJson: request.WorkingTimeJson,
+            PpePolicy: request.PpePolicy,
+            SocialInsuranceFlag: request.SocialInsuranceFlag,
+            HealthInsuranceFlag: request.HealthInsuranceFlag,
+            UnemploymentInsuranceFlag: request.UnemploymentInsuranceFlag,
+            TaxPolicy: request.TaxPolicy,
+            TrainingPolicy: request.TrainingPolicy,
+            ConfidentialityClause: request.ConfidentialityClause,
+            TemplateId: request.TemplateId,
+            HasProbation: request.HasProbation,
+            ProbationStartDate: request.ProbationStartDate,
+            ProbationEndDate: request.ProbationEndDate,
+            ProbationSalary: request.ProbationSalary,
+            ProbationResultStatus: request.ProbationResultStatus,
+            ParentContractId: request.ParentContractId,
+            Allowances: (request.Allowances ?? Array.Empty<ContractAllowanceItemRequest>())
                 .Select(a => new ContractAllowanceInput(a.AllowanceTypeId, a.Amount, a.Currency, a.Note))
                 .ToList(),
-            request.ForceAllowThirdDefinite);
+            ForceAllowThirdDefinite: request.ForceAllowThirdDefinite);
 
         var id = await _mediator.Send(cmd, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
@@ -99,38 +102,40 @@ public class ContractController : ControllerBase
         CancellationToken cancellationToken)
     {
         var cmd = new UpdateContractCommand(
-            id,
-            request.ContractCategory,
-            request.ContractSubtype,
-            request.EmployeeInformationId,
-            request.EmployerPartyId,
-            request.EmployerSignerUserId,
-            request.PositionId,
-            request.JobDescription,
-            request.WorkLocation,
-            request.EffectiveFrom,
-            request.EffectiveTo,
-            request.SalaryGradeId,
-            request.SalaryPayCycle,
-            request.PromotionPolicy,
-            request.WorkingTimeJson,
-            request.PpePolicy,
-            request.SocialInsuranceFlag,
-            request.HealthInsuranceFlag,
-            request.UnemploymentInsuranceFlag,
-            request.TrainingPolicy,
-            request.ConfidentialityClause,
-            request.TemplateId,
-            request.HasProbation,
-            request.ProbationStartDate,
-            request.ProbationEndDate,
-            request.ProbationSalary,
-            request.ProbationResultStatus,
-            request.ParentContractId,
-            (request.Allowances ?? Array.Empty<ContractAllowanceItemRequest>())
+            Id: id,
+            Kind: request.Kind,
+            ContractCategory: request.ContractCategory,
+            ContractSubtype: request.ContractSubtype,
+            EmployeeInformationId: request.EmployeeInformationId,
+            EmployerPartyId: request.EmployerPartyId,
+            EmployerSignerUserId: request.EmployerSignerUserId,
+            PositionId: request.PositionId,
+            JobDescription: request.JobDescription,
+            WorkLocation: request.WorkLocation,
+            EffectiveFrom: request.EffectiveFrom,
+            EffectiveTo: request.EffectiveTo,
+            SalaryGradeId: request.SalaryGradeId,
+            SalaryPayCycle: request.SalaryPayCycle,
+            PromotionPolicy: request.PromotionPolicy,
+            WorkingTimeJson: request.WorkingTimeJson,
+            PpePolicy: request.PpePolicy,
+            SocialInsuranceFlag: request.SocialInsuranceFlag,
+            HealthInsuranceFlag: request.HealthInsuranceFlag,
+            UnemploymentInsuranceFlag: request.UnemploymentInsuranceFlag,
+            TaxPolicy: request.TaxPolicy,
+            TrainingPolicy: request.TrainingPolicy,
+            ConfidentialityClause: request.ConfidentialityClause,
+            TemplateId: request.TemplateId,
+            HasProbation: request.HasProbation,
+            ProbationStartDate: request.ProbationStartDate,
+            ProbationEndDate: request.ProbationEndDate,
+            ProbationSalary: request.ProbationSalary,
+            ProbationResultStatus: request.ProbationResultStatus,
+            ParentContractId: request.ParentContractId,
+            Allowances: (request.Allowances ?? Array.Empty<ContractAllowanceItemRequest>())
                 .Select(a => new ContractAllowanceInput(a.AllowanceTypeId, a.Amount, a.Currency, a.Note))
                 .ToList(),
-            request.ForceAllowThirdDefinite);
+            ForceAllowThirdDefinite: request.ForceAllowThirdDefinite);
 
         var updated = await _mediator.Send(cmd, cancellationToken);
         if (!updated) return NotFound();

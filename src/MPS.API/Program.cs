@@ -128,6 +128,9 @@ builder.Services
         };
     });
 
+builder.Services.Configure<MPS.Application.Settings.AttendanceCheckinSettings>(
+    builder.Configuration.GetSection(MPS.Application.Settings.AttendanceCheckinSettings.SectionName));
+
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();
@@ -205,7 +208,10 @@ builder.Services.AddCors(options =>
 
         policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              // Không expose thì trình duyệt giấu header này khỏi JS, mọi endpoint tải file
+              // (bảng lương, mẫu phân ca...) mất tên file do server đặt và phải đoán lại ở FE.
+              .WithExposedHeaders("Content-Disposition");
     });
 });
 

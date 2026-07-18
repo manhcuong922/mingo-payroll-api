@@ -11,8 +11,9 @@ namespace MPS.Application.Tests.TestHelpers;
 internal static class ContractCommandFactory
 {
     public static CreateContractCommand ValidCreate(
-        ContractCategory category = ContractCategory.Definite,
-        ContractSubtype subtype = ContractSubtype.Official,
+        ContractKind kind = ContractKind.LaborFullTime,
+        ContractCategory? category = ContractCategory.Definite,
+        ContractSubtype? subtype = ContractSubtype.Official,
         int employeeInformationId = 100,
         int employerPartyId = 1,
         int employerSignerUserId = 1,
@@ -27,10 +28,19 @@ internal static class ContractCommandFactory
     {
         var from = effectiveFrom ?? new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
         DateTime? to = effectiveTo;
-        if (!to.HasValue && category == ContractCategory.Definite)
+
+        // For UserChoice kinds the request must carry insurance flags + TaxPolicy; for
+        // RuleDriven kinds they must be null (the server derives them from metadata).
+        var meta = MPS.Domain.Constants.ContractKindMetadata.Get(kind);
+        var isUserChoice = meta.InsuranceMode == InsuranceDeterminationMode.UserChoice;
+
+        // Default EffectiveTo: Definite LaborFullTime → +1 year; any kind that requires
+        // EffectiveTo → +1 year; otherwise leave null.
+        if (!to.HasValue && (category == ContractCategory.Definite || meta.RequiresEffectiveTo))
             to = from.AddYears(1);
 
         return new CreateContractCommand(
+            Kind: kind,
             ContractCategory: category,
             ContractSubtype: subtype,
             EmployeeInformationId: employeeInformationId,
@@ -46,9 +56,10 @@ internal static class ContractCommandFactory
             PromotionPolicy: null,
             WorkingTimeJson: "{\"hoursPerDay\":8,\"daysPerWeek\":5}",
             PpePolicy: null,
-            SocialInsuranceFlag: true,
-            HealthInsuranceFlag: true,
-            UnemploymentInsuranceFlag: true,
+            SocialInsuranceFlag: isUserChoice ? false : null,
+            HealthInsuranceFlag: isUserChoice ? false : null,
+            UnemploymentInsuranceFlag: isUserChoice ? false : null,
+            TaxPolicy: isUserChoice ? TaxPolicy.FlatRate10Percent : null,
             TrainingPolicy: null,
             ConfidentialityClause: null,
             TemplateId: null,

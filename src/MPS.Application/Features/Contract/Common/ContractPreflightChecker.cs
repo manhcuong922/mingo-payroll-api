@@ -79,15 +79,15 @@ public sealed class ContractPreflightChecker
                     $"ProbationSalary ({probationSalary}) must be at least {LaborLawConstants.Probation.MinSalaryPercent}% of SalaryAmountSnapshot ({grade.BaseSalary}) — Điều 26 BLLĐ 2019. Minimum: {minRequired:0.##}.");
         }
 
-        // Điều 20 k.2c — không quá 2 HĐ Definite+Official trước đó
-        if (input is { ContractCategory: ContractCategory.Definite, ContractSubtype: ContractSubtype.Official }
+        // Điều 20 k.2c — không quá 2 HĐ Definite+Official trước đó (chỉ áp cho LaborFullTime)
+        if (input is { Kind: ContractKind.LaborFullTime, ContractCategory: ContractCategory.Definite, ContractSubtype: ContractSubtype.Official }
             && !input.ForceAllowThirdDefinite)
         {
             var count = await _contracts.CountDefiniteOfficialContractsAsync(
                 input.EmployeeInformationId, input.EmployerPartyId, input.ExcludeContractId, ct);
             if (count >= 2)
                 throw new DomainValidationException(
-                    $"Cannot sign a third Definite+Official contract with the same employer (currently {count}). " +
+                    $"Cannot sign a third Definite+Official LaborFullTime contract with the same employer (currently {count}). " +
                     "Điều 20 k.2c BLLĐ 2019. Use ForceAllowThirdDefinite to override for exempt cases.");
         }
 
@@ -109,8 +109,9 @@ public sealed record ContractCheckInput(
     int PositionId,
     int SalaryGradeId,
     DateTime EffectiveFrom,
-    ContractCategory ContractCategory,
-    ContractSubtype ContractSubtype,
+    ContractKind Kind,
+    ContractCategory? ContractCategory,
+    ContractSubtype? ContractSubtype,
     bool HasProbation,
     decimal? ProbationSalary,
     IReadOnlyList<int> AllowanceTypeIds,
