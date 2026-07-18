@@ -38,6 +38,11 @@ services:
     # Nạp toàn bộ biến cấu hình ứng dụng (Section__Key) từ .env
     env_file:
       - .env
+    environment:
+      # DEMO: mỗi lần api khởi động sẽ XÓA SẠCH DB rồi seed lại -> data luôn giống seeder sau mỗi deploy.
+      # Mặc định TRUE ở stack demo này; tắt bằng cách đặt SEED_RESET_ON_STARTUP=false trong .env trên VPS.
+      # ⚠️ Bật = mọi lần api restart (deploy/reboot/crash) đều mất toàn bộ dữ liệu.
+      Seed__ResetOnStartup: ${SEED_RESET_ON_STARTUP:-true}
     depends_on:
       sqlserver:
         condition: service_healthy
