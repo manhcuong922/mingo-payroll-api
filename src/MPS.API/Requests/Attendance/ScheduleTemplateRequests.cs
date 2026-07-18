@@ -33,7 +33,9 @@ public sealed record UpdateScheduleTemplateRequest(
     bool IsActive,
     string? Notes,
     ScheduleApplyTarget? ApplyTarget = null,
-    IReadOnlyList<int>? DepartmentIds = null);
+    IReadOnlyList<int>? DepartmentIds = null,
+    bool IncludeRestDaysAndHolidays = false,
+    bool AcknowledgeWeeklyOvertimeWarnings = false);
 
 public sealed record ConfirmMonthlyScheduleImportRequest(
     string PreviewToken,

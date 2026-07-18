@@ -126,7 +126,7 @@ public class AutoApplyScheduleOnDepartmentChangeHandler
                 BatchShiftConflictPolicy.Skip,
                 SourceScheduleTemplateId: template.Id,
                 AcknowledgeWeeklyOvertimeWarnings: false,
-                IncludeRestDaysAndHolidays: false),
+                IncludeRestDaysAndHolidays: template.IncludeRestDaysAndHolidays),
                 cancellationToken);
         }
         catch (Exception ex)

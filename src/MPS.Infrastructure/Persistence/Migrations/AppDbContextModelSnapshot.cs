@@ -1020,6 +1020,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("EffectiveTo")
                         .HasColumnType("date");
 
+                    b.Property<bool>("IncludeRestDaysAndHolidays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
