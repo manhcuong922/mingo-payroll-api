@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.LeaveRequest.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
@@ -16,6 +17,7 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
     private readonly ILeaveRequestRepository _repository;
     private readonly IAttendanceEditLockChecker _editLockChecker;
     private readonly ApproverDepartmentGuard _departmentGuard;
+    private readonly MedicalCertificateUploader _certificateUploader;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -23,12 +25,14 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         ILeaveRequestRepository repository,
         IAttendanceEditLockChecker editLockChecker,
         ApproverDepartmentGuard departmentGuard,
+        MedicalCertificateUploader certificateUploader,
         ICurrentUserService currentUser,
         IClock clock)
     {
         _repository = repository;
         _editLockChecker = editLockChecker;
         _departmentGuard = departmentGuard;
+        _certificateUploader = certificateUploader;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -62,41 +66,72 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         // Cutoff: HR có thể override qua OverrideReason nếu có permission.
         await _editLockChecker.EnsureCanModifyAsync(existing.StartDate, request.OverrideReason, cancellationToken);
 
-        // Fill in / refresh medical cert fields if approver provides them.
-        var medicalUrl = string.IsNullOrWhiteSpace(request.MedicalCertificateUrl)
-            ? existing.MedicalCertificateUrl
-            : request.MedicalCertificateUrl.Trim();
         var insuranceNo = string.IsNullOrWhiteSpace(request.InsuranceCertNumber)
             ? existing.InsuranceCertNumber
             : request.InsuranceCertNumber.Trim();
 
-        if (existing.LeaveType.RequireDocument
-            && string.IsNullOrWhiteSpace(existing.SupportingDocumentUrl)
-            && string.IsNullOrWhiteSpace(medicalUrl))
+        string? oldCertObjectKey = existing.MedicalCertificateObjectKey;
+        string? newCertObjectKey = null;
+
+        if (request.MedicalCertificateStream is not null)
         {
+            newCertObjectKey = await _certificateUploader.UploadAsync(
+                existing.EmployeeInformationId,
+                request.MedicalCertificateStream,
+                request.MedicalCertificateContentType ?? string.Empty,
+                request.MedicalCertificateSize ?? 0L,
+                cancellationToken);
+        }
+
+        var effectiveCertObjectKey = newCertObjectKey ?? existing.MedicalCertificateObjectKey;
+
+        if (existing.LeaveType.RequireDocument && string.IsNullOrWhiteSpace(effectiveCertObjectKey))
+        {
+            // Rollback upload nếu vừa lỡ tạo (không xảy ra trong flow này vì effectiveCertObjectKey lấy từ new nếu có,
+            // nhưng defensive để đối xứng).
+            await _certificateUploader.TryDeleteAsync(newCertObjectKey, CancellationToken.None);
             throw new DomainValidationException(
-                $"Leave type '{existing.LeaveType.Code}' requires a supporting document before approval.");
+                $"Loại đơn '{existing.LeaveType.Code}' yêu cầu ảnh chứng nhận y tế — vui lòng upload trước khi duyệt.");
         }
 
         var code = existing.LeaveType.Code?.ToUpperInvariant();
         if ((code == SickLeaveCode || code == MaternityLeaveCode)
             && string.IsNullOrWhiteSpace(insuranceNo))
         {
+            await _certificateUploader.TryDeleteAsync(newCertObjectKey, CancellationToken.None);
             throw new DomainValidationException(
                 $"Đơn '{existing.LeaveType.Code}' yêu cầu InsuranceCertNumber (số hiệu giấy C65-HD).");
         }
 
         // Persist any newly-supplied cert data before ApproveAndApply commits balance/attendance.
-        if (medicalUrl != existing.MedicalCertificateUrl || insuranceNo != existing.InsuranceCertNumber)
+        if (newCertObjectKey is not null || insuranceNo != existing.InsuranceCertNumber)
         {
-            existing.MedicalCertificateUrl = medicalUrl;
+            existing.MedicalCertificateObjectKey = effectiveCertObjectKey;
             existing.InsuranceCertNumber = insuranceNo;
             existing.UpdatedAt = _clock.UtcNow;
             existing.UpdatedByUserId = userId;
-            await _repository.UpdateAsync(existing, cancellationToken);
+            try
+            {
+                await _repository.UpdateAsync(existing, cancellationToken);
+            }
+            catch
+            {
+                await _certificateUploader.TryDeleteAsync(newCertObjectKey, CancellationToken.None);
+                throw;
+            }
         }
 
-        return await _repository.ApproveAndApplyAsync(
+        var approved = await _repository.ApproveAndApplyAsync(
             request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
+
+        if (approved
+            && newCertObjectKey is not null
+            && !string.IsNullOrWhiteSpace(oldCertObjectKey)
+            && !string.Equals(oldCertObjectKey, newCertObjectKey, StringComparison.Ordinal))
+        {
+            await _certificateUploader.TryDeleteAsync(oldCertObjectKey, CancellationToken.None);
+        }
+
+        return approved;
     }
 }

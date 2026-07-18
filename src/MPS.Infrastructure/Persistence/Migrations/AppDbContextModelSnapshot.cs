@@ -640,9 +640,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("LeaveTypeId")
                         .HasColumnType("int");
 
-                    b.Property<string>("MedicalCertificateUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                    b.Property<string>("MedicalCertificateObjectKey")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
@@ -663,10 +663,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<byte>("Status")
                         .HasColumnType("tinyint");
-
-                    b.Property<string>("SupportingDocumentUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<decimal>("TotalDays")
                         .HasColumnType("decimal(4,1)");

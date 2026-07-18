@@ -169,7 +169,7 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         tracked.ReviewNote = entity.ReviewNote;
         tracked.ReviewedByUserId = entity.ReviewedByUserId;
         tracked.ReviewedAt = entity.ReviewedAt;
-        tracked.MedicalCertificateUrl = entity.MedicalCertificateUrl;
+        tracked.MedicalCertificateObjectKey = entity.MedicalCertificateObjectKey;
         tracked.InsuranceCertNumber = entity.InsuranceCertNumber;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;

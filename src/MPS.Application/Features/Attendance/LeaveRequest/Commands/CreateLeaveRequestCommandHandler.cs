@@ -28,6 +28,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly IAttendanceEditLockChecker _editLockChecker;
     private readonly LeaveBalanceFallbackResolver _fallbackResolver;
     private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
+    private readonly MedicalCertificateUploader _certificateUploader;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
 
@@ -41,6 +42,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         IAttendanceEditLockChecker editLockChecker,
         LeaveBalanceFallbackResolver fallbackResolver,
         AttendanceRequestDayConflictChecker dayConflictChecker,
+        MedicalCertificateUploader certificateUploader,
         ICurrentUserService currentUser,
         IClock clock)
     {
@@ -53,6 +55,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _editLockChecker = editLockChecker;
         _fallbackResolver = fallbackResolver;
         _dayConflictChecker = dayConflictChecker;
+        _certificateUploader = certificateUploader;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -92,14 +95,6 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         if (leaveType.MaxDaysPerRequest is decimal max && totalDays > max)
             throw new DomainValidationException(
                 $"Leave type '{leaveType.Code}' allows at most {max} day(s) per request; requested {totalDays}.");
-
-        if (leaveType.RequireDocument
-            && string.IsNullOrWhiteSpace(request.SupportingDocumentUrl)
-            && string.IsNullOrWhiteSpace(request.MedicalCertificateUrl))
-        {
-            throw new DomainValidationException(
-                $"Leave type '{leaveType.Code}' requires a SupportingDocumentUrl or MedicalCertificateUrl.");
-        }
 
         if (!isRetroactive)
         {
@@ -158,6 +153,17 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
 
         var resolvedRoute = ApproverRouteResolver.Resolve(request.ApproverRoute, _currentUser.RoleId);
 
+        string? medicalCertObjectKey = null;
+        if (request.MedicalCertificateStream is not null)
+        {
+            medicalCertObjectKey = await _certificateUploader.UploadAsync(
+                employeeId,
+                request.MedicalCertificateStream,
+                request.MedicalCertificateContentType ?? string.Empty,
+                request.MedicalCertificateSize ?? 0L,
+                cancellationToken);
+        }
+
         var entity = new LeaveRequestEntity
         {
             EmployeeInformationId = employeeId,
@@ -169,15 +175,24 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             ApproverRoute = resolvedRoute,
             Status = LeaveRequestStatus.Pending,
             Reason = request.Reason,
-            SupportingDocumentUrl = request.SupportingDocumentUrl,
-            MedicalCertificateUrl = request.MedicalCertificateUrl,
+            MedicalCertificateObjectKey = medicalCertObjectKey,
             InsuranceCertNumber = request.InsuranceCertNumber?.Trim(),
             IsRetroactive = isRetroactive,
             CreatedAt = _clock.UtcNow,
             CreatedByUserId = userId
         };
 
-        var id = await _repository.AddAsync(entity, cancellationToken);
+        int id;
+        try
+        {
+            id = await _repository.AddAsync(entity, cancellationToken);
+        }
+        catch
+        {
+            await _certificateUploader.TryDeleteAsync(medicalCertObjectKey, CancellationToken.None);
+            throw;
+        }
+
         return new CreateLeaveRequestResult(id, finalType.Id, finalType.Code, switched, switchMessage);
     }
 

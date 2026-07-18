@@ -65,8 +65,7 @@ public sealed class AttendanceRequestDayConflictChecker
             : $"khoảng {startDate:dd/MM/yyyy} → {endDate:dd/MM/yyyy}";
 
         throw new DomainValidationException(
-            $"Đã tồn tại đơn {string.Join(", ", conflicts)} (Pending/Approved) trong {rangeLabel}. "
-            + "Mỗi ngày chỉ được có 1 đơn Leave/WFH/LateEarly — vui lòng hủy đơn cũ trước khi tạo đơn mới.");
+            $"Đã có đơn trong {rangeLabel}. Vui lòng hủy đơn cũ trước khi tạo đơn mới.");
     }
 }
 

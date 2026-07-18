@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using MPS.Domain.Enums.Attendance;
 
 namespace MPS.API.Requests.Attendance;
@@ -7,24 +9,58 @@ public sealed record InitLeaveBalanceRequest(
     int Year,
     int LeaveTypeId);
 
-public sealed record CreateLeaveRequest(
-    int LeaveTypeId,
-    DateOnly StartDate,
-    DateOnly EndDate,
-    string? Reason,
-    string? SupportingDocumentUrl,
-    string? MedicalCertificateUrl,
-    string? InsuranceCertNumber,
-    OvertimeApproverRoute? ApproverRoute,
-    string? OverrideReason);
+public sealed class CreateLeaveRequest
+{
+    [FromForm(Name = "leaveTypeId")]
+    public int LeaveTypeId { get; set; }
+
+    [FromForm(Name = "startDate")]
+    public DateOnly StartDate { get; set; }
+
+    [FromForm(Name = "endDate")]
+    public DateOnly EndDate { get; set; }
+
+    [FromForm(Name = "reason")]
+    public string? Reason { get; set; }
+
+    [FromForm(Name = "insuranceCertNumber")]
+    public string? InsuranceCertNumber { get; set; }
+
+    [FromForm(Name = "approverRoute")]
+    public OvertimeApproverRoute? ApproverRoute { get; set; }
+
+    [FromForm(Name = "overrideReason")]
+    public string? OverrideReason { get; set; }
+
+    [FromForm(Name = "medicalCertificate")]
+    public IFormFile? MedicalCertificate { get; set; }
+}
 
 public sealed record ReviewLeaveRequest(string? ReviewNote);
 
-public sealed record ApproveLeaveRequestBody(
-    string? ReviewNote,
-    string? MedicalCertificateUrl,
-    string? InsuranceCertNumber,
-    string? OverrideReason);
+public sealed class ApproveLeaveRequestBody
+{
+    [FromForm(Name = "reviewNote")]
+    public string? ReviewNote { get; set; }
+
+    [FromForm(Name = "insuranceCertNumber")]
+    public string? InsuranceCertNumber { get; set; }
+
+    [FromForm(Name = "overrideReason")]
+    public string? OverrideReason { get; set; }
+
+    [FromForm(Name = "medicalCertificate")]
+    public IFormFile? MedicalCertificate { get; set; }
+}
+
+public sealed class UploadLeaveMedicalCertificateRequest
+{
+    [FromForm(Name = "medicalCertificate")]
+    public IFormFile MedicalCertificate { get; set; } = default!;
+
+    [FromForm(Name = "overrideReason")]
+    public string? OverrideReason { get; set; }
+}
 
 public sealed record CancelLeaveRequestBody(string? CancelReason);
 
