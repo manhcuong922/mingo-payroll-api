@@ -132,9 +132,51 @@ internal static class PayrollExcelInfoSheets
         }
 
         if (book.Notes.Count == 0)
+        {
             sd.Append(C.Row(row, C.Text($"A{row}", "(Kỳ này không có ghi chú)", S.Meta)));
+            row++;
+        }
+
+        AppendFlagLegend(sd, row + 2);
 
         return Sheet(sd, widths: new[] { 16D, 18D, 34D, 70D, 16D, 16D, 30D, 14D });
+    }
+
+    /// <summary>Chú giải ý nghĩa từng mã cờ BH + cờ thuế (2 cột hệ thống suy từ HĐ — chỉ đọc).</summary>
+    private static void AppendFlagLegend(SheetData sd, uint row)
+    {
+        sd.Append(C.Row(row, C.Text($"A{row}",
+            "CHÚ GIẢI CỜ BẢO HIỂM & CỜ THUẾ (2 cột này hệ thống suy từ hợp đồng — chỉ đọc, không sửa tay)", S.Bold)));
+        row += 2;
+
+        row = AppendFlagBlock(sd, row, "Cờ bảo hiểm (cột \"Cờ BH\")",
+            MPS.Domain.Enums.Payroll.PayrollFlagLegend.Insurance);
+        row += 1;
+        AppendFlagBlock(sd, row, "Cờ thuế (cột \"Cờ thuế\")",
+            MPS.Domain.Enums.Payroll.PayrollFlagLegend.Tax);
+    }
+
+    private static uint AppendFlagBlock(
+        SheetData sd, uint row, string title,
+        IReadOnlyList<MPS.Domain.Enums.Payroll.PayrollFlagLegend.Entry> entries)
+    {
+        sd.Append(C.Row(row, C.Text($"A{row}", title, S.Bold)));
+        row++;
+        sd.Append(C.Row(row,
+            C.Text($"A{row}", "Mã", S.Header),
+            C.Text($"B{row}", "Loại", S.Header),
+            C.Text($"C{row}", "Ý nghĩa", S.Header)));
+        row++;
+
+        foreach (var e in entries)
+        {
+            sd.Append(C.Row(row,
+                C.Text($"A{row}", MPS.Domain.Enums.Payroll.PayrollFlagLegend.DisplayCode(e.Code)),
+                C.Text($"B{row}", e.Label),
+                C.Text($"C{row}", e.Description)));
+            row++;
+        }
+        return row;
     }
 
     private static string NoteTypeLabel(string noteType) => noteType switch
