@@ -93,7 +93,9 @@ public class ScheduleTemplateController : ControllerBase
             request.IsActive,
             request.Notes,
             request.ApplyTarget,
-            request.DepartmentIds), cancellationToken);
+            request.DepartmentIds,
+            request.IncludeRestDaysAndHolidays,
+            request.AcknowledgeWeeklyOvertimeWarnings), cancellationToken);
         return NoContent();
     }
 

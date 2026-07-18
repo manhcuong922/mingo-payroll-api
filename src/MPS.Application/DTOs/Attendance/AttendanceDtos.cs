@@ -110,7 +110,8 @@ public sealed record ScheduleTemplateDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     ScheduleApplyTarget? ApplyTarget,
-    IReadOnlyList<int> TargetDepartmentIds);
+    IReadOnlyList<int> TargetDepartmentIds,
+    bool IncludeRestDaysAndHolidays);
 
 public sealed record ScheduleTemplateApplyConflictDto(
     int EmployeeInformationId,

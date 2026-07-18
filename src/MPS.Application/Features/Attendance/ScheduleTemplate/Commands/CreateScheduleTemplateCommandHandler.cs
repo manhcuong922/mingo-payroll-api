@@ -146,6 +146,7 @@ public class CreateScheduleTemplateCommandHandler
             DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth),
             IsActive = true,
             Notes = request.Notes,
+            IncludeRestDaysAndHolidays = request.IncludeRestDaysAndHolidays,
             ApplyTarget = applyTarget,
             TargetDepartmentIds = applyTarget == ScheduleApplyTarget.Departments
                 ? ScheduleTemplateValidation.ToCsvMask(request.DepartmentIds)

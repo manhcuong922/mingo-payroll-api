@@ -135,6 +135,7 @@ public class UpdateScheduleTemplateCommandHandler
         existing.DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth);
         existing.IsActive = request.IsActive;
         existing.Notes = request.Notes;
+        existing.IncludeRestDaysAndHolidays = request.IncludeRestDaysAndHolidays;
         existing.ApplyTarget = applyTarget;
         existing.TargetDepartmentIds = applyTarget == ScheduleApplyTarget.Departments
             ? ScheduleTemplateValidation.ToCsvMask(request.DepartmentIds)
@@ -165,8 +166,8 @@ public class UpdateScheduleTemplateCommandHandler
                     operations,
                     BatchShiftConflictPolicy.ReplaceIfNoAttendance,
                     SourceScheduleTemplateId: existing.Id,
-                    AcknowledgeWeeklyOvertimeWarnings: true,
-                    IncludeRestDaysAndHolidays: false),
+                    AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings,
+                    IncludeRestDaysAndHolidays: request.IncludeRestDaysAndHolidays),
                 cancellationToken);
         }
 
