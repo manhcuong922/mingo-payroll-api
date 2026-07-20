@@ -126,7 +126,9 @@ public class ScheduleTemplateController : ControllerBase
     public async Task<IActionResult> DownloadMonthlyImportTemplate(
         [FromQuery] int? year,
         [FromQuery] int? month,
-        CancellationToken cancellationToken)
+        [FromQuery] MPS.Domain.Enums.Attendance.ScheduleApplyTarget applyTarget
+            = MPS.Domain.Enums.Attendance.ScheduleApplyTarget.Employees,
+        CancellationToken cancellationToken = default)
     {
         var targetMonth = ResolveTemplateMonth(year, month);
         if (targetMonth is null)
@@ -140,12 +142,16 @@ public class ScheduleTemplateController : ControllerBase
         var bytes = MonthlyScheduleImportTemplateGenerator.Generate(
             targetMonth.Value.Year,
             targetMonth.Value.Month,
-            activeShifts.Items);
+            activeShifts.Items,
+            applyTarget);
 
+        var modeSuffix = applyTarget == MPS.Domain.Enums.Attendance.ScheduleApplyTarget.Departments
+            ? "phong-ban"
+            : "nhan-vien";
         return File(
             bytes,
             MonthlyScheduleImportTemplateGenerator.ExcelContentType,
-            $"phan-ca-thang-{targetMonth.Value.Month:00}-{targetMonth.Value.Year}-mau.xlsx");
+            $"phan-ca-thang-{targetMonth.Value.Month:00}-{targetMonth.Value.Year}-{modeSuffix}-mau.xlsx");
     }
 
     [HttpPost("import-monthly/preview")]
@@ -153,7 +159,9 @@ public class ScheduleTemplateController : ControllerBase
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> PreviewMonthlyImport(
         IFormFile file,
-        CancellationToken cancellationToken)
+        [FromForm(Name = "applyTarget")] MPS.Domain.Enums.Attendance.ScheduleApplyTarget applyTarget
+            = MPS.Domain.Enums.Attendance.ScheduleApplyTarget.Employees,
+        CancellationToken cancellationToken = default)
     {
         if (file is null || file.Length == 0)
             return BadRequest(new { error = "File is required." });
@@ -164,7 +172,9 @@ public class ScheduleTemplateController : ControllerBase
         await file.CopyToAsync(buffer, cancellationToken);
         buffer.Position = 0;
 
-        var result = await _mediator.Send(new PreviewMonthlyScheduleImportCommand(buffer), cancellationToken);
+        var result = await _mediator.Send(
+            new PreviewMonthlyScheduleImportCommand(buffer, applyTarget),
+            cancellationToken);
         return Ok(result);
     }
 

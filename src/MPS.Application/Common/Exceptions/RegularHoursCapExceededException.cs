@@ -32,7 +32,7 @@ public sealed class RegularHoursCapExceededException : Exception
                 .OrderBy(v => v.WorkDate)
                 .ThenBy(v => v.EmployeeInformationId)
                 .Select(v =>
-                    $"NV #{v.EmployeeInformationId} ngày {v.WorkDate:yyyy-MM-dd}: {FormatHours(v.TotalHoursAfter)}/{FormatHours(v.CapHours)}h")
+                    $"NV #{v.EmployeeInformationId} ngày {v.WorkDate:dd-MM-yyyy}: {FormatHours(v.TotalHoursAfter)}/{FormatHours(v.CapHours)}h")
                 .ToList();
 
             parts.Add($"Vượt 8h/ngày: {string.Join("; ", dailyDetails)}");
@@ -45,7 +45,7 @@ public sealed class RegularHoursCapExceededException : Exception
                 .ThenBy(v => v.IsoWeek)
                 .ThenBy(v => v.EmployeeInformationId)
                 .Select(v =>
-                    $"NV #{v.EmployeeInformationId} tuần {v.IsoYear}-W{v.IsoWeek:00} ({v.WeekStart:yyyy-MM-dd} đến {v.WeekEnd:yyyy-MM-dd}): {FormatHours(v.TotalHoursAfter)}/{FormatHours(v.CapHours)}h")
+                    $"NV #{v.EmployeeInformationId} tuần {v.IsoYear}-W{v.IsoWeek:00} ({v.WeekStart:dd-MM-yyyy} đến {v.WeekEnd:dd-MM-yyyy}): {FormatHours(v.TotalHoursAfter)}/{FormatHours(v.CapHours)}h")
                 .ToList();
 
             parts.Add($"Vượt 48h/tuần: {string.Join("; ", weeklyDetails)}");
