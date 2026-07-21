@@ -77,7 +77,15 @@ chốt với kế toán trước khi code.
 
 **Chặn:** `PAY-ADJ`, `ADJ-T01`, `OT-T01`, `LEAVE-06`, `APX-X02`.
 
-### BS-2 — Ca đêm vắt sang ngày khác loại không tách segment — HOÃN (PO chốt 2026-07-21)
+### BS-2 — ✅ ĐÃ XỬ LÝ (phiên 4, 2026-07-21)
+
+> **Phần A** (giờ thường theo loại ngày + phụ cấp đêm) **ĐÃ LÀM** — xem
+> [19-bs2-phu-troi-gio-thuong.md](19-bs2-phu-troi-gio-thuong.md).
+> **Phần B** (tách segment ca đêm vắt ngày) PO chốt **KHÔNG LÀM** — giữ nguyên gán toàn bộ vào ngày
+> bắt đầu ca, vì khớp cách chấm công thực tế (1 ca = 1 bản ghi).
+> Phần dưới giữ lại để đối chiếu lịch sử phân loại ban đầu.
+
+#### (Ghi chép cũ) Ca đêm vắt sang ngày khác loại không tách segment
 
 **Hiện trạng schema:** `AttendanceRecord` có **1 `WorkDate`** + **1 cặp `(DayHours, NightHours)`**,
 không có bảng/cột segment. Ca 22:00 T7 → 06:00 CN, toàn bộ 8 giờ gắn vào WorkDate = T7.

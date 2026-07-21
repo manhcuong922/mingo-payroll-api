@@ -45,6 +45,11 @@ public static class PayrollColumnCodes
     public const string ThuongDuAn = "THUONGDUAN";
     public const string ThuongNam = "THUONGNAM";
     public const string ThuongKhac = "THUONGKHAC";
+
+    // BS-2 — phụ trội giờ THƯỜNG (ca chính thức, không qua đơn OT). Miễn thuế TNCN như CL_GLT.
+    public const string PhuTroiNgayNghi = "PHUTROI_NGAYNGHI";  // ca rơi vào nghỉ tuần/lễ
+    public const string PhuCapDem = "PHUCAP_DEM";              // làm đêm 30% (Đ.98.2)
+
     public const string TongThuNhap = "TONGTHUNHAP";
 
     // Khối F — bảo hiểm

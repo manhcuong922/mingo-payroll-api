@@ -17,7 +17,11 @@ public sealed class PayrollAdjustmentColumnTests
     private static decimal Cell(PayrollRow row, string code)
         => row.Cells.Single(c => c.ColumnCode == code).ComputedValue ?? 0m;
 
-    private static PayrollRow Compute(decimal truyLinh, decimal truyThu)
+    private static PayrollRow Compute(decimal truyLinh, decimal truyThu) =>
+        Compute(truyLinh, truyThu, premiumDayType: 0m, premiumNight: 0m);
+
+    private static PayrollRow Compute(
+        decimal truyLinh, decimal truyThu, decimal premiumDayType, decimal premiumNight)
     {
         var graph = new ColumnDependencyGraph();
         var calculator = new PayrollCalculator(new FormulaEvaluator(new FormulaFunctionRegistry()), graph);
@@ -37,6 +41,8 @@ public sealed class PayrollAdjustmentColumnTests
                 [PayrollFieldKeys.DependentDeduction] = 4_400_000m,
                 [PayrollFieldKeys.TruyLinh] = truyLinh,
                 [PayrollFieldKeys.TruyThu] = truyThu,
+                [PayrollFieldKeys.PremiumDayType] = premiumDayType,
+                [PayrollFieldKeys.PremiumNight] = premiumNight,
             },
             Texts =
             {

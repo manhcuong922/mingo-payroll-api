@@ -4,6 +4,7 @@ using MPS.Application.Common.Interfaces.Payroll;
 using MPS.Application.Common.Payroll;
 using MPS.Application.Common.Payroll.Formula;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
+using MPS.Application.Features.Payroll.Common;
 using MPS.Domain.Entities;
 using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Enums.Attendance;
@@ -35,6 +36,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     }
 
     private enum CongCategory { Official, Probation, Apprentice }
+
+    private static readonly IReadOnlyDictionary<DateOnly, DayType> EmptyDayTypes =
+        new Dictionary<DateOnly, DayType>();
 
     public async Task<PayrollCollectionResult> CollectAsync(PayrollCollectionRequest req, CancellationToken ct)
     {
@@ -114,7 +118,18 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             var activeContract = PickContract(empContracts, periodStart, periodEnd);
             var records = attByEmp.GetValueOrDefault(e.Id) ?? new List<Domain.Entities.Attendance.AttendanceRecord>();
 
+            var ots = otByEmp.GetValueOrDefault(e.Id) ?? new List<Domain.Entities.Attendance.OvertimeRequest>();
+
+            // ⭐ BS-2: loại ngày cần cho CẢ giờ thường (phụ trội nghỉ tuần/lễ) lẫn OT — resolve 1 lần
+            // cho cả kỳ, dùng chung, tránh gọi 2 lượt.
+            var dayTypeByDate = records.Count > 0 || ots.Count > 0
+                ? await _dayTypeResolver.ResolveRangeAsync(e.Id, periodStart, periodEnd, ct)
+                : EmptyDayTypes;
+
             decimal congCom = 0, congThuViec = 0, congChinhThuc = 0, congHocViec = 0, dayHours = 0, nightHours = 0;
+            decimal weeklyRestHours = 0, holidayHours = 0;
+            var workSegments = new List<RegularHoursPremiumCalculator.WorkDaySegment>(records.Count);
+
             foreach (var r in records)
             {
                 // ⭐ #25: chỉ tính ngày công NẰM TRONG kỳ hiệu lực của một hợp đồng. Trước đây mọi
@@ -135,16 +150,33 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 }
                 dayHours += r.DayHours;
                 nightHours += r.NightHours;
+
+                // BS-2 phần A: ca CHÍNH THỨC (không qua đơn OT) vẫn có thể rơi vào nghỉ tuần/lễ.
+                var dayType = dayTypeByDate.GetValueOrDefault(r.WorkDate, DayType.Normal);
+                workSegments.Add(new RegularHoursPremiumCalculator.WorkDaySegment(dayType, r.DayHours, r.NightHours));
+                switch (dayType)
+                {
+                    case DayType.WeeklyRestDay:
+                        weeklyRestHours += r.DayHours + r.NightHours; break;
+                    case DayType.PublicHoliday:
+                    case DayType.PaidLeaveDay:
+                        holidayHours += r.DayHours + r.NightHours; break;
+                }
             }
 
             var mucLuong = activeContract?.SalaryAmountSnapshot ?? 0m;
             var hourlyRate = req.StandardWorkingDays > 0 && labor.StandardWorkingHoursPerDay > 0
                 ? mucLuong / (req.StandardWorkingDays * labor.StandardWorkingHoursPerDay) : 0m;
-            var ots = otByEmp.GetValueOrDefault(e.Id) ?? new List<Domain.Entities.Attendance.OvertimeRequest>();
+
             // ⭐ BS-2: hệ số OT theo LOẠI NGÀY (Đ.98) — trước đây dùng cứng 1.5/2.0 cho mọi ngày, bỏ qua
             // cuối tuần (200%) và lễ (300%) ⇒ ai tăng ca ngày lễ bị trả thiếu. Với ngày THƯỜNG, hệ số động
             // ra đúng 1.5 (ngày) / 2.0 (đêm) như cũ nên không đổi số cho các kỳ chỉ có OT ngày thường.
-            var (tangCa, chenhLech) = await ComputeOvertimePayAsync(e.Id, ots, hourlyRate, labor, periodStart, periodEnd, ct);
+            var (tangCa, chenhLech) = await ComputeOvertimePayAsync(
+                e.Id, ots, hourlyRate, labor, dayTypeByDate, ct);
+
+            // ⭐ BS-2 phần A: giờ THƯỜNG ngày nghỉ/lễ chỉ được trả 100% qua cột Thu nhập ⇒ trả phần
+            // còn thiếu (200%/300%); cộng phụ cấp làm đêm 30% mà trước đây KHÔNG cột nào trả.
+            var premium = RegularHoursPremiumCalculator.Accumulate(workSegments, hourlyRate, labor);
 
             decimal finalScore = 0m, coefficient = 1.0m;
             if (e.UserId.HasValue && scoreByUser.TryGetValue(e.UserId.Value, out var sc) && sc.HasValue)
@@ -183,6 +215,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[NightHours] = nightHours;
             n[OtTangCa] = tangCa;
             n[OtChenhLech] = chenhLech;
+            n[PremiumDayType] = premium.DayTypePremium;
+            n[PremiumNight] = premium.NightPremium;
+            n[WeeklyRestHours] = weeklyRestHours;
+            n[HolidayHours] = holidayHours;
             n[EvalFinalScore] = finalScore;
             n[PayrollFieldKeys.ProductivityCoefficient] = coefficient;
             n[DependentsCount] = depCountByEmp.TryGetValue(e.Id, out var dc) ? dc : e.DependentsNo;
@@ -266,15 +302,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         IReadOnlyList<Domain.Entities.Attendance.OvertimeRequest> ots,
         decimal hourlyRate,
         MPS.Application.Common.Models.Compliance.LaborLawConstantsSnapshot labor,
-        DateOnly periodStart,
-        DateOnly periodEnd,
+        IReadOnlyDictionary<DateOnly, DayType> dayTypeByDate,
         CancellationToken ct)
     {
         if (ots.Count == 0 || hourlyRate <= 0m) return (0m, 0m);
-
-        // 1 truy vấn/nhân viên cho cả kỳ (tránh N+1); OT ngoài kỳ hiếm nhưng resolve lẻ nếu có.
-        var dayTypeByDate = await _dayTypeResolver.ResolveRangeAsync(
-            employeeInformationId, periodStart, periodEnd, ct);
 
         var segments = new List<OvertimePayCalculator.OvertimeSegment>(ots.Count);
         foreach (var ot in ots)

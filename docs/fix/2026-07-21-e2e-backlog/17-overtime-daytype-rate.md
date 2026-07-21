@@ -75,6 +75,8 @@ Với **ngày thường**, hệ số động ra **đúng 1.5 (ngày) / 2.0 (đê
 
 ## Còn để lại (ngoài phạm vi đợt này)
 
-- Giờ **thường** theo loại ngày (cuối tuần/lễ có phụ trội) — cần thêm field vào catalog + công thức.
-- Tách **segment ca đêm vắt ngày** (BS-2 gốc, phần B) — chỉ có nghĩa sau khi làm giờ-thường-theo-loại-ngày.
-- Tinh chỉnh Đ.98.3 (đêm sau ngày OT = 20%×150%).
+- ~~Giờ **thường** theo loại ngày~~ → **ĐÃ LÀM** phiên 4, kèm phụ cấp làm đêm 30%.
+  Xem [19-bs2-phu-troi-gio-thuong.md](19-bs2-phu-troi-gio-thuong.md).
+- ~~Tách **segment ca đêm vắt ngày** (BS-2 gốc, phần B)~~ → PO chốt **không làm**, giữ nguyên gán vào
+  ngày bắt đầu ca.
+- Tinh chỉnh Đ.98.3 (đêm sau ngày OT = 20%×150%) — vẫn để lại.

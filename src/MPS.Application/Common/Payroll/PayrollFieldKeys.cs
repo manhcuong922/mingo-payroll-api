@@ -38,6 +38,16 @@ public static class PayrollFieldKeys
     public const string OtTangCa = "ot.tangCa";
     public const string OtChenhLech = "ot.chenhLechLtg";
 
+    // ===== Phụ trội giờ THƯỜNG (BS-2 phần A) — ca chính thức, không qua đơn OT =====
+    /// <summary>Tiền phụ trội do ca rơi vào ngày nghỉ tuần/lễ (phần vượt hệ số ngày thường).</summary>
+    public const string PremiumDayType = "premium.ngayNghiLe";
+    /// <summary>Tiền phụ cấp làm đêm 30% (Đ.98.2) cho giờ thường.</summary>
+    public const string PremiumNight = "premium.lamDem";
+    /// <summary>Số giờ công thường rơi vào ngày nghỉ tuần (để HR đối chiếu).</summary>
+    public const string WeeklyRestHours = "attendance.weeklyRestHours";
+    /// <summary>Số giờ công thường rơi vào ngày lễ / nghỉ có lương (để HR đối chiếu).</summary>
+    public const string HolidayHours = "attendance.holidayHours";
+
     // ===== Đánh giá / năng suất =====
     public const string EvalFinalScore = "eval.finalScore";
     public const string ProductivityCoefficient = "eval.productivityCoefficient";
