@@ -85,4 +85,16 @@ public interface IOvertimeRequestRepository
         DateOnly workDate,
         int? excludeId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Trả về true nếu tồn tại OT ACTIVE (Pending / PendingApprover / Approved) của employee
+    /// có WorkDate rơi vào bất kỳ ngày nào trong khoảng [startDate, endDate].
+    /// Dùng cho cross-check chống trùng ngày giữa Leave/WFH/LateEarly và OT.
+    /// </summary>
+    Task<bool> HasActiveInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default);
 }
