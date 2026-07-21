@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Attendance;
@@ -31,6 +32,7 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IContractLookupReader _lookup;
     private readonly OvertimeCapChecker _capChecker;
+    private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
@@ -43,6 +45,7 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         IEmployeeInformationRepository employeeRepository,
         IContractLookupReader lookup,
         OvertimeCapChecker capChecker,
+        AttendanceRequestDayConflictChecker dayConflictChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
@@ -54,6 +57,7 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         _employeeRepository = employeeRepository;
         _lookup = lookup;
         _capChecker = capChecker;
+        _dayConflictChecker = dayConflictChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
@@ -105,6 +109,15 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             throw new DomainValidationException(
                 $"Bạn đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) giao thoa khung giờ này.");
         }
+
+        // 5b. Cross-check chống trùng ngày với đơn Leave/WFH/LateEarly đang active.
+        await _dayConflictChecker.EnsureNoConflictAsync(
+            employeeId,
+            request.WorkDate,
+            request.WorkDate,
+            AttendanceRequestKind.Overtime,
+            excludeRequestId: null,
+            cancellationToken);
 
         // 6. Cap check + split
         await _capChecker.CheckAsync(

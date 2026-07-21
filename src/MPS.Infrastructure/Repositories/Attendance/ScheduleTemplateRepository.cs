@@ -111,6 +111,7 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
         tracked.DaysOfMonthMask = entity.DaysOfMonthMask;
         tracked.IsActive = entity.IsActive;
         tracked.Notes = entity.Notes;
+        tracked.IncludeRestDaysAndHolidays = entity.IncludeRestDaysAndHolidays;
         tracked.ApplyTarget = entity.ApplyTarget;
         tracked.TargetDepartmentIds = entity.TargetDepartmentIds;
         tracked.UpdatedAt = entity.UpdatedAt;

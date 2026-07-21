@@ -9,7 +9,7 @@ public sealed record EligibleManager(
 public interface IDepartmentRepository
 {
     // GetAll / GetPaged mặc định lọc IsActive == true; truyền includeInactive=true để xem cả xưởng đã archive.
-    Task<IReadOnlyList<Department>> GetAllAsync(bool includeInactive, CancellationToken ct);
+    Task<IReadOnlyList<Department>> GetAllAsync(bool includeInactive, string? keyword, CancellationToken ct);
     Task<Department?> GetByIdAsync(int id, CancellationToken ct);
     Task<Department?> GetByManagerEmployeeIdAsync(int employeeId, CancellationToken ct);
     Task<(IReadOnlyList<Department> Items, int Total)> GetPagedAsync(

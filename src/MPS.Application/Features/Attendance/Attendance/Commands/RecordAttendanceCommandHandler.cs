@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
@@ -16,6 +17,9 @@ namespace MPS.Application.Features.Attendance.Attendance.Commands;
 ///  • ShiftMode: shift assignment thông thường, ShiftTemplateId set
 ///  • OvertimeMode: OT đã Approved, OvertimeRequestId set, ShiftTemplateId null
 /// Handler enforce exactly-one-of, validate active, chống chấm trùng.
+/// Status nullable — nếu null:
+///  • Shift record → resolver suy từ giờ chấm + shift + setting.
+///  • OT record → default Present khi có check-in, Absent nếu không.
 /// </summary>
 public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCommand, int>
 {
@@ -23,6 +27,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IOvertimeRequestRepository _overtimeRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IAttendanceSettingRepository _settingRepository;
+    private readonly IAttendanceStatusResolver _statusResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -34,6 +40,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         IShiftTemplateRepository shiftRepository,
         IOvertimeRequestRepository overtimeRepository,
         IEmployeeInformationRepository employeeRepository,
+        IAttendanceSettingRepository settingRepository,
+        IAttendanceStatusResolver statusResolver,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -44,6 +52,8 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         _shiftRepository = shiftRepository;
         _overtimeRepository = overtimeRepository;
         _employeeRepository = employeeRepository;
+        _settingRepository = settingRepository;
+        _statusResolver = statusResolver;
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -102,11 +112,14 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
             throw new ConflictException(
                 $"Attendance record already exists for employee {request.EmployeeInformationId} on {request.WorkDate:yyyy-MM-dd} shift {shift.Code}.");
 
+        var resolvedStatus = await ResolveShiftStatusAsync(
+            request.Status, checkInAt, checkOutAt, shift, request.WorkDate, ct);
+
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
-            _splitter, request.Status, checkInAt, checkOutAt,
+            _splitter, resolvedStatus, checkInAt, checkOutAt,
             laborLaw.NightStartTime, laborLaw.NightEndTime, shift, request.WorkDate);
 
-        var entity = BuildEntity(request, userId, checkInAt, checkOutAt, dayHours, nightHours);
+        var entity = BuildEntity(request, resolvedStatus, userId, checkInAt, checkOutAt, dayHours, nightHours);
         entity.ShiftTemplateId = shiftId;
         entity.OvertimeRequestId = null;
         return await _repository.AddAsync(entity, ct);
@@ -143,14 +156,35 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
             throw new ConflictException(
                 $"OvertimeRequest {otId} đã được chấm công (record {existing.Id}).");
 
+        // OT record: resolver không áp dụng. Nếu HR truyền status = null → default Present khi có check-in, Absent nếu không.
+        var resolvedStatus = request.Status ?? (checkInAt is null ? AttendanceStatus.Absent : AttendanceStatus.Present);
+
         // Split hours không cần shift (không có break) — pass null cho break.
         var (dayHours, nightHours) = SplitHoursWithoutShift(
-            request.Status, checkInAt, checkOutAt, laborLaw.NightStartTime, laborLaw.NightEndTime);
+            resolvedStatus, checkInAt, checkOutAt, laborLaw.NightStartTime, laborLaw.NightEndTime);
 
-        var entity = BuildEntity(request, userId, checkInAt, checkOutAt, dayHours, nightHours);
+        var entity = BuildEntity(request, resolvedStatus, userId, checkInAt, checkOutAt, dayHours, nightHours);
         entity.ShiftTemplateId = null;
         entity.OvertimeRequestId = otId;
         return await _repository.AddAsync(entity, ct);
+    }
+
+    /// <summary>
+    /// Nếu HR truyền status cụ thể → giữ nguyên (override thủ công).
+    /// Nếu null → load setting + gọi resolver suy status từ giờ chấm.
+    /// </summary>
+    private async Task<AttendanceStatus> ResolveShiftStatusAsync(
+        AttendanceStatus? explicitStatus,
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
+        MPS.Domain.Entities.Attendance.ShiftTemplate shift,
+        DateOnly workDate,
+        CancellationToken ct)
+    {
+        if (explicitStatus.HasValue) return explicitStatus.Value;
+
+        var setting = await _settingRepository.GetOrCreateDefaultAsync(_clock.UtcNow, ct);
+        return _statusResolver.Resolve(checkInAt, checkOutAt, shift, workDate, setting);
     }
 
     private (decimal DayHours, decimal NightHours) SplitHoursWithoutShift(
@@ -175,6 +209,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
 
     private AttendanceRecordEntity BuildEntity(
         RecordAttendanceCommand request,
+        AttendanceStatus resolvedStatus,
         int userId,
         DateTime? checkInAt,
         DateTime? checkOutAt,
@@ -188,7 +223,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
             CheckOutAt = checkOutAt,
             DayHours = dayHours,
             NightHours = nightHours,
-            Status = request.Status,
+            Status = resolvedStatus,
             Notes = request.Notes,
             OverrideReason = !string.IsNullOrWhiteSpace(request.OverrideReason)
                 ? request.OverrideReason.Trim()

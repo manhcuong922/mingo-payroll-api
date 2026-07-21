@@ -3,6 +3,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Payroll;
 using MPS.Application.Common.Payroll.Formula;
 using MPS.Application.Features.Payroll.Common;
+using MPS.Domain.Constants;
 using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
@@ -40,6 +41,10 @@ public sealed class EditPayrollCellCommandHandler : IRequestHandler<EditPayrollC
             ?? throw new NotFoundException($"Không tìm thấy kỳ lương #{request.PeriodId}.");
         if (period.Status != PayrollPeriodStatus.Draft)
             throw new ConflictException("Kỳ lương đã chốt/khoá — không thể sửa.");
+
+        // Cột cờ BH/thuế do hệ thống suy từ hợp đồng — chặn cứng (kể cả kỳ cũ đã snapshot editable=true).
+        if (PayrollColumnCodes.IsFlagColumn(request.ColumnCode))
+            throw new ConflictException("Cột cờ (BH/thuế) do hệ thống suy từ hợp đồng — không cho sửa tay.");
 
         var defs = PayrollColumnSnapshotMapper.Deserialize(period.FormulaSnapshotJson);
         var plan = PayrollColumnPlan.Build(defs, _graph);

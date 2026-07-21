@@ -38,5 +38,27 @@ public class UpdateAttendanceSettingCommandValidator : AbstractValidator<UpdateA
         RuleFor(x => x.WfhWorkPlanMinLength)
             .InclusiveBetween(0, 500).When(x => x.WfhWorkPlanMinLength.HasValue)
             .WithMessage("WfhWorkPlanMinLength phải trong khoảng 0-500 ký tự.");
+
+        RuleFor(x => x.LateGraceMinutes)
+            .InclusiveBetween(0, 120).When(x => x.LateGraceMinutes.HasValue)
+            .WithMessage("LateGraceMinutes phải trong khoảng 0-120 phút.");
+
+        RuleFor(x => x.EarlyLeaveGraceMinutes)
+            .InclusiveBetween(0, 120).When(x => x.EarlyLeaveGraceMinutes.HasValue)
+            .WithMessage("EarlyLeaveGraceMinutes phải trong khoảng 0-120 phút.");
+
+        RuleFor(x => x.HalfDayThresholdMinutes)
+            .InclusiveBetween(30, 480).When(x => x.HalfDayThresholdMinutes.HasValue)
+            .WithMessage("HalfDayThresholdMinutes phải trong khoảng 30-480 phút.");
+
+        // Cross-field: HalfDayThresholdMinutes phải > max(LateGraceMinutes, EarlyLeaveGraceMinutes) nếu có giá trị.
+        RuleFor(x => x).Custom((cmd, ctx) =>
+        {
+            if (!cmd.HalfDayThresholdMinutes.HasValue) return;
+            var maxGrace = Math.Max(cmd.LateGraceMinutes ?? 0, cmd.EarlyLeaveGraceMinutes ?? 0);
+            if (cmd.HalfDayThresholdMinutes.Value <= maxGrace)
+                ctx.AddFailure(nameof(cmd.HalfDayThresholdMinutes),
+                    "Ngưỡng nửa ngày phải lớn hơn grace period đi muộn / về sớm.");
+        });
     }
 }

@@ -237,9 +237,21 @@ var app = builder.Build();
 // ===== Apply migrations + seed default admin =====
 using (var scope = app.Services.CreateScope())
 {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Seed:ResetOnStartup=true -> XÓA SẠCH database rồi tạo lại từ migration + seed, để DB luôn về đúng
+    // trạng thái seeder mỗi lần khởi động (dùng cho môi trường DEMO: mỗi lần deploy = data sạch giống seed).
+    // Mặc định false (an toàn cho local/dev/test). Bật qua env Seed__ResetOnStartup ở compose/.env.
+    // ⚠️ CẢNH BÁO: bật cờ này thì MỌI lần container api khởi động (deploy, reboot, crash) đều mất toàn bộ dữ liệu.
+    if (builder.Configuration.GetValue<bool>("Seed:ResetOnStartup"))
+    {
+        app.Logger.LogWarning(
+            "Seed:ResetOnStartup=true -> xóa toàn bộ database rồi seed lại từ đầu (mọi dữ liệu hiện có sẽ mất).");
+        await db.Database.EnsureDeletedAsync();
+    }
+
     // Tự áp các migration còn thiếu khi khởi động (idempotent).
     // Cần thiết cho deploy container: DB mới sẽ được tạo schema đầy đủ.
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();

@@ -608,6 +608,171 @@ Hiện chỉ áp cho **Create** theo yêu cầu. Khi các Update handler (Update
 
 ---
 
+## Phần 7 — Bỏ SupportingDocumentUrl + đổi MedicalCertificate sang upload ảnh MinIO
+
+**Context / vấn đề**: FE hiện tại phải nhập 2 field URL string (`SupportingDocumentUrl`, `MedicalCertificateUrl`) khi gửi đơn Leave. Nghiệp vụ thực tế:
+- `SupportingDocumentUrl` không có case sử dụng rõ ràng → gây confusion cho user, không có host ảnh sẵn để paste URL vào.
+- `MedicalCertificateUrl` chỉ dùng cho đơn SICK/MATERNITY nhưng dạng URL string bắt user tự upload ở đâu đó rồi dán link → UX kém, dễ leak, không kiểm soát được.
+
+**Yêu cầu nghiệp vụ**:
+- Bỏ hoàn toàn `SupportingDocumentUrl`.
+- Với đơn `LeaveType.RequireDocument = true` (hiện là `SICK` và `MATERNITY`): cho phép employee upload ảnh chứng nhận y tế trực tiếp, BE lưu MinIO. Vẫn giữ `InsuranceCertNumber` (mã hồ sơ y tế, string) như cũ.
+
+### Quyết định thiết kế đã chốt
+
+1. **API style**: `POST /api/leave-requests` chuyển từ `application/json` sang `multipart/form-data` (single endpoint, không tách 2 bước upload). `PUT /api/leave-requests/{id}/approve` cũng chuyển sang multipart để approver có thể upload ảnh thay employee.
+2. **Field DB**: rename `LeaveRequests.MedicalCertificateUrl` → `MedicalCertificateObjectKey` (semantic đúng: đang lưu MinIO objectKey, không phải URL).
+3. **Approve flow**: giữ khả năng approver upload ảnh bổ sung — nếu employee tạo đơn Sick/Maternity không kèm ảnh, HR duyệt phải tự upload trong bước approve; nếu vẫn không có ảnh → chặn approve.
+
+### Contract API mới
+
+**POST `/api/leave-requests`** — `multipart/form-data`
+
+Text fields:
+- `leaveTypeId` (int), `startDate` (date), `endDate` (date)
+- `reason` (string, optional, ≤500)
+- `insuranceCertNumber` (string, optional, ≤50) — chỉ SICK/MATERNITY
+- `approverRoute` (int enum, optional), `overrideReason` (string, optional)
+
+File field:
+- `medicalCertificate` (IFormFile, **optional** cho MỌI loại đơn) — không bắt buộc ngay ở Create kể cả SICK/MATERNITY, phù hợp workflow BHXH thực tế "nộp đơn trước, bổ sung giấy C65-HD sau"
+- Content-type whitelist: `image/jpeg`, `image/png`, `image/webp`
+- Size ≤ 5 MB
+
+Response 201 giữ nguyên shape hiện tại.
+
+**POST `/api/leave-requests/{id}/medical-certificate`** (endpoint mới) — `multipart/form-data`
+- Auth: `creator` của đơn HOẶC user có `Permissions.LeaveRequestApproveAll` (approver)
+- Chỉ cho phép khi đơn đang ở `Status = Pending` — đơn đã Approved/Rejected/Cancelled → 400
+- Text: `overrideReason` (optional, dùng khi ngoài giờ cutoff)
+- File: `medicalCertificate` (bắt buộc, cùng constraint content-type + size như Create)
+- Behavior: nếu đơn đã có `MedicalCertificateObjectKey` cũ → upload ảnh mới lên MinIO, save DB thành công thì xóa ảnh cũ (rollback pattern như Contract Replace).
+- Response 204.
+
+**PUT `/api/leave-requests/{id}/approve`** — `multipart/form-data`
+- Text: `reviewNote`, `insuranceCertNumber`, `overrideReason`
+- File: `medicalCertificate` (optional, cùng constraint như Create) — approver upload thay employee nếu employee chưa gửi
+- Approve rule: nếu `LeaveType.RequireDocument = true` và đơn KHÔNG có `MedicalCertificateObjectKey` cũ VÀ approve request KHÔNG kèm file → throw `DomainValidationException($"Loại đơn '{code}' yêu cầu ảnh chứng nhận y tế — vui lòng upload trước khi duyệt.")`
+- Response 204 giữ nguyên.
+
+**GET `/api/leave-requests/{id}/medical-certificate/download-url`** (endpoint mới)
+- Auth: creator đơn HOẶC có `Permissions.LeaveRequestReadAll`
+- Response 200: `{ url: string, expiresAt: DateTime }` — presigned URL 15 phút
+- 404 nếu đơn không có ảnh
+- **Backward-compat cho data cũ**: nếu giá trị field bắt đầu bằng `http://` / `https://` (URL string cũ trước migration), trả nguyên value không tạo presigned. Đơn giản, không cần data migration.
+
+### DB migration `20260718_LeaveRequestMedicalCertificate`
+
+- `DROP COLUMN LeaveRequests.SupportingDocumentUrl`
+- `RENAME COLUMN LeaveRequests.MedicalCertificateUrl → MedicalCertificateObjectKey`
+- Bump max length 1000 → 1024 để khớp `ObjectKeyBuilder.MaxKeyLength`
+- Không có backfill.
+
+### Object key pattern (MinIO)
+
+Thêm helper vào [`ObjectKeyBuilder.cs`](src/MPS.Application/Common/Storage/ObjectKeyBuilder.cs):
+
+```csharp
+public static string ForLeaveMedicalCertificate(int employeeId, string extension, Guid uniqueId)
+```
+
+Object key: `leave-medical-certificates/{yyyy}/{MM}/{employeeId}/{uniqueId:N}.{ext}`
+
+Ext suy từ content-type: `image/jpeg → jpg`, `image/png → png`, `image/webp → webp`. Guard whitelist trong helper, throw `ArgumentException` nếu content-type khác.
+
+### Handler flow
+
+**CreateLeaveRequestCommandHandler**:
+1. Fetch LeaveType (giữ nguyên logic hiện có).
+2. Validate cơ bản: date range, shift assignment, notice period, cutoff, cross-check trùng ngày (Phần 6).
+3. Nếu có file:
+   - Content-type ngoài whitelist → throw
+   - Size > 5 MB → throw
+   - Build objectKey, upload MinIO **trước** khi insert entity.
+4. Insert entity với `MedicalCertificateObjectKey = objectKey` (hoặc null nếu không có file).
+5. Nếu `SaveChangesAsync` throw → xóa object MinIO đã upload — pattern giống [`UploadTerminationNoticeCommandHandler.cs:89-107`](src/MPS.Application/Features/ContractTermination/Commands/UploadTerminationNoticeCommandHandler.cs).
+6. **KHÔNG** throw nếu `LeaveType.RequireDocument = true` mà thiếu file — cho phép Pending không kèm ảnh; check dồn xuống bước Approve.
+
+**UploadLeaveMedicalCertificateCommandHandler** (mới):
+1. Fetch đơn — 404 nếu không tồn tại.
+2. Auth: `_currentUser.UserId == entity.CreatedByUserId` HOẶC có `Permissions.LeaveRequestApproveAll` — else `ForbiddenAccessException`.
+3. `Status != Pending` → throw `DomainValidationException("Chỉ có thể upload chứng nhận y tế khi đơn đang chờ duyệt.")`.
+4. `_editLockChecker.EnsureCanModifyAsync(entity.StartDate, overrideReason, ct)`.
+5. Validate content-type + size → upload MinIO → save `MedicalCertificateObjectKey = objectKey` mới.
+6. Nếu save thành công VÀ đơn có objectKey cũ → best-effort `_storage.DeleteAsync(oldKey)` (log warning nếu fail, không throw — object cũ orphan chấp nhận được).
+
+**ApproveLeaveRequestCommandHandler**:
+- Nếu approver upload file mới → upload MinIO, save `MedicalCertificateObjectKey` mới, xóa ảnh cũ sau khi save thành công.
+- Guard mới: nếu `LeaveType.RequireDocument = true` VÀ đơn KHÔNG có `MedicalCertificateObjectKey` cũ VÀ approve request KHÔNG kèm file → `DomainValidationException($"Loại đơn '{code}' yêu cầu ảnh chứng nhận y tế — vui lòng upload trước khi duyệt.")`.
+- Còn lại giữ nguyên logic hiện tại (`InsuranceCertNumber` vẫn bắt buộc theo rule cũ).
+
+**Rollback pattern**: upload MinIO trước → insert DB → nếu DB fail thì `_storage.DeleteAsync(objectKey)`. Nếu app crash giữa 2 bước → orphan object trong MinIO — chấp nhận (giống pattern hiện có ở Contract module). Không xây job cleanup ở phase này.
+
+### Files thay đổi
+
+Modified:
+- [`src/MPS.Domain/Entities/Attendance/LeaveRequest.cs`](src/MPS.Domain/Entities/Attendance/LeaveRequest.cs) — bỏ `SupportingDocumentUrl`, rename `MedicalCertificateUrl` → `MedicalCertificateObjectKey`
+- [`src/MPS.Infrastructure/Persistence/Configurations/Attendance/LeaveRequestEntityConfiguration.cs`](src/MPS.Infrastructure/Persistence/Configurations/Attendance/LeaveRequestEntityConfiguration.cs) — cập nhật cột, max length 1024
+- [`src/MPS.API/Requests/Attendance/LeaveRequests.cs`](src/MPS.API/Requests/Attendance/LeaveRequests.cs) — `CreateLeaveRequest` + `ApproveLeaveRequestBody` chuyển từ `record` sang `class` với `[FromForm]` + `IFormFile? MedicalCertificate`
+- [`src/MPS.Application/Features/Attendance/LeaveRequest/Commands/CreateLeaveRequestCommand.cs`](src/MPS.Application/Features/Attendance/LeaveRequest/Commands/CreateLeaveRequestCommand.cs) — bỏ `SupportingDocumentUrl`, `MedicalCertificateUrl`; thêm `Stream? MedicalCertificateStream, string? MedicalCertificateContentType, long? MedicalCertificateSize, string? MedicalCertificateFileName`
+- [`src/MPS.Application/Features/Attendance/LeaveRequest/Commands/CreateLeaveRequestCommandHandler.cs`](src/MPS.Application/Features/Attendance/LeaveRequest/Commands/CreateLeaveRequestCommandHandler.cs) — inject `IFileStorageService`, flow upload + rollback
+- [`src/MPS.Application/Features/Attendance/LeaveRequest/Commands/ApproveLeaveRequestCommand.cs`](src/MPS.Application/Features/Attendance/LeaveRequest/Commands/ApproveLeaveRequestCommand.cs) + Handler
+- [`src/MPS.Application/Features/Attendance/LeaveRequest/Validators/LeaveRequestValidators.cs`](src/MPS.Application/Features/Attendance/LeaveRequest/Validators/LeaveRequestValidators.cs) — bỏ rule `SupportingDocumentUrl`, `MedicalCertificateUrl`
+- [`src/MPS.Application/Features/Attendance/LeaveRequest/Common/LeaveRequestMapper.cs`](src/MPS.Application/Features/Attendance/LeaveRequest/Common/LeaveRequestMapper.cs) — bỏ + rename field
+- [`src/MPS.Application/DTOs/Attendance/AttendanceDtos.cs`](src/MPS.Application/DTOs/Attendance/AttendanceDtos.cs) — `LeaveRequestDto` bỏ + rename field
+- [`src/MPS.API/Controllers/LeaveRequestController.cs`](src/MPS.API/Controllers/LeaveRequestController.cs) — `Create` + `Approve` chuyển sang `[FromForm]`, thêm endpoint `POST /{id}/medical-certificate` (upload/replace) và `GET /{id}/medical-certificate/download-url`
+- [`src/MPS.Application/Common/Storage/ObjectKeyBuilder.cs`](src/MPS.Application/Common/Storage/ObjectKeyBuilder.cs) — thêm `ForLeaveMedicalCertificate`
+- [`tests/MPS.Infrastructure.Tests/Storage/ObjectKeyBuilderTests.cs`](tests/MPS.Infrastructure.Tests/Storage/ObjectKeyBuilderTests.cs) — thêm test case cho helper mới
+
+New:
+- Migration `20260718_LeaveRequestMedicalCertificate.cs`
+- `src/MPS.Application/Features/Attendance/LeaveRequest/Queries/GetLeaveMedicalCertificateDownloadUrlQuery.cs` + Handler
+- `src/MPS.Application/Features/Attendance/LeaveRequest/Commands/UploadLeaveMedicalCertificateCommand.cs` + Handler
+
+Không đụng:
+- `DatabaseSeeder.cs` — LeaveType SICK/MATERNITY seed vẫn `RequireDocument = true`, không thay đổi
+- Query list handler (`GetLeaveRequestsQuery`, `GetMyLeaveRequestsQuery`, `GetLeaveRequestByIdQuery`) — chỉ tự động thay đổi qua DTO mapper, không đổi logic
+
+### FE impact
+
+**Breaking change** cho form gửi đơn Leave (kể cả loại thường không cần chứng từ):
+- Toàn bộ FE gọi `POST /api/leave-requests` phải chuyển từ JSON body sang `multipart/form-data`.
+- Bỏ 2 input `supportingDocumentUrl` và `medicalCertificateUrl` khỏi form.
+- Với loại `SICK` / `MATERNITY`: thêm input `<input type="file" accept="image/jpeg,image/png,image/webp">` optional — cho phép employee chọn ảnh ngay hoặc để trống nộp đơn trước.
+- Trong trang chi tiết đơn Pending Sick/Maternity: nếu chưa có ảnh, hiển thị nút "Bổ sung chứng nhận y tế" gọi `POST /api/leave-requests/{id}/medical-certificate` với file. Có thể replace nếu đã có ảnh cũ.
+- Hiển thị lại ảnh y tế: gọi `GET /api/leave-requests/{id}/medical-certificate/download-url` → dùng `url` trả về gán `<img src="...">`. Không hard-code presigned URL trong list DTO — luôn gọi endpoint lấy fresh URL (link 15 phút, tránh cache stale).
+- Form Approve của HR: thêm ô upload optional để bổ sung ảnh nếu employee chưa gửi. Nếu đơn SICK/MATERNITY vẫn chưa có ảnh khi bấm Approve → BE trả 400, FE toast cảnh báo yêu cầu upload trước.
+
+Sẽ có tài liệu FE riêng sau khi implement xong.
+
+### Test plan
+
+- **Unit**:
+  - `ObjectKeyBuilderTests.ForLeaveMedicalCertificate` — happy path + invalid content-type
+  - `CreateLeaveRequestCommandHandlerTests`:
+    - Không file (mọi LeaveType) → OK, `MedicalCertificateObjectKey = null`, không gọi storage
+    - Có file → upload MinIO + save DB thành công
+    - Có file + save DB fail → verify `_storage.DeleteAsync` được gọi (rollback)
+    - Content-type ngoài whitelist → throw, không upload
+  - `UploadLeaveMedicalCertificateCommandHandlerTests`:
+    - Không phải creator + không có permission approve → 403
+    - Status Approved/Rejected/Cancelled → 400
+    - Đơn có ảnh cũ + upload mới → save thành công + verify `DeleteAsync(oldKey)` gọi
+    - Đơn không có ảnh cũ + upload → save thành công, không gọi Delete
+  - `ApproveLeaveRequestCommandHandlerTests`:
+    - LeaveType require + đơn đã có objectKey + không upload thêm → OK
+    - LeaveType require + đơn KHÔNG có + không upload → throw
+    - LeaveType require + đơn có + approver upload mới → objectKey đổi, ảnh cũ bị xóa
+- **Integration**:
+  - POST create multipart với ảnh JPG hợp lệ → 201, DB có objectKey, MinIO có object.
+  - POST create multipart cho SICK không kèm file → 201 (Pending không có ảnh), sau đó POST /{id}/medical-certificate với ảnh → 204.
+  - Approve đơn SICK không có ảnh, không upload → 400.
+  - GET download-url của đơn vừa tạo → 200 với URL tải được ảnh.
+  - GET download-url của đơn cũ có URL string → trả nguyên URL (backward-compat).
+- **Regression**: existing test cross-check Phần 6 vẫn pass; existing test balance/notice/cutoff vẫn pass.
+
+---
+
 ## Thứ tự triển khai đề xuất (6 PR nhỏ, dễ review)
 
 1. **PR-0** (prerequisite): Phần 0 — Mở rộng `AttendanceSetting` + `LeaveType` với field cấu hình chính sách công ty. Chỉ add nullable columns + mở rộng payload endpoint có sẵn. Không tạo permission mới. Merge trước tiên vì các PR sau phụ thuộc vào field mới.
@@ -617,5 +782,6 @@ Hiện chỉ áp cho **Create** theo yêu cầu. Khi các Update handler (Update
 5. **PR-4**: Phần 4 — EmployeeDependent + DependentRegistrationRequest.
 6. **PR-5** (optional): WFH ↔ AttendanceRecord integration nếu team muốn ghép vào phase 1.
 7. **PR-6** (đã merge): Phần 6 — Cross-check chống trùng ngày Leave/WFH/LateEarly. Chỉ application logic + 1 shared checker, không có migration.
+8. **PR-7**: Phần 7 — Bỏ `SupportingDocumentUrl`, chuyển `MedicalCertificateUrl` sang upload ảnh MinIO. Breaking change cho FE (multipart + endpoint download-url mới). Có migration rename column + drop column.
 
 Mỗi PR đứng độc lập, build được, có test, có thể revert riêng.

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using MPS.Domain.Entities.Attendance;
+using MPS.Domain.Enums.Attendance;
 
 namespace MPS.API.Services;
 
@@ -13,7 +14,29 @@ internal static class MonthlyScheduleImportTemplateGenerator
     private const int TotalDataRows = 10; // 3 demo + 7 rỗng
     private const int FirstDataRow = 5;   // R5
 
-    public static byte[] Generate(int year, int month, IReadOnlyCollection<ShiftTemplate> activeShifts)
+    /// <summary>
+    /// Static demo rows theo mode. HR sẽ thay bằng dữ liệu thật khi điền.
+    /// Dept mode dùng mã phòng ban giống seed default (IT/KT/NS) — đọc user nhận ra ngay.
+    /// </summary>
+    private static readonly (string Code, string Name)[] EmployeeDemoRows =
+    {
+        ("EMP001", "Nguyễn Văn An"),
+        ("EMP002", "Trần Thị Bình"),
+        ("EMP003", "Lê Văn Cường"),
+    };
+
+    private static readonly (string Code, string Name)[] DepartmentDemoRows =
+    {
+        ("IT", "Phòng Công nghệ thông tin"),
+        ("KT", "Phòng Kế toán"),
+        ("NS", "Phòng Nhân sự"),
+    };
+
+    public static byte[] Generate(
+        int year,
+        int month,
+        IReadOnlyCollection<ShiftTemplate> activeShifts,
+        ScheduleApplyTarget applyTarget = ScheduleApplyTarget.Employees)
     {
         var daysInMonth = DateTime.DaysInMonth(year, month);
         var lastDayColumn = ColumnName(daysInMonth + 2);
@@ -31,7 +54,7 @@ internal static class MonthlyScheduleImportTemplateGenerator
             WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelationships());
             WriteEntry(archive, "xl/styles.xml", BuildStyles());
             WriteEntry(archive, "xl/worksheets/sheet1.xml",
-                BuildWorksheet(year, month, daysInMonth, lastDayColumn, referenceStartRow, lastRow, activeShifts));
+                BuildWorksheet(year, month, daysInMonth, lastDayColumn, referenceStartRow, lastRow, activeShifts, applyTarget));
         }
 
         return output.ToArray();
@@ -44,8 +67,13 @@ internal static class MonthlyScheduleImportTemplateGenerator
         string lastDayColumn,
         int referenceStartRow,
         int lastRow,
-        IReadOnlyCollection<ShiftTemplate> activeShifts)
+        IReadOnlyCollection<ShiftTemplate> activeShifts,
+        ScheduleApplyTarget applyTarget)
     {
+        var isDeptMode = applyTarget == ScheduleApplyTarget.Departments;
+        var codeHeader = isDeptMode ? "Mã phòng ban" : "Mã NV";
+        var nameHeader = isDeptMode ? "Tên phòng ban" : "Họ tên";
+        var demoRows = isDeptMode ? DepartmentDemoRows : EmployeeDemoRows;
         var sb = new StringBuilder();
         sb.Append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""");
         sb.Append("""<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">""");
@@ -60,15 +88,16 @@ internal static class MonthlyScheduleImportTemplateGenerator
         sb.Append("""</cols><sheetData>""");
 
         // R1 — Title lớn, xanh đậm
+        var titleSuffix = isDeptMode ? " (theo phòng ban)" : "";
         WriteRow(sb, 1, [
-            InlineCell("A1", $"BẢNG PHÂN CA THÁNG {month:00}/{year}", 1)
+            InlineCell("A1", $"BẢNG PHÂN CA THÁNG {month:00}/{year}{titleSuffix}", 1)
         ], height: 40);
 
-        // R3 — Day numbers header (Mã NV, Họ tên, 1, 2, ..., N)
+        // R3 — Day numbers header (code+name theo mode, 1, 2, ..., N)
         var dayNumberCells = new List<string>
         {
-            InlineCell("A3", "Mã NV", 3),
-            InlineCell("B3", "Họ tên", 3)
+            InlineCell("A3", codeHeader, 3),
+            InlineCell("B3", nameHeader, 3)
         };
         for (var day = 1; day <= daysInMonth; day++)
         {
@@ -90,12 +119,6 @@ internal static class MonthlyScheduleImportTemplateGenerator
 
         // Data rows — 3 demo + (TotalDataRows - 3) trống
         var demoShiftCode = activeShifts.OrderBy(s => s.Code).FirstOrDefault()?.Code ?? "CA-1";
-        var demoEmployees = new (string Code, string Name)[]
-        {
-            ("EMP001", "Nguyễn Văn An"),
-            ("EMP002", "Trần Thị Bình"),
-            ("EMP003", "Lê Văn Cường")
-        };
 
         var lastDataRow = FirstDataRow + TotalDataRows - 1;
         for (var row = FirstDataRow; row <= lastDataRow; row++)
@@ -106,10 +129,10 @@ internal static class MonthlyScheduleImportTemplateGenerator
             var cells = new List<string>
             {
                 isDemo
-                    ? InlineCell($"A{row}", demoEmployees[demoIndex].Code, 6)
+                    ? InlineCell($"A{row}", demoRows[demoIndex].Code, 6)
                     : EmptyCell($"A{row}", 6),
                 isDemo
-                    ? InlineCell($"B{row}", demoEmployees[demoIndex].Name, 6)
+                    ? InlineCell($"B{row}", demoRows[demoIndex].Name, 6)
                     : EmptyCell($"B{row}", 6),
             };
             for (var day = 1; day <= daysInMonth; day++)

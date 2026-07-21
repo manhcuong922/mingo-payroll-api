@@ -8,6 +8,7 @@ public interface IEmployeeInformationRepository
     Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
         bool? hasActiveUser = null,
+        string? keyword = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Employee có gắn User và User.Status == 1. Dùng cho attendance/phân ca thay cho contract-active.</summary>

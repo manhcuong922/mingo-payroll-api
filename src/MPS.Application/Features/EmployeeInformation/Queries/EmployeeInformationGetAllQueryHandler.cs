@@ -36,6 +36,7 @@ public class EmployeeInformationGetAllQueryHandler
         {
             var all = await _repository.GetAllAsync(
                 hasActiveUser: request.HasActiveUser,
+                keyword: request.Keyword,
                 cancellationToken: cancellationToken);
             return _mapper.Map<IReadOnlyList<EmployeeInformationDto>>(all);
         }

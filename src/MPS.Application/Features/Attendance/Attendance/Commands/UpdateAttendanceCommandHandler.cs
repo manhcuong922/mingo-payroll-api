@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Exceptions;
@@ -11,10 +12,13 @@ namespace MPS.Application.Features.Attendance.Attendance.Commands;
 /// <summary>
 /// Edit lock is resolved from AttendanceSetting.
 /// Multi-shift: key bao gồm ShiftTemplateId — sửa đúng record của ca cụ thể.
+/// Status nullable — null → resolver suy từ giờ chấm + shift + setting.
 /// </summary>
 public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCommand, bool>
 {
     private readonly IAttendanceRecordRepository _repository;
+    private readonly IAttendanceSettingRepository _settingRepository;
+    private readonly IAttendanceStatusResolver _statusResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -23,6 +27,8 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
 
     public UpdateAttendanceCommandHandler(
         IAttendanceRecordRepository repository,
+        IAttendanceSettingRepository settingRepository,
+        IAttendanceStatusResolver statusResolver,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -30,6 +36,8 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
         IClock clock)
     {
         _repository = repository;
+        _settingRepository = settingRepository;
+        _statusResolver = statusResolver;
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -55,9 +63,20 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
         if (!AttendanceTimeRules.HasValidObservedRange(checkInAt, checkOutAt))
             throw new DomainValidationException("CheckOutAt must be later than CheckInAt.");
 
+        // Resolve status: nếu HR truyền cụ thể → giữ nguyên; nếu null → resolver suy từ shift + setting.
+        var resolvedStatus = request.Status;
+        if (!resolvedStatus.HasValue && existing.ShiftTemplate is not null)
+        {
+            var setting = await _settingRepository.GetOrCreateDefaultAsync(_clock.UtcNow, cancellationToken);
+            resolvedStatus = _statusResolver.Resolve(
+                checkInAt, checkOutAt, existing.ShiftTemplate, existing.WorkDate, setting);
+        }
+        // Nếu vẫn null (record không có ShiftTemplate — OT), giữ status hiện tại.
+        var finalStatus = resolvedStatus ?? existing.Status;
+
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter,
-            request.Status,
+            finalStatus,
             checkInAt,
             checkOutAt,
             laborLaw.NightStartTime,
@@ -67,7 +86,7 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
 
         existing.CheckInAt = checkInAt;
         existing.CheckOutAt = checkOutAt;
-        existing.Status = request.Status;
+        existing.Status = finalStatus;
         existing.Notes = request.Notes;
         existing.OverrideReason = !string.IsNullOrWhiteSpace(request.OverrideReason)
             ? request.OverrideReason

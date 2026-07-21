@@ -8,11 +8,12 @@ public sealed record CreateLeaveRequestCommand(
     DateOnly StartDate,
     DateOnly EndDate,
     string? Reason,
-    string? SupportingDocumentUrl,
-    string? MedicalCertificateUrl,
     string? InsuranceCertNumber,
     OvertimeApproverRoute? ApproverRoute,
-    string? OverrideReason) : IRequest<CreateLeaveRequestResult>;
+    string? OverrideReason,
+    Stream? MedicalCertificateStream,
+    string? MedicalCertificateContentType,
+    long? MedicalCertificateSize) : IRequest<CreateLeaveRequestResult>;
 
 /// <summary>
 /// Kết quả tạo đơn kèm cờ báo hệ thống đã tự chuyển sang loại UNPAID (khi hết quỹ phép + LeaveType.AutoFallbackToUnpaid=true).

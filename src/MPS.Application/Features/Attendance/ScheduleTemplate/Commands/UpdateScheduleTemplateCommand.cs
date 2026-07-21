@@ -17,4 +17,6 @@ public sealed record UpdateScheduleTemplateCommand(
     bool IsActive,
     string? Notes,
     ScheduleApplyTarget? ApplyTarget = null,
-    IReadOnlyList<int>? DepartmentIds = null) : IRequest<Unit>;
+    IReadOnlyList<int>? DepartmentIds = null,
+    bool IncludeRestDaysAndHolidays = false,
+    bool AcknowledgeWeeklyOvertimeWarnings = false) : IRequest<Unit>;
