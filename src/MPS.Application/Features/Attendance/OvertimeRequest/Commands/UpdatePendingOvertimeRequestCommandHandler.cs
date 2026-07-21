@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
@@ -19,6 +20,7 @@ public class UpdatePendingOvertimeRequestCommandHandler
 {
     private readonly IOvertimeRequestRepository _repository;
     private readonly OvertimeCapChecker _capChecker;
+    private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
@@ -27,6 +29,7 @@ public class UpdatePendingOvertimeRequestCommandHandler
     public UpdatePendingOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
         OvertimeCapChecker capChecker,
+        AttendanceRequestDayConflictChecker dayConflictChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
@@ -34,6 +37,7 @@ public class UpdatePendingOvertimeRequestCommandHandler
     {
         _repository = repository;
         _capChecker = capChecker;
+        _dayConflictChecker = dayConflictChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
@@ -71,6 +75,15 @@ public class UpdatePendingOvertimeRequestCommandHandler
             throw new DomainValidationException(
                 $"NV đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) giao thoa khung giờ mới.");
         }
+
+        // Cross-check chống trùng ngày với đơn Leave/WFH/LateEarly đang active.
+        await _dayConflictChecker.EnsureNoConflictAsync(
+            existing.EmployeeInformationId,
+            request.WorkDate,
+            request.WorkDate,
+            AttendanceRequestKind.Overtime,
+            excludeRequestId: existing.Id,
+            cancellationToken);
 
         // Cap check tính cumulative Pending + PendingApprover + Approved; exclude chính đơn
         // đang sửa để tránh double-count giờ cũ.

@@ -21,9 +21,8 @@ public class LeaveRequestEntityConfiguration : IEntityTypeConfiguration<LeaveReq
         builder.Property(e => e.Status).HasConversion<byte>().IsRequired();
         builder.Property(e => e.ApproverRoute).HasConversion<byte>();
         builder.Property(e => e.Reason).HasMaxLength(500);
-        builder.Property(e => e.SupportingDocumentUrl).HasMaxLength(1000);
         builder.Property(e => e.IsRetroactive).IsRequired().HasDefaultValue(false);
-        builder.Property(e => e.MedicalCertificateUrl).HasMaxLength(1000);
+        builder.Property(e => e.MedicalCertificateObjectKey).HasMaxLength(1024);
         builder.Property(e => e.InsuranceCertNumber).HasMaxLength(50);
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.Property(e => e.ReviewedAt);

@@ -4,30 +4,34 @@ using MPS.Domain.Interfaces.Attendance;
 namespace MPS.Application.Features.Attendance.Common;
 
 /// <summary>
-/// Cross-check chống trùng ngày giữa 3 loại đơn Leave / WFH / LateEarly.
+/// Cross-check chống trùng ngày giữa 4 loại đơn Leave / WFH / LateEarly / Overtime.
 /// Chỉ chấp nhận 1 đơn (Pending hoặc Approved) trên 1 ngày; Rejected/Cancelled
-/// không tính. Throw <see cref="DomainValidationException"/> với thông báo
-/// nêu rõ loại đơn nào đang chặn.
+/// không tính. Với OT, "active" gồm Pending + PendingApprover + Approved.
+/// Throw <see cref="DomainValidationException"/> với thông báo nêu rõ loại đơn nào đang chặn.
 /// </summary>
 public sealed class AttendanceRequestDayConflictChecker
 {
     private readonly ILeaveRequestRepository _leaveRepository;
     private readonly IWfhRequestRepository _wfhRepository;
     private readonly ILateEarlyRequestRepository _lateEarlyRepository;
+    private readonly IOvertimeRequestRepository _overtimeRepository;
 
     public AttendanceRequestDayConflictChecker(
         ILeaveRequestRepository leaveRepository,
         IWfhRequestRepository wfhRepository,
-        ILateEarlyRequestRepository lateEarlyRepository)
+        ILateEarlyRequestRepository lateEarlyRepository,
+        IOvertimeRequestRepository overtimeRepository)
     {
         _leaveRepository = leaveRepository;
         _wfhRepository = wfhRepository;
         _lateEarlyRepository = lateEarlyRepository;
+        _overtimeRepository = overtimeRepository;
     }
 
     /// <summary>
     /// Đảm bảo trong khoảng [startDate, endDate] employee KHÔNG có bất kỳ đơn
-    /// Leave/WFH/LateEarly nào ở trạng thái Pending hoặc Approved.
+    /// Leave/WFH/LateEarly/OT nào ở trạng thái active (Pending/Approved cho 3 loại kia;
+    /// Pending/PendingApprover/Approved cho OT).
     /// </summary>
     /// <param name="requestKind">Loại đơn đang tạo — dùng để loại trừ khi update.</param>
     /// <param name="excludeRequestId">Bỏ qua đơn hiện tại (khi update).</param>
@@ -43,7 +47,7 @@ public sealed class AttendanceRequestDayConflictChecker
         var wfhExclude = requestKind == AttendanceRequestKind.Wfh ? excludeRequestId : null;
         var lateEarlyExclude = requestKind == AttendanceRequestKind.LateEarly ? excludeRequestId : null;
 
-        // Await tuần tự — 3 repository share cùng 1 AppDbContext scoped;
+        // Await tuần tự — các repository share cùng 1 AppDbContext scoped;
         // EF Core DbContext không thread-safe, chạy song song sẽ throw
         // "A second operation started on this context before a previous operation completed".
         var hasLeave = await _leaveRepository.HasPendingOrApprovedInRangeAsync(
@@ -52,21 +56,28 @@ public sealed class AttendanceRequestDayConflictChecker
             employeeInformationId, startDate, endDate, wfhExclude, cancellationToken);
         var hasLateEarly = await _lateEarlyRepository.HasPendingOrApprovedInRangeAsync(
             employeeInformationId, startDate, endDate, lateEarlyExclude, cancellationToken);
+        // Không check OT-in-range khi requestKind==Overtime: nhiều OT khác khung giờ
+        // trên cùng ngày vẫn hợp lệ, việc chống trùng khung giờ OT đã được xử lý riêng
+        // bằng OvertimeTimeOverlap ở CreateOvertimeRequestCommandHandler.
+        var hasOvertime = requestKind == AttendanceRequestKind.Overtime
+            ? false
+            : await _overtimeRepository.HasActiveInRangeAsync(
+                employeeInformationId, startDate, endDate, excludeRequestId: null, cancellationToken);
 
-        if (!hasLeave && !hasWfh && !hasLateEarly) return;
+        if (!hasLeave && !hasWfh && !hasLateEarly && !hasOvertime) return;
 
         var conflicts = new List<string>();
         if (hasLeave) conflicts.Add("nghỉ phép");
         if (hasWfh) conflicts.Add("WFH");
         if (hasLateEarly) conflicts.Add("đi trễ/về sớm");
+        if (hasOvertime) conflicts.Add("tăng ca");
 
         var rangeLabel = startDate == endDate
             ? $"ngày {startDate:dd/MM/yyyy}"
             : $"khoảng {startDate:dd/MM/yyyy} → {endDate:dd/MM/yyyy}";
 
         throw new DomainValidationException(
-            $"Đã tồn tại đơn {string.Join(", ", conflicts)} (Pending/Approved) trong {rangeLabel}. "
-            + "Mỗi ngày chỉ được có 1 đơn Leave/WFH/LateEarly — vui lòng hủy đơn cũ trước khi tạo đơn mới.");
+            $"Đã có đơn {string.Join(", ", conflicts)} trong {rangeLabel}. Vui lòng hủy đơn cũ trước khi tạo đơn mới.");
     }
 }
 
@@ -75,4 +86,5 @@ public enum AttendanceRequestKind
     Leave = 1,
     Wfh = 2,
     LateEarly = 3,
+    Overtime = 4,
 }
