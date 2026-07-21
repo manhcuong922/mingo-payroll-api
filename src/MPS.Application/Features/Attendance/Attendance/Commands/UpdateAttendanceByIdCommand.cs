@@ -11,6 +11,6 @@ public sealed record UpdateAttendanceByIdCommand(
     int Id,
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
-    AttendanceStatus Status,
+    AttendanceStatus? Status,
     string? Notes,
     string? OverrideReason) : IRequest<bool>;

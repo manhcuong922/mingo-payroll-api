@@ -26,9 +26,10 @@ public class EmployeeInformationController : ControllerBase
         Permissions.EmployeeInformationReadSelf)]
     public async Task<IActionResult> GetAll(
         [FromQuery] bool? hasActiveUser,
+        [FromQuery] string? keyword,
         CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new EmployeeInformationGetAllQuery(hasActiveUser), cancellationToken);
+        var result = await _mediator.Send(new EmployeeInformationGetAllQuery(hasActiveUser, keyword), cancellationToken);
         return Ok(result);
     }
 

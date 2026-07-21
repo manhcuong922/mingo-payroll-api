@@ -64,7 +64,17 @@ public sealed record EmployeeShiftAssignmentDto(
     TimeOnly StartTime,
     TimeOnly EndTime,
     DateOnly WorkDate,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    /// <summary>
+    /// FK về ScheduleTemplate sinh ra assignment (null = manual/orphan).
+    /// Cho phép FE nhận biết assignment thuộc template nào để filter view theo phòng ban.
+    /// </summary>
+    int? ScheduleTemplateId,
+    /// <summary>
+    /// applyTarget của template (null khi <see cref="ScheduleTemplateId"/> null).
+    /// View "Tổng hợp theo phòng ban" chỉ include row có <c>Departments</c>.
+    /// </summary>
+    Domain.Enums.Attendance.ScheduleApplyTarget? ScheduleApplyTarget);
 
 public sealed record ShiftRosterLockedDateDto(
     int EmployeeInformationId,
@@ -275,6 +285,9 @@ public sealed record AttendanceSettingDto(
     int? WfhMinNoticeDays,
     decimal? WfhMaxDaysPerRequest,
     int? WfhWorkPlanMinLength,
+    int? LateGraceMinutes,
+    int? EarlyLeaveGraceMinutes,
+    int? HalfDayThresholdMinutes,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 

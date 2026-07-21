@@ -221,11 +221,23 @@ public class CreateScheduleTemplateCommandHandler
         var dates = _expander.ExpandDates(templateShape);
         if (dates.Count == 0 || employeeIds.Count == 0) return;
 
+        // Loại các ngày đã có ca bị khoá do AttendanceRecord — batch handler sẽ skip
+        // các ngày này với status SkippedAttendanceExists, không tạo delta. Pre-check phải
+        // đồng bộ để không throw false-positive "Vượt 8h/ngày" (Điều 105 BLLĐ).
+        var fromDate = dates.Min();
+        var toDate = dates.Max();
+        var lockedRows = await _assignmentRepository.GetLockedShiftsAsync(
+            employeeIds, fromDate, toDate, cancellationToken);
+        var lockedDays = lockedRows.Select(r => (r.EmployeeInformationId, r.WorkDate)).ToHashSet();
+
         var deltas = new List<WeeklyCapDelta>(dates.Count * employeeIds.Count * shifts.Count);
         foreach (var empId in employeeIds)
         foreach (var date in dates)
-        foreach (var shift in shifts)
-            deltas.Add(new WeeklyCapDelta(empId, date, shift.StandardHours));
+        {
+            if (lockedDays.Contains((empId, date))) continue;
+            foreach (var shift in shifts)
+                deltas.Add(new WeeklyCapDelta(empId, date, shift.StandardHours));
+        }
 
         var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
         var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);

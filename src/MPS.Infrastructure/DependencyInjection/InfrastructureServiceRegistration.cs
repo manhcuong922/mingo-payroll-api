@@ -158,6 +158,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleVersionRepository, AttendanceRuleVersionRepository>();
         services.AddScoped<MPS.Application.Common.Services.IAttendanceRateResolver,
             MPS.Application.Common.Services.AttendanceRateResolver>();
+        services.AddSingleton<MPS.Application.Common.Services.IAttendanceStatusResolver,
+            MPS.Application.Common.Services.AttendanceStatusResolver>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
         services.AddScoped<IDayTypeResolver, DayTypeResolver>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IWorkHourSplitter, WorkHourSplitter>();

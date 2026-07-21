@@ -18,7 +18,7 @@ public class DepartmentGetAllQueryHandler : IRequestHandler<DepartmentGetAllQuer
 
     public async Task<IReadOnlyList<DepartmentDto>> Handle(DepartmentGetAllQuery request, CancellationToken cancellationToken)
     {
-        var entities = await _repository.GetAllAsync(request.IncludeInactive, cancellationToken);
+        var entities = await _repository.GetAllAsync(request.IncludeInactive, request.Keyword, cancellationToken);
         return _mapper.Map<IReadOnlyList<DepartmentDto>>(entities);
     }
 }

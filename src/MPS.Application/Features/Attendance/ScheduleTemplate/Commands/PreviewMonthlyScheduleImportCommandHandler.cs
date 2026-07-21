@@ -154,14 +154,14 @@ public sealed class PreviewMonthlyScheduleImportCommandHandler
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("[MonthlyImport] step=lookup-departments-begin");
-        var allDepartments = await _departmentRepository.GetAllAsync(includeInactive: false, cancellationToken);
+        var allDepartments = await _departmentRepository.GetAllAsync(includeInactive: false, keyword: null, cancellationToken);
         var deptByCode = allDepartments
             .GroupBy(d => d.Code, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         _logger.LogInformation("[MonthlyImport] step=lookup-departments-done total={Count}", allDepartments.Count);
 
         _logger.LogInformation("[MonthlyImport] step=lookup-employees-by-dept-begin");
-        var activeEmployees = await _employeeRepository.GetAllAsync(hasActiveUser: true, cancellationToken);
+        var activeEmployees = await _employeeRepository.GetAllAsync(hasActiveUser: true, cancellationToken: cancellationToken);
         var employeesByDeptId = activeEmployees
             .Where(e => e.DepartmentId.HasValue)
             .GroupBy(e => e.DepartmentId!.Value)

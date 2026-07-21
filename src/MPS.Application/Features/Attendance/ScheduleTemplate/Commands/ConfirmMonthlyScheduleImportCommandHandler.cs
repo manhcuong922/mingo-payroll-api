@@ -24,6 +24,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IDepartmentRepository _departmentRepository;
+    private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IRegularHoursCapChecker _capChecker;
 
     public ConfirmMonthlyScheduleImportCommandHandler(
@@ -35,6 +36,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         IShiftTemplateRepository shiftRepository,
         IEmployeeInformationRepository employeeRepository,
         IDepartmentRepository departmentRepository,
+        IEmployeeShiftAssignmentRepository assignmentRepository,
         IRegularHoursCapChecker capChecker)
     {
         _cache = cache;
@@ -45,6 +47,7 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         _shiftRepository = shiftRepository;
         _employeeRepository = employeeRepository;
         _departmentRepository = departmentRepository;
+        _assignmentRepository = assignmentRepository;
         _capChecker = capChecker;
     }
 
@@ -138,8 +141,17 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
 
         // Pre-check cap before creating any ScheduleTemplate.
         // If this fails in the loop below, earlier groups may already be committed.
+        // Loại các ngày đã có ca bị khoá do AttendanceRecord — batch handler sẽ skip
+        // với status SkippedAttendanceExists nên pre-check phải đồng bộ để không throw
+        // false-positive "Vượt 8h/ngày" (Điều 105 BLLĐ).
+        var opEmployeeIds = entry.Operations.Select(o => o.EmployeeInformationId).Distinct().ToList();
+        var lockedRows = await _assignmentRepository.GetLockedShiftsAsync(
+            opEmployeeIds, fromDate, toDate, cancellationToken);
+        var lockedDays = lockedRows.Select(r => (r.EmployeeInformationId, r.WorkDate)).ToHashSet();
+
         var deltas = entry.Operations
-            .Where(o => o.ShiftTemplateId.HasValue)
+            .Where(o => o.ShiftTemplateId.HasValue
+                && !lockedDays.Contains((o.EmployeeInformationId, o.WorkDate)))
             .Select(o => new WeeklyCapDelta(
                 o.EmployeeInformationId,
                 o.WorkDate,

@@ -349,6 +349,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<TimeOnly>("DailyEditCutoffTime")
                         .HasColumnType("time");
 
+                    b.Property<int?>("EarlyLeaveGraceMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("HalfDayThresholdMinutes")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsEditLockEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -361,6 +367,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<int?>("LateEarlyMaxOccurrencesPerMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LateGraceMinutes")
                         .HasColumnType("int");
 
                     b.Property<int>("LockAfterDays")

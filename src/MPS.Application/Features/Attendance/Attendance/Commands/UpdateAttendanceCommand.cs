@@ -9,6 +9,6 @@ public sealed record UpdateAttendanceCommand(
     int ShiftTemplateId,
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
-    AttendanceStatus Status,
+    AttendanceStatus? Status,
     string? Notes,
     string? OverrideReason = null) : IRequest<bool>;

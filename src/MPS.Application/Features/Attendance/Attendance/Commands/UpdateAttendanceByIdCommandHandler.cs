@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
@@ -11,6 +12,8 @@ namespace MPS.Application.Features.Attendance.Attendance.Commands;
 public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendanceByIdCommand, bool>
 {
     private readonly IAttendanceRecordRepository _repository;
+    private readonly IAttendanceSettingRepository _settingRepository;
+    private readonly IAttendanceStatusResolver _statusResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -19,6 +22,8 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
 
     public UpdateAttendanceByIdCommandHandler(
         IAttendanceRecordRepository repository,
+        IAttendanceSettingRepository settingRepository,
+        IAttendanceStatusResolver statusResolver,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -26,6 +31,8 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         IClock clock)
     {
         _repository = repository;
+        _settingRepository = settingRepository;
+        _statusResolver = statusResolver;
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -51,20 +58,38 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
 
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(existing.WorkDate, cancellationToken);
 
+        // Resolve status: nếu HR truyền cụ thể → giữ nguyên; nếu null và có shift → resolver suy từ giờ chấm.
+        // Nếu null và không có shift (OT) → giữ status hiện tại.
+        AttendanceStatus finalStatus;
+        if (request.Status.HasValue)
+        {
+            finalStatus = request.Status.Value;
+        }
+        else if (existing.ShiftTemplate is not null)
+        {
+            var setting = await _settingRepository.GetOrCreateDefaultAsync(_clock.UtcNow, cancellationToken);
+            finalStatus = _statusResolver.Resolve(
+                checkInAt, checkOutAt, existing.ShiftTemplate, existing.WorkDate, setting);
+        }
+        else
+        {
+            finalStatus = existing.Status;
+        }
+
         // Shift record → dùng AttendanceHourCalculator (cap về khung ca + break).
         // OT record (không có ShiftTemplate) → split trực tiếp, không cap.
         var (dayHours, nightHours) = existing.ShiftTemplate is not null
             ? AttendanceHourCalculator.Compute(
-                _splitter, request.Status, checkInAt, checkOutAt,
+                _splitter, finalStatus, checkInAt, checkOutAt,
                 laborLaw.NightStartTime, laborLaw.NightEndTime,
                 existing.ShiftTemplate, existing.WorkDate)
             : SplitHoursWithoutShift(
-                request.Status, checkInAt, checkOutAt,
+                finalStatus, checkInAt, checkOutAt,
                 laborLaw.NightStartTime, laborLaw.NightEndTime);
 
         existing.CheckInAt = checkInAt;
         existing.CheckOutAt = checkOutAt;
-        existing.Status = request.Status;
+        existing.Status = finalStatus;
         existing.Notes = request.Notes;
         existing.OverrideReason = !string.IsNullOrWhiteSpace(request.OverrideReason)
             ? request.OverrideReason
