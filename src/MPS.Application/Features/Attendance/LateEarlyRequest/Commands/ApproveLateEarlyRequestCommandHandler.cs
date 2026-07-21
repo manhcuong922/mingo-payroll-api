@@ -6,6 +6,7 @@ using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Attendance.LateEarlyRequest.Commands;
 
@@ -18,6 +19,8 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly LateEarlyLeaveDeduction _leaveDeduction;
+    private readonly LateEarlyAttendanceDock _attendanceDock;
+    private readonly IPayrollStaleMarker _payrollStale;
 
     public ApproveLateEarlyRequestCommandHandler(
         ILateEarlyRequestRepository repository,
@@ -26,9 +29,13 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
         IClock clock,
-        LateEarlyLeaveDeduction leaveDeduction)
+        LateEarlyLeaveDeduction leaveDeduction,
+        LateEarlyAttendanceDock attendanceDock,
+        IPayrollStaleMarker payrollStale)
     {
         _leaveDeduction = leaveDeduction;
+        _attendanceDock = attendanceDock;
+        _payrollStale = payrollStale;
         _repository = repository;
         _limitChecker = limitChecker;
         _editLockChecker = editLockChecker;
@@ -98,8 +105,21 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
                 existing.EmployeeInformationId, existing.WorkDate, existing.Minutes,
                 userId, now, cancellationToken);
         }
+        else
+        {
+            // BS-4 (phần 2): không bù quỹ phép → trừ số giờ thiếu khỏi giờ công thực tế của ngày.
+            await _attendanceDock.DockAsync(
+                existing.EmployeeInformationId, existing.WorkDate, existing.Minutes,
+                userId, now, cancellationToken);
+        }
 
         await _repository.UpdateAsync(existing, cancellationToken);
+
+        // BS-6: đổi công/quỹ của ngày → kỳ Draft của tháng đó cần tính lại.
+        await _payrollStale.MarkStaleForMonthAsync(
+            existing.WorkDate.Year, existing.WorkDate.Month,
+            $"Duyệt đi muộn/về sớm ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
+
         return new ApproveLateEarlyRequestResult(true, limit.MustDeductFromLeaveBalance, null);
     }
 }

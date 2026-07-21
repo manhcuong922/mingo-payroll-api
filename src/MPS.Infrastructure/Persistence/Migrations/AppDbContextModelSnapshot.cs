@@ -4004,6 +4004,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsStale")
+                        .HasColumnType("bit");
+
                     b.Property<string>("ParamsSnapshotJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -4030,6 +4033,13 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("StaleMarkedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StaleReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<decimal>("StandardWorkingDays")
                         .HasColumnType("decimal(5,2)");

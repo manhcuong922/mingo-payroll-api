@@ -65,6 +65,7 @@ public static class PayrollSheetMapper
         return new PayrollSheetDto(
             period.Id, period.PeriodYear, period.PeriodMonth,
             period.PayDate, period.StandardWorkingDays, period.Status.ToString(),
+            period.IsStale, period.StaleReason, period.StaleMarkedAt,
             columns, rows, notes, refs);
     }
 }

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -91,7 +91,8 @@ public sealed class ContractAppendixFlowIntegrationTests
         var pdfBytes = BuildFakePdfBytes("Phụ lục đã ký");
         var activateHandler = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,
-            NullLogger<ActivateContractAppendixCommandHandler>.Instance);
+            NullLogger<ActivateContractAppendixCommandHandler>.Instance,
+            new NoopPayrollStaleMarker());
 
         var fileId = await activateHandler.Handle(new ActivateContractAppendixCommand(
             AppendixId: appendixId,
@@ -250,7 +251,8 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         var activateHandler = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,
-            NullLogger<ActivateContractAppendixCommandHandler>.Instance);
+            NullLogger<ActivateContractAppendixCommandHandler>.Instance,
+            new NoopPayrollStaleMarker());
 
         var pdfBytes = BuildFakePdfBytes();
         var act = () => activateHandler.Handle(new ActivateContractAppendixCommand(

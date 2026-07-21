@@ -19,18 +19,22 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
     private readonly ICurrentUserService _currentUser;
     private readonly ILogger<ActivateContractAppendixCommandHandler> _logger;
 
+    private readonly Domain.Interfaces.Payroll.IPayrollStaleMarker _payrollStale;
+
     public ActivateContractAppendixCommandHandler(
         IContractAppendixRepository appendices,
         AppendixApplier applier,
         IFileStorageService storage,
         ICurrentUserService currentUser,
-        ILogger<ActivateContractAppendixCommandHandler> logger)
+        ILogger<ActivateContractAppendixCommandHandler> logger,
+        Domain.Interfaces.Payroll.IPayrollStaleMarker payrollStale)
     {
         _appendices = appendices;
         _applier = applier;
         _storage = storage;
         _currentUser = currentUser;
         _logger = logger;
+        _payrollStale = payrollStale;
     }
 
     public async Task<int> Handle(ActivateContractAppendixCommand request, CancellationToken cancellationToken)
@@ -91,9 +95,10 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
             UploadedByUserId = userId,
         };
 
+        int appendixFileId;
         try
         {
-            return await _appendices.ActivateDraftAsync(
+            appendixFileId = await _appendices.ActivateDraftAsync(
                 appendixId: request.AppendixId,
                 file: file,
                 apply: (contract, allowances) =>
@@ -116,5 +121,14 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
             }
             throw;
         }
+
+        // BS-6: phụ lục đổi lương/phụ cấp có hiệu lực từ EffectiveFrom, kéo dài sang các kỳ kế tiếp
+        // ⇒ mọi kỳ Draft từ tháng đó về sau cần tính lại (APX-X01).
+        await _payrollStale.MarkStaleFromMonthAsync(
+            appendix.EffectiveFrom.Year, appendix.EffectiveFrom.Month,
+            $"Kích hoạt phụ lục HĐ {appendix.AppendixNo} (hiệu lực {appendix.EffectiveFrom:dd/MM/yyyy})",
+            cancellationToken);
+
+        return appendixFileId;
     }
 }

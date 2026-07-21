@@ -5,6 +5,7 @@ using MPS.Domain.Common;
 using MPS.Domain.Enums.Evaluation;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Evaluation;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Evaluation.MonthlyEvaluation.Commands;
 
@@ -12,12 +13,14 @@ public class ReopenMonthlyEvaluationCommandHandler : IRequestHandler<ReopenMonth
 {
     private readonly IMonthlyEvaluationRepository _repo;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPayrollStaleMarker _payrollStale;
 
     public ReopenMonthlyEvaluationCommandHandler(
-        IMonthlyEvaluationRepository repo, ICurrentUserService currentUser)
+        IMonthlyEvaluationRepository repo, ICurrentUserService currentUser, IPayrollStaleMarker payrollStale)
     {
         _repo = repo;
         _currentUser = currentUser;
+        _payrollStale = payrollStale;
     }
 
     public async Task<bool> Handle(ReopenMonthlyEvaluationCommand request, CancellationToken ct)
@@ -40,6 +43,11 @@ public class ReopenMonthlyEvaluationCommandHandler : IRequestHandler<ReopenMonth
         var ok = await _repo.UpdateWithConcurrencyAsync(evaluation, expected, ct);
         if (!ok)
             throw new ConflictException("Dữ liệu đã thay đổi ở nơi khác. Vui lòng tải lại rồi thử lại.");
+
+        // BS-6: mở lại bảng đánh giá đã duyệt = điểm có thể đổi → kỳ lương của tháng đó cần tính lại.
+        await _payrollStale.MarkStaleForMonthAsync(
+            evaluation.PeriodYear, evaluation.PeriodMonth,
+            $"Mở lại đánh giá tháng {evaluation.PeriodMonth:D2}/{evaluation.PeriodYear}", ct);
 
         return true;
     }

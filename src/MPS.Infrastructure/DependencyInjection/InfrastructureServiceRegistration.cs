@@ -118,6 +118,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
         services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
+        // BS-6: đánh cờ "cần tính lại" cho kỳ Draft khi nguồn (chấm công/đơn/phụ lục/đánh giá) đổi.
+        services.AddScoped<IPayrollStaleMarker, PayrollStaleMarker>();
         // Formula engine + calculator (stateless → singleton).
         services.AddSingleton<IFormulaFunctionRegistry, FormulaFunctionRegistry>();
         services.AddSingleton<IFormulaEvaluator, FormulaEvaluator>();
@@ -135,6 +137,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
         // BS-8: trừ thật vào quỹ phép năm khi approver bật DeductFromLeaveBalance.
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLeaveDeduction>();
+        // BS-4 (phần 2): trừ giờ công khi duyệt đi muộn/về sớm không bù quỹ phép.
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyAttendanceDock>();
         services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
         services.AddScoped<
             MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,

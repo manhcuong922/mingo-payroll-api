@@ -64,6 +64,19 @@ public class PayrollController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// BS-6: tính lại kỳ Draft từ nguồn mới (khi IsStale=true), giữ nguyên các ô đã ghim tay.
+    /// Kỳ đã chốt hoặc thiếu liệu → chặn.
+    /// </summary>
+    [HttpPost("periods/{id:int}/recalculate")]
+    [HasPermission(Permissions.PayrollUpdateAll)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Recalculate(int id, CancellationToken ct)
+    {
+        await _mediator.Send(new RecalculatePayrollPeriodCommand(id), ct);
+        return NoContent();
+    }
+
     // #11: Swagger trước đây khai 200 (mặc định của IActionResult) trong khi thực tế trả 204.
     [HttpPost("periods/{id:int}/finalize")]
     [HasPermission(Permissions.PayrollFinalizeAll)]

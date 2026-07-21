@@ -1,4 +1,5 @@
-using FluentAssertions;
+﻿using FluentAssertions;
+using MPS.Application.Tests.TestHelpers;
 using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Evaluation.MonthlyEvaluation.Commands;
@@ -17,7 +18,7 @@ public class ApproveMonthlyEvaluationHandlerTests
 
     private static readonly string RowVersion = Convert.ToBase64String(new byte[8]);
 
-    private ApproveMonthlyEvaluationCommandHandler Sut() => new(_repo.Object, _currentUser.Object);
+    private ApproveMonthlyEvaluationCommandHandler Sut() => new(_repo.Object, _currentUser.Object, new NoopPayrollStaleMarker());
 
     private void ReturnBoard(MPS.Domain.Entities.Evaluation.MonthlyEvaluation board)
     {

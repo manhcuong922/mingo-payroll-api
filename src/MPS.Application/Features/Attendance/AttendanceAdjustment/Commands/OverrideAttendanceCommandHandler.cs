@@ -3,6 +3,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using AttendanceAdjustmentEntity = MPS.Domain.Entities.Attendance.AttendanceAdjustment;
 
 namespace MPS.Application.Features.Attendance.AttendanceAdjustment.Commands;
@@ -18,19 +19,22 @@ public class OverrideAttendanceCommandHandler : IRequestHandler<OverrideAttendan
     private readonly ICurrentUserService _currentUser;
     private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly IClock _clock;
+    private readonly IPayrollStaleMarker _payrollStale;
 
     public OverrideAttendanceCommandHandler(
         IAttendanceAdjustmentRepository repository,
         IAttendanceRecordRepository recordRepository,
         ICurrentUserService currentUser,
         IAttendanceEditLockChecker lockChecker,
-        IClock clock)
+        IClock clock,
+        IPayrollStaleMarker payrollStale)
     {
         _repository = repository;
         _recordRepository = recordRepository;
         _currentUser = currentUser;
         _lockChecker = lockChecker;
         _clock = clock;
+        _payrollStale = payrollStale;
     }
 
     public async Task<int> Handle(OverrideAttendanceCommand request, CancellationToken cancellationToken)
@@ -66,6 +70,13 @@ public class OverrideAttendanceCommandHandler : IRequestHandler<OverrideAttendan
             CreatedByUserId = userId
         };
 
-        return await _repository.OverrideAndApplyAsync(adjustment, _clock.UtcNow, cancellationToken);
+        var id = await _repository.OverrideAndApplyAsync(adjustment, _clock.UtcNow, cancellationToken);
+
+        // BS-6: sửa công tay → kỳ lương Draft của tháng đó cần tính lại.
+        await _payrollStale.MarkStaleForMonthAsync(
+            request.WorkDate.Year, request.WorkDate.Month,
+            $"HR override chấm công ngày {request.WorkDate:dd/MM/yyyy}", cancellationToken);
+
+        return id;
     }
 }

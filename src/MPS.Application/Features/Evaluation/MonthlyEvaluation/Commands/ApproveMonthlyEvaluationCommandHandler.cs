@@ -5,6 +5,7 @@ using MPS.Domain.Common;
 using MPS.Domain.Enums.Evaluation;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Evaluation;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Evaluation.MonthlyEvaluation.Commands;
 
@@ -12,12 +13,14 @@ public class ApproveMonthlyEvaluationCommandHandler : IRequestHandler<ApproveMon
 {
     private readonly IMonthlyEvaluationRepository _repo;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPayrollStaleMarker _payrollStale;
 
     public ApproveMonthlyEvaluationCommandHandler(
-        IMonthlyEvaluationRepository repo, ICurrentUserService currentUser)
+        IMonthlyEvaluationRepository repo, ICurrentUserService currentUser, IPayrollStaleMarker payrollStale)
     {
         _repo = repo;
         _currentUser = currentUser;
+        _payrollStale = payrollStale;
     }
 
     public async Task<bool> Handle(ApproveMonthlyEvaluationCommand request, CancellationToken ct)
@@ -51,6 +54,11 @@ public class ApproveMonthlyEvaluationCommandHandler : IRequestHandler<ApproveMon
         var ok = await _repo.UpdateWithConcurrencyAsync(evaluation, expected, ct);
         if (!ok)
             throw new ConflictException("Dữ liệu đã thay đổi ở nơi khác. Vui lòng tải lại rồi thử lại.");
+
+        // BS-6: duyệt đánh giá tháng chốt FinalScore → đổi hệ số năng suất → đổi lương (EVAL-T01).
+        await _payrollStale.MarkStaleForMonthAsync(
+            evaluation.PeriodYear, evaluation.PeriodMonth,
+            $"Duyệt đánh giá tháng {evaluation.PeriodMonth:D2}/{evaluation.PeriodYear}", ct);
 
         return true;
     }

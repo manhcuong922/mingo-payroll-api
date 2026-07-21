@@ -5,6 +5,7 @@ using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Attendance.LeaveRequest.Commands;
 
@@ -18,19 +19,22 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
     private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPayrollStaleMarker _payrollStale;
 
     public ApproveLeaveRequestCommandHandler(
         ILeaveRequestRepository repository,
         IAttendanceEditLockChecker editLockChecker,
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPayrollStaleMarker payrollStale)
     {
         _repository = repository;
         _editLockChecker = editLockChecker;
         _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
+        _payrollStale = payrollStale;
     }
 
     public async Task<bool> Handle(ApproveLeaveRequestCommand request, CancellationToken cancellationToken)
@@ -96,7 +100,24 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
             await _repository.UpdateAsync(existing, cancellationToken);
         }
 
-        return await _repository.ApproveAndApplyAsync(
+        var applied = await _repository.ApproveAndApplyAsync(
             request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
+
+        // BS-6: duyệt nghỉ phép sinh AttendanceRecord OnLeave → đổi công → kỳ Draft cần tính lại.
+        if (applied)
+            await _payrollStale.MarkStaleForMonthsAsync(
+                MonthsInRange(existing.StartDate, existing.EndDate),
+                $"Duyệt nghỉ phép {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}", cancellationToken);
+
+        return applied;
+    }
+
+    // Các (năm, tháng) mà khoảng nghỉ vắt qua — 1 đơn có thể trải nhiều tháng.
+    private static IEnumerable<(int Year, int Month)> MonthsInRange(DateOnly start, DateOnly end)
+    {
+        var seen = new HashSet<(int, int)>();
+        for (var d = start; d <= end; d = d.AddDays(1))
+            seen.Add((d.Year, d.Month));
+        return seen;
     }
 }
