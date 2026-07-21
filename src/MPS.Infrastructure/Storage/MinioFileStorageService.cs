@@ -79,6 +79,23 @@ public sealed class MinioFileStorageService : IFileStorageService
 
         var stat = await StatAsync(bucket, request.ObjectKey, cancellationToken);
 
+        // ⭐ #29: chốt chặn "upload thành công giả". Nếu object trên storage không đúng kích thước
+        // vừa gửi (điển hình: 0 byte) thì KHÔNG được coi là thành công — nếu bỏ qua, DB sẽ ghi
+        // bản ghi file có sha256 + presigned URL đầy đủ trong khi object rỗng/không tồn tại,
+        // và hợp đồng chuyển Active mà mất trắng PDF đã ký.
+        if (stat.Size != buffer.Length)
+        {
+            _logger.LogError(
+                "Upload integrity check failed for {ObjectKey}: sent {Expected} bytes but storage reports {Actual}.",
+                request.ObjectKey, buffer.Length, stat.Size);
+
+            await TryDeleteOrphanAsync(bucket, request.ObjectKey, cancellationToken);
+
+            throw new FileStorageException(
+                $"MinIO upload verification failed for '{request.ObjectKey}': " +
+                $"expected {buffer.Length} bytes, storage reports {stat.Size}.");
+        }
+
         _logger.LogInformation(
             "Uploaded {ObjectKey} to bucket {Bucket} ({Size} bytes, sha256={Sha256}).",
             request.ObjectKey, bucket, stat.Size, hashHex);
@@ -288,6 +305,21 @@ public sealed class MinioFileStorageService : IFileStorageService
         catch (FileNotFoundInStorageException)
         {
             return false;
+        }
+    }
+
+    // Dọn object hỏng sau khi integrity check thất bại. Best-effort: lỗi dọn dẹp không được che
+    // mất lỗi gốc (upload hỏng) nên chỉ log.
+    private async Task TryDeleteOrphanAsync(string bucket, string objectKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await DeleteAsync(objectKey, bucket, cancellationToken);
+        }
+        catch (Exception cleanupEx)
+        {
+            _logger.LogWarning(cleanupEx,
+                "Could not remove corrupted object {ObjectKey} from bucket {Bucket}.", objectKey, bucket);
         }
     }
 
