@@ -401,6 +401,27 @@ public class ContractRepository : IContractRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<int>> GetUserIdsWithActiveContractAsync(
+        IReadOnlyCollection<int> userIds,
+        DateTime atUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+            return Array.Empty<int>();
+
+        var ids = userIds.Distinct().ToArray();
+        return await _context.Contracts
+            .AsNoTracking()
+            .Where(c => c.Status == ContractStatus.Active
+                     && c.EffectiveFrom <= atUtc
+                     && (c.EffectiveTo == null || c.EffectiveTo >= atUtc)
+                     && c.EmployeeInformation.UserId != null
+                     && ids.Contains(c.EmployeeInformation.UserId!.Value))
+            .Select(c => c.EmployeeInformation.UserId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<Domain.Entities.Contract?> GetForDocumentGenerationAsync(int id, CancellationToken cancellationToken = default) =>
         _context.Contracts
             .AsNoTracking()

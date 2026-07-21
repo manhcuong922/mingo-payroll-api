@@ -20,19 +20,22 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
     private readonly IDepartmentRepository _departments;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
+    private readonly IContractRepository _contracts;
 
     public TaskCreateCommandHandler(
         IProjectTaskRepository tasks,
         IProjectRepository projects,
         IDepartmentRepository departments,
         IDepartmentManagerAuthorizer authorizer,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IContractRepository contracts)
     {
         _tasks = tasks;
         _projects = projects;
         _departments = departments;
         _authorizer = authorizer;
         _currentUser = currentUser;
+        _contracts = contracts;
     }
 
     public async Task<int> Handle(TaskCreateCommand request, CancellationToken ct)
@@ -58,11 +61,12 @@ public class TaskCreateCommandHandler : IRequestHandler<TaskCreateCommand, int>
         // Sản lượng scale tự do — bỏ luật "tổng con ≤ sản lượng cha" (% tiến độ do trọng số, không do sản lượng).
         ValidateParentNotDone(parent);
 
-        // Gán người vào vị trí lá: cùng xưởng + đúng chức danh + không InProgress ở task khác (refactor I/P/D).
+        // Gán người vào vị trí lá: cùng xưởng + đúng chức danh + còn HĐ hiệu lực (#28)
+        // + không đang giữ công đoạn chưa xong (#24).
         if (!request.IsBatchParent)
             await TaskAssigneeGuard.ValidateAsync(
                 request.AssigneeUserIds, request.DepartmentId, request.RequiredPositionId,
-                Array.Empty<int>(), _departments, _tasks, ct);
+                Array.Empty<int>(), _departments, _tasks, _contracts, ct);
 
         var task = BuildTask(request, userId, project);
         return await _tasks.AddAsync(task, ct);

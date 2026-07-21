@@ -42,16 +42,23 @@ public class ProjectGenerateTasksCommandHandler : IRequestHandler<ProjectGenerat
         // Lập kế hoạch: Planning Manager của xưởng đơn / GĐ.
         await ProjectScopeGuard.EnsureCanWriteAsync(project.DepartmentId, _currentUser, _authorizer, cancellationToken);
 
-        // Idempotency (refactor F): chặn generate lần 2 nếu đơn đã có task. Đổi template = xoá cây cũ trước.
+        // Fail-fast trước khi vào khoá (đường thường, tránh chi phí transaction cho request lặp).
         if (await _tasks.HasAnyByProjectAsync(request.ProjectId, cancellationToken))
             throw new DomainValidationException("Đơn đã có task — không thể sinh lại. Xoá cây task cũ trước nếu muốn đổi quy trình.");
 
         var template = await _templates.GetByIdWithStepsAsync(request.ProcessTemplateId, cancellationToken)
             ?? throw new NotFoundException($"Không tìm thấy quy trình mẫu #{request.ProcessTemplateId}.");
 
-        var tasks = _generator.BuildTree(project, template, userId);
+        // ⭐ #16: idempotency thật sự nằm ở đây — check-then-insert được bọc trong transaction + app-lock
+        // theo project, nên 2 request song song không thể cùng sinh cây task (trước đây ra 2 cây chồng nhau).
+        var generated = await _tasks.GenerateExclusiveAsync(
+            request.ProjectId,
+            _ => Task.FromResult<IReadOnlyList<Domain.Entities.ProjectTask>?>(
+                _generator.BuildTree(project, template, userId)),
+            cancellationToken);
 
-        await _tasks.AddRangeAsync(tasks, cancellationToken);
-        return tasks.Count;
+        return generated
+            ?? throw new DomainValidationException(
+                "Đơn đã có task — không thể sinh lại. Xoá cây task cũ trước nếu muốn đổi quy trình.");
     }
 }

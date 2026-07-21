@@ -128,6 +128,16 @@ public interface IContractRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lọc trong danh sách userId, trả về những user đang có HĐ hiệu lực tại <paramref name="atUtc"/>
+    /// (Status=Active và atUtc nằm trong [EffectiveFrom, EffectiveTo]). Dùng cho guard "không giao việc
+    /// cho người không còn quan hệ lao động" — xem TaskAssigneeGuard.
+    /// </summary>
+    Task<IReadOnlyList<int>> GetUserIdsWithActiveContractAsync(
+        IReadOnlyCollection<int> userIds,
+        DateTime atUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Load HĐ kèm toàn bộ dữ liệu cần thiết để sinh DOCX: EI, EmployerParty, Position,
     /// SalaryGrade, ContractAllowances + AllowanceType, Template + TemplateFile.
     /// </summary>
