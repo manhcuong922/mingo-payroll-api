@@ -29,6 +29,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly LeaveBalanceFallbackResolver _fallbackResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IRequestDayOccupancyReader _dayOccupancy;
 
     public CreateLeaveRequestCommandHandler(
         ILeaveRequestRepository repository,
@@ -40,8 +41,10 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         IAttendanceEditLockChecker editLockChecker,
         LeaveBalanceFallbackResolver fallbackResolver,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IRequestDayOccupancyReader dayOccupancy)
     {
+        _dayOccupancy = dayOccupancy;
         _repository = repository;
         _leaveTypeRepository = leaveTypeRepository;
         _balanceRepository = balanceRepository;
@@ -65,6 +68,11 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
 
         if (request.EndDate < request.StartDate)
             throw new DomainValidationException("EndDate must be on/after StartDate.");
+
+        // [D8] — 1 ngày chỉ được 1 đơn Leave/WFH/LateEarly. Kiểm SỚM, trước khi đụng quỹ phép.
+        await RequestDayGuard.EnsureDayFreeAsync(
+            _dayOccupancy, employeeId, request.StartDate, request.EndDate,
+            cancellationToken: cancellationToken);
 
         var leaveType = await _leaveTypeRepository.GetByIdAsync(request.LeaveTypeId, cancellationToken)
             ?? throw new NotFoundException($"Leave type {request.LeaveTypeId} not found.");

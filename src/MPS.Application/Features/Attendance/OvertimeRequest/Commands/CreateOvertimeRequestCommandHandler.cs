@@ -1,9 +1,10 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using OvertimeRequestEntity = MPS.Domain.Entities.Attendance.OvertimeRequest;
@@ -35,6 +36,7 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IRequestDayOccupancyReader _dayOccupancy;
 
     public CreateOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
@@ -46,8 +48,10 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IRequestDayOccupancyReader dayOccupancy)
     {
+        _dayOccupancy = dayOccupancy;
         _repository = repository;
         _projectRepository = projectRepository;
         _taskRepository = taskRepository;
@@ -105,6 +109,11 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             throw new DomainValidationException(
                 $"Bạn đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) giao thoa khung giờ này.");
         }
+
+        // 5b. [D8] — không đăng ký OT cho ngày đang nghỉ phép (đơn đã duyệt): hôm đó NV không đi làm
+        // nên không thể có giờ làm thêm. WFH / đi muộn-về sớm KHÔNG chặn (vẫn làm việc trong ngày).
+        await RequestDayGuard.EnsureNotOnApprovedLeaveAsync(
+            _dayOccupancy, employeeId, request.WorkDate, request.WorkDate, cancellationToken);
 
         // 6. Cap check + split
         await _capChecker.CheckAsync(

@@ -69,14 +69,9 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
             _clock.UtcNow,
             cancellationToken);
 
-        var now = _clock.UtcNow;
-        existing.Status = WfhRequestStatus.Approved;
-        existing.ReviewedByUserId = userId;
-        existing.ReviewedAt = now;
-        existing.ReviewNote = request.ReviewNote;
-        existing.UpdatedAt = now;
-        existing.UpdatedByUserId = userId;
-
-        return await _repository.UpdateAsync(existing, cancellationToken);
+        // BS-4 / [D11]: duyệt + sinh AttendanceRecord (Present, đủ giờ ca) trong cùng transaction.
+        // Trước đây chỉ đổi Status ⇒ ngày WFH không có bản ghi chấm công nào ⇒ mất công khi tính lương.
+        return await _repository.ApproveAndApplyAsync(
+            request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
     }
 }

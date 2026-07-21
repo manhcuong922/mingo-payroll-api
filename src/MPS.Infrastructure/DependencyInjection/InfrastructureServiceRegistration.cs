@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -133,6 +133,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
+        // BS-8: trừ thật vào quỹ phép năm khi approver bật DeductFromLeaveBalance.
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLeaveDeduction>();
         services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
         services.AddScoped<
             MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,
@@ -150,6 +152,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILateEarlyRequestRepository, LateEarlyRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IWfhRequestRepository, WfhRequestRepository>();
+        // [D8] guard chồng ngày chéo loại Leave/WFH/LateEarly (+ OT ↔ nghỉ phép).
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IRequestDayOccupancyReader, RequestDayOccupancyReader>();
         services.AddScoped<MPS.Domain.Interfaces.Employee.IEmployeeDependentRepository, MPS.Infrastructure.Repositories.Employee.EmployeeDependentRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Employee.IDependentRegistrationRequestRepository, MPS.Infrastructure.Repositories.Employee.DependentRegistrationRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceAdjustmentRepository, AttendanceAdjustmentRepository>();

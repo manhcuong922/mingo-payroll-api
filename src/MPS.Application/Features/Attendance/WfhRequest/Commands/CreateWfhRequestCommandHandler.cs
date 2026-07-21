@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.WfhRequest.Common;
@@ -24,6 +24,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IRequestDayOccupancyReader _dayOccupancy;
 
     public CreateWfhRequestCommandHandler(
         IWfhRequestRepository repository,
@@ -33,8 +34,10 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         WfhQuotaChecker quotaChecker,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IRequestDayOccupancyReader dayOccupancy)
     {
+        _dayOccupancy = dayOccupancy;
         _repository = repository;
         _shiftAssignmentRepository = shiftAssignmentRepository;
         _settingRepository = settingRepository;
@@ -84,11 +87,11 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
 
         await _editLockChecker.EnsureCanModifyAsync(request.StartDate, request.OverrideReason, cancellationToken);
 
-        if (await _repository.HasOverlappingWfhAsync(employeeId, request.StartDate, request.EndDate, excludeRequestId: null, cancellationToken))
-            throw new DomainValidationException("Đã tồn tại đơn WFH Pending/Approved chồng lấp khoảng ngày này.");
-
-        if (await _repository.HasOverlappingLeaveAsync(employeeId, request.StartDate, request.EndDate, cancellationToken))
-            throw new DomainValidationException("Có đơn nghỉ phép Approved chồng lấp — không thể WFH cùng ngày.");
+        // [D8] — thay 2 guard rời (WFH↔WFH, WFH↔Nghỉ-Approved) bằng guard CHÉO đầy đủ:
+        // nay chặn cả WFH↔LateEarly và WFH↔Nghỉ đang Pending.
+        await RequestDayGuard.EnsureDayFreeAsync(
+            _dayOccupancy, employeeId, request.StartDate, request.EndDate,
+            cancellationToken: cancellationToken);
 
         await _quotaChecker.EnsureWithinQuotaAsync(
             employeeId, request.StartDate, request.EndDate, totalDays, _clock.UtcNow, cancellationToken);

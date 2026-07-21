@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
@@ -20,6 +20,7 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IRequestDayOccupancyReader _dayOccupancy;
 
     public CreateLateEarlyRequestCommandHandler(
         ILateEarlyRequestRepository repository,
@@ -28,8 +29,10 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
         IAttendanceEditLockChecker editLockChecker,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IRequestDayOccupancyReader dayOccupancy)
     {
+        _dayOccupancy = dayOccupancy;
         _repository = repository;
         _shiftAssignmentRepository = shiftAssignmentRepository;
         _settingRepository = settingRepository;
@@ -70,9 +73,11 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
 
         await _editLockChecker.EnsureCanModifyAsync(request.WorkDate, request.OverrideReason, cancellationToken);
 
-        if (await _repository.HasOverlapAsync(employeeId, request.WorkDate, request.Kind, excludeRequestId: null, cancellationToken))
-            throw new DomainValidationException(
-                $"Đã tồn tại đơn {request.Kind} cho ngày {request.WorkDate:dd/MM/yyyy} (Pending/Approved).");
+        // [D8] — trước đây chỉ chặn TRÙNG KIND (LateArrival↔LateArrival). Nay chặn chéo toàn bộ:
+        // 1 ngày đã có đơn nghỉ / WFH / đi muộn nào thì không nhận thêm đơn nữa.
+        await RequestDayGuard.EnsureDayFreeAsync(
+            _dayOccupancy, employeeId, request.WorkDate, request.WorkDate,
+            cancellationToken: cancellationToken);
 
         var resolvedRoute = ApproverRouteResolver.Resolve(request.ApproverRoute, _currentUser.RoleId);
 
