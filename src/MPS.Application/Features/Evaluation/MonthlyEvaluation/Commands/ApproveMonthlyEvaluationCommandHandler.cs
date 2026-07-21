@@ -4,6 +4,7 @@ using MPS.Application.Features.Evaluation.Common;
 using MPS.Domain.Common;
 using MPS.Domain.Enums.Evaluation;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Evaluation;
 using MPS.Domain.Interfaces.Payroll;
 
@@ -13,14 +14,19 @@ public class ApproveMonthlyEvaluationCommandHandler : IRequestHandler<ApproveMon
 {
     private readonly IMonthlyEvaluationRepository _repo;
     private readonly ICurrentUserService _currentUser;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IContractLookupReader _lookup;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveMonthlyEvaluationCommandHandler(
-        IMonthlyEvaluationRepository repo, ICurrentUserService currentUser, IPayrollStaleMarker payrollStale)
+        IMonthlyEvaluationRepository repo,
+        ICurrentUserService currentUser,
+        IContractLookupReader lookup,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repo = repo;
         _currentUser = currentUser;
-        _payrollStale = payrollStale;
+        _lookup = lookup;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveMonthlyEvaluationCommand request, CancellationToken ct)
@@ -55,11 +61,20 @@ public class ApproveMonthlyEvaluationCommandHandler : IRequestHandler<ApproveMon
         if (!ok)
             throw new ConflictException("Dữ liệu đã thay đổi ở nơi khác. Vui lòng tải lại rồi thử lại.");
 
-        // BS-6: duyệt đánh giá tháng chốt FinalScore → đổi hệ số năng suất → đổi lương (EVAL-T01).
-        await _payrollStale.MarkStaleForMonthAsync(
-            evaluation.PeriodYear, evaluation.PeriodMonth,
+        // BS-6 + BS-5: duyệt đánh giá tháng chốt FinalScore → đổi hệ số năng suất → đổi lương (EVAL-T01).
+        // Đánh giá dùng EmployeeUserId (User) — resolve sang EmployeeInformationId để capture Finalized.
+        var empIds = await ResolveEmployeeIdsAsync(evaluation.EmployeeUserId, ct);
+        await _payrollChange.OnSourceChangedAsync(
+            new[] { (evaluation.PeriodYear, evaluation.PeriodMonth) },
+            empIds,
             $"Duyệt đánh giá tháng {evaluation.PeriodMonth:D2}/{evaluation.PeriodYear}", ct);
 
         return true;
+    }
+
+    private async Task<int[]> ResolveEmployeeIdsAsync(int userId, CancellationToken ct)
+    {
+        var empId = await _lookup.GetEmployeeInformationIdByUserIdAsync(userId, ct);
+        return empId.HasValue ? new[] { empId.Value } : Array.Empty<int>();
     }
 }

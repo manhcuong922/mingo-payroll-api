@@ -20,7 +20,7 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
     private readonly IClock _clock;
     private readonly LateEarlyLeaveDeduction _leaveDeduction;
     private readonly LateEarlyAttendanceDock _attendanceDock;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveLateEarlyRequestCommandHandler(
         ILateEarlyRequestRepository repository,
@@ -31,11 +31,11 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
         IClock clock,
         LateEarlyLeaveDeduction leaveDeduction,
         LateEarlyAttendanceDock attendanceDock,
-        IPayrollStaleMarker payrollStale)
+        IPayrollSourceChangeHandler payrollChange)
     {
         _leaveDeduction = leaveDeduction;
         _attendanceDock = attendanceDock;
-        _payrollStale = payrollStale;
+        _payrollChange = payrollChange;
         _repository = repository;
         _limitChecker = limitChecker;
         _editLockChecker = editLockChecker;
@@ -115,9 +115,9 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
 
         await _repository.UpdateAsync(existing, cancellationToken);
 
-        // BS-6: đổi công/quỹ của ngày → kỳ Draft của tháng đó cần tính lại.
-        await _payrollStale.MarkStaleForMonthAsync(
-            existing.WorkDate.Year, existing.WorkDate.Month,
+        // BS-6 + BS-5: đổi công/quỹ của ngày → mark stale kỳ Draft, capture Finalized cho NV.
+        await _payrollChange.OnSourceChangedAsync(
+            existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
             $"Duyệt đi muộn/về sớm ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
 
         return new ApproveLateEarlyRequestResult(true, limit.MustDeductFromLeaveBalance, null);

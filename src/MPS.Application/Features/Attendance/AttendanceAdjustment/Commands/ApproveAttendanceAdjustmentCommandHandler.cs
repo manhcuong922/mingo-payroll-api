@@ -11,18 +11,18 @@ public class ApproveAttendanceAdjustmentCommandHandler : IRequestHandler<Approve
     private readonly IAttendanceAdjustmentRepository _repository;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveAttendanceAdjustmentCommandHandler(
         IAttendanceAdjustmentRepository repository,
         ICurrentUserService currentUser,
         IClock clock,
-        IPayrollStaleMarker payrollStale)
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _currentUser = currentUser;
         _clock = clock;
-        _payrollStale = payrollStale;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveAttendanceAdjustmentCommand request, CancellationToken cancellationToken)
@@ -36,10 +36,10 @@ public class ApproveAttendanceAdjustmentCommandHandler : IRequestHandler<Approve
         var applied = await _repository.ApproveAndApplyAsync(
             request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
 
-        // BS-6: duyệt điều chỉnh công → kỳ lương Draft của tháng đó cần tính lại.
+        // BS-6 + BS-5: duyệt điều chỉnh công → mark stale kỳ Draft, capture Finalized cho NV.
         if (applied && adjustment?.AttendanceRecord is { } record)
-            await _payrollStale.MarkStaleForMonthAsync(
-                record.WorkDate.Year, record.WorkDate.Month,
+            await _payrollChange.OnSourceChangedAsync(
+                record.WorkDate.Year, record.WorkDate.Month, adjustment.EmployeeInformationId,
                 $"Duyệt điều chỉnh công ngày {record.WorkDate:dd/MM/yyyy}", cancellationToken);
 
         return applied;

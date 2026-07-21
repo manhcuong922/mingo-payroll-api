@@ -75,5 +75,11 @@ public static class PayrollColumnCodes
     public const string ThuKhac = "THU_KHAC";
     public const string PhiCongDoanVien = "PHICONGDOANVIEN";
     public const string ChiKhac = "CHI_KHAC";
+
+    // BS-5 — cộng dồn khoản chênh lệch từ các kỳ Finalized đã sửa nguồn (chưa áp trước đó).
+    // Handler pin giá trị vào 2 cột này khi tạo kỳ mới; công thức THUCNHAN cộng đại số.
+    public const string TruyLinh = "TRUY_LINH";   // + (bù cho NV)
+    public const string TruyThu = "TRUY_THU";     // − (thu lại của NV — dấu âm)
+
     public const string ThucNhan = "THUCNHAN";
 }

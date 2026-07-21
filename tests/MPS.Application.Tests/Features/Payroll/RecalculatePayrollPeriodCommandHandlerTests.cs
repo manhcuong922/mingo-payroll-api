@@ -128,6 +128,34 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
     }
 
     [Fact]
+    public async Task Recalculate_GiuNguyenTruyLinhTruyThu_BS5()
+    {
+        // Kỳ đã có khoản truy lĩnh chốt lúc tạo. Collector KHÔNG biết field này (nó chỉ gom nguồn
+        // chấm công/HĐ) ⇒ nếu không carry-over, lần tính lại sẽ âm thầm xoá 2tr khỏi bảng lương.
+        var period = DraftPeriodWithOneEmployee(stale: true);
+        var empRow = period.Rows.First(r => r.RowType == PayrollRowType.Employee);
+        empRow.InputSnapshotJson = new PayrollEmployeeInputs
+        {
+            EmployeeInformationId = EmpId,
+            Numbers =
+            {
+                [PayrollFieldKeys.TruyLinh] = 2_000_000m,
+                [PayrollFieldKeys.TruyThu] = -500_000m,
+            },
+        }.ToSnapshotJson();
+
+        _periods.Setup(p => p.GetFullAsync(PeriodId, false, It.IsAny<CancellationToken>())).ReturnsAsync(period);
+        SetupReady(EmpId);
+        SetupCollectFor(EmpId);   // input mới KHÔNG có 2 field này
+
+        await Sut().Handle(new RecalculatePayrollPeriodCommand(PeriodId), CancellationToken.None);
+
+        var after = PayrollEmployeeInputs.FromSnapshotJson(EmpId, empRow.InputSnapshotJson);
+        after.Numbers[PayrollFieldKeys.TruyLinh].Should().Be(2_000_000m);
+        after.Numbers[PayrollFieldKeys.TruyThu].Should().Be(-500_000m);
+    }
+
+    [Fact]
     public async Task Recalculate_Throws_WhenEligibleEmployeeSetChanged()
     {
         var period = DraftPeriodWithOneEmployee(stale: true);

@@ -42,6 +42,10 @@ public static class PayrollFieldKeys
     public const string EvalFinalScore = "eval.finalScore";
     public const string ProductivityCoefficient = "eval.productivityCoefficient";
 
+    // ===== Truy lĩnh / truy thu (BS-5) — gom từ các kỳ Finalized đã sửa nguồn =====
+    public const string TruyLinh = "adjustment.truyLinh";   // tổng phần dương (+)
+    public const string TruyThu = "adjustment.truyThu";     // tổng phần âm (−, đã clamp để THỰC NHẬN ≥ 0)
+
     // ===== Thưởng / công đoàn / người phụ thuộc =====
     public const string BonusThuongDuAn = "bonus.thuongDuAn";
     public const string DependentsCount = "employee.dependentsCount";

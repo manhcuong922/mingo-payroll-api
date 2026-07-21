@@ -36,7 +36,8 @@ public sealed partial class DatabaseSeeder
     {
         if (await _context.PayrollFormulaSets.AsNoTracking().AnyAsync(ct))
         {
-            _logger.LogDebug("PayrollFormulaSet already seeded; skipping.");
+            _logger.LogDebug("PayrollFormulaSet already seeded; checking for missing system columns.");
+            await UpgradeDefaultFormulaSetAsync(ct);
             return;
         }
 
@@ -53,6 +54,44 @@ public sealed partial class DatabaseSeeder
         await _context.PayrollFormulaSets.AddAsync(set, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded default PayrollFormulaSet with {Count} columns.", set.Columns.Count);
+    }
+
+    /// <summary>
+    /// Nâng cấp bảng công thức MẶC ĐỊNH khi bản mã nguồn có thêm cột hệ thống mới (BS-5: TRUY_LINH /
+    /// TRUY_THU). Chỉ chạm bảng <c>IsDefault</c> và chỉ các cột <c>IsSystem</c> — bảng kế toán tự
+    /// clone/chỉnh không bị đụng. Idempotent: chạy lại không đổi gì khi cột đã đủ.
+    ///
+    /// Cần thiết vì seeder gốc bỏ qua toàn bộ khi đã có bảng ⇒ DB đang chạy sẽ vĩnh viễn thiếu cột
+    /// mới, và kỳ lương mới sẽ không có chỗ nhận khoản truy lĩnh.
+    /// </summary>
+    private async Task UpgradeDefaultFormulaSetAsync(CancellationToken ct)
+    {
+        var set = await _context.PayrollFormulaSets
+            .Include(s => s.Columns)
+            .FirstOrDefaultAsync(s => s.IsDefault, ct);
+        if (set is null) return;
+
+        var defaults = DefaultPayrollFormulaSet.BuildColumns();
+        var existingCodes = set.Columns.Select(c => c.ColumnCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = defaults.Where(d => !existingCodes.Contains(d.ColumnCode)).ToList();
+        if (missing.Count == 0) return;
+
+        foreach (var column in missing) set.Columns.Add(column);
+
+        // Cột mới nằm giữa bảng ⇒ đồng bộ lại DisplayOrder + công thức của các cột hệ thống theo
+        // bản mặc định (THUCNHAN phải cộng thêm 2 cột mới, nếu không tiền truy lĩnh sẽ không chảy vào).
+        var defaultByCode = defaults.ToDictionary(d => d.ColumnCode, StringComparer.OrdinalIgnoreCase);
+        foreach (var column in set.Columns.Where(c => c.IsSystem))
+        {
+            if (!defaultByCode.TryGetValue(column.ColumnCode, out var d)) continue;
+            column.DisplayOrder = d.DisplayOrder;
+            column.FormulaJson = d.FormulaJson;
+        }
+
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Nâng cấp bảng công thức mặc định: thêm {Count} cột hệ thống mới ({Codes}).",
+            missing.Count, string.Join(", ", missing.Select(m => m.ColumnCode)));
     }
 
     private async Task SeedProductivityCoefficientsAsync(CancellationToken ct)

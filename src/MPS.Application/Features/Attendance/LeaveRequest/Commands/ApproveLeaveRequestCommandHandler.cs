@@ -19,7 +19,7 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
     private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveLeaveRequestCommandHandler(
         ILeaveRequestRepository repository,
@@ -27,14 +27,14 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
         IClock clock,
-        IPayrollStaleMarker payrollStale)
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _editLockChecker = editLockChecker;
         _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
-        _payrollStale = payrollStale;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveLeaveRequestCommand request, CancellationToken cancellationToken)
@@ -103,10 +103,11 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         var applied = await _repository.ApproveAndApplyAsync(
             request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
 
-        // BS-6: duyệt nghỉ phép sinh AttendanceRecord OnLeave → đổi công → kỳ Draft cần tính lại.
+        // BS-6 + BS-5: duyệt nghỉ phép đổi công → mark stale kỳ Draft, capture Finalized cho NV.
         if (applied)
-            await _payrollStale.MarkStaleForMonthsAsync(
+            await _payrollChange.OnSourceChangedAsync(
                 MonthsInRange(existing.StartDate, existing.EndDate),
+                new[] { existing.EmployeeInformationId },
                 $"Duyệt nghỉ phép {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}", cancellationToken);
 
         return applied;

@@ -49,7 +49,13 @@ chưa có tài khoản; khi đó `POST /User` là cách duy nhất tạo tài kh
 > Đã triển khai ở đợt này (2026-07-21, phiên 2). Xem [16-payroll-stale-recalc.md](16-payroll-stale-recalc.md).
 > Mục này giữ lại để đối chiếu lịch sử phân loại ban đầu.
 
-### BS-5 — Truy lĩnh / truy thu `[D3]` — vẫn HOÃN (PO chốt 2026-07-21)
+### BS-5 — Truy lĩnh / truy thu `[D3]` — ✅ ĐÃ LÀM (phiên 3, 2026-07-21)
+
+> Đã triển khai theo **phương án (A)** — diff THỰC NHẬN, không tính lại thuế; truy thu chặn về 0,
+> phần dư chuyển kỳ sau. Xem [18-bs5-truy-linh-handoff.md](18-bs5-truy-linh-handoff.md).
+> Phần dưới giữ lại để đối chiếu lịch sử phân loại ban đầu.
+
+#### (Ghi chép cũ) vì sao từng xếp Hoãn
 
 **Hiện trạng:** `grep -riE "retro|truy lĩnh|truy thu|arrear"` trên `src` → 0 kết quả (đã kiểm lại).
 Sửa công/OT cho kỳ **đã Finalized** được ghi nhận nhưng phần chênh lệch không chảy vào kỳ nào.

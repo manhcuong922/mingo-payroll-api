@@ -33,7 +33,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
@@ -45,7 +45,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
         IClock clock,
-        IPayrollStaleMarker payrollStale)
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _projectRepository = projectRepository;
@@ -56,7 +56,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
         _clock = clock;
-        _payrollStale = payrollStale;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveOvertimeRequestCommand request, CancellationToken cancellationToken)
@@ -131,9 +131,9 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
 
         await _repository.UpdateAsync(existing, cancellationToken);
 
-        // BS-6: duyệt OT → thêm giờ/phụ cấp OT vào tháng → kỳ Draft cần tính lại.
-        await _payrollStale.MarkStaleForMonthAsync(
-            existing.WorkDate.Year, existing.WorkDate.Month,
+        // BS-6 + BS-5: duyệt OT → tháng có kỳ Draft mark stale; kỳ Finalized capture chênh lệch NV.
+        await _payrollChange.OnSourceChangedAsync(
+            existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
             $"Duyệt OT ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
 
         return true;

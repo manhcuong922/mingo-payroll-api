@@ -92,7 +92,7 @@ public sealed class ContractAppendixFlowIntegrationTests
         var activateHandler = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,
             NullLogger<ActivateContractAppendixCommandHandler>.Instance,
-            new NoopPayrollStaleMarker());
+            new NoopPayrollSourceChangeHandler());
 
         var fileId = await activateHandler.Handle(new ActivateContractAppendixCommand(
             AppendixId: appendixId,
@@ -252,7 +252,7 @@ public sealed class ContractAppendixFlowIntegrationTests
         var activateHandler = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,
             NullLogger<ActivateContractAppendixCommandHandler>.Instance,
-            new NoopPayrollStaleMarker());
+            new NoopPayrollSourceChangeHandler());
 
         var pdfBytes = BuildFakePdfBytes();
         var act = () => activateHandler.Handle(new ActivateContractAppendixCommand(

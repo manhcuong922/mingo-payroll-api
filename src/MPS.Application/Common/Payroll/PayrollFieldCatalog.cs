@@ -45,6 +45,10 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(EvalFinalScore, "Điểm đánh giá tháng", "Đánh giá", ColumnDataType.Number),
         new(ProductivityCoefficient, "Hệ số năng suất", "Đánh giá", ColumnDataType.Number),
 
+        // Truy lĩnh / truy thu (BS-5)
+        new(TruyLinh, "Truy lĩnh kỳ trước", "Truy lĩnh", ColumnDataType.Money),
+        new(TruyThu, "Truy thu kỳ trước", "Truy lĩnh", ColumnDataType.Money),
+
         // Thưởng / công đoàn
         new(BonusThuongDuAn, "Thưởng dự án", "Thưởng", ColumnDataType.Money),
         new(UnionFee, "Phí công đoàn viên", "Công đoàn", ColumnDataType.Money),

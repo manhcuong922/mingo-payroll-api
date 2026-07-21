@@ -35,9 +35,11 @@ không suy đoán từ mô tả trong báo cáo.
 | #25 | Lương không giới hạn công theo kỳ hiệu lực HĐ | [13-payroll-contract-scope.md](13-payroll-contract-scope.md) |
 | BS-6 | Thiếu cờ stale + endpoint tính lại kỳ lương | [16-payroll-stale-recalc.md](16-payroll-stale-recalc.md) |
 | #2 | Tài liệu hoá DELETE hybrid catalog | [../../api/catalog-delete-semantics.md](../../api/catalog-delete-semantics.md) |
+| BS-5 | Truy lĩnh/truy thu khi sửa nguồn kỳ đã chốt | [18-bs5-truy-linh-handoff.md](18-bs5-truy-linh-handoff.md) |
 
 \* #22 được sửa **không phải như báo cáo mô tả** — xem mục 1.2.
 Phiên 2 (2026-07-21) bổ sung: **BS-6** (stale + re-calc), **BS-4 phần 2** (trừ giờ LateEarly), **#2** (doc).
+Phiên 3 (2026-07-21) bổ sung: **BS-5** (truy lĩnh/truy thu, phương án A — xem [18](18-bs5-truy-linh-handoff.md)).
 
 ### 1.2. Bác bỏ — báo cáo mô tả SAI (2 + 1 phần)
 
@@ -60,14 +62,15 @@ Phiên 2 (2026-07-21) bổ sung: **BS-6** (stale + re-calc), **BS-4 phần 2** (
 |---|---|
 | #15 | DB **có** unique index `IX_ShiftTemplates_Code` / `_Name` (filtered `IsActive = 1`), và `CreateShiftTemplateCommandHandler` **bỏ qua `code` client gửi** — mã được tự sinh từ `Name`. 3 request "trùng mã" cùng trả 201 chỉ xảy ra khi **Name khác nhau**. Việc race trên cùng Name nay đã được map về 409 (xem [06](06-error-mapping.md)) thay vì 500. |
 
-### 1.5. Hoãn — tính năng mới (2, PO chốt 2026-07-21)
+### 1.5. Hoãn — tính năng mới (1, PO chốt 2026-07-21)
 
 | # | Lý do hoãn |
 |---|---|
-| BS-5 | Truy lĩnh/truy thu — cần bảng mới + luồng duyệt + **chốt quy tắc thuế TNCN với kế toán**. Xem [14](14-khong-sua-va-hoan.md). |
 | BS-2 | Tách segment ca đêm vắt ngày. **Phát hiện: chỉ tách segment KHÔNG đổi lương** — payroll hiện không áp hệ số loại-ngày cho giờ thường. Cần xây mô hình trả lương theo loại ngày trước. Xem [14](14-khong-sua-va-hoan.md). |
 
 > BS-6 (cờ stale + re-calc) ban đầu xếp Hoãn, nay **ĐÃ LÀM** ở phiên 2 — xem mục 1.1.
+> BS-5 (truy lĩnh/truy thu) ban đầu xếp Hoãn chờ chốt quy tắc thuế, nay **ĐÃ LÀM** ở phiên 3 theo
+> **phương án (A)** (diff THỰC NHẬN, không tính lại thuế) — xem [18](18-bs5-truy-linh-handoff.md).
 
 ### 1.6. Không thuộc backend
 
@@ -109,7 +112,7 @@ Cùng gốc với #12 và đã được sửa chung — xem [05](05-compliance-a
 
 ```bash
 dotnet build MPS.sln            # Build succeeded
-dotnet test  MPS.sln            # 662 passed / 0 failed (trước đợt sửa: 647)
+dotnet test  MPS.sln            # 686 passed / 0 failed (trước đợt sửa: 647)
 dotnet ef database update --project src/MPS.Infrastructure --startup-project src/MPS.API
 ```
 

@@ -19,7 +19,7 @@ public class OverrideAttendanceCommandHandler : IRequestHandler<OverrideAttendan
     private readonly ICurrentUserService _currentUser;
     private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly IClock _clock;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public OverrideAttendanceCommandHandler(
         IAttendanceAdjustmentRepository repository,
@@ -27,14 +27,14 @@ public class OverrideAttendanceCommandHandler : IRequestHandler<OverrideAttendan
         ICurrentUserService currentUser,
         IAttendanceEditLockChecker lockChecker,
         IClock clock,
-        IPayrollStaleMarker payrollStale)
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _recordRepository = recordRepository;
         _currentUser = currentUser;
         _lockChecker = lockChecker;
         _clock = clock;
-        _payrollStale = payrollStale;
+        _payrollChange = payrollChange;
     }
 
     public async Task<int> Handle(OverrideAttendanceCommand request, CancellationToken cancellationToken)
@@ -72,9 +72,9 @@ public class OverrideAttendanceCommandHandler : IRequestHandler<OverrideAttendan
 
         var id = await _repository.OverrideAndApplyAsync(adjustment, _clock.UtcNow, cancellationToken);
 
-        // BS-6: sửa công tay → kỳ lương Draft của tháng đó cần tính lại.
-        await _payrollStale.MarkStaleForMonthAsync(
-            request.WorkDate.Year, request.WorkDate.Month,
+        // BS-6 + BS-5: sửa công tay → mark stale kỳ Draft, capture Finalized cho NV.
+        await _payrollChange.OnSourceChangedAsync(
+            request.WorkDate.Year, request.WorkDate.Month, request.EmployeeInformationId,
             $"HR override chấm công ngày {request.WorkDate:dd/MM/yyyy}", cancellationToken);
 
         return id;

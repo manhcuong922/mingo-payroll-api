@@ -18,7 +18,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
     private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveWfhRequestCommandHandler(
         IWfhRequestRepository repository,
@@ -27,7 +27,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
         IClock clock,
-        IPayrollStaleMarker payrollStale)
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _quotaChecker = quotaChecker;
@@ -35,7 +35,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
-        _payrollStale = payrollStale;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveWfhRequestCommand request, CancellationToken cancellationToken)
@@ -78,10 +78,11 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         var applied = await _repository.ApproveAndApplyAsync(
             request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
 
-        // BS-6: WFH nay sinh công → kỳ Draft của các tháng vắt qua cần tính lại.
+        // BS-6 + BS-5: WFH sinh công → mark stale kỳ Draft, capture Finalized cho NV.
         if (applied)
-            await _payrollStale.MarkStaleForMonthsAsync(
+            await _payrollChange.OnSourceChangedAsync(
                 MonthsInRange(existing.StartDate, existing.EndDate),
+                new[] { existing.EmployeeInformationId },
                 $"Duyệt WFH {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}", cancellationToken);
 
         return applied;

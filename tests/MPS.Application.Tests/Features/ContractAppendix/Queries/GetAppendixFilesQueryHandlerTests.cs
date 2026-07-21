@@ -57,7 +57,7 @@ public sealed class GetAppendixFilesQueryHandlerTests
         var activateApdx = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,
             NullLogger<ActivateContractAppendixCommandHandler>.Instance,
-            new NoopPayrollStaleMarker());
+            new NoopPayrollSourceChangeHandler());
         var pdf = BuildFakePdfBytes();
         await activateApdx.Handle(new ActivateContractAppendixCommand(
             AppendixId: appendixId,

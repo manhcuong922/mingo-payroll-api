@@ -4,6 +4,7 @@ using MPS.Application.Features.Evaluation.Common;
 using MPS.Domain.Common;
 using MPS.Domain.Enums.Evaluation;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Evaluation;
 using MPS.Domain.Interfaces.Payroll;
 
@@ -13,14 +14,19 @@ public class ReopenMonthlyEvaluationCommandHandler : IRequestHandler<ReopenMonth
 {
     private readonly IMonthlyEvaluationRepository _repo;
     private readonly ICurrentUserService _currentUser;
-    private readonly IPayrollStaleMarker _payrollStale;
+    private readonly IContractLookupReader _lookup;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ReopenMonthlyEvaluationCommandHandler(
-        IMonthlyEvaluationRepository repo, ICurrentUserService currentUser, IPayrollStaleMarker payrollStale)
+        IMonthlyEvaluationRepository repo,
+        ICurrentUserService currentUser,
+        IContractLookupReader lookup,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repo = repo;
         _currentUser = currentUser;
-        _payrollStale = payrollStale;
+        _lookup = lookup;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ReopenMonthlyEvaluationCommand request, CancellationToken ct)
@@ -44,9 +50,11 @@ public class ReopenMonthlyEvaluationCommandHandler : IRequestHandler<ReopenMonth
         if (!ok)
             throw new ConflictException("Dữ liệu đã thay đổi ở nơi khác. Vui lòng tải lại rồi thử lại.");
 
-        // BS-6: mở lại bảng đánh giá đã duyệt = điểm có thể đổi → kỳ lương của tháng đó cần tính lại.
-        await _payrollStale.MarkStaleForMonthAsync(
-            evaluation.PeriodYear, evaluation.PeriodMonth,
+        // BS-6 + BS-5: mở lại đánh giá đã duyệt = điểm có thể đổi → mark stale + capture Finalized cho NV.
+        var empId = await _lookup.GetEmployeeInformationIdByUserIdAsync(evaluation.EmployeeUserId, ct);
+        await _payrollChange.OnSourceChangedAsync(
+            new[] { (evaluation.PeriodYear, evaluation.PeriodMonth) },
+            empId.HasValue ? new[] { empId.Value } : Array.Empty<int>(),
             $"Mở lại đánh giá tháng {evaluation.PeriodMonth:D2}/{evaluation.PeriodYear}", ct);
 
         return true;

@@ -176,11 +176,18 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.ThuKhac, "Thu khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.PhiCongDoanVien, "Phí công đoàn viên", GH, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.UnionFee, money: true);
         Add(Cc.ChiKhac, "Chi khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
+        // BS-5 — 2 cột truy lĩnh / truy thu, seed từ field do handler tạo kỳ gom sẵn (mặc định 0 khi
+        // NV không có khoản chưa áp). Dấu: TRUY_LINH dương (+); TRUY_THU âm (−) — cộng đại số vào THUCNHAN.
+        Add(Cc.TruyLinh, "Truy lĩnh (kỳ trước sửa nguồn)", GH, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.TruyLinh, money: true);
+        Add(Cc.TruyThu, "Truy thu (kỳ trước sửa nguồn)", GH, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.TruyThu, money: true);
         Add(Cc.ThucNhan, "THỰC NHẬN", GH, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             rounding: RoundingMode.ToThousand,
-            formula: N.Sub(N.Sub(N.Add(N.Add(N.Sub(N.Sub(N.Sub(
+            formula: N.Add(N.Add(N.Sub(N.Sub(N.Add(N.Add(N.Sub(N.Sub(N.Sub(
                 N.Col(Cc.TongThuNhap), N.Col(Cc.CongBhNld)), N.Col(Cc.TruTamUng)), N.Col(Cc.ThueTncn)),
-                N.Col(Cc.ThuBhHoanThue)), N.Col(Cc.ThuKhac)), N.Col(Cc.PhiCongDoanVien)), N.Col(Cc.ChiKhac)));
+                N.Col(Cc.ThuBhHoanThue)), N.Col(Cc.ThuKhac)), N.Col(Cc.PhiCongDoanVien)), N.Col(Cc.ChiKhac)),
+                N.Col(Cc.TruyLinh)), N.Col(Cc.TruyThu)));
 
         return cols;
     }

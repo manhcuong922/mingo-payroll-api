@@ -115,11 +115,16 @@ public static class InfrastructureServiceRegistration
         // ===== Payroll module (bảng lương hàng tháng) =====
         services.AddScoped<IPayrollFormulaSetRepository, PayrollFormulaSetRepository>();
         services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
+        services.AddScoped<IPayrollAdjustmentRepository, PayrollAdjustmentRepository>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
         services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
         // BS-6: đánh cờ "cần tính lại" cho kỳ Draft khi nguồn (chấm công/đơn/phụ lục/đánh giá) đổi.
         services.AddScoped<IPayrollStaleMarker, PayrollStaleMarker>();
+        // BS-5: capture chênh lệch THUCNHAN của NV khi kỳ Finalized bị sửa nguồn.
+        services.AddScoped<IPayrollAdjustmentCapture, PayrollAdjustmentCapture>();
+        // Gộp BS-6 + BS-5: 8 handler nguồn gọi qua đây, service tự phân nhánh Draft/Finalized.
+        services.AddScoped<IPayrollSourceChangeHandler, PayrollSourceChangeHandler>();
         // Formula engine + calculator (stateless → singleton).
         services.AddSingleton<IFormulaFunctionRegistry, FormulaFunctionRegistry>();
         services.AddSingleton<IFormulaEvaluator, FormulaEvaluator>();

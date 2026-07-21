@@ -96,6 +96,11 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
         {
             var row = rowByEmp[inputs.EmployeeInformationId];
             row.DisplayOrder = order++;
+
+            // BS-5: truy lĩnh/truy thu đã được chốt lúc TẠO kỳ (và các khoản đã đánh dấu áp vào kỳ
+            // này). Collector không biết chúng ⇒ phải khôi phục từ snapshot cũ, nếu không lần tính
+            // lại sẽ âm thầm xoá số truy lĩnh khỏi bảng lương.
+            CarryOverAdjustmentFields(row.InputSnapshotJson, inputs);
             row.InputSnapshotJson = inputs.ToSnapshotJson();
 
             var ctx = new PayrollCalcContext
@@ -128,6 +133,18 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
         period.UpdatedByUserId = userId;
 
         await _periods.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Giữ nguyên 2 field truy lĩnh/truy thu từ snapshot cũ sang bộ input vừa gom lại.</summary>
+    private static void CarryOverAdjustmentFields(string? oldSnapshotJson, PayrollEmployeeInputs newInputs)
+    {
+        if (string.IsNullOrEmpty(oldSnapshotJson)) return;
+
+        var old = PayrollEmployeeInputs.FromSnapshotJson(newInputs.EmployeeInformationId, oldSnapshotJson);
+        foreach (var key in new[] { PayrollFieldKeys.TruyLinh, PayrollFieldKeys.TruyThu })
+        {
+            if (old.Numbers.TryGetValue(key, out var value)) newInputs.Numbers[key] = value;
+        }
     }
 
     private static Dictionary<int, List<PinnedCell>> SnapshotPinnedOverrides(PayrollPeriod period)

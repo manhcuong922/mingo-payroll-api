@@ -41,7 +41,14 @@ public sealed record DeletePayrollPeriodCommand(int PeriodId) : IRequest;
 public sealed class DeletePayrollPeriodCommandHandler : IRequestHandler<DeletePayrollPeriodCommand>
 {
     private readonly IPayrollPeriodRepository _periods;
-    public DeletePayrollPeriodCommandHandler(IPayrollPeriodRepository periods) => _periods = periods;
+    private readonly IPayrollAdjustmentRepository _adjustments;
+
+    public DeletePayrollPeriodCommandHandler(
+        IPayrollPeriodRepository periods, IPayrollAdjustmentRepository adjustments)
+    {
+        _periods = periods;
+        _adjustments = adjustments;
+    }
 
     public async Task Handle(DeletePayrollPeriodCommand request, CancellationToken ct)
     {
@@ -49,6 +56,20 @@ public sealed class DeletePayrollPeriodCommandHandler : IRequestHandler<DeletePa
             ?? throw new NotFoundException($"Không tìm thấy kỳ lương #{request.PeriodId}.");
         if (period.Status != PayrollPeriodStatus.Draft)
             throw new ConflictException("Chỉ xoá được kỳ đang ở trạng thái Nháp.");
+
+        // BS-5: trả các khoản truy lĩnh/truy thu đã áp vào kỳ này về trạng thái CHƯA áp — nếu không,
+        // xoá kỳ vừa vi phạm FK (Restrict) vừa làm mất khoản (không kỳ nào gom lại nữa).
+        var applied = await _adjustments.GetAppliedToPeriodAsync(request.PeriodId, ct);
+        if (applied.Count > 0)
+        {
+            foreach (var adjustment in applied)
+            {
+                adjustment.AppliedPeriodId = null;
+                adjustment.AppliedAt = null;
+            }
+            await _adjustments.SaveChangesAsync(ct);
+        }
+
         await _periods.DeleteAsync(request.PeriodId, ct);
     }
 }
