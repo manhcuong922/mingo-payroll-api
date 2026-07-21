@@ -108,6 +108,11 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             decimal congCom = 0, congThuViec = 0, congChinhThuc = 0, congHocViec = 0, dayHours = 0, nightHours = 0;
             foreach (var r in records)
             {
+                // ⭐ #25: chỉ tính ngày công NẰM TRONG kỳ hiệu lực của một hợp đồng. Trước đây mọi
+                // AttendanceRecord trong kỳ đều được tính, nên NV vào/ra giữa tháng vẫn hưởng đủ công
+                // cả tháng (và NV không có HĐ hiệu lực vẫn được tính công) ⇒ trả lương sai.
+                if (!IsCoveredByContract(empContracts, r.WorkDate)) continue;
+
                 var weight = DayWeight(r.Status);
                 if (weight > 0)
                 {
@@ -240,6 +245,17 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             .OrderByDescending(c => c.Status == ContractEnums.ContractStatus.Active)
             .ThenByDescending(c => c.EffectiveFrom)
             .FirstOrDefault();
+    }
+
+    // #25 — ngày công chỉ hợp lệ khi rơi vào kỳ hiệu lực của một HĐ (đã loại HĐ Cancelled từ query).
+    // Trả true khi employee không có HĐ nào để tránh vô tình xoá sạch công của dữ liệu lịch sử
+    // chưa được số hoá hợp đồng — trường hợp đó readiness gate đã cảnh báo ở bước tạo kỳ.
+    private static bool IsCoveredByContract(List<Contract> contracts, DateOnly day)
+    {
+        if (contracts.Count == 0) return true;
+
+        var dayDt = day.ToDateTime(new TimeOnly(12, 0));
+        return contracts.Any(c => c.EffectiveFrom <= dayDt && (c.EffectiveTo == null || c.EffectiveTo >= dayDt));
     }
 
     private static CongCategory ResolveCategory(List<Contract> contracts, DateOnly day, Contract? fallback)
