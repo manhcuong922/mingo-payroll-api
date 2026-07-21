@@ -29,11 +29,15 @@ không suy đoán từ mô tả trong báo cáo.
 | #27 | Username tự sinh lọt ký tự thô | [09-username-sanitize.md](09-username-sanitize.md) |
 | #11 | Swagger khai 200, thực tế 204 | [06-error-mapping.md](06-error-mapping.md) |
 | BS-3 | Guard chồng ngày đơn từ chấm công | [10-request-day-guard.md](10-request-day-guard.md) |
-| BS-4 | Duyệt WFH không sinh chấm công | [11-wfh-attendance.md](11-wfh-attendance.md) |
+| BS-4 (p1) | Duyệt WFH không sinh chấm công | [11-wfh-attendance.md](11-wfh-attendance.md) |
+| BS-4 (p2) | Duyệt LateEarly không trừ giờ công | [15-lateearly-dock-hours.md](15-lateearly-dock-hours.md) |
 | BS-8 | `deductFromLeaveBalance` không trừ quỹ phép | [12-lateearly-leave-deduction.md](12-lateearly-leave-deduction.md) |
 | #25 | Lương không giới hạn công theo kỳ hiệu lực HĐ | [13-payroll-contract-scope.md](13-payroll-contract-scope.md) |
+| BS-6 | Thiếu cờ stale + endpoint tính lại kỳ lương | [16-payroll-stale-recalc.md](16-payroll-stale-recalc.md) |
+| #2 | Tài liệu hoá DELETE hybrid catalog | [../../api/catalog-delete-semantics.md](../../api/catalog-delete-semantics.md) |
 
 \* #22 được sửa **không phải như báo cáo mô tả** — xem mục 1.2.
+Phiên 2 (2026-07-21) bổ sung: **BS-6** (stale + re-calc), **BS-4 phần 2** (trừ giờ LateEarly), **#2** (doc).
 
 ### 1.2. Bác bỏ — báo cáo mô tả SAI (2 + 1 phần)
 
@@ -56,13 +60,14 @@ không suy đoán từ mô tả trong báo cáo.
 |---|---|
 | #15 | DB **có** unique index `IX_ShiftTemplates_Code` / `_Name` (filtered `IsActive = 1`), và `CreateShiftTemplateCommandHandler` **bỏ qua `code` client gửi** — mã được tự sinh từ `Name`. 3 request "trùng mã" cùng trả 201 chỉ xảy ra khi **Name khác nhau**. Việc race trên cùng Name nay đã được map về 409 (xem [06](06-error-mapping.md)) thay vì 500. |
 
-### 1.5. Hoãn — tính năng mới / cần đổi schema (3)
+### 1.5. Hoãn — tính năng mới (2, PO chốt 2026-07-21)
 
 | # | Lý do hoãn |
 |---|---|
-| BS-5 | Truy lĩnh/truy thu — cần bảng mới + luồng nghiệp vụ. Xem [14](14-khong-sua-va-hoan.md). |
-| BS-6 | Cờ stale + endpoint re-calc — cần cột mới trên `PayrollPeriod`. Xem [14](14-khong-sua-va-hoan.md). |
-| BS-2 | Tách segment ca đêm vắt ngày — cần đổi schema `AttendanceRecord`. Xem [14](14-khong-sua-va-hoan.md). |
+| BS-5 | Truy lĩnh/truy thu — cần bảng mới + luồng duyệt + **chốt quy tắc thuế TNCN với kế toán**. Xem [14](14-khong-sua-va-hoan.md). |
+| BS-2 | Tách segment ca đêm vắt ngày. **Phát hiện: chỉ tách segment KHÔNG đổi lương** — payroll hiện không áp hệ số loại-ngày cho giờ thường. Cần xây mô hình trả lương theo loại ngày trước. Xem [14](14-khong-sua-va-hoan.md). |
+
+> BS-6 (cờ stale + re-calc) ban đầu xếp Hoãn, nay **ĐÃ LÀM** ở phiên 2 — xem mục 1.1.
 
 ### 1.6. Không thuộc backend
 

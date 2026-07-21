@@ -44,34 +44,19 @@ chưa có tài khoản; khi đó `POST /User` là cách duy nhất tạo tài kh
 
 ## B. Hoãn — tính năng mới, cần thiết kế riêng
 
-### BS-6 — Cờ "cần tính lại" (stale) + endpoint re-calc `[D1]`
+### BS-6 — Cờ "cần tính lại" (stale) + endpoint re-calc `[D1]` — ✅ ĐÃ LÀM
 
-**Hiện trạng:** `PayrollPeriod` chỉ có `Draft`/`Finalized`; `EditPayrollCellCommand` là đường duy nhất
-làm đổi số. Không có cờ stale, không có endpoint tính lại. Xác nhận bằng grep: không có
-`IsStale`/`NeedsRecalc`/`recalculate` nào trong `src`.
+> Đã triển khai ở đợt này (2026-07-21, phiên 2). Xem [16-payroll-stale-recalc.md](16-payroll-stale-recalc.md).
+> Mục này giữ lại để đối chiếu lịch sử phân loại ban đầu.
 
-**Vì sao hoãn:** cần thêm cột trên `PayrollPeriod` (entity + migration) **và** phải cắm hook đánh cờ
-vào ~6 luồng nguồn (chấm công, điều chỉnh công, duyệt OT, duyệt nghỉ/WFH, phụ lục HĐ, đánh giá tháng)
-— tức chạm vào nhiều module đang chạy.
-
-**Đề xuất thiết kế:**
-
-1. `PayrollPeriod`: thêm `IsStale bit`, `StaleReason nvarchar(500)`, `StaleMarkedAt datetime2`.
-2. Domain event `PayrollSourceChangedNotification(year, month, employeeInformationId, reason)`;
-   handler đánh cờ mọi kỳ `Draft` phủ tháng đó.
-3. `POST /payroll/periods/{id}/recalculate` — chỉ cho kỳ `Draft`, chạy lại
-   `PayrollDataCollector` + composer, **giữ nguyên các ô đã ghim** (override thủ công), xoá cờ stale.
-4. Bảng lương trả thêm `isStale` để FE hiện cảnh báo "số liệu nguồn đã đổi".
-
-**Chặn:** `PAY-STALE`, `ADJ-T02`, `EVAL-T01`, `APX-X01`.
-
-### BS-5 — Truy lĩnh / truy thu `[D3]`
+### BS-5 — Truy lĩnh / truy thu `[D3]` — vẫn HOÃN (PO chốt 2026-07-21)
 
 **Hiện trạng:** `grep -riE "retro|truy lĩnh|truy thu|arrear"` trên `src` → 0 kết quả (đã kiểm lại).
 Sửa công/OT cho kỳ **đã Finalized** được ghi nhận nhưng phần chênh lệch không chảy vào kỳ nào.
 
-**Vì sao hoãn:** là tính năng nghiệp vụ hoàn chỉnh — cần bảng mới, luồng duyệt, và quy tắc thuế
-(khoản truy lĩnh tính thuế ở kỳ phát sinh hay kỳ chi trả?). Không phải bug sửa được bằng vài dòng.
+**Vì sao hoãn:** là tính năng nghiệp vụ hoàn chỉnh — cần bảng mới, luồng duyệt, và quy tắc thuế.
+PO chốt (2026-07-21) **hoãn**, chỉ ghi tài liệu thiết kế; quy tắc thuế TNCN cho khoản truy lĩnh phải
+chốt với kế toán trước khi code.
 
 **Đề xuất thiết kế:**
 
@@ -80,17 +65,42 @@ Sửa công/OT cho kỳ **đã Finalized** được ghi nhận nhưng phần ch�
    `CreatedBy/At`, `ApprovedBy/At`.
 2. Khi sửa nguồn của kỳ Finalized → tính chênh lệch → sinh dòng adjustment `AppliedPeriodId = null`.
 3. Khi tạo kỳ mới → gom adjustment chưa áp của NV → 2 cột mới `TRUY_LINH` / `TRUY_THU` trên bảng lương.
-4. Chốt trước với kế toán: quy tắc thuế TNCN cho khoản truy lĩnh.
+4. **Quyết định thuế còn treo** (2 phương án, cần kế toán chốt):
+   - Tính thuế ở **kỳ chi trả**: cộng chênh lệch vào thu nhập chịu thuế kỳ kế tiếp (đơn giản).
+   - Tính thuế theo **kỳ phát sinh**: phân bổ về đúng kỳ cũ, tính lại thuế luỹ tiến kỳ đó (đúng bản chất, phức tạp).
 
 **Chặn:** `PAY-ADJ`, `ADJ-T01`, `OT-T01`, `LEAVE-06`, `APX-X02`.
 
-### BS-2 — Ca đêm vắt sang ngày khác loại không tách segment
+### BS-2 — Ca đêm vắt sang ngày khác loại không tách segment — HOÃN (PO chốt 2026-07-21)
 
-**Hiện trạng:** `AttendanceRecord` có **1 `WorkDate`** + **1 cặp `(DayHours, NightHours)`**, không có
-bảng segment. Ca 22:00 T7 → 06:00 CN ăn hệ số của **T7 cho toàn bộ 8 giờ**.
+**Hiện trạng schema:** `AttendanceRecord` có **1 `WorkDate`** + **1 cặp `(DayHours, NightHours)`**,
+không có bảng/cột segment. Ca 22:00 T7 → 06:00 CN, toàn bộ 8 giờ gắn vào WorkDate = T7.
 
-**Vì sao hoãn:** phải đổi schema `AttendanceRecord` — entity này là đầu vào của payroll collector, OT
-composer, seed data và nhiều spec. Rủi ro cao, cần đợt riêng có test hồi quy lương đầy đủ.
+**⚠️ Phát hiện then chốt (khảo sát 2026-07-21) — vì sao "chỉ thêm cột" là code chết:**
+Hệ số theo loại ngày **CÓ trong dữ liệu compliance nhưng KHÔNG được payroll áp cho giờ công thường**:
+
+- `LaborLawConstants` có `WorkRateNormalFloor`/`WorkRateWeeklyRestFloor`/`WorkRateHolidayFloor(=300%)`,
+  và tồn tại `DayTypeResolver` (phân loại thường/cuối tuần/lễ theo ngày).
+- Nhưng `PayrollDataCollector` **chỉ cộng `DayHours`/`NightHours`** rồi đưa vào cột, **không** gọi
+  `DayTypeResolver` cũng **không** dùng `WorkRate*Floor` cho giờ thường. OT thì dùng **cứng** `1.5`/`2.0`
+  (không đọc hệ số lễ/cuối tuần từ LaborLawConstants).
+- `PayrollFieldCatalog` **không có** field "giờ cuối tuần"/"giờ lễ" để công thức tham chiếu.
+
+⇒ Tách segment ca đêm vắt ngày (dù thêm cột hay bảng mới) **không tác động đồng lương nào** dưới mô
+hình payroll hiện tại. Nó chỉ có nghĩa nếu **đồng thời** xây mô hình trả lương theo loại ngày.
+
+**Vì sao hoãn (PO chốt):** để BS-2 thực sự đúng tiền lương cần một tính năng lớn hơn nhiều —
+không chỉ tách segment mà phải:
+
+1. Thêm field giờ theo loại ngày (`WEEKEND_HOURS`, `HOLIDAY_HOURS`, và phần đêm tương ứng) vào
+   `PayrollFieldCatalog`.
+2. `PayrollDataCollector` dùng `DayTypeResolver` + `WorkRate*Floor` để phân loại + áp hệ số cho giờ
+   thường (và cân nhắc sửa OT dùng hệ số động thay cho `1.5`/`2.0` cứng — liên quan `OT-B04`).
+3. Chỉ khi đó mới thêm cột phụ tách ca đêm vắt ngày (`DayHoursNextDay`/`NightHoursNextDay` + loại ngày
+   của phần vắt) để phân bổ đúng hệ số.
+
+**Chặn:** `ATT-03`, `ATT-04`. Cần đợt riêng có test hồi quy lương đầy đủ + chốt mô hình trả lương
+theo loại ngày với PO/kế toán.
 
 **Hai phương án đã cân nhắc:**
 
