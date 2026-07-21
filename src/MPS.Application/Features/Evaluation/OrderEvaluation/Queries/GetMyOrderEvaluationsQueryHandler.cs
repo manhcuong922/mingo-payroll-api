@@ -2,6 +2,7 @@ using AutoMapper;
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Evaluation;
+using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Evaluation;
 
@@ -28,7 +29,14 @@ public class GetMyOrderEvaluationsQueryHandler
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Không xác định được người dùng hiện tại.");
 
-        var items = await _repo.GetForEvaluatorAsync(userId, request.Status, request.DepartmentId, ct);
+        // Endpoint khai cả OrderEvaluationReadAll lẫn ReadOwn nhưng trước đây LUÔN lọc theo evaluator
+        // ⇒ Admin/HR/GĐ (ReadAll) luôn nhận [] và tưởng cơ chế sinh bảng-theo-đơn hỏng. Nay: có ReadAll
+        // thì xem mọi bảng, không có thì vẫn chỉ xem bảng mình phụ trách.
+        var evaluatorFilter = _currentUser.HasPermission(Permissions.OrderEvaluationReadAll)
+            ? (int?)null
+            : userId;
+
+        var items = await _repo.GetForEvaluatorAsync(evaluatorFilter, request.Status, request.DepartmentId, ct);
         return _mapper.Map<IReadOnlyList<OrderEvaluationSummaryDto>>(items);
     }
 }
