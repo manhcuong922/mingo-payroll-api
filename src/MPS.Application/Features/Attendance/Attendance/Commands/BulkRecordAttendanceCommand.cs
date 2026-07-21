@@ -8,7 +8,7 @@ public sealed record BulkRecordAttendanceItem(
     int ShiftTemplateId,
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
-    AttendanceStatus Status,
+    AttendanceStatus? Status,
     string? Notes,
     string? OverrideReason);
 

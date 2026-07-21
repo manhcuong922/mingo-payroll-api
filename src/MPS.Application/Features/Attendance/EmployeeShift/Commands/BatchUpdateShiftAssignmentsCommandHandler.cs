@@ -239,7 +239,10 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         await _repository.ApplyBatchAsync(toAdd, toUpdate, toRemoveIds, cancellationToken);
 
         var applied = items.Count(i => i.Status is BatchShiftItemStatus.Applied or BatchShiftItemStatus.Replaced);
-        var skipped = items.Count(i => i.Status is BatchShiftItemStatus.SkippedSameShift);
+        var skipped = items.Count(i => i.Status is BatchShiftItemStatus.SkippedSameShift
+            or BatchShiftItemStatus.SkippedAttendanceExists
+            or BatchShiftItemStatus.SkippedWeeklyRestDay
+            or BatchShiftItemStatus.SkippedPublicHoliday);
         var conflicts = items.Count - applied - skipped;
 
         return new BatchUpdateShiftAssignmentsResult(applied, skipped, conflicts, items);
@@ -346,6 +349,18 @@ public class BatchUpdateShiftAssignmentsCommandHandler
             return new BatchShiftItemResult(op.Kind, op.EmployeeInformationId, op.WorkDate, shiftId,
                 BatchShiftItemStatus.SkippedSameShift, shiftId,
                 "Assignment đã tồn tại với cùng ca trên ngày này.");
+        }
+
+        // (emp, date) đã có ≥1 ca bị khoá do AttendanceRecord → bỏ qua Add cho ngày này.
+        // Tránh false-positive cap 8h/ngày (Điều 105 BLLĐ) khi ca chấm cũ + ca mới cộng dồn
+        // vượt luật. HR muốn thêm ca thứ 2 phải xử lý attendance của ca cũ trước.
+        var lockedOnThisDay = existingList.FirstOrDefault(a =>
+            lockedShifts.Contains((a.EmployeeInformationId, a.WorkDate, a.ShiftTemplateId)));
+        if (lockedOnThisDay is not null)
+        {
+            return new BatchShiftItemResult(op.Kind, op.EmployeeInformationId, op.WorkDate, shiftId,
+                BatchShiftItemStatus.SkippedAttendanceExists, lockedOnThisDay.ShiftTemplateId,
+                $"Ngày {op.WorkDate:yyyy-MM-dd} đã có ca chấm công — bỏ qua để không vượt 8h/ngày.");
         }
 
         var crossDateOverlap = overlapList

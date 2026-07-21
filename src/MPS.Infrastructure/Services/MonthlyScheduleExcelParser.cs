@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Attendance;
+using MPS.Domain.Enums.Attendance;
 
 namespace MPS.Infrastructure.Services;
 
@@ -35,6 +36,40 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         ["Mã NV", "Mã nhân viên", "Employee Code"];
     private static readonly string[] EmployeeNameHeaderAliases =
         ["Họ tên", "Họ và tên", "Employee Name"];
+    private static readonly string[] DepartmentCodeHeaderAliases =
+        ["Mã phòng ban", "Mã PB", "Department Code"];
+    private static readonly string[] DepartmentNameHeaderAliases =
+        ["Tên phòng ban", "Department Name"];
+
+    /// <summary>Bảng alias header phụ thuộc mode. Chỉ đọc trong parser, không expose ra ngoài.</summary>
+    private sealed record TargetColumnConfig(
+        string[] CodeAliases,
+        string[] NameAliases,
+        /// <summary>Alias của mode NGƯỢC lại — dùng để detect user chọn nhầm mode + báo lỗi chính xác.</summary>
+        string[] OppositeCodeAliases,
+        string DisplayCodeName,
+        string OppositeDisplayCodeName,
+        string MissingCodeHeaderCode,
+        string MissingCodeHeaderMessage);
+
+    private static TargetColumnConfig ResolveTargetConfig(ScheduleApplyTarget applyTarget) =>
+        applyTarget == ScheduleApplyTarget.Departments
+            ? new TargetColumnConfig(
+                DepartmentCodeHeaderAliases,
+                DepartmentNameHeaderAliases,
+                OppositeCodeAliases: EmployeeCodeHeaderAliases,
+                DisplayCodeName: "Mã phòng ban",
+                OppositeDisplayCodeName: "Mã NV",
+                MissingCodeHeaderCode: "MISSING_DEPARTMENT_CODE_HEADER",
+                MissingCodeHeaderMessage: "Header không có cột 'Mã phòng ban'.")
+            : new TargetColumnConfig(
+                EmployeeCodeHeaderAliases,
+                EmployeeNameHeaderAliases,
+                OppositeCodeAliases: DepartmentCodeHeaderAliases,
+                DisplayCodeName: "Mã NV",
+                OppositeDisplayCodeName: "Mã phòng ban",
+                MissingCodeHeaderCode: "MISSING_EMPLOYEE_CODE_HEADER",
+                MissingCodeHeaderMessage: "Header không có cột 'Mã NV'.");
     private static readonly string[] ScheduleNameKeyAliases =
         ["Tên bảng phân ca", "Tên", "Schedule Name"];
     private static readonly string[] MonthKeyAliases =
@@ -51,10 +86,13 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
     private static readonly XNamespace OfficeRelationshipNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private static readonly XNamespace PackageRelationshipNs = "http://schemas.openxmlformats.org/package/2006/relationships";
 
-    public MonthlyScheduleParseResult Parse(Stream stream)
+    public MonthlyScheduleParseResult Parse(
+        Stream stream,
+        ScheduleApplyTarget applyTarget = ScheduleApplyTarget.Employees)
     {
         var errors = new List<MonthlyScheduleParseError>();
         var assignments = new List<MonthlyScheduleParsedAssignment>();
+        var targetConfig = ResolveTargetConfig(applyTarget);
 
         // Đọc 1 lần ra byte[] rồi các bước parse mở MemoryStream riêng.
         byte[] fileBytes;
@@ -99,9 +137,9 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
                 string.Equals(s.Name, LegacyAssignmentsSheet, StringComparison.OrdinalIgnoreCase));
 
             if (hasLegacyInfo && hasLegacyAssignments)
-                return ParseLegacyTwoSheet(fileBytes, assignments, errors);
+                return ParseLegacyTwoSheet(fileBytes, targetConfig, assignments, errors);
 
-            return ParseSingleSheet(fileBytes, sheets[0].Name, assignments, errors);
+            return ParseSingleSheet(fileBytes, sheets[0].Name, targetConfig, assignments, errors);
         }
         catch (Exception ex)
         {
@@ -114,6 +152,7 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
     private static MonthlyScheduleParseResult ParseSingleSheet(
         byte[] fileBytes,
         string sheetName,
+        TargetColumnConfig targetConfig,
         List<MonthlyScheduleParsedAssignment> assignments,
         List<MonthlyScheduleParseError> errors)
     {
@@ -125,16 +164,19 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         string? notes = null;
 
         var headerRowIndex = -1;
-        string? employeeCodeColumnLetter = null;
-        string? employeeNameColumnLetter = null;
+        string? codeColumnLetter = null;
+        string? nameColumnLetter = null;
         var columnLetterToDay = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Track row có header của mode NGƯỢC lại → dùng để báo lỗi WRONG_APPLY_TARGET
+        // nếu không tìm được header đúng mode.
+        var oppositeHeaderRowIndex = -1;
 
         for (var r = 0; r < rows.Count; r++)
         {
             var row = rows[r];
             var firstText = GetCellString(row, "A");
 
-            if (IsAnyAlias(firstText, EmployeeCodeHeaderAliases))
+            if (IsAnyAlias(firstText, targetConfig.CodeAliases))
             {
                 headerRowIndex = r;
                 foreach (var (letter, raw) in row)
@@ -142,11 +184,20 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
                     var text = ToTrimmedString(raw);
                     if (string.IsNullOrEmpty(text)) continue;
 
-                    if (IsAnyAlias(text, EmployeeCodeHeaderAliases)) employeeCodeColumnLetter = letter;
-                    else if (IsAnyAlias(text, EmployeeNameHeaderAliases)) employeeNameColumnLetter = letter;
+                    if (IsAnyAlias(text, targetConfig.CodeAliases)) codeColumnLetter = letter;
+                    else if (IsAnyAlias(text, targetConfig.NameAliases)) nameColumnLetter = letter;
                     else if (TryParseDay(text, out var day)) columnLetterToDay[letter] = day;
                 }
                 break;
+            }
+
+            // Chưa match đúng mode → check xem row này có phải header của mode ngược không.
+            if (oppositeHeaderRowIndex < 0
+                && IsAnyAlias(firstText, targetConfig.OppositeCodeAliases))
+            {
+                oppositeHeaderRowIndex = r;
+                // Không break — vẫn tiếp tục quét, biết đâu có cả 2 header (edge case),
+                // ưu tiên tìm đúng mode trước khi bail.
             }
 
             // Vẫn còn metadata — đọc key/value (cột A/B).
@@ -192,14 +243,25 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
 
         if (headerRowIndex < 0)
         {
+            // Nếu detect được header của mode ngược → user chọn nhầm radio. Báo lỗi cụ thể.
+            if (oppositeHeaderRowIndex >= 0)
+            {
+                errors.Add(new MonthlyScheduleParseError(
+                    oppositeHeaderRowIndex + 1, null, "WRONG_APPLY_TARGET",
+                    $"File này dùng cột '{targetConfig.OppositeDisplayCodeName}' — có vẻ file dành cho mode "
+                    + $"khác. Đổi radio 'Đối tượng phân ca' hoặc chọn file có cột '{targetConfig.DisplayCodeName}'."));
+                return new MonthlyScheduleParseResult(scheduleName, year, month, notes, assignments, errors);
+            }
+
             errors.Add(new MonthlyScheduleParseError(null, null, "MISSING_HEADER_ROW",
-                "Không tìm thấy hàng header (phải có cột 'Mã NV' / 'Mã nhân viên')."));
+                $"Không tìm thấy hàng header (phải có cột '{targetConfig.DisplayCodeName}')."));
             return new MonthlyScheduleParseResult(scheduleName, year, month, notes, assignments, errors);
         }
-        if (employeeCodeColumnLetter is null)
+        if (codeColumnLetter is null)
         {
-            errors.Add(new MonthlyScheduleParseError(headerRowIndex + 1, null, "MISSING_EMPLOYEE_CODE_HEADER",
-                "Header không có cột 'Mã NV'."));
+            errors.Add(new MonthlyScheduleParseError(headerRowIndex + 1, null,
+                targetConfig.MissingCodeHeaderCode,
+                targetConfig.MissingCodeHeaderMessage));
             return new MonthlyScheduleParseResult(scheduleName, year, month, notes, assignments, errors);
         }
         if (columnLetterToDay.Count == 0)
@@ -210,7 +272,7 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         }
 
         ReadAssignmentRows(rows, headerRowIndex, year, month,
-            employeeCodeColumnLetter, employeeNameColumnLetter, columnLetterToDay, assignments, errors);
+            codeColumnLetter, nameColumnLetter, columnLetterToDay, assignments, errors);
 
         return new MonthlyScheduleParseResult(scheduleName, year, month, notes, assignments, errors);
     }
@@ -219,6 +281,7 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
 
     private static MonthlyScheduleParseResult ParseLegacyTwoSheet(
         byte[] fileBytes,
+        TargetColumnConfig targetConfig,
         List<MonthlyScheduleParsedAssignment> assignments,
         List<MonthlyScheduleParseError> errors)
     {
@@ -269,22 +332,33 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         }
 
         var headerRow = assignmentRows[0];
-        string? employeeCodeColumnLetter = null;
-        string? employeeNameColumnLetter = null;
+        string? codeColumnLetter = null;
+        string? nameColumnLetter = null;
+        var hasOppositeHeader = false;
         var columnLetterToDay = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var (letter, raw) in headerRow)
         {
             var text = ToTrimmedString(raw);
             if (string.IsNullOrEmpty(text)) continue;
 
-            if (IsAnyAlias(text, EmployeeCodeHeaderAliases)) employeeCodeColumnLetter = letter;
-            else if (IsAnyAlias(text, EmployeeNameHeaderAliases)) employeeNameColumnLetter = letter;
+            if (IsAnyAlias(text, targetConfig.CodeAliases)) codeColumnLetter = letter;
+            else if (IsAnyAlias(text, targetConfig.NameAliases)) nameColumnLetter = letter;
+            else if (IsAnyAlias(text, targetConfig.OppositeCodeAliases)) hasOppositeHeader = true;
             else if (TryParseDay(text, out var day)) columnLetterToDay[letter] = day;
         }
-        if (employeeCodeColumnLetter is null)
+        if (codeColumnLetter is null)
         {
-            errors.Add(new MonthlyScheduleParseError(1, null, "MISSING_EMPLOYEE_CODE_HEADER",
-                "Sheet Assignments thiếu cột 'Employee Code'."));
+            if (hasOppositeHeader)
+            {
+                errors.Add(new MonthlyScheduleParseError(1, null, "WRONG_APPLY_TARGET",
+                    $"Sheet Assignments dùng cột '{targetConfig.OppositeDisplayCodeName}' — file dành cho "
+                    + $"mode khác. Đổi radio 'Đối tượng phân ca' hoặc chọn file có cột '{targetConfig.DisplayCodeName}'."));
+                return new MonthlyScheduleParseResult(scheduleName, year, month, notes, assignments, errors);
+            }
+
+            errors.Add(new MonthlyScheduleParseError(1, null,
+                targetConfig.MissingCodeHeaderCode,
+                $"Sheet Assignments thiếu cột '{targetConfig.DisplayCodeName}'."));
             return new MonthlyScheduleParseResult(scheduleName, year, month, notes, assignments, errors);
         }
         if (columnLetterToDay.Count == 0)
@@ -295,7 +369,7 @@ public sealed class MonthlyScheduleExcelParser : IMonthlyScheduleExcelParser
         }
 
         ReadAssignmentRows(assignmentRows, headerRowIndex: 0, year, month,
-            employeeCodeColumnLetter, employeeNameColumnLetter, columnLetterToDay, assignments, errors);
+            codeColumnLetter, nameColumnLetter, columnLetterToDay, assignments, errors);
 
         return new MonthlyScheduleParseResult(scheduleName, year, month, notes, assignments, errors);
     }

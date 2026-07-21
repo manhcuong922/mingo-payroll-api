@@ -62,7 +62,9 @@ public class GetShiftRosterQueryHandler : IRequestHandler<GetShiftRosterQuery, S
             a.ShiftTemplate.StartTime,
             a.ShiftTemplate.EndTime,
             a.WorkDate,
-            a.CreatedAt)).ToList();
+            a.CreatedAt,
+            a.ScheduleTemplateId,
+            a.ScheduleTemplate?.ApplyTarget)).ToList();
 
         var lockedDtos = lockedRows
             .Select(r => new ShiftRosterLockedDateDto(r.EmployeeInformationId, r.WorkDate, r.ShiftTemplateId))

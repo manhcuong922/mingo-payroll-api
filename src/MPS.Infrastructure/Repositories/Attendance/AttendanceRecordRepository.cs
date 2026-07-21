@@ -138,6 +138,23 @@ public class AttendanceRecordRepository : IAttendanceRecordRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AttendanceRecord>> GetByRangeAsync(
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.AttendanceRecords
+            .AsNoTracking()
+            .Include(r => r.EmployeeInformation)
+            .Include(r => r.ShiftTemplate)
+            .Include(r => r.OvertimeRequest)
+                .ThenInclude(o => o!.Project)
+            .Where(r => r.WorkDate >= fromDate && r.WorkDate <= toDate)
+            .OrderBy(r => r.WorkDate)
+            .ThenBy(r => r.EmployeeInformationId)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<int> AddAsync(AttendanceRecord entity, CancellationToken cancellationToken = default)
     {
         await _context.AttendanceRecords.AddAsync(entity, cancellationToken);

@@ -33,6 +33,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
 
     public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
         bool? hasActiveUser = null,
+        string? keyword = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.EmployeeInformations
@@ -43,6 +44,17 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsQueryable();
 
         query = ApplyActiveUserFilter(query, hasActiveUser);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            // COLLATE Latin1_General_CI_AI: case + accent insensitive (nhất quán với GetPagedAsync).
+            // Fields: FullName + User.EmployeeCode + Department.Name — phục vụ search "Tổng hợp phân ca".
+            query = query.Where(e =>
+                EF.Functions.Like(EF.Functions.Collate(e.FullName, "Latin1_General_CI_AI"), $"%{kw}%")
+                || (e.User != null && EF.Functions.Like(EF.Functions.Collate(e.User.EmployeeCode, "Latin1_General_CI_AI"), $"%{kw}%"))
+                || (e.Department != null && EF.Functions.Like(EF.Functions.Collate(e.Department.Name, "Latin1_General_CI_AI"), $"%{kw}%")));
+        }
 
         return await query.ToListAsync(cancellationToken);
     }

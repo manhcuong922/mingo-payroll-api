@@ -23,9 +23,10 @@ public class DepartmentController : ControllerBase
     [HasPermission(Permissions.DepartmentReadAll)]
     public async Task<IActionResult> GetAll(
         [FromQuery] bool includeInactive = false,
+        [FromQuery] string? keyword = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _mediator.Send(new DepartmentGetAllQuery(includeInactive), cancellationToken);
+        var result = await _mediator.Send(new DepartmentGetAllQuery(includeInactive, keyword), cancellationToken);
         return Ok(result);
     }
 

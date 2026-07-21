@@ -76,4 +76,12 @@ public static class PayrollColumnCodes
     public const string PhiCongDoanVien = "PHICONGDOANVIEN";
     public const string ChiKhac = "CHI_KHAC";
     public const string ThucNhan = "THUCNHAN";
+
+    /// <summary>
+    /// Cột cờ (BH/thuế) do hệ thống suy từ hợp đồng — chỉ đọc, không cho sửa tay. Kể cả kỳ cũ đã
+    /// snapshot IsEditable=true vẫn bị chặn ở EditPayrollCellCommand.
+    /// </summary>
+    public static bool IsFlagColumn(string code) =>
+        string.Equals(code, FlagBh, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(code, FlagThue, StringComparison.OrdinalIgnoreCase);
 }

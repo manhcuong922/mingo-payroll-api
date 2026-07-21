@@ -349,6 +349,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<TimeOnly>("DailyEditCutoffTime")
                         .HasColumnType("time");
 
+                    b.Property<int?>("EarlyLeaveGraceMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("HalfDayThresholdMinutes")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsEditLockEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -361,6 +367,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<int?>("LateEarlyMaxOccurrencesPerMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LateGraceMinutes")
                         .HasColumnType("int");
 
                     b.Property<int>("LockAfterDays")
@@ -685,9 +694,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("LeaveTypeId")
                         .HasColumnType("int");
 
-                    b.Property<string>("MedicalCertificateUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                    b.Property<string>("MedicalCertificateObjectKey")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
@@ -708,10 +717,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<byte>("Status")
                         .HasColumnType("tinyint");
-
-                    b.Property<string>("SupportingDocumentUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<decimal>("TotalDays")
                         .HasColumnType("decimal(4,1)");
@@ -1064,6 +1069,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("EffectiveTo")
                         .HasColumnType("date");
+
+                    b.Property<bool>("IncludeRestDaysAndHolidays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()

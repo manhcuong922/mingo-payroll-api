@@ -70,7 +70,7 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.SoTaiKhoan, "Số tài khoản", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.EmployeeBankAccount, editable: false);
         Add(Cc.NgayVao, "Ngày vào", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.EmployeeJoinDate, editable: false);
         Add(Cc.Thang, "Tháng", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.PeriodMonthLabel, editable: false);
-        Add(Cc.FlagBh, "Cờ BH", GA, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractInsuranceFlag);
+        Add(Cc.FlagBh, "Cờ BH", GA, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractInsuranceFlag, editable: false);
 
         // ===== Khối B — ngày công =====
         Add(Cc.CongChuan, "Công chuẩn", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongChuan);
@@ -145,7 +145,7 @@ public static class DefaultPayrollFormulaSet
         // ===== Khối G — thuế TNCN =====
         Add(Cc.TruTamUng, "Cấn trừ tạm ứng", GG, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.SlNpt, "Số người phụ thuộc", GG, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.DependentsCount);
-        Add(Cc.FlagThue, "Cờ thuế", GG, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractTaxFlag);
+        Add(Cc.FlagThue, "Cờ thuế", GG, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractTaxFlag, editable: false);
         Add(Cc.GtNpt, "Giảm trừ NPT", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.Progressive)),
                 N.Mul(N.Col(Cc.SlNpt), N.Field(Fk.DependentDeduction)), N.Const(0m)));

@@ -32,18 +32,17 @@ public class LeaveRequest
 
     public string? Reason { get; set; }
 
-    /// <summary>
-    /// Bắt buộc khi LeaveType.RequireDocument = true.
-    /// </summary>
-    public string? SupportingDocumentUrl { get; set; }
-
     // ===== Sick / Maternity fields =====
 
     /// <summary>StartDate &lt; today. Set khi Create nếu LeaveType.AllowRetroactive=true.</summary>
     public bool IsRetroactive { get; set; }
 
-    /// <summary>URL giấy chứng nhận nghỉ hưởng BHXH (mẫu C65-HD) hoặc giấy ra viện.</summary>
-    public string? MedicalCertificateUrl { get; set; }
+    /// <summary>
+    /// MinIO object key của ảnh giấy chứng nhận nghỉ hưởng BHXH (mẫu C65-HD) hoặc giấy ra viện.
+    /// Bắt buộc trước khi Approve khi LeaveType.RequireDocument = true.
+    /// Giá trị legacy có thể là URL http/https — endpoint download-url tự phân biệt.
+    /// </summary>
+    public string? MedicalCertificateObjectKey { get; set; }
 
     /// <summary>Số hiệu giấy C65-HD — bắt buộc khi Approve Sick/Maternity.</summary>
     public string? InsuranceCertNumber { get; set; }

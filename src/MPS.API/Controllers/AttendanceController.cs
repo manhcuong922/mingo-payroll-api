@@ -60,6 +60,20 @@ public class AttendanceController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Toàn bộ AttendanceRecord trong khoảng ngày — flat list, FE tự group cho matrix Bảng chấm công tháng.
+    /// </summary>
+    [HttpGet("range")]
+    [HasPermission(Permissions.AttendanceReadAll)]
+    public async Task<IActionResult> GetByRange(
+        [FromQuery] DateOnly fromDate,
+        [FromQuery] DateOnly toDate,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetAttendanceByRangeQuery(fromDate, toDate), cancellationToken);
+        return Ok(result);
+    }
+
     /// <summary>OT Approved chưa được chấm công cho ngày X — HR click từng row để chấm.</summary>
     [HttpGet("daily/{workDate}/pending-overtime")]
     [HasPermission(Permissions.AttendanceReadAll)]
@@ -95,7 +109,10 @@ public class AttendanceController : ControllerBase
             request.WfhMaxDaysPerMonth,
             request.WfhMinNoticeDays,
             request.WfhMaxDaysPerRequest,
-            request.WfhWorkPlanMinLength), cancellationToken);
+            request.WfhWorkPlanMinLength,
+            request.LateGraceMinutes,
+            request.EarlyLeaveGraceMinutes,
+            request.HalfDayThresholdMinutes), cancellationToken);
         return Ok(result);
     }
 

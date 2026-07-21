@@ -134,6 +134,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.MedicalCertificateUploader>();
         services.AddScoped<MPS.Application.Features.Attendance.Common.AttendanceRequestDayConflictChecker>();
         services.AddScoped<
             MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,
@@ -158,6 +159,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleVersionRepository, AttendanceRuleVersionRepository>();
         services.AddScoped<MPS.Application.Common.Services.IAttendanceRateResolver,
             MPS.Application.Common.Services.AttendanceRateResolver>();
+        services.AddSingleton<MPS.Application.Common.Services.IAttendanceStatusResolver,
+            MPS.Application.Common.Services.AttendanceStatusResolver>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IFaceRegistrationRepository, MPS.Infrastructure.Repositories.Attendance.FaceRegistrationRepository>();
         services.AddScoped<IDayTypeResolver, DayTypeResolver>();
