@@ -17,7 +17,11 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
 
         RuleFor(x => x.CitizenId)
             .NotEmpty().WithMessage("CitizenId is required.")
-            .MaximumLength(20).WithMessage("CitizenId must not exceed 20 characters.");
+            .MaximumLength(20).WithMessage("CitizenId must not exceed 20 characters.")
+            // #1 — trước đây chỉ có unique index ở DB ⇒ trùng CCCD nổ 500. Kiểm ở validator để trả 400.
+            .MustAsync(async (citizenId, ct) =>
+                string.IsNullOrWhiteSpace(citizenId) || !await repository.CitizenIdExistsAsync(citizenId.Trim(), null, ct))
+            .WithMessage("CitizenId is already used by another employee.");
 
         RuleFor(x => x.PermanentAddress)
             .NotEmpty().WithMessage("PermanentAddress is required.");

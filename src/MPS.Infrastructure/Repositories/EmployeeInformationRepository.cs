@@ -165,6 +165,11 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsNoTracking()
             .AnyAsync(e => e.Email == email && (excludeId == null || e.Id != excludeId), cancellationToken);
 
+    public Task<bool> CitizenIdExistsAsync(string citizenId, int? excludeId = null, CancellationToken cancellationToken = default) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.CitizenId == citizenId && (excludeId == null || e.Id != excludeId), cancellationToken);
+
     public Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default) =>
         _context.Positions
             .AsNoTracking()

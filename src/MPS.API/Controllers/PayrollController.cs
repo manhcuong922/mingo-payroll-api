@@ -64,8 +64,10 @@ public class PayrollController : ControllerBase
         return NoContent();
     }
 
+    // #11: Swagger trước đây khai 200 (mặc định của IActionResult) trong khi thực tế trả 204.
     [HttpPost("periods/{id:int}/finalize")]
     [HasPermission(Permissions.PayrollFinalizeAll)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Finalize(int id, CancellationToken ct)
     {
         await _mediator.Send(new FinalizePayrollPeriodCommand(id), ct);

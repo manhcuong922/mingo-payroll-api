@@ -20,7 +20,11 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
 
         RuleFor(x => x.CitizenId)
             .NotEmpty().WithMessage("CitizenId is required.")
-            .MaximumLength(20).WithMessage("CitizenId must not exceed 20 characters.");
+            .MaximumLength(20).WithMessage("CitizenId must not exceed 20 characters.")
+            // #1 — đối xứng với Create: chặn trùng CCCD ở tầng ứng dụng (400) thay vì để DB nổ 500.
+            .MustAsync(async (cmd, citizenId, ct) =>
+                string.IsNullOrWhiteSpace(citizenId) || !await repository.CitizenIdExistsAsync(citizenId.Trim(), cmd.Id, ct))
+            .WithMessage("CitizenId is already used by another employee.");
 
         RuleFor(x => x.PermanentAddress)
             .NotEmpty().WithMessage("PermanentAddress is required.");
