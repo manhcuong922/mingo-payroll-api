@@ -2,12 +2,16 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Services;
 using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using MPS.Application.Settings;
+// 'ShiftTemplate' trùng tên với namespace Features.Attendance.ShiftTemplate → alias cho rõ.
+using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
 
 namespace MPS.Application.Features.Attendance.FaceRegistration.Commands;
 
@@ -17,6 +21,9 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
 
     private readonly IAttendanceRecordRepository _attendanceRepository;
     private readonly IEmployeeShiftAssignmentRepository _shiftAssignmentRepository;
+    private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IAttendanceSettingRepository _settingRepository;
+    private readonly IAttendanceStatusResolver _statusResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -27,6 +34,9 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     public FaceCheckinCommandHandler(
         IAttendanceRecordRepository attendanceRepository,
         IEmployeeShiftAssignmentRepository shiftAssignmentRepository,
+        IEmployeeInformationRepository employeeRepository,
+        IAttendanceSettingRepository settingRepository,
+        IAttendanceStatusResolver statusResolver,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -36,6 +46,9 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     {
         _attendanceRepository = attendanceRepository;
         _shiftAssignmentRepository = shiftAssignmentRepository;
+        _employeeRepository = employeeRepository;
+        _settingRepository = settingRepository;
+        _statusResolver = statusResolver;
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -44,10 +57,30 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         _checkinSettings = checkinSettings.Value;
     }
 
+    /// <summary>
+    /// Suy status từ giờ chấm + shift + setting — dùng chung công thức với luồng
+    /// chấm công tay (<c>RecordAttendanceCommandHandler.ResolveShiftStatusAsync</c>)
+    /// để face check-in ra cùng kết quả Late / EarlyLeave / HalfDay / Present.
+    /// </summary>
+    private async Task<AttendanceStatus> ResolveStatusAsync(
+        DateTime? checkInAt,
+        DateTime? checkOutAt,
+        ShiftTemplateEntity shift,
+        DateOnly workDate,
+        CancellationToken ct)
+    {
+        var setting = await _settingRepository.GetOrCreateDefaultAsync(_clock.UtcNow, ct);
+        return _statusResolver.Resolve(checkInAt, checkOutAt, shift, workDate, setting);
+    }
+
     public async Task<FaceCheckinResultDto> Handle(FaceCheckinCommand request, CancellationToken cancellationToken)
     {
         if (!int.TryParse(request.EmployeeId, out var employeeInformationId))
             return Fail($"EmployeeId không hợp lệ: '{request.EmployeeId}'.");
+
+        // Guard giống luồng chấm công tay: NV phải có tài khoản active.
+        if (!await _employeeRepository.HasActiveUserAsync(employeeInformationId, cancellationToken))
+            return Fail($"Nhân viên {employeeInformationId} không có tài khoản active; không thể chấm công.");
 
         var utcTime    = DateTime.SpecifyKind(request.CheckinTime, DateTimeKind.Utc);
         var vnZone     = TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh");
@@ -145,6 +178,11 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             var userId = _currentUser.UserId
                 ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
+            // Status suy từ giờ chấm giống chấm công tay (bắt đi muộn), không hardcode Present.
+            // Chưa có CheckOut nên DayHours/NightHours = 0 — sẽ tính lại lúc tan ca.
+            var checkinStatus = await ResolveStatusAsync(
+                localTime, null, shift.ShiftTemplate, workDate, cancellationToken);
+
             var record = new AttendanceRecord
             {
                 EmployeeInformationId = employeeInformationId,
@@ -152,7 +190,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 ShiftTemplateId       = shift.ShiftTemplateId,
                 CheckInAt             = localTime,
                 CheckOutAt            = null,
-                Status                = AttendanceStatus.Present,
+                Status                = checkinStatus,
                 Notes                 = $"Face recognition - confidence: {request.Confidence:P0} - camera: {request.CameraId} - source: {request.Source}",
                 CreatedAt             = _clock.UtcNow,
                 CreatedByUserId       = userId,
@@ -211,14 +249,20 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         var updateUserId = _currentUser.UserId
             ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
+        // Re-resolve status khi đã có đủ CheckIn/CheckOut — giống chấm công tay,
+        // nhờ đó bắt được EarlyLeave / HalfDay (trước đây luôn kẹt ở Present).
+        var checkoutStatus = await ResolveStatusAsync(
+            existing.CheckInAt, localTime, existing.ShiftTemplate!, workDate, cancellationToken);
+
         // Tính DayHours/NightHours giống hệt luồng chấm công tay
         // (RecordAttendanceCommandHandler): splitter + break của ca + khung giờ đêm theo luật.
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(workDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
-            _splitter, existing.Status, existing.CheckInAt, localTime,
+            _splitter, checkoutStatus, existing.CheckInAt, localTime,
             laborLaw.NightStartTime, laborLaw.NightEndTime, existing.ShiftTemplate!, workDate);
 
         existing.CheckOutAt      = localTime;
+        existing.Status          = checkoutStatus;
         existing.DayHours        = dayHours;
         existing.NightHours      = nightHours;
         existing.UpdatedAt       = _clock.UtcNow;
