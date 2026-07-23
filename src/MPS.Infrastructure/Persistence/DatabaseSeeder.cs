@@ -67,6 +67,10 @@ public sealed partial class DatabaseSeeder
         // HĐ lao động cho TOÀN BỘ workforce xưởng + văn phòng → payroll bao phủ cả công ty (không chỉ
         // nhóm contract-test). Phải chạy TRƯỚC SeedPayrollAsync — xem DatabaseSeeder.WorkforceContractsData.cs.
         await SeedWorkforceContractsAsync(cancellationToken);
+        // Quỹ phép năm cho mọi NV có HĐ — mô phỏng job cấp quỹ 01/01 mà hệ thống thật đã chạy.
+        // Phải chạy SAU hợp đồng (cần ngày vào làm để tính thâm niên) — xem
+        // DatabaseSeeder.LeaveBalancesData.cs.
+        await SeedLeaveBalancesAsync(cancellationToken);
         // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
         // xem DatabaseSeeder.PayrollDemoData.cs.
         await SeedPayrollAsync(cancellationToken);
