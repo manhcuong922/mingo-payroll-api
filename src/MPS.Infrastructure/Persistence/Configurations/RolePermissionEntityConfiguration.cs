@@ -282,5 +282,24 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
         PermissionIds.MonthlyEvaluationReadAll, PermissionIds.MonthlyEvaluationReadSelf,
         PermissionIds.MonthlyEvaluationAggregateAll, PermissionIds.MonthlyEvaluationScoreDirectAll,
         PermissionIds.MonthlyEvaluationApproveAll, PermissionIds.MonthlyEvaluationReopenAll,
+        // ===== Compliance module — lỗi #31 =====
+        // Trước đây nhóm này KHÔNG có mặt ở đây, nên ma trận seed cấp cho SystemAdmin thiếu sạch
+        // quyền đọc dữ liệu tuân thủ. Việc cấp quyền phụ thuộc HOÀN TOÀN vào migration
+        // 20260612100000_ComplianceRolePermissions — mà migration đó lại thiếu attribute
+        // [Migration] nên chưa bao giờ được EF nhận vào chuỗi ⇒ mọi môi trường dựng từ code
+        // (CI, staging, máy mới, production) đều 403 ở toàn bộ GET /compliance/*, kể cả admin.
+        // Nguồn sự thật phải nằm ở ĐÂY; migration chỉ là đường vá cho DB đã tồn tại.
+        PermissionIds.SocialInsuranceRateReadAll, PermissionIds.SocialInsuranceRateCreateAll,
+        PermissionIds.SocialInsuranceRateUpdateAll, PermissionIds.SocialInsuranceRateDeleteAll,
+        PermissionIds.PitRegulationReadAll, PermissionIds.PitRegulationCreateAll,
+        PermissionIds.PitRegulationUpdateAll, PermissionIds.PitRegulationDeleteAll,
+        PermissionIds.MinimumWageReadAll, PermissionIds.MinimumWageCreateAll,
+        PermissionIds.MinimumWageUpdateAll, PermissionIds.MinimumWageDeleteAll,
+        PermissionIds.AllowanceExemptThresholdReadAll, PermissionIds.AllowanceExemptThresholdCreateAll,
+        PermissionIds.AllowanceExemptThresholdUpdateAll, PermissionIds.AllowanceExemptThresholdDeleteAll,
+        PermissionIds.LaborLawConstantsReadAll, PermissionIds.LaborLawConstantsCreateAll,
+        PermissionIds.LaborLawConstantsUpdateAll, PermissionIds.LaborLawConstantsDeleteAll,
+        PermissionIds.LegalDocumentReadAll, PermissionIds.LegalDocumentWriteAll,
+        PermissionIds.AuditLogReadAll,
     };
 }

@@ -141,6 +141,17 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         return entity.Id;
     }
 
+    public async Task<IReadOnlyList<int>> AddRangeAsync(
+        IReadOnlyList<LeaveRequest> entities,
+        CancellationToken cancellationToken = default)
+    {
+        await _context.LeaveRequests.AddRangeAsync(entities, cancellationToken);
+        // Một SaveChanges cho cả nhóm ⇒ EF gói trong 1 transaction ngầm: không thể còn lại
+        // trạng thái nửa vời "có phần có lương mà thiếu phần không lương".
+        await _context.SaveChangesAsync(cancellationToken);
+        return entities.Select(e => e.Id).ToList();
+    }
+
     public async Task<bool> UpdateAsync(LeaveRequest entity, CancellationToken cancellationToken = default)
     {
         var tracked = await _context.LeaveRequests.FirstOrDefaultAsync(r => r.Id == entity.Id, cancellationToken);

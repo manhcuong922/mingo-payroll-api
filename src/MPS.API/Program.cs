@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using MediatR;
@@ -143,6 +145,28 @@ builder.Services.AddSingleton<
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Nghiệp vụ (§13 + §1): khi chặn theo hạn mức phải **báo rõ thời gian chờ**, không được trả
+    // 429 rỗng. Trước đây body trống và KHÔNG có header `Retry-After` ⇒ người dùng chỉ thấy thao
+    // tác "im lặng không có gì xảy ra" và không biết chờ bao lâu; UI cũng không hiển thị được gì.
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var retryAfterSeconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+            ? Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))
+            : 60; // fixed window 1 phút cho mọi policy hiện có
+
+        var response = context.HttpContext.Response;
+        response.StatusCode = StatusCodes.Status429TooManyRequests;
+        response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+        response.ContentType = "application/json";
+        await response.WriteAsync(
+            JsonSerializer.Serialize(new
+            {
+                error = $"Bạn thao tác quá nhanh. Vui lòng thử lại sau {retryAfterSeconds} giây.",
+                retryAfterSeconds,
+            }),
+            cancellationToken);
+    };
 
     options.AddPolicy("auth-login", context =>
         RateLimitPartition.GetFixedWindowLimiter(
