@@ -65,8 +65,14 @@ public sealed class PayrollAdjustmentCapture : IPayrollAdjustmentCapture
 
         try
         {
+            // `AsSplitQuery` là BẮT BUỘC ở đây, không phải tối ưu cho vui: kỳ lương có ~34 dòng ×
+            // ~54 ô, nạp bằng Include lồng nhau sinh tích Descartes và truy vấn **quá hạn SQL
+            // (Execution Timeout)**. Vì cả khối này là best-effort (nuốt lỗi để không làm hỏng thao
+            // tác nguồn), timeout đó khiến khoản truy lĩnh/truy thu **âm thầm không bao giờ được
+            // sinh** — người lao động mất tiền truy lĩnh mà không ai thấy lỗi ở đâu.
             var period = await _db.PayrollPeriods
                 .Include(p => p.Rows).ThenInclude(r => r.Cells)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(p => p.Id == sourcePeriodId, ct);
 
             if (period is null || period.Status != PayrollPeriodStatus.Finalized) return;

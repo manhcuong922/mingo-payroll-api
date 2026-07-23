@@ -15,7 +15,20 @@ public interface IPayrollAdjustmentRepository
     /// <summary>Các khoản đã áp vào 1 kỳ — dùng khi xoá kỳ để trả chúng về trạng thái chưa áp.</summary>
     Task<IReadOnlyList<PayrollAdjustment>> GetAppliedToPeriodAsync(int periodId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Các khoản CHƯA áp phát sinh TỪ chính kỳ này cho 1 NV — dùng cho sàn 0 (#44): mỗi lượt tính
+    /// lại phải THAY THẾ khoản thiếu cũ, không được cộng dồn qua từng lần bấm "tính lại".
+    /// </summary>
+    Task<IReadOnlyList<PayrollAdjustment>> GetPendingFromSourcePeriodAsync(
+        int sourcePeriodId, int employeeInformationId, CancellationToken ct = default);
+
+    /// <summary>Mọi khoản CHƯA áp phát sinh từ 1 kỳ — dùng khi xoá kỳ đó (#44).</summary>
+    Task<IReadOnlyList<PayrollAdjustment>> GetPendingSourcedByPeriodAsync(
+        int sourcePeriodId, CancellationToken ct = default);
+
     void Add(PayrollAdjustment adjustment);
+
+    void Remove(PayrollAdjustment adjustment);
 
     Task SaveChangesAsync(CancellationToken ct = default);
 }

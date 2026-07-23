@@ -166,6 +166,12 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
                 }
             }
 
+            // #44 — sàn 0: sau khi đã chốt truy lĩnh/truy thu, thực nhận vẫn có thể âm (BH tính
+            // trên MUC_LUONG nguyên trong khi thu nhập chia theo công chuẩn). Kẹp về 0 và đẩy
+            // phần thiếu sang kỳ sau, đúng nguyên tắc đã áp cho truy thu.
+            var shortfall = PayrollNetFloor.Apply(row, period, userId, now);
+            if (shortfall is not null) _adjustments.Add(shortfall);
+
             // Snapshot SAU khi đã chốt số truy lĩnh/truy thu — recompute sau này tái lập đúng số.
             row.InputSnapshotJson = inputs.ToSnapshotJson();
 

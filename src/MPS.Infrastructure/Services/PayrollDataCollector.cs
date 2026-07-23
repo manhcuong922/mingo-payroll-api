@@ -137,7 +137,11 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 // cả tháng (và NV không có HĐ hiệu lực vẫn được tính công) ⇒ trả lương sai.
                 if (!IsCoveredByContract(empContracts, r.WorkDate)) continue;
 
-                var weight = DayWeight(r.Status);
+                // Loại ngày phải resolve TRƯỚC khi tính trọng số công: ngày nghỉ CÓ LƯƠNG cũng là
+                // ngày công được trả (xem DayWeight).
+                var dayType = dayTypeByDate.GetValueOrDefault(r.WorkDate, DayType.Normal);
+
+                var weight = DayWeight(r.Status, dayType);
                 if (weight > 0)
                 {
                     congCom += weight;
@@ -152,7 +156,6 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 nightHours += r.NightHours;
 
                 // BS-2 phần A: ca CHÍNH THỨC (không qua đơn OT) vẫn có thể rơi vào nghỉ tuần/lễ.
-                var dayType = dayTypeByDate.GetValueOrDefault(r.WorkDate, DayType.Normal);
                 workSegments.Add(new RegularHoursPremiumCalculator.WorkDaySegment(dayType, r.DayHours, r.NightHours));
                 switch (dayType)
                 {
@@ -275,10 +278,28 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         HeadlineValue = headlineValue,
     };
 
-    private static decimal DayWeight(AttendanceStatus status) => status switch
+    /// <summary>
+    /// Trọng số ngày công dùng để tính lương.
+    ///
+    /// <para><b>Ngày nghỉ CÓ LƯƠNG được tính là 1 ngày công.</b> `CAC-CASE-XAY-RA.md` §6: đơn nghỉ
+    /// phép được duyệt thì "sinh ngày nghỉ **có lương** trong bảng chấm công, **chảy vào lương với
+    /// hệ số ngày phép**".</para>
+    ///
+    /// <para>Trước đây mọi bản ghi <c>OnLeave</c> đều nhận trọng số 0 — kể cả phép năm/nghỉ ốm đã
+    /// trừ quỹ. Hậu quả: nghỉ 5 ngày phép năm thì <b>mất luôn 5 ngày lương</b>, tức phép "có lương"
+    /// thực chất không được trả đồng nào; và mọi ngày nghỉ có lương đều có giờ công = 0 nên cũng
+    /// không có cột nào khác bù lại.</para>
+    ///
+    /// <para>Bản thân <c>AttendanceStatus.OnLeave</c> KHÔNG phân biệt được nghỉ có lương hay không
+    /// lương, nên phải tra <paramref name="dayType"/> — <c>DayTypeResolver</c> chỉ đánh
+    /// <c>PaidLeaveDay</c> khi có đơn nghỉ Approved với <c>IsPaid = true</c>. Nhờ đó nghỉ KHÔNG
+    /// lương vẫn giữ trọng số 0, đúng nghiệp vụ.</para>
+    /// </summary>
+    private static decimal DayWeight(AttendanceStatus status, DayType dayType) => status switch
     {
         AttendanceStatus.Present or AttendanceStatus.Late or AttendanceStatus.EarlyLeave => 1.0m,
         AttendanceStatus.HalfDay => 0.5m,
+        AttendanceStatus.OnLeave when dayType == DayType.PaidLeaveDay => 1.0m,
         _ => 0m,
     };
 

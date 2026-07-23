@@ -29,7 +29,23 @@ public sealed class PayrollAdjustmentRepository : IPayrollAdjustmentRepository
             .Where(a => a.AppliedPeriodId == periodId)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<PayrollAdjustment>> GetPendingFromSourcePeriodAsync(
+        int sourcePeriodId, int employeeInformationId, CancellationToken ct = default) =>
+        await _context.PayrollAdjustments
+            .Where(a => a.AppliedPeriodId == null
+                        && a.SourcePeriodId == sourcePeriodId
+                        && a.EmployeeInformationId == employeeInformationId)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<PayrollAdjustment>> GetPendingSourcedByPeriodAsync(
+        int sourcePeriodId, CancellationToken ct = default) =>
+        await _context.PayrollAdjustments
+            .Where(a => a.AppliedPeriodId == null && a.SourcePeriodId == sourcePeriodId)
+            .ToListAsync(ct);
+
     public void Add(PayrollAdjustment adjustment) => _context.PayrollAdjustments.Add(adjustment);
+
+    public void Remove(PayrollAdjustment adjustment) => _context.PayrollAdjustments.Remove(adjustment);
 
     public Task SaveChangesAsync(CancellationToken ct = default) => _context.SaveChangesAsync(ct);
 }

@@ -28,11 +28,13 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
     private readonly IColumnDependencyGraph _graph;
     private readonly IPayrollFieldCatalog _catalog;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPayrollAdjustmentRepository _adjustments;
 
     public RecalculatePayrollPeriodCommandHandler(
         IPayrollPeriodRepository periods, IPayrollReadinessChecker readiness,
         IPayrollDataCollector collector, IPayrollCalculator calculator,
-        IColumnDependencyGraph graph, IPayrollFieldCatalog catalog, ICurrentUserService currentUser)
+        IColumnDependencyGraph graph, IPayrollFieldCatalog catalog, ICurrentUserService currentUser,
+        IPayrollAdjustmentRepository adjustments)
     {
         _periods = periods;
         _readiness = readiness;
@@ -41,6 +43,7 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
         _graph = graph;
         _catalog = catalog;
         _currentUser = currentUser;
+        _adjustments = adjustments;
     }
 
     public async Task Handle(RecalculatePayrollPeriodCommand request, CancellationToken ct)
@@ -116,6 +119,10 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
             if (pinned.TryGetValue(inputs.EmployeeInformationId, out var pins))
                 ReapplyPins(plan, ctx, row, pins);
 
+            // #44 — sàn 0 phải áp cả ở đường TÍNH LẠI, nếu không kế toán bấm "tính lại" là số âm
+            // quay về. Khoản thiếu cũ của chính kỳ này được thay thế (không cộng dồn qua mỗi lượt).
+            await ReplaceNetShortfallAsync(period, row, userId, ct);
+
             employeeRows.Add(row);
         }
 
@@ -133,6 +140,27 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
         period.UpdatedByUserId = userId;
 
         await _periods.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// #44 — áp sàn 0 cho THỰC NHẬN ở đường tính lại, và THAY THẾ khoản thiếu cũ của chính kỳ này.
+    ///
+    /// Phải thay thế chứ không thêm mới: mỗi lần kế toán bấm "tính lại", nếu cứ cộng thêm một
+    /// khoản truy thu nữa thì nhân viên bị thu nhiều lần cho cùng một phần thiếu.
+    /// </summary>
+    private async Task ReplaceNetShortfallAsync(
+        PayrollPeriod period, PayrollRow row, int userId, CancellationToken ct)
+    {
+        if (!PayrollNetFloor.AppliesTo(row)) return;
+
+        foreach (var stale in await _adjustments.GetPendingFromSourcePeriodAsync(
+                     period.Id, row.EmployeeInformationId!.Value, ct))
+        {
+            _adjustments.Remove(stale);
+        }
+
+        var shortfall = PayrollNetFloor.Apply(row, period, userId, DateTime.UtcNow);
+        if (shortfall is not null) _adjustments.Add(shortfall);
     }
 
     /// <summary>Giữ nguyên 2 field truy lĩnh/truy thu từ snapshot cũ sang bộ input vừa gom lại.</summary>
