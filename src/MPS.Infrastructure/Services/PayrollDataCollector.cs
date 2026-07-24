@@ -224,7 +224,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[HolidayHours] = holidayHours;
             n[EvalFinalScore] = finalScore;
             n[PayrollFieldKeys.ProductivityCoefficient] = coefficient;
-            n[DependentsCount] = depCountByEmp.TryGetValue(e.Id, out var dc) ? dc : e.DependentsNo;
+            // #40 — SỐ SUẤT giảm trừ gia cảnh luôn suy ra từ BẢN GHI người phụ thuộc đã duyệt còn
+            // hiệu lực trong kỳ, KHÔNG bao giờ đọc số khai tay `EmployeeInformation.DependentsNo`.
+            // Trước đây khi NV chưa có bản ghi nào thì fallback về số khai tay, nên `PUT` một
+            // `DependentsNo = 99` (không bản ghi, không chứng từ) tạo ra 99 suất giảm trừ KHỐNG. Theo
+            // `CAC-CASE-XAY-RA` §3.2: "không nhận số nhập tay không có căn cứ". Không có bản ghi ⇒ 0.
+            n[DependentsCount] = depCountByEmp.TryGetValue(e.Id, out var dc) ? dc : 0m;
             n[BonusThuongDuAn] = 0m;
             n[UnionFee] = 0m;
             n[BhxhDnRate] = bhxhDnRate;

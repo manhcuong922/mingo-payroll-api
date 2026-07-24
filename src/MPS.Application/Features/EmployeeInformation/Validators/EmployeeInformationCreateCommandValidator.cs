@@ -17,7 +17,11 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
 
         RuleFor(x => x.CitizenId)
             .NotEmpty().WithMessage("CitizenId is required.")
-            .MaximumLength(20).WithMessage("CitizenId must not exceed 20 characters.")
+            // #42 — CCCD là khoá định danh thuế TNCN + BHXH ⇒ phải đúng 12 chữ số, ÁP CÙNG một chuẩn
+            // với CCCD người phụ thuộc (DependentValidators). Trước đây chỉ giới hạn độ dài 20 và
+            // không có regex nên nhận cả "abc" ⇒ dữ liệu định danh rác vào ngay hồ sơ NV — nơi khai
+            // thuế và hồ sơ BHXH lấy nguồn.
+            .Matches(@"^\d{12}$").WithMessage("CitizenId phải đúng 12 chữ số.")
             // #1 — trước đây chỉ có unique index ở DB ⇒ trùng CCCD nổ 500. Kiểm ở validator để trả 400.
             .MustAsync(async (citizenId, ct) =>
                 string.IsNullOrWhiteSpace(citizenId) || !await repository.CitizenIdExistsAsync(citizenId.Trim(), null, ct))

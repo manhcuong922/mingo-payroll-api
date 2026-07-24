@@ -502,6 +502,10 @@ public sealed partial class DatabaseSeeder
         string username, string code, string email, string fullName,
         int roleId, int positionId, int departmentId, string password, CancellationToken ct)
     {
+        // #47 — vai trò quản trị cấp công ty KHÔNG trực thuộc xưởng (§3.1). Trước đây seed gán xưởng
+        // cho HR/Kế toán/Giám đốc ⇒ chính validator của hệ thống chặn không cho lưu lại 3 hồ sơ này.
+        // Chuẩn hoá ngay tại nguồn: role quản trị ⇒ để trống xưởng.
+        int? deptId = SystemRoles.DepartmentMemberRoleIds.Contains(roleId) ? departmentId : null;
         var user = await _context.Users.FirstOrDefaultAsync(
             u => u.Username == username || u.EmployeeCode == code || u.Email == email, ct);
         if (user is null)
@@ -523,9 +527,19 @@ public sealed partial class DatabaseSeeder
             await _context.SaveChangesAsync(ct);
         }
 
-        var citizenId = $"DEMO{user.Id:D9}";
-        var emp = await _context.EmployeeInformations
-            .FirstOrDefaultAsync(e => e.UserId == user.Id || e.CitizenId == citizenId, ct);
+        // #42 — CCCD phải đúng 12 chữ số (validator mới). Trước đây seed sinh "DEMO000000005" (13 ký
+        // tự, có chữ) ⇒ 31 hồ sơ seed không lưu lại được sau khi thêm regex. Sinh 12 chữ số dẫn xuất
+        // từ user.Id, mở đầu bằng "9" để đủ 12 số và không đụng dải CCCD thật.
+        var citizenId = $"9{user.Id:D11}";
+
+        // ⚠️ Tra theo UserId TRƯỚC, chỉ fallback CitizenId khi chưa có bản ghi gắn user. Dùng OR
+        // `UserId == x OR CitizenId == c` trong MỘT truy vấn là bẫy: CitizenId sinh theo user.Id có
+        // thể TRÙNG CitizenId (sinh theo cách khác) của một hồ sơ KHÁC ⇒ FirstOrDefault trả nhầm
+        // bản ghi, seed cập nhật sai người và bỏ sót người cần sửa (đã gây mất xưởng của tổ trưởng/
+        // công nhân xưởng 1).
+        var emp = await _context.EmployeeInformations.FirstOrDefaultAsync(e => e.UserId == user.Id, ct)
+            ?? await _context.EmployeeInformations.FirstOrDefaultAsync(
+                   e => e.UserId == null && e.CitizenId == citizenId, ct);
         if (emp is null)
         {
             emp = new EmployeeInformation
@@ -538,7 +552,7 @@ public sealed partial class DatabaseSeeder
                 Email = email,
                 PhoneNo = user.PhoneNo,
                 PositionId = positionId,
-                DepartmentId = departmentId,
+                DepartmentId = deptId,
                 DependentsNo = 0,
             };
             await _context.EmployeeInformations.AddAsync(emp, ct);
@@ -546,10 +560,11 @@ public sealed partial class DatabaseSeeder
         }
         else
         {
-            // Bản ghi cũ (từ lần seed trước) — chỉnh về đúng xưởng/chức danh nếu lệch.
+            // Bản ghi cũ (từ lần seed trước) — chỉnh về đúng xưởng/chức danh nếu lệch. Với role quản
+            // trị thì đúng-đắn là để trống xưởng (#47), nên đồng bộ về `deptId` (có thể null).
             var changed = false;
             if (emp.UserId is null) { emp.UserId = user.Id; changed = true; }
-            if (emp.DepartmentId != departmentId) { emp.DepartmentId = departmentId; changed = true; }
+            if (emp.DepartmentId != deptId) { emp.DepartmentId = deptId; changed = true; }
             if (emp.PositionId != positionId) { emp.PositionId = positionId; changed = true; }
             if (changed) await _context.SaveChangesAsync(ct);
         }
