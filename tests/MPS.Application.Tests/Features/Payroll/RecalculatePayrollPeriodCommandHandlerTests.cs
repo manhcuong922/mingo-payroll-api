@@ -30,6 +30,7 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
     private readonly Mock<IColumnDependencyGraph> _graph = new();
     private readonly Mock<IPayrollFieldCatalog> _catalog = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
+    private readonly Mock<IPayrollAdjustmentRepository> _adjustments = new();
 
     public RecalculatePayrollPeriodCommandHandlerTests()
     {
@@ -41,7 +42,7 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
 
     private RecalculatePayrollPeriodCommandHandler Sut() => new(
         _periods.Object, _readiness.Object, _collector.Object, _calculator.Object,
-        _graph.Object, _catalog.Object, _currentUser.Object);
+        _graph.Object, _catalog.Object, _currentUser.Object, _adjustments.Object);
 
     private static PayrollPeriod DraftPeriodWithOneEmployee(bool stale)
     {
