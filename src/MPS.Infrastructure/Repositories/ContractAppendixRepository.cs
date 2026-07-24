@@ -53,7 +53,7 @@ public class ContractAppendixRepository : IContractAppendixRepository
     public async Task<int> ActivateDraftAsync(
         int appendixId,
         ContractFile file,
-        Func<Contract, ICollection<ContractAllowance>, Task> apply,
+        Func<Contract, ICollection<ContractAllowance>, ContractAppendix, Task> apply,
         DateTime signedAtUtc,
         CancellationToken cancellationToken = default)
     {
@@ -81,7 +81,7 @@ public class ContractAppendixRepository : IContractAppendixRepository
                 $"Cannot activate appendix: parent contract status is {contract.Status}, expected Active.");
 
         // Caller mutates the tracked Contract + allowance collection (add/update/remove).
-        await apply(contract, contract.ContractAllowances);
+        await apply(contract, contract.ContractAllowances, appendix);
 
         // Insert ContractFile (TargetType=Appendix, V1, IsCurrent).
         file.TargetId = appendixId;

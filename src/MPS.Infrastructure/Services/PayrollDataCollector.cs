@@ -87,6 +87,22 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             .ToListAsync(ct);
         var contractsByEmp = contracts.GroupBy(c => c.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
 
+        // [D12] — phụ lục ĐÃ KÍCH HOẠT có đổi lương: mỗi cái là một mốc lương mới của hợp đồng.
+        // Chỉ lấy phụ lục có hiệu lực KHÔNG MUỘN HƠN đầu kỳ để kỳ cũ giữ nguyên mức lương cũ.
+        var contractIds = contracts.Select(c => c.Id).ToList();
+        var periodStartUtc = periodStart.ToDateTime(TimeOnly.MinValue);
+        var salaryChangesByContract = (await _db.ContractAppendices.AsNoTracking()
+            .Where(a => contractIds.Contains(a.ContractId)
+                && a.Status == ContractEnums.AppendixStatus.Active
+                && a.SalaryAmountSnapshot != null
+                && a.EffectiveFrom <= periodStartUtc)
+            .Select(a => new { a.ContractId, a.EffectiveFrom, a.SalaryAmountSnapshot })
+            .ToListAsync(ct))
+            .GroupBy(a => a.ContractId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(a => a.EffectiveFrom).First().SalaryAmountSnapshot!.Value);
+
         var attByEmp = (await _db.AttendanceRecords.AsNoTracking()
             .Where(a => empIds.Contains(a.EmployeeInformationId) && a.WorkDate >= periodStart && a.WorkDate <= periodEnd)
             .ToListAsync(ct)).GroupBy(a => a.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
@@ -167,7 +183,14 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 }
             }
 
-            var mucLuong = activeContract?.SalaryAmountSnapshot ?? 0m;
+            // [D12] — mức lương áp cho kỳ: nếu HĐ đã có phụ lục đổi lương hiệu lực từ trước đầu kỳ
+            // thì dùng mức của phụ lục gần nhất, không thì dùng mức đóng băng lúc ký HĐ. Nhờ vậy
+            // tính lại một kỳ CŨ vẫn ra đúng mức lương của thời điểm đó.
+            var mucLuong = activeContract is null
+                ? 0m
+                : salaryChangesByContract.TryGetValue(activeContract.Id, out var changed)
+                    ? changed
+                    : activeContract.SalaryAmountSnapshot;
             var hourlyRate = req.StandardWorkingDays > 0 && labor.StandardWorkingHoursPerDay > 0
                 ? mucLuong / (req.StandardWorkingDays * labor.StandardWorkingHoursPerDay) : 0m;
 

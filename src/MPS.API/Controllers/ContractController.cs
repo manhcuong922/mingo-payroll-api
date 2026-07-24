@@ -202,6 +202,18 @@ public class ContractController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// [D12] — Lịch sử mức lương theo mốc hiệu lực (lần ký gốc + các phụ lục đổi lương đã kích hoạt).
+    /// Đây là căn cứ để đối chiếu "kỳ lương tháng X trả theo mức nào".
+    /// </summary>
+    [HttpGet("{id:int}/salary-snapshots")]
+    [HasAnyPermission(Permissions.ContractReadAll, Permissions.ContractReadSelf)]
+    public async Task<IActionResult> GetSalarySnapshots(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetContractSalarySnapshotsQuery(id), cancellationToken);
+        return Ok(result);
+    }
+
     // --- Files (download via presigned URL) ---
 
     [HttpGet("{id:int}/files")]

@@ -35,7 +35,7 @@ public interface IContractAppendixRepository
     Task<int> ActivateDraftAsync(
         int appendixId,
         ContractFile file,
-        Func<Contract, ICollection<ContractAllowance>, Task> apply,
+        Func<Contract, ICollection<ContractAllowance>, ContractAppendix, Task> apply,
         DateTime signedAtUtc,
         CancellationToken cancellationToken = default);
 }

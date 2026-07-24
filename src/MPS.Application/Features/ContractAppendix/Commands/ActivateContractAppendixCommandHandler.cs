@@ -101,8 +101,8 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
             appendixFileId = await _appendices.ActivateDraftAsync(
                 appendixId: request.AppendixId,
                 file: file,
-                apply: (contract, allowances) =>
-                    _applier.ApplyAsync(contract, allowances, change, DateTime.UtcNow, cancellationToken),
+                apply: (contract, allowances, appendix) =>
+                    _applier.ApplyAsync(contract, allowances, appendix, change, DateTime.UtcNow, cancellationToken),
                 signedAtUtc: request.SignedAt,
                 cancellationToken: cancellationToken);
         }

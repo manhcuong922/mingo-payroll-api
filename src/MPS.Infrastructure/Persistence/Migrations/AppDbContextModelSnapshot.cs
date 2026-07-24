@@ -2784,6 +2784,13 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("NoticeSentAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal?>("SalaryAmountSnapshot")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("SalaryCurrencySnapshot")
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("datetime2");
 
@@ -6394,6 +6401,121 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 1,
                             PermissionId = 233
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 65
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 66
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 67
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 68
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 69
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 70
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 71
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 72
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 77
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 78
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 79
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 80
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 81
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 82
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 83
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 84
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 85
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 86
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 87
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 88
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 89
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 91
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 90
                         },
                         new
                         {
