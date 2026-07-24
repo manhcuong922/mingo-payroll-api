@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
+using MPS.Domain.Constants;
 using MPS.Domain.Entities.Employee;
 using MPS.Domain.Enums.Employee;
 using MPS.Domain.Exceptions;
@@ -130,6 +131,14 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
                 break;
         }
 
+        // Đẩy thay đổi của bước trên (thêm mới / hạ IsActive) xuống DB TRƯỚC khi đếm.
+        //
+        // ⚠️ Thiếu dòng này là lệch 1 người: bản ghi vừa `AddAsync` chưa nằm trong DB lúc COUNT nên
+        // duyệt đăng ký cho ra `DependentsNo = active − 1`, còn duyệt hủy lại cho `active + 1`
+        // (hủy một người phụ thuộc mà số lại TĂNG). Đây là số hiển thị trên hồ sơ và là nguồn dự
+        // phòng cho giảm trừ gia cảnh, nên sai ở đây là sai tiền thuế.
+        await _context.SaveChangesAsync(cancellationToken);
+
         // Sync EmployeeInformation.DependentsNo với số active dependents.
         var employee = await _context.EmployeeInformations
             .FirstOrDefaultAsync(e => e.Id == request.EmployeeInformationId, cancellationToken)
@@ -162,17 +171,8 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
         if (string.IsNullOrWhiteSpace(request.SupportingDocumentUrl))
             throw new DomainValidationException("Register cần SupportingDocumentUrl (giấy khai sinh/CCCD).");
 
-        if (!string.IsNullOrWhiteSpace(request.CitizenId))
-        {
-            var exists = await _context.EmployeeDependents.AnyAsync(
-                d => d.EmployeeInformationId == request.EmployeeInformationId
-                    && d.IsActive
-                    && d.CitizenId == request.CitizenId,
-                cancellationToken);
-            if (exists)
-                throw new DomainValidationException(
-                    $"CCCD/CMND '{request.CitizenId}' đã tồn tại ở người phụ thuộc active khác.");
-        }
+        await EnsureCitizenIdNotClaimedAsync(
+            request.CitizenId, request.EmployeeInformationId, excludeDependentId: null, cancellationToken);
 
         var dependent = new EmployeeDependent
         {
@@ -218,8 +218,14 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
             dependent.Relationship = request.Relationship.Value;
         if (request.TaxIdentificationNumber is not null)
             dependent.TaxIdentificationNumber = request.TaxIdentificationNumber;
-        if (request.CitizenId is not null)
+        if (request.CitizenId is not null && request.CitizenId != dependent.CitizenId)
+        {
+            // Đổi CCCD qua phụ lục cũng phải qua cùng một cửa: nếu không, đây là đường vòng để
+            // khai trùng người phụ thuộc mà không bị guard ở nhánh đăng ký mới.
+            await EnsureCitizenIdNotClaimedAsync(
+                request.CitizenId, request.EmployeeInformationId, dependent.Id, cancellationToken);
             dependent.CitizenId = request.CitizenId;
+        }
         if (request.RegisteredFromDate.HasValue)
             dependent.RegisteredFromDate = request.RegisteredFromDate.Value;
         if (request.RegisteredToDate.HasValue)
@@ -227,6 +233,37 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
 
         dependent.UpdatedAt = nowUtc;
         dependent.UpdatedByUserId = userId;
+    }
+
+    /// <summary>
+    /// Chốt chặn "mỗi người phụ thuộc chỉ một người lao động giảm trừ" ở bước DUYỆT.
+    ///
+    /// Phải kiểm lại ở đây chứ không chỉ lúc nộp đơn: hai nhân viên có thể nộp hai đơn cho cùng một
+    /// người khi chưa đơn nào được duyệt — lúc nộp cả hai đều "sạch", chỉ tới khi duyệt mới lộ
+    /// trùng. Trước đây guard chỉ dò trong CÙNG một nhân viên nên cả hai đơn đều được duyệt 204 và
+    /// giảm trừ gia cảnh bị tính hai lần (lỗi #38).
+    /// </summary>
+    private async Task EnsureCitizenIdNotClaimedAsync(
+        string? citizenId,
+        int employeeInformationId,
+        int? excludeDependentId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(citizenId)) return;
+
+        var claimed = await _context.EmployeeDependents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                d => d.IsActive
+                    && d.CitizenId == citizenId
+                    && (excludeDependentId == null || d.Id != excludeDependentId),
+                cancellationToken);
+        if (claimed is null) return;
+
+        throw new DomainValidationException(
+            claimed.EmployeeInformationId == employeeInformationId
+                ? DependentClaimRules.DuplicateInSameEmployee(citizenId)
+                : DependentClaimRules.ClaimedByAnotherEmployee(citizenId));
     }
 
     private async Task DeactivateDependentAsync(

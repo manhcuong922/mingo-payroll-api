@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Domain.Constants;
 using MPS.Domain.Enums.Employee;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -41,15 +42,7 @@ public class CreateDependentRegistrationRequestCommandHandler : IRequestHandler<
         {
             case DependentRequestType.Register:
                 EnsureRegisterPayload(request);
-                if (!string.IsNullOrWhiteSpace(request.CitizenId))
-                {
-                    if (await _dependentRepository.ExistsActiveWithCitizenIdAsync(
-                            employeeId, request.CitizenId, excludeDependentId: null, cancellationToken))
-                    {
-                        throw new DomainValidationException(
-                            $"CCCD/CMND '{request.CitizenId}' đã tồn tại ở người phụ thuộc active.");
-                    }
-                }
+                await EnsureCitizenIdNotClaimedAsync(request.CitizenId, employeeId, cancellationToken);
                 break;
 
             case DependentRequestType.Update:
@@ -93,6 +86,30 @@ public class CreateDependentRegistrationRequestCommandHandler : IRequestHandler<
             throw new DomainValidationException("Register cần RegisteredFromDate.");
         if (string.IsNullOrWhiteSpace(request.SupportingDocumentUrl))
             throw new DomainValidationException("Register cần SupportingDocumentUrl (giấy khai sinh/CCCD).");
+    }
+
+    /// <summary>
+    /// Chặn khai trùng người phụ thuộc ngay từ lúc NỘP ĐƠN — kể cả khi người đó đang được nhân
+    /// viên KHÁC đăng ký. Trước đây chỉ dò trong cùng một nhân viên nên hai vợ chồng cùng khai một
+    /// đứa con thì cả hai đơn đều qua và giảm trừ gia cảnh bị tính hai lần.
+    /// Chốt chặn thật vẫn nằm ở bước duyệt (chống race giữa hai đơn đang chờ).
+    /// </summary>
+    private async Task EnsureCitizenIdNotClaimedAsync(
+        string? citizenId,
+        int employeeId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(citizenId)) return;
+
+        var trimmed = citizenId.Trim();
+        var claimed = await _dependentRepository.FindActiveByCitizenIdAsync(
+            trimmed, excludeDependentId: null, cancellationToken);
+        if (claimed is null) return;
+
+        throw new DomainValidationException(
+            claimed.EmployeeInformationId == employeeId
+                ? DependentClaimRules.DuplicateInSameEmployee(trimmed)
+                : DependentClaimRules.ClaimedByAnotherEmployee(trimmed));
     }
 
     private async Task EnsureTargetOwnershipAsync(
