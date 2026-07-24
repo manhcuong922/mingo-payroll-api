@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MPS.API.RateLimiting;
 using MPS.API.Authorization;
 using MPS.API.Requests.ContractTermination;
 using MPS.Application.Features.ContractTermination.Commands;
@@ -28,7 +29,7 @@ public class ContractTerminationController : ControllerBase
     /// </summary>
     [HttpPost("notice")]
     [HasPermission(Permissions.ContractFileUploadAll)]
-    [EnableRateLimiting("contract-upload")]
+    [EnableRateLimiting(RateLimitPolicies.ContractUpload)]
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> UploadNotice(
         int contractId,

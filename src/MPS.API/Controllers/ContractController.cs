@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MPS.API.RateLimiting;
 using MPS.API.Authorization;
 using MPS.API.Requests.Contract;
 using MPS.Application.Features.Contract.Commands;
@@ -225,7 +226,7 @@ public class ContractController : ControllerBase
 
     [HttpPost("{id:int}/activate")]
     [HasPermission(Permissions.ContractActivateAll)]
-    [EnableRateLimiting("contract-upload")]
+    [EnableRateLimiting(RateLimitPolicies.ContractUpload)]
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> Activate(
         int id,
@@ -253,7 +254,7 @@ public class ContractController : ControllerBase
 
     [HttpPost("{id:int}/files/replace")]
     [HasPermission(Permissions.ContractActivateAll)]
-    [EnableRateLimiting("contract-upload")]
+    [EnableRateLimiting(RateLimitPolicies.ContractUpload)]
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> ReplaceFile(
         int id,
