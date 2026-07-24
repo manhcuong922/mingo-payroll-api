@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -115,9 +115,16 @@ public static class InfrastructureServiceRegistration
         // ===== Payroll module (bảng lương hàng tháng) =====
         services.AddScoped<IPayrollFormulaSetRepository, PayrollFormulaSetRepository>();
         services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
+        services.AddScoped<IPayrollAdjustmentRepository, PayrollAdjustmentRepository>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
         services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
+        // BS-6: đánh cờ "cần tính lại" cho kỳ Draft khi nguồn (chấm công/đơn/phụ lục/đánh giá) đổi.
+        services.AddScoped<IPayrollStaleMarker, PayrollStaleMarker>();
+        // BS-5: capture chênh lệch THUCNHAN của NV khi kỳ Finalized bị sửa nguồn.
+        services.AddScoped<IPayrollAdjustmentCapture, PayrollAdjustmentCapture>();
+        // Gộp BS-6 + BS-5: 8 handler nguồn gọi qua đây, service tự phân nhánh Draft/Finalized.
+        services.AddScoped<IPayrollSourceChangeHandler, PayrollSourceChangeHandler>();
         // Formula engine + calculator (stateless → singleton).
         services.AddSingleton<IFormulaFunctionRegistry, FormulaFunctionRegistry>();
         services.AddSingleton<IFormulaEvaluator, FormulaEvaluator>();
@@ -133,6 +140,10 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
+        // BS-8: trừ thật vào quỹ phép năm khi approver bật DeductFromLeaveBalance.
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLeaveDeduction>();
+        // BS-4 (phần 2): trừ giờ công khi duyệt đi muộn/về sớm không bù quỹ phép.
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyAttendanceDock>();
         services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.MedicalCertificateUploader>();
         services.AddScoped<MPS.Application.Features.Attendance.Common.AttendanceRequestDayConflictChecker>();

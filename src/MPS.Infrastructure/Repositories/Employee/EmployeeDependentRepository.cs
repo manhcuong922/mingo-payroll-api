@@ -52,4 +52,18 @@ public class EmployeeDependentRepository : IEmployeeDependentRepository
             query = query.Where(d => d.Id != excludeDependentId.Value);
         return query.AnyAsync(cancellationToken);
     }
+
+    public Task<EmployeeDependent?> FindActiveByCitizenIdAsync(
+        string citizenId,
+        int? excludeDependentId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.EmployeeDependents
+            .AsNoTracking()
+            .Include(d => d.EmployeeInformation)
+            .Where(d => d.IsActive && d.CitizenId == citizenId);
+        if (excludeDependentId.HasValue)
+            query = query.Where(d => d.Id != excludeDependentId.Value);
+        return query.FirstOrDefaultAsync(cancellationToken);
+    }
 }

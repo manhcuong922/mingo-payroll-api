@@ -6,6 +6,7 @@ using MPS.Application.Features.Attendance.WfhRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Attendance.WfhRequest.Commands;
 
@@ -17,6 +18,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
     private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveWfhRequestCommandHandler(
         IWfhRequestRepository repository,
@@ -24,7 +26,8 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         IAttendanceEditLockChecker editLockChecker,
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _quotaChecker = quotaChecker;
@@ -32,6 +35,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveWfhRequestCommand request, CancellationToken cancellationToken)
@@ -69,14 +73,26 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
             _clock.UtcNow,
             cancellationToken);
 
-        var now = _clock.UtcNow;
-        existing.Status = WfhRequestStatus.Approved;
-        existing.ReviewedByUserId = userId;
-        existing.ReviewedAt = now;
-        existing.ReviewNote = request.ReviewNote;
-        existing.UpdatedAt = now;
-        existing.UpdatedByUserId = userId;
+        // BS-4 / [D11]: duyệt + sinh AttendanceRecord (Present, đủ giờ ca) trong cùng transaction.
+        // Trước đây chỉ đổi Status ⇒ ngày WFH không có bản ghi chấm công nào ⇒ mất công khi tính lương.
+        var applied = await _repository.ApproveAndApplyAsync(
+            request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
 
-        return await _repository.UpdateAsync(existing, cancellationToken);
+        // BS-6 + BS-5: WFH sinh công → mark stale kỳ Draft, capture Finalized cho NV.
+        if (applied)
+            await _payrollChange.OnSourceChangedAsync(
+                MonthsInRange(existing.StartDate, existing.EndDate),
+                new[] { existing.EmployeeInformationId },
+                $"Duyệt WFH {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}", cancellationToken);
+
+        return applied;
+    }
+
+    private static IEnumerable<(int Year, int Month)> MonthsInRange(DateOnly start, DateOnly end)
+    {
+        var seen = new HashSet<(int, int)>();
+        for (var d = start; d <= end; d = d.AddDays(1))
+            seen.Add((d.Year, d.Month));
+        return seen;
     }
 }

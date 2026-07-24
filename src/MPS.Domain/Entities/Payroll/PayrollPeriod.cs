@@ -27,6 +27,20 @@ public class PayrollPeriod
 
     public PayrollPeriodStatus Status { get; set; } = PayrollPeriodStatus.Draft;
 
+    // ===== Cờ "cần tính lại" (stale) — BS-6/[D1] =====
+    /// <summary>
+    /// True khi một NGUỒN của kỳ (chấm công, duyệt OT/nghỉ/WFH/đi-muộn, phụ lục HĐ, đánh giá tháng)
+    /// đổi SAU khi kỳ đã được tính. Chỉ áp cho kỳ Draft — kỳ Finalized đã đóng băng số liệu.
+    /// Xoá cờ bằng POST /payroll/periods/{id}/recalculate.
+    /// </summary>
+    public bool IsStale { get; set; }
+
+    /// <summary>Lý do gần nhất khiến kỳ bị đánh cờ (nguồn nào đổi).</summary>
+    public string? StaleReason { get; set; }
+
+    /// <summary>Thời điểm đánh cờ gần nhất (UTC).</summary>
+    public DateTime? StaleMarkedAt { get; set; }
+
     public int FormulaSetId { get; set; }
     public PayrollFormulaSet FormulaSet { get; set; } = null!;
 

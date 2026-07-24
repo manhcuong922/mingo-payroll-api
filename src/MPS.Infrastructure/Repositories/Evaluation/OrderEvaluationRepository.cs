@@ -41,14 +41,17 @@ public class OrderEvaluationRepository : IOrderEvaluationRepository
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<OrderEvaluation>> GetForEvaluatorAsync(
-        int evaluatorUserId, EvaluationStatus? status, int? departmentId, CancellationToken ct)
+        int? evaluatorUserId, EvaluationStatus? status, int? departmentId, CancellationToken ct)
     {
         var query = _context.OrderEvaluations
             .AsNoTracking()
             .Include(x => x.Project)
             .Include(x => x.Subjects).ThenInclude(s => s.Employee)
-            .Where(x => x.EvaluatorUserId == evaluatorUserId)
             .AsQueryable();
+
+        // null = quyền ReadAll → không giới hạn theo người chấm.
+        if (evaluatorUserId.HasValue)
+            query = query.Where(x => x.EvaluatorUserId == evaluatorUserId.Value);
 
         if (status.HasValue)
             query = query.Where(x => x.Status == status.Value);

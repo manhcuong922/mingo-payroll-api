@@ -30,7 +30,7 @@ public sealed class AppendixApplierTests
 
         var applier = new AppendixApplier(Mock.Of<IContractLookupReader>());
 
-        await applier.ApplyAsync(contract, allowances, change, NowUtc, CancellationToken.None);
+        await applier.ApplyAsync(contract, allowances, Appendix(), change, NowUtc, CancellationToken.None);
 
         contract.JobDescription.Should().Be("Tech Lead");
         contract.WorkLocation.Should().Be("TP.HCM");
@@ -38,15 +38,16 @@ public sealed class AppendixApplierTests
     }
 
     /// <summary>
-    /// Đổi SalaryGradeId hợp lệ → swap reference. KHÔNG re-freeze SalaryAmountSnapshot
-    /// (snapshot giữ giá trị tại lần ký gốc).
+    /// [D12] — Đổi SalaryGradeId hợp lệ → swap reference. Ô snapshot của HỢP ĐỒNG giữ nguyên mức
+    /// lúc ký gốc; mức MỚI được đóng băng trên chính PHỤ LỤC (kèm mốc hiệu lực của nó).
     /// </summary>
     [Fact]
-    public async Task SalaryGrade_Swap_Updates_FK_But_Keeps_Snapshot()
+    public async Task SalaryGrade_Swap_Updates_FK_Keeps_Contract_Snapshot_And_Freezes_On_Appendix()
     {
         var contract = NewContract();
         contract.SalaryGradeId = 1;
         contract.SalaryAmountSnapshot = 25_000_000m;
+        var appendix = Appendix();
 
         var lookup = new Mock<IContractLookupReader>();
         lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(5, It.IsAny<CancellationToken>()))
@@ -54,12 +55,14 @@ public sealed class AppendixApplierTests
 
         var applier = new AppendixApplier(lookup.Object);
 
-        await applier.ApplyAsync(contract, new List<ContractAllowance>(),
+        await applier.ApplyAsync(contract, new List<ContractAllowance>(), appendix,
             new AppendixChangeSet { SalaryGradeId = 5 }, NowUtc, CancellationToken.None);
 
         contract.SalaryGradeId.Should().Be(5);
         contract.SalaryAmountSnapshot.Should().Be(25_000_000m,
-            "snapshot must remain frozen at the original signing; appendix records the new value in PDF, not by re-freezing snapshot column");
+            "ô snapshot của HỢP ĐỒNG phải giữ mức lúc ký để tính lại kỳ lương CŨ vẫn đúng lịch sử");
+        appendix.SalaryAmountSnapshot.Should().Be(30_000_000m,
+            "[D12] — mức lương mới phải được đóng băng trên phụ lục để kỳ SAU mốc hiệu lực dùng đúng mức");
     }
 
     /// <summary>SalaryGradeId trỏ tới grade đã inactive → throw, không apply field nào khác.</summary>
@@ -73,7 +76,7 @@ public sealed class AppendixApplierTests
 
         var applier = new AppendixApplier(lookup.Object);
 
-        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(),
+        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(),
             new AppendixChangeSet { SalaryGradeId = 99 }, NowUtc, CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainValidationException>()
@@ -91,7 +94,7 @@ public sealed class AppendixApplierTests
 
         var applier = new AppendixApplier(lookup.Object);
 
-        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(),
+        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(),
             new AppendixChangeSet { SalaryGradeId = 999 }, NowUtc, CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainValidationException>()
@@ -118,7 +121,7 @@ public sealed class AppendixApplierTests
             AddAllowances = new[] { new AppendixAllowanceChange(10, 500_000m, Currency: null, Note: "phụ cấp mới") },
         };
 
-        await applier.ApplyAsync(contract, allowances, change, NowUtc, CancellationToken.None);
+        await applier.ApplyAsync(contract, allowances, Appendix(), change, NowUtc, CancellationToken.None);
 
         allowances.Should().HaveCount(1);
         allowances[0].AllowanceTypeId.Should().Be(10);
@@ -150,7 +153,7 @@ public sealed class AppendixApplierTests
             AddAllowances = new[] { new AppendixAllowanceChange(10, 200m) },
         };
 
-        var act = () => applier.ApplyAsync(contract, allowances, change, NowUtc, CancellationToken.None);
+        var act = () => applier.ApplyAsync(contract, allowances, Appendix(), change, NowUtc, CancellationToken.None);
         await act.Should().ThrowAsync<DomainValidationException>()
             .WithMessage("*already exists*UpdateAllowances*");
     }
@@ -172,7 +175,7 @@ public sealed class AppendixApplierTests
             AddAllowances = new[] { new AppendixAllowanceChange(99, 500m) },
         };
 
-        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), change, NowUtc, CancellationToken.None);
+        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(), change, NowUtc, CancellationToken.None);
         await act.Should().ThrowAsync<DomainValidationException>()
             .WithMessage("*not found or inactive*99*");
     }
@@ -194,7 +197,7 @@ public sealed class AppendixApplierTests
             UpdateAllowances = new[] { new AppendixAllowanceChange(10, 800m, "USD", "tăng theo phụ lục") },
         };
 
-        await applier.ApplyAsync(contract, allowances, change, NowUtc, CancellationToken.None);
+        await applier.ApplyAsync(contract, allowances, Appendix(), change, NowUtc, CancellationToken.None);
 
         allowances.Should().HaveCount(1);
         allowances[0].Amount.Should().Be(800m);
@@ -215,7 +218,7 @@ public sealed class AppendixApplierTests
             UpdateAllowances = new[] { new AppendixAllowanceChange(99, 100m) },
         };
 
-        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), change, NowUtc, CancellationToken.None);
+        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(), change, NowUtc, CancellationToken.None);
         await act.Should().ThrowAsync<DomainValidationException>()
             .WithMessage("*Cannot update allowance type 99*not present*");
     }
@@ -236,7 +239,7 @@ public sealed class AppendixApplierTests
             RemoveAllowanceTypeIds = new[] { 10, 99 }, // 99 không tồn tại trên HĐ
         };
 
-        await applier.ApplyAsync(contract, allowances, change, NowUtc, CancellationToken.None);
+        await applier.ApplyAsync(contract, allowances, Appendix(), change, NowUtc, CancellationToken.None);
 
         allowances.Should().BeEmpty(); // chỉ 10 bị remove, 99 idempotent ignore.
     }
@@ -252,4 +255,7 @@ public sealed class AppendixApplierTests
         WorkLocation = "Hà Nội",
         ContractAllowances = new List<ContractAllowance>(),
     };
+
+    /// <summary>Phụ lục trống để nhận mức lương đóng băng khi test đổi bậc lương ([D12]).</summary>
+    private static Domain.Entities.ContractAppendix Appendix() => new() { EffectiveFrom = NowUtc };
 }

@@ -13,6 +13,7 @@ public class PayrollPeriodEntityConfiguration : IEntityTypeConfiguration<Payroll
         builder.Property(e => e.PayDate).IsRequired();
         builder.Property(e => e.StandardWorkingDays).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.Status).HasConversion<int>();
+        builder.Property(e => e.StaleReason).HasMaxLength(500);
         builder.Property(e => e.FormulaSnapshotJson).IsRequired();
         builder.Property(e => e.ParamsSnapshotJson).IsRequired();
         builder.Property(e => e.ProductivitySnapshotJson).IsRequired();

@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
@@ -6,6 +6,7 @@ using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Attendance.LateEarlyRequest.Commands;
 
@@ -17,6 +18,9 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
     private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly LateEarlyLeaveDeduction _leaveDeduction;
+    private readonly LateEarlyAttendanceDock _attendanceDock;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveLateEarlyRequestCommandHandler(
         ILateEarlyRequestRepository repository,
@@ -24,8 +28,14 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
         IAttendanceEditLockChecker editLockChecker,
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        LateEarlyLeaveDeduction leaveDeduction,
+        LateEarlyAttendanceDock attendanceDock,
+        IPayrollSourceChangeHandler payrollChange)
     {
+        _leaveDeduction = leaveDeduction;
+        _attendanceDock = attendanceDock;
+        _payrollChange = payrollChange;
         _repository = repository;
         _limitChecker = limitChecker;
         _editLockChecker = editLockChecker;
@@ -87,7 +97,29 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
         existing.UpdatedAt = now;
         existing.UpdatedByUserId = userId;
 
+        // BS-8: cờ deduct phải TRỪ THẬT vào quỹ phép năm. Trừ TRƯỚC khi lưu đơn — nếu quỹ không đủ
+        // thì ném lỗi và đơn vẫn ở Pending (không có trạng thái nửa vời "đã duyệt nhưng chưa trừ").
+        if (request.DeductFromLeaveBalance)
+        {
+            await _leaveDeduction.ApplyAsync(
+                existing.EmployeeInformationId, existing.WorkDate, existing.Minutes,
+                userId, now, cancellationToken);
+        }
+        else
+        {
+            // BS-4 (phần 2): không bù quỹ phép → trừ số giờ thiếu khỏi giờ công thực tế của ngày.
+            await _attendanceDock.DockAsync(
+                existing.EmployeeInformationId, existing.WorkDate, existing.Minutes,
+                userId, now, cancellationToken);
+        }
+
         await _repository.UpdateAsync(existing, cancellationToken);
+
+        // BS-6 + BS-5: đổi công/quỹ của ngày → mark stale kỳ Draft, capture Finalized cho NV.
+        await _payrollChange.OnSourceChangedAsync(
+            existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
+            $"Duyệt đi muộn/về sớm ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
+
         return new ApproveLateEarlyRequestResult(true, limit.MustDeductFromLeaveBalance, null);
     }
 }

@@ -6,6 +6,7 @@ using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Attendance.LeaveRequest.Commands;
 
@@ -20,6 +21,7 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
     private readonly MedicalCertificateUploader _certificateUploader;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveLeaveRequestCommandHandler(
         ILeaveRequestRepository repository,
@@ -27,7 +29,8 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         ApproverDepartmentGuard departmentGuard,
         MedicalCertificateUploader certificateUploader,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _editLockChecker = editLockChecker;
@@ -35,6 +38,7 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         _certificateUploader = certificateUploader;
         _currentUser = currentUser;
         _clock = clock;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveLeaveRequestCommand request, CancellationToken cancellationToken)
@@ -121,10 +125,12 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
             }
         }
 
-        var approved = await _repository.ApproveAndApplyAsync(
+        var applied = await _repository.ApproveAndApplyAsync(
             request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
 
-        if (approved
+        // Thay chứng từ cũ (nhánh dev): giấy cũ chỉ được xoá SAU khi duyệt thành công, và chỉ khi
+        // thật sự có giấy mới khác giấy cũ.
+        if (applied
             && newCertObjectKey is not null
             && !string.IsNullOrWhiteSpace(oldCertObjectKey)
             && !string.Equals(oldCertObjectKey, newCertObjectKey, StringComparison.Ordinal))
@@ -132,6 +138,22 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
             await _certificateUploader.TryDeleteAsync(oldCertObjectKey, CancellationToken.None);
         }
 
-        return approved;
+        // BS-6 + BS-5: duyệt nghỉ phép đổi công → mark stale kỳ Draft, capture Finalized cho NV.
+        if (applied)
+            await _payrollChange.OnSourceChangedAsync(
+                MonthsInRange(existing.StartDate, existing.EndDate),
+                new[] { existing.EmployeeInformationId },
+                $"Duyệt nghỉ phép {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}", cancellationToken);
+
+        return applied;
+    }
+
+    // Các (năm, tháng) mà khoảng nghỉ vắt qua — 1 đơn có thể trải nhiều tháng.
+    private static IEnumerable<(int Year, int Month)> MonthsInRange(DateOnly start, DateOnly end)
+    {
+        var seen = new HashSet<(int, int)>();
+        for (var d = start; d <= end; d = d.AddDays(1))
+            seen.Add((d.Year, d.Month));
+        return seen;
     }
 }

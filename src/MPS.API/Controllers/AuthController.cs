@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MPS.API.RateLimiting;
 using MPS.API.Requests.Auth;
 using MPS.API.Responses.Auth;
 using MPS.Application.Common.Models;
@@ -23,7 +24,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
-    [EnableRateLimiting("auth-login")]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
     public async Task<IActionResult> Login(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
@@ -35,7 +36,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
-    [EnableRateLimiting("auth-refresh")]
+    [EnableRateLimiting(RateLimitPolicies.Refresh)]
     public async Task<IActionResult> Refresh(
         [FromBody] RefreshTokenRequest request,
         CancellationToken cancellationToken)
@@ -70,7 +71,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
-    [EnableRateLimiting("auth-login")]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
     public async Task<IActionResult> ForgotPassword(
         [FromBody] ForgotPasswordRequest request,
         CancellationToken cancellationToken)
@@ -81,7 +82,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("reset-password")]
     [AllowAnonymous]
-    [EnableRateLimiting("auth-login")]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
     public async Task<IActionResult> ResetPassword(
         [FromBody] ResetPasswordRequest request,
         CancellationToken cancellationToken)

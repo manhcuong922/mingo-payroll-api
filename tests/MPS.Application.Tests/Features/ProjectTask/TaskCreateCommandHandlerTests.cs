@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.ProjectTask.Commands;
@@ -17,12 +17,14 @@ public sealed class TaskCreateCommandHandlerTests
     private readonly Mock<IDepartmentRepository> _departments = new();
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
+    private readonly Mock<IContractRepository> _contracts = new();
 
     private const int ManagerUserId = 7;
     private const int DeptId = 3;
 
     private TaskCreateCommandHandler CreateSut() =>
-        new(_tasks.Object, _projects.Object, _departments.Object, _authorizer.Object, _currentUser.Object);
+        new(_tasks.Object, _projects.Object, _departments.Object, _authorizer.Object, _currentUser.Object,
+            _contracts.Object);
 
     private const int StageId = 5;
 
@@ -42,6 +44,10 @@ public sealed class TaskCreateCommandHandlerTests
             });
         _tasks.Setup(t => t.AddAsync(It.IsAny<MPS.Domain.Entities.ProjectTask>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(42);
+        // #28: mọi thành viên trong test đều coi như còn HĐ hiệu lực.
+        _contracts.Setup(c => c.GetUserIdsWithActiveContractAsync(
+                It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<int> ids, DateTime _, CancellationToken _) => ids.ToList());
     }
 
     private static TaskCreateCommand Command(IReadOnlyList<int> assignees) =>

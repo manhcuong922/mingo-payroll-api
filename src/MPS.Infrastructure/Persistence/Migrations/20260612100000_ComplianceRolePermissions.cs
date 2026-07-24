@@ -1,121 +1,89 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using MPS.Infrastructure.Persistence;
 
 #nullable disable
 
-#pragma warning disable CA1814
-
 namespace MPS.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Lỗi #31 (E2E 2026-07-21): mọi <c>GET /api/compliance/*</c> trả 403 với MỌI role, kể cả
+    /// SystemAdmin — 20 quyền tuân thủ (Id 65–88) không được gán cho role nào.
+    ///
+    /// <para><b>Gốc rễ thật.</b> File này đã tồn tại từ 2026-06-12 nhưng CHƯA BAO GIỜ chạy: nó
+    /// thiếu cặp attribute <c>[DbContext]</c> + <c>[Migration]</c>. EF Core nhận diện một
+    /// migration qua attribute đó — thường nằm ở file <c>.Designer.cs</c> do scaffolder sinh,
+    /// hoặc khai trực tiếp trên class. File này không có Designer VÀ không có attribute ⇒ EF
+    /// không thấy nó ⇒ không có dòng nào trong <c>__EFMigrationsHistory</c>.</para>
+    ///
+    /// <para><b>Đính chính chẩn đoán cũ:</b> báo cáo E2E từng ghi nguyên nhân là "thiếu file
+    /// .Designer.cs". Không đúng — 27 migration khác trong thư mục này cũng không có Designer mà
+    /// vẫn chạy bình thường vì chúng khai <c>[Migration]</c> ngay trên class (ví dụ
+    /// <c>20260721090000_AddLegalDocumentReadPermission</c>). File này là file DUY NHẤT thiếu CẢ
+    /// HAI. Thêm Designer sẽ không giải quyết được gì.</para>
+    ///
+    /// <para><b>Idempotent.</b> Bản cũ dùng <c>InsertData</c> — sẽ vỡ khoá chính trên môi trường
+    /// đã được vá tay ở mức dữ liệu trong lúc kiểm thử. Nay dùng SQL <c>NOT EXISTS</c> và join
+    /// theo <c>Permissions.Resource</c>/<c>Action</c> thay vì hardcode Id, để không phụ thuộc
+    /// việc đánh số Id giữ nguyên qua các đợt tái cấu trúc catalog quyền (bản cũ còn cấp cả
+    /// <c>OtRate</c> 73–76 — resource đã bị gỡ ở migration
+    /// <c>20260616082959_Compliance_RemoveOtRate_AddLegalDocument</c>).</para>
+    ///
+    /// <para>Ma trận (khớp <c>RolePermissionEntityConfiguration.AllPermissionIds</c>):
+    /// SystemAdmin(1) + HR(2) full CRUD; Kế toán(3) + Giám đốc(4) read-only.</para>
+    /// </summary>
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260612100000_ComplianceRolePermissions")]
     public partial class ComplianceRolePermissions : Migration
     {
-        /// <inheritdoc />
+        /// <summary>5 nhóm dữ liệu tuân thủ được cấp quyền theo ma trận trên.</summary>
+        private static readonly string[] ComplianceResources =
+        {
+            "SocialInsuranceRate",
+            "PitRegulation",
+            "MinimumWage",
+            "AllowanceExemptThreshold",
+            "LaborLawConstants",
+        };
+
+        private const string FullCrudRoleIds = "1,2";   // SystemAdmin, HR
+        private const string ReadOnlyRoleIds = "3,4";   // Kế toán, Giám đốc
+
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Gán 24 compliance permissions (65–88) vào RolePermissions
-            // Theo spec mục 1.2:
-            //   SystemAdmin (1) + HR (2): full CRUD (tất cả 24 perms)
-            //   Accountant (3) + Director (4): Read-only (6 perms: 65,69,73,77,81,85)
-            migrationBuilder.InsertData(
-                table: "RolePermissions",
-                columns: new[] { "PermissionId", "RoleId" },
-                values: new object[,]
-                {
-                    // ── SystemAdmin (RoleId = 1) — full CRUD ──────────────────
-                    { 65, 1 }, { 66, 1 }, { 67, 1 }, { 68, 1 },   // SocialInsuranceRate
-                    { 69, 1 }, { 70, 1 }, { 71, 1 }, { 72, 1 },   // PitRegulation
-                    { 73, 1 }, { 74, 1 }, { 75, 1 }, { 76, 1 },   // OtRate
-                    { 77, 1 }, { 78, 1 }, { 79, 1 }, { 80, 1 },   // MinimumWage
-                    { 81, 1 }, { 82, 1 }, { 83, 1 }, { 84, 1 },   // AllowanceExemptThreshold
-                    { 85, 1 }, { 86, 1 }, { 87, 1 }, { 88, 1 },   // LaborLawConstants
-
-                    // ── HR (RoleId = 2) — full CRUD (Primary Actor) ──────────
-                    { 65, 2 }, { 66, 2 }, { 67, 2 }, { 68, 2 },
-                    { 69, 2 }, { 70, 2 }, { 71, 2 }, { 72, 2 },
-                    { 73, 2 }, { 74, 2 }, { 75, 2 }, { 76, 2 },
-                    { 77, 2 }, { 78, 2 }, { 79, 2 }, { 80, 2 },
-                    { 81, 2 }, { 82, 2 }, { 83, 2 }, { 84, 2 },
-                    { 85, 2 }, { 86, 2 }, { 87, 2 }, { 88, 2 },
-
-                    // ── Accountant (RoleId = 3) — Read-only ──────────────────
-                    { 65, 3 }, { 69, 3 }, { 73, 3 },
-                    { 77, 3 }, { 81, 3 }, { 85, 3 },
-
-                    // ── Director (RoleId = 4) — Read-only ────────────────────
-                    { 65, 4 }, { 69, 4 }, { 73, 4 },
-                    { 77, 4 }, { 81, 4 }, { 85, 4 }
-                });
+            foreach (var resource in ComplianceResources)
+            {
+                migrationBuilder.Sql(GrantSql(resource, FullCrudRoleIds, readOnly: false));
+                migrationBuilder.Sql(GrantSql(resource, ReadOnlyRoleIds, readOnly: true));
+            }
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DeleteData(
-                table: "RolePermissions",
-                keyColumns: new[] { "PermissionId", "RoleId" },
-                keyValues: new object[] { 65, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 66, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 67, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 68, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 69, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 70, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 71, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 72, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 73, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 74, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 75, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 76, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 77, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 78, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 79, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 80, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 81, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 82, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 83, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 84, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 85, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 86, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 87, 1 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 88, 1 });
-
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 65, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 66, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 67, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 68, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 69, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 70, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 71, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 72, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 73, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 74, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 75, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 76, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 77, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 78, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 79, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 80, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 81, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 82, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 83, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 84, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 85, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 86, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 87, 2 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 88, 2 });
-
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 65, 3 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 69, 3 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 73, 3 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 77, 3 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 81, 3 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 85, 3 });
-
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 65, 4 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 69, 4 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 73, 4 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 77, 4 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 81, 4 });
-            migrationBuilder.DeleteData(table: "RolePermissions", keyColumns: new[] { "PermissionId", "RoleId" }, keyValues: new object[] { 85, 4 });
+            foreach (var resource in ComplianceResources)
+            {
+                migrationBuilder.Sql($@"
+DELETE rp
+FROM RolePermissions rp
+INNER JOIN Permissions p ON p.Id = rp.PermissionId
+WHERE p.Resource = '{resource}'
+  AND rp.RoleId IN ({FullCrudRoleIds},{ReadOnlyRoleIds});");
+            }
         }
+
+        /// <summary>
+        /// Cấp quyền của <paramref name="resource"/> cho danh sách role, bỏ qua cặp đã tồn tại.
+        /// <paramref name="readOnly"/> = true thì chỉ cấp action <c>Read</c>.
+        /// </summary>
+        private static string GrantSql(string resource, string roleIds, bool readOnly) => $@"
+INSERT INTO RolePermissions (RoleId, PermissionId)
+SELECT r.RoleId, p.Id
+FROM Permissions p
+CROSS JOIN (SELECT CAST(value AS INT) AS RoleId FROM STRING_SPLIT('{roleIds}', ',')) r
+WHERE p.Resource = '{resource}'
+  {(readOnly ? "AND p.Action = 'Read'" : string.Empty)}
+  AND NOT EXISTS (
+        SELECT 1 FROM RolePermissions rp
+        WHERE rp.PermissionId = p.Id AND rp.RoleId = r.RoleId);";
     }
 }

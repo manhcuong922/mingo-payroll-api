@@ -24,6 +24,17 @@ public interface ILeaveRequestRepository
 
     Task<int> AddAsync(LeaveRequest entity, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Lưu nhiều đơn nghỉ trong MỘT lượt ghi.
+    /// Dùng cho `[D2]`: đơn xin vượt quỹ được tách thành phần CÓ LƯƠNG (dùng nốt quỹ) và phần
+    /// KHÔNG LƯƠNG. Hai phần phải cùng sống hoặc cùng chết — nếu chỉ phần có lương được lưu thì
+    /// người lao động mất số ngày nghỉ đã xin, còn nếu chỉ phần không lương được lưu thì họ mất
+    /// quỹ phép. Trả về id theo đúng thứ tự truyền vào.
+    /// </summary>
+    Task<IReadOnlyList<int>> AddRangeAsync(
+        IReadOnlyList<LeaveRequest> entities,
+        CancellationToken cancellationToken = default);
+
     Task<bool> UpdateAsync(LeaveRequest entity, CancellationToken cancellationToken = default);
 
     /// <summary>

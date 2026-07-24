@@ -110,8 +110,6 @@ public static class Permissions
     public const string AllowanceExemptThresholdUpdateAll = "AllowanceExemptThreshold.Update.All";
     public const string AllowanceExemptThresholdDeleteAll = "AllowanceExemptThreshold.Delete.All";
 
-    // (81–84 reserved unused)
-
     public const string LaborLawConstantsReadAll = "LaborLawConstants.Read.All";
     public const string LaborLawConstantsCreateAll = "LaborLawConstants.Create.All";
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
@@ -446,17 +444,20 @@ public static class PermissionIds
     public const int PitRegulationUpdateAll = 71;
     public const int PitRegulationDeleteAll = 72;
 
-    public const int MinimumWageReadAll = 73;
-    public const int MinimumWageCreateAll = 74;
-    public const int MinimumWageUpdateAll = 75;
-    public const int MinimumWageDeleteAll = 76;
+    // ⚠️ 73–76 là OtRate.* — module OtRate đã bị gỡ (migration 20260616082959) nhưng 4 dòng
+    // Permissions vẫn nằm trong DB. KHÔNG tái sử dụng dải này cho quyền mới; nếu cần thì phải
+    // viết migration xoá RolePermissions + Permissions 73–76 trước.
+    // (73–76 retired: OtRate.Read/Create/Update/Delete.All)
 
-    public const int AllowanceExemptThresholdReadAll = 77;
-    public const int AllowanceExemptThresholdCreateAll = 78;
-    public const int AllowanceExemptThresholdUpdateAll = 79;
-    public const int AllowanceExemptThresholdDeleteAll = 80;
+    public const int MinimumWageReadAll = 77;
+    public const int MinimumWageCreateAll = 78;
+    public const int MinimumWageUpdateAll = 79;
+    public const int MinimumWageDeleteAll = 80;
 
-    // (81–84 reserved unused)
+    public const int AllowanceExemptThresholdReadAll = 81;
+    public const int AllowanceExemptThresholdCreateAll = 82;
+    public const int AllowanceExemptThresholdUpdateAll = 83;
+    public const int AllowanceExemptThresholdDeleteAll = 84;
 
     public const int LaborLawConstantsReadAll = 85;
     public const int LaborLawConstantsCreateAll = 86;
@@ -464,10 +465,13 @@ public static class PermissionIds
     public const int LaborLawConstantsDeleteAll = 88;
 
     // ===== AuditLog + LegalDocument + Compliance Auto-Update — IDs 89–94 =====
+    // ⚠️ Thứ tự Id KHÔNG khớp thứ tự khai báo lịch sử: DB có AuditLog.Read.All = 90 (seed bởi
+    // migration AddAuditLogs), còn 89 bỏ trống. LegalDocument.Read.All nay chiếm 89
+    // (migration 20260721*_AddLegalDocumentReadPermission). Đây là SỰ THẬT trong DB — trước đây
+    // hằng số ở file này lệch 4 đơn vị so với DB nhưng chưa lộ vì runtime chỉ dùng chuỗi Code.
 
-    public const int AuditLogReadAll = 89;
-
-    public const int LegalDocumentReadAll = 90;
+    public const int LegalDocumentReadAll = 89;
+    public const int AuditLogReadAll = 90;
     public const int LegalDocumentWriteAll = 91;
 
     public const int ComplianceAutoUpdateRunAll = 92;

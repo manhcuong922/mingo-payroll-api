@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MPS.API.RateLimiting;
 using MPS.API.Authorization;
 using MPS.API.Requests.ContractAppendix;
 using MPS.Application.Features.ContractAppendix.Commands;
@@ -82,7 +83,7 @@ public class ContractAppendixController : ControllerBase
     /// </summary>
     [HttpPost("api/contract-appendices/{id:int}/activate")]
     [HasPermission(Permissions.ContractAppendixActivateAll)]
-    [EnableRateLimiting("contract-upload")]
+    [EnableRateLimiting(RateLimitPolicies.ContractUpload)]
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> Activate(
         int id,

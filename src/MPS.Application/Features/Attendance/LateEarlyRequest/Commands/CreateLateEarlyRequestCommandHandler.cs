@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
@@ -73,6 +73,7 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
 
         await _editLockChecker.EnsureCanModifyAsync(request.WorkDate, request.OverrideReason, cancellationToken);
 
+        // [D8] — chặn CHÉO LOẠI: 1 ngày đã có đơn nghỉ / WFH / đi muộn / OT nào thì không nhận thêm.
         await _dayConflictChecker.EnsureNoConflictAsync(
             employeeId,
             request.WorkDate,

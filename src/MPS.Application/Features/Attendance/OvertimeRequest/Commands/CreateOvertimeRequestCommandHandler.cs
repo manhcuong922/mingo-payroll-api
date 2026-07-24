@@ -1,10 +1,11 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using OvertimeRequestEntity = MPS.Domain.Entities.Attendance.OvertimeRequest;
@@ -110,7 +111,8 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
                 $"Bạn đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) giao thoa khung giờ này.");
         }
 
-        // 5b. Cross-check chống trùng ngày với đơn Leave/WFH/LateEarly đang active.
+        // 5b. [D8] — chặn CHÉO LOẠI: 1 ngày đã có đơn Leave/WFH/LateEarly đang active thì không
+        // nhận thêm OT (giữ theo cơ chế thống nhất của toàn hệ thống — AttendanceRequestDayConflictChecker).
         await _dayConflictChecker.EnsureNoConflictAsync(
             employeeId,
             request.WorkDate,

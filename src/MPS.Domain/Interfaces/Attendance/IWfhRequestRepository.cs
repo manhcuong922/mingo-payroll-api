@@ -22,6 +22,19 @@ public interface IWfhRequestRepository
 
     Task<bool> UpdateAsync(WfhRequest entity, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// BS-4 / [D11] — duyệt đơn WFH và SINH BẢN GHI CHẤM CÔNG cho từng ngày đã phân ca trong khoảng.
+    /// WFH là ngày ĐI LÀM (tại nhà) nên bản ghi ở trạng thái <c>Present</c> với đủ giờ chuẩn của ca;
+    /// trước đây duyệt WFH không tạo bản ghi nào ⇒ ngày đó bị coi như không có công khi tính lương.
+    /// Cập nhật trạng thái đơn + upsert AttendanceRecord trong CÙNG transaction.
+    /// </summary>
+    Task<bool> ApproveAndApplyAsync(
+        int requestId,
+        int reviewedByUserId,
+        string? reviewNote,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Sum(TotalDays) trong tháng cho các đơn Approved của 1 employee.</summary>
     Task<decimal> SumApprovedDaysInMonthAsync(
         int employeeInformationId,

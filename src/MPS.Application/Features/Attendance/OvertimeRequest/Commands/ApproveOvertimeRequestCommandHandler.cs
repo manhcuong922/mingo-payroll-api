@@ -1,10 +1,11 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
@@ -32,6 +33,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
@@ -42,7 +44,8 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _projectRepository = projectRepository;
@@ -53,6 +56,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
         _clock = clock;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveOvertimeRequestCommand request, CancellationToken cancellationToken)
@@ -126,6 +130,12 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         existing.UpdatedByUserId = userId;
 
         await _repository.UpdateAsync(existing, cancellationToken);
+
+        // BS-6 + BS-5: duyệt OT → tháng có kỳ Draft mark stale; kỳ Finalized capture chênh lệch NV.
+        await _payrollChange.OnSourceChangedAsync(
+            existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
+            $"Duyệt OT ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
+
         return true;
     }
 

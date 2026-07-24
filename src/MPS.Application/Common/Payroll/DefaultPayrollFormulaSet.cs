@@ -113,9 +113,17 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.ThuongDuAn, "Thưởng dự án", GE, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.BonusThuongDuAn, money: true);
         Add(Cc.ThuongNam, "Thưởng năm", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThuongKhac, "Thưởng khác", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
+        // BS-2 — ca CHÍNH THỨC rơi vào ngày nghỉ tuần/lễ chỉ được trả 100% qua cột Thu nhập (phân bổ
+        // theo ngày công); 2 cột này trả phần CÒN THIẾU tới 200%/300% (Đ.98.1) + phụ cấp đêm 30%
+        // (Đ.98.2). Collector tính sẵn thành tiền, giống cách cột Tăng ca đang làm.
+        Add(Cc.PhuTroiNgayNghi, "Phụ trội ngày nghỉ/lễ", GE, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.PremiumDayType, money: true);
+        Add(Cc.PhuCapDem, "Phụ cấp làm đêm", GE, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.PremiumNight, money: true);
         Add(Cc.TongThuNhap, "Tổng thu nhập", GE, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.ThuNhap), N.Col(Cc.LuongNgayPhep), N.Col(Cc.TangCa),
-                N.Col(Cc.HoaHong), N.Col(Cc.ThuongDuAn), N.Col(Cc.ThuongNam), N.Col(Cc.ThuongKhac)));
+                N.Col(Cc.HoaHong), N.Col(Cc.ThuongDuAn), N.Col(Cc.ThuongNam), N.Col(Cc.ThuongKhac),
+                N.Col(Cc.PhuTroiNgayNghi), N.Col(Cc.PhuCapDem)));
 
         // ===== Khối F — bảo hiểm =====
         var noBh = new[] { InsuranceFlags.NoInsurance, InsuranceFlags.Maternity };
@@ -155,8 +163,12 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.ChenhLechLtg, "Chênh lệch làm thêm giờ", GG, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.OtChenhLech, money: true);
         Add(Cc.ComMienThue, "Cơm miễn thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Min, N.Col(Cc.Com), N.Field(Fk.MealExemptThreshold)));
+        // BS-2 — phụ trội ngày nghỉ/lễ + phụ cấp đêm là phần trả CAO HƠN mức ngày thường do làm đêm/
+        // làm thêm ⇒ MIỄN thuế TNCN (Đ.3 TT111/2013), trừ khỏi TNCT giống "Chênh lệch làm thêm giờ".
         Add(Cc.Tnct, "Thu nhập chịu thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: N.Sub(N.Sub(N.Sub(N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)));
+            formula: N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
+                N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)),
+                N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)));
         Add(Cc.Tntt, "Thu nhập tính thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Max,
                 N.Sub(N.Sub(N.Sub(N.Col(Cc.Tnct), N.Col(Cc.CongBhNld)), N.Col(Cc.GtNpt)), N.Col(Cc.GtBanThan)),
@@ -176,11 +188,18 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.ThuKhac, "Thu khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.PhiCongDoanVien, "Phí công đoàn viên", GH, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.UnionFee, money: true);
         Add(Cc.ChiKhac, "Chi khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
+        // BS-5 — 2 cột truy lĩnh / truy thu, seed từ field do handler tạo kỳ gom sẵn (mặc định 0 khi
+        // NV không có khoản chưa áp). Dấu: TRUY_LINH dương (+); TRUY_THU âm (−) — cộng đại số vào THUCNHAN.
+        Add(Cc.TruyLinh, "Truy lĩnh (kỳ trước sửa nguồn)", GH, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.TruyLinh, money: true);
+        Add(Cc.TruyThu, "Truy thu (kỳ trước sửa nguồn)", GH, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.TruyThu, money: true);
         Add(Cc.ThucNhan, "THỰC NHẬN", GH, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             rounding: RoundingMode.ToThousand,
-            formula: N.Sub(N.Sub(N.Add(N.Add(N.Sub(N.Sub(N.Sub(
+            formula: N.Add(N.Add(N.Sub(N.Sub(N.Add(N.Add(N.Sub(N.Sub(N.Sub(
                 N.Col(Cc.TongThuNhap), N.Col(Cc.CongBhNld)), N.Col(Cc.TruTamUng)), N.Col(Cc.ThueTncn)),
-                N.Col(Cc.ThuBhHoanThue)), N.Col(Cc.ThuKhac)), N.Col(Cc.PhiCongDoanVien)), N.Col(Cc.ChiKhac)));
+                N.Col(Cc.ThuBhHoanThue)), N.Col(Cc.ThuKhac)), N.Col(Cc.PhiCongDoanVien)), N.Col(Cc.ChiKhac)),
+                N.Col(Cc.TruyLinh)), N.Col(Cc.TruyThu)));
 
         return cols;
     }

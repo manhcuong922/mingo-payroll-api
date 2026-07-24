@@ -63,10 +63,19 @@ public sealed partial class DatabaseSeeder
             shopIndex++;
             // 2 đơn/xưởng: đơn A đang chạy (bắt đầu 20 ngày trước, deadline 10 ngày tới, SL 200) —
             // dùng test schedule/tiến độ; đơn B sắp tới (bắt đầu 5 ngày tới, deadline +40, SL 100).
+            //
+            // ⚠️ CHỈ đơn A được gán người (`AssignWorkers`). Trước đây cả hai đơn đều gán CÙNG một
+            // pool công nhân, trong khi cả hai đều ở `ProjectStatus.Active` ⇒ ngay từ lúc dựng DB,
+            // mỗi công nhân đã giữ 2 task `Todo` ở 2 đơn ĐANG CHẠY. Đó chính là vi phạm quy tắc
+            // "không giao việc chồng" mà `TaskAssigneeGuard` enforce ngay sau đó ⇒ **không một
+            // công nhân seed nào nhận thêm được task**, và guard bị quy oan là lỗi #33 "khoá vĩnh
+            // viễn công nhân". Guard vốn đúng và vẫn có đường thoát (huỷ/tạm dừng đơn thì
+            // `CascadeCancelByProjectAsync`/pause nhả người ra) — chính DỮ LIỆU SEED mới là chỗ
+            // tự mâu thuẫn. Đơn B nay để trống assignee, đúng nghĩa "đơn sắp tới, chưa phân công".
             var specs = new[]
             {
-                (Suffix: "A", Start: today.AddDays(-20), Deadline: today.AddDays(10),  Qty: 200),
-                (Suffix: "B", Start: today.AddDays(5),   Deadline: today.AddDays(45), Qty: 100),
+                (Suffix: "A", Start: today.AddDays(-20), Deadline: today.AddDays(10),  Qty: 200, AssignWorkers: true),
+                (Suffix: "B", Start: today.AddDays(5),   Deadline: today.AddDays(45), Qty: 100, AssignWorkers: false),
             };
 
             foreach (var spec in specs)
@@ -90,8 +99,11 @@ public sealed partial class DatabaseSeeder
                 await _context.ProjectTasks.AddRangeAsync(tasks, ct);
                 await _context.SaveChangesAsync(ct);   // cần task.Id để gán người
 
-                totalTasks += AssignWorkersToLeaves(tasks, shop);
-                await _context.SaveChangesAsync(ct);
+                if (spec.AssignWorkers)
+                {
+                    totalTasks += AssignWorkersToLeaves(tasks, shop);
+                    await _context.SaveChangesAsync(ct);
+                }
                 totalOrders++;
             }
         }

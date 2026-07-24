@@ -41,9 +41,19 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(OtTangCa, "Tiền tăng ca", "Tăng ca", ColumnDataType.Money),
         new(OtChenhLech, "Chênh lệch làm thêm giờ (miễn thuế)", "Tăng ca", ColumnDataType.Money),
 
+        // Phụ trội giờ thường theo loại ngày / ca đêm (BS-2)
+        new(PremiumDayType, "Phụ trội ngày nghỉ/lễ (miễn thuế)", "Phụ trội", ColumnDataType.Money),
+        new(PremiumNight, "Phụ cấp làm đêm (miễn thuế)", "Phụ trội", ColumnDataType.Money),
+        new(WeeklyRestHours, "Giờ làm ngày nghỉ tuần", "Chấm công", ColumnDataType.Number),
+        new(HolidayHours, "Giờ làm ngày lễ", "Chấm công", ColumnDataType.Number),
+
         // Đánh giá
         new(EvalFinalScore, "Điểm đánh giá tháng", "Đánh giá", ColumnDataType.Number),
         new(ProductivityCoefficient, "Hệ số năng suất", "Đánh giá", ColumnDataType.Number),
+
+        // Truy lĩnh / truy thu (BS-5)
+        new(TruyLinh, "Truy lĩnh kỳ trước", "Truy lĩnh", ColumnDataType.Money),
+        new(TruyThu, "Truy thu kỳ trước", "Truy lĩnh", ColumnDataType.Money),
 
         // Thưởng / công đoàn
         new(BonusThuongDuAn, "Thưởng dự án", "Thưởng", ColumnDataType.Money),

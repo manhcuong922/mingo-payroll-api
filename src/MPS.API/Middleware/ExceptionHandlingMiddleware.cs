@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Exceptions.Storage;
@@ -173,6 +174,37 @@ public class ExceptionHandlingMiddleware
             await context.Response.WriteAsync(
                 JsonSerializer.Serialize(new { error = "A storage error occurred." }));
         }
+        catch (DbUpdateException dbex) when (IsUniqueViolation(dbex))
+        {
+            // Race check-then-insert (#15/#17): sequential thì validator trả 400 sạch, nhưng 2 request
+            // song song cùng lọt qua validator rồi đụng unique index ⇒ trước đây trả 500, client retry
+            // vô nghĩa. Map về 409 để client biết "ai đó vừa tạo trước".
+            _logger.LogWarning(dbex,
+                "Unique constraint violated for {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = "DUPLICATE_KEY",
+                error = "Dữ liệu đã tồn tại (trùng khoá duy nhất) — có thể một yêu cầu khác vừa tạo trước.",
+            }));
+        }
+        catch (DbUpdateException dbex) when (IsForeignKeyViolation(dbex))
+        {
+            // #19/#26: xoá bản ghi còn dữ liệu tham chiếu (đơn đã Completed, hồ sơ NV còn HĐ Active…).
+            // FK constraint là lỗi NGHIỆP VỤ của người gọi, không phải sự cố hệ thống ⇒ 409, không 500.
+            _logger.LogWarning(dbex,
+                "Foreign key constraint violated for {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                code = "REFERENCED_BY_OTHER_RECORDS",
+                error = "Không thể thực hiện: bản ghi đang được dữ liệu khác tham chiếu.",
+            }));
+        }
         catch (DbUpdateException dbex)
         {
             _logger.LogError(dbex,
@@ -193,4 +225,12 @@ public class ExceptionHandlingMiddleware
                 JsonSerializer.Serialize(new { error = "An unexpected error occurred." }));
         }
     }
+
+    // SQL Server: 2601 = duplicate key row in unique index, 2627 = unique/PK constraint violation.
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is SqlException { Number: 2601 or 2627 };
+
+    // 547 = REFERENCE constraint (FK) — cả chiều insert lẫn chiều delete-restrict.
+    private static bool IsForeignKeyViolation(DbUpdateException ex) =>
+        ex.InnerException is SqlException { Number: 547 };
 }

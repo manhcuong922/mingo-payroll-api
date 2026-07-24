@@ -2786,6 +2786,13 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("NoticeSentAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal?>("SalaryAmountSnapshot")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("SalaryCurrencySnapshot")
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("datetime2");
 
@@ -3781,6 +3788,54 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("PasswordResetTokens", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollAdjustment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("AppliedPeriodId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("SourcePeriodId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliedPeriodId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("SourcePeriodId");
+
+                    b.HasIndex("EmployeeInformationId", "AppliedPeriodId")
+                        .HasDatabaseName("IX_PayrollAdjustments_Emp_AppliedPeriod");
+
+                    b.ToTable("PayrollAdjustments", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollCellValue", b =>
                 {
                     b.Property<int>("Id")
@@ -4006,6 +4061,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsStale")
+                        .HasColumnType("bit");
+
                     b.Property<string>("ParamsSnapshotJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -4032,6 +4090,13 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("StaleMarkedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StaleReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<decimal>("StandardWorkingDays")
                         .HasColumnType("decimal(5,2)");
@@ -6338,6 +6403,121 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 1,
                             PermissionId = 233
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 65
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 66
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 67
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 68
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 69
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 70
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 71
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 72
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 77
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 78
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 79
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 80
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 81
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 82
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 83
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 84
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 85
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 86
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 87
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 88
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 89
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 91
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionId = 90
                         },
                         new
                         {
@@ -8649,6 +8829,40 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollAdjustment", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollPeriod", "AppliedPeriod")
+                        .WithMany()
+                        .HasForeignKey("AppliedPeriodId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollPeriod", "SourcePeriod")
+                        .WithMany()
+                        .HasForeignKey("SourcePeriodId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AppliedPeriod");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("SourcePeriod");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollCellValue", b =>

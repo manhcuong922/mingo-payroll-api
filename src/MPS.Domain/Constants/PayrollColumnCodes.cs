@@ -45,6 +45,11 @@ public static class PayrollColumnCodes
     public const string ThuongDuAn = "THUONGDUAN";
     public const string ThuongNam = "THUONGNAM";
     public const string ThuongKhac = "THUONGKHAC";
+
+    // BS-2 — phụ trội giờ THƯỜNG (ca chính thức, không qua đơn OT). Miễn thuế TNCN như CL_GLT.
+    public const string PhuTroiNgayNghi = "PHUTROI_NGAYNGHI";  // ca rơi vào nghỉ tuần/lễ
+    public const string PhuCapDem = "PHUCAP_DEM";              // làm đêm 30% (Đ.98.2)
+
     public const string TongThuNhap = "TONGTHUNHAP";
 
     // Khối F — bảo hiểm
@@ -75,6 +80,12 @@ public static class PayrollColumnCodes
     public const string ThuKhac = "THU_KHAC";
     public const string PhiCongDoanVien = "PHICONGDOANVIEN";
     public const string ChiKhac = "CHI_KHAC";
+
+    // BS-5 — cộng dồn khoản chênh lệch từ các kỳ Finalized đã sửa nguồn (chưa áp trước đó).
+    // Handler pin giá trị vào 2 cột này khi tạo kỳ mới; công thức THUCNHAN cộng đại số.
+    public const string TruyLinh = "TRUY_LINH";   // + (bù cho NV)
+    public const string TruyThu = "TRUY_THU";     // − (thu lại của NV — dấu âm)
+
     public const string ThucNhan = "THUCNHAN";
 
     /// <summary>

@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MPS.Application.Common.Interfaces;
@@ -56,7 +56,8 @@ public sealed class GetAppendixFilesQueryHandlerTests
 
         var activateApdx = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,
-            NullLogger<ActivateContractAppendixCommandHandler>.Instance);
+            NullLogger<ActivateContractAppendixCommandHandler>.Instance,
+            new NoopPayrollSourceChangeHandler());
         var pdf = BuildFakePdfBytes();
         await activateApdx.Handle(new ActivateContractAppendixCommand(
             AppendixId: appendixId,

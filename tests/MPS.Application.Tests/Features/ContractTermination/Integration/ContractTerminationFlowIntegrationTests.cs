@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -96,10 +96,11 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         // === Step 2: terminate với reason C9 ===
         var createTermHandler = new CreateContractTerminationCommandHandler(
-            termRepo, repo, lookup, currentUser.Object);
+            termRepo, repo, lookup, currentUser.Object,
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
 
         var noticeSent = DateTime.UtcNow;
-        var terminationId = await createTermHandler.Handle(new CreateContractTerminationCommand(
+        var terminationResult = await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
             ReasonRefId: 9,
             TerminationParty: TerminationParty.Employee,
@@ -111,7 +112,9 @@ public sealed class ContractTerminationFlowIntegrationTests
             LegalBasis: "Điều 35 k.1",
             Notes: "NLĐ xin nghỉ"), CancellationToken.None);
 
+        var terminationId = terminationResult.Id;
         terminationId.Should().BeGreaterThan(0);
+        terminationResult.OpenTasks.Should().BeEmpty();
 
         var contractAfter = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
         contractAfter.Status.Should().Be(ContractStatus.Terminated);
@@ -151,7 +154,8 @@ public sealed class ContractTerminationFlowIntegrationTests
             actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
-            termRepo, repo, lookup, currentUser.Object);
+            termRepo, repo, lookup, currentUser.Object,
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
 
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
@@ -194,9 +198,10 @@ public sealed class ContractTerminationFlowIntegrationTests
             actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
-            termRepo, repo, lookup, currentUser.Object);
+            termRepo, repo, lookup, currentUser.Object,
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
 
-        var terminationId = await createTermHandler.Handle(new CreateContractTerminationCommand(
+        var terminationResult = await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
             ReasonRefId: 6,
             TerminationParty: TerminationParty.ByLaw,
@@ -208,7 +213,9 @@ public sealed class ContractTerminationFlowIntegrationTests
             LegalBasis: "Điều 34 k.6",
             Notes: "Giấy chứng tử số ..."), CancellationToken.None);
 
+        var terminationId = terminationResult.Id;
         terminationId.Should().BeGreaterThan(0);
+        terminationResult.OpenTasks.Should().BeEmpty();
 
         var contractAfter = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
         contractAfter.Status.Should().Be(ContractStatus.Terminated);
@@ -236,7 +243,8 @@ public sealed class ContractTerminationFlowIntegrationTests
             actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
-            termRepo, repo, lookup, currentUser.Object);
+            termRepo, repo, lookup, currentUser.Object,
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
 
         await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
@@ -324,7 +332,8 @@ public sealed class ContractTerminationFlowIntegrationTests
             CancellationToken.None);
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
-            termRepo, repo, lookup, currentUser.Object);
+            termRepo, repo, lookup, currentUser.Object,
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
 
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,

@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using MediatR;
@@ -9,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using MPS.API.Authorization;
 using MPS.API.Middleware;
+using MPS.API.RateLimiting;
 using MPS.API.Services;
 using MPS.Application.Behaviors;
 using MPS.Application.Common.Interfaces;
@@ -139,63 +142,8 @@ builder.Services.AddSingleton<
     Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler,
     AuditAccessDeniedHandler>();
 
-// ===== Rate Limiting =====
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    options.AddPolicy("auth-login", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            }));
-
-    options.AddPolicy("auth-refresh", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 20,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            }));
-
-    // Contract file uploads (activate / replace): 5 uploads/min per user, fall back to IP.
-    options.AddPolicy("contract-upload", context =>
-    {
-        var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            ?? context.Connection.RemoteIpAddress?.ToString()
-            ?? "anonymous";
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: userId,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            });
-    });
-
-    // OCR citizen-id: 10 req/min per user, fall back to IP.
-    options.AddPolicy("ocr-citizen-id", context =>
-    {
-        var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            ?? context.Connection.RemoteIpAddress?.ToString()
-            ?? "anonymous";
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: userId,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            });
-    });
-});
+// ===== Rate Limiting ===== (khai báo chi tiết: MPS.API/RateLimiting/RateLimitingSetup.cs)
+builder.Services.AddMpsRateLimiting(builder.Configuration);
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -254,8 +202,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors();
-app.UseRateLimiter();
+// Thứ tự quan trọng: UseRateLimiter phải chạy SAU UseAuthentication thì policy phân vùng theo
+// người dùng (tải file hợp đồng, OCR) mới đọc được claim; nếu không, mọi người dùng chung một IP
+// bị gộp vào một rổ và chặn nhầm nhau. Vẫn đặt TRƯỚC UseAuthorization để request bị từ chối
+// quyền cũng bị tính hạn mức (chống dò endpoint).
 app.UseAuthentication();
+app.UseMiddleware<LoginIdentityMiddleware>();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 
