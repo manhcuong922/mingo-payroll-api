@@ -32,6 +32,7 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
     private readonly IProjectTaskRepository _taskRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IContractLookupReader _lookup;
+    private readonly IContractRepository _contracts;
     private readonly OvertimeCapChecker _capChecker;
     private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IWorkHourSplitter _splitter;
@@ -45,6 +46,7 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         IProjectTaskRepository taskRepository,
         IEmployeeInformationRepository employeeRepository,
         IContractLookupReader lookup,
+        IContractRepository contracts,
         OvertimeCapChecker capChecker,
         AttendanceRequestDayConflictChecker dayConflictChecker,
         IWorkHourSplitter splitter,
@@ -57,6 +59,7 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         _taskRepository = taskRepository;
         _employeeRepository = employeeRepository;
         _lookup = lookup;
+        _contracts = contracts;
         _capChecker = capChecker;
         _dayConflictChecker = dayConflictChecker;
         _splitter = splitter;
@@ -75,6 +78,12 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             ?? throw new NotFoundException($"No employee profile linked to user {userId}.");
         var employee = await _employeeRepository.GetByIdAsync(employeeId, cancellationToken)
             ?? throw new NotFoundException($"Employee {employeeId} not found.");
+
+        // 1b. Case 8 — NV phải còn quan hệ lao động (HĐ Active) mới được đăng ký OT. HĐ đã chấm dứt/
+        // hết hạn thì không phát sinh OT nữa (đồng bộ với guard giao việc — TaskAssigneeGuard).
+        if (!await _contracts.HasActiveContractAsync(employeeId, cancellationToken))
+            throw new DomainValidationException(
+                "CONTRACT_NOT_ACTIVE: Nhân viên không còn hợp đồng lao động hiệu lực — không thể đăng ký OT.");
 
         // 2. Load & validate Project (đơn sản xuất)
         var project = await _projectRepository.GetByIdAsync(request.ProjectId, cancellationToken)

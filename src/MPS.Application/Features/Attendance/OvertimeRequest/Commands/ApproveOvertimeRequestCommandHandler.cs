@@ -28,6 +28,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
     private readonly IProjectRepository _projectRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IContractLookupReader _lookup;
+    private readonly IContractRepository _contracts;
     private readonly OvertimeCapChecker _capChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -40,6 +41,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         IProjectRepository projectRepository,
         IEmployeeInformationRepository employeeRepository,
         IContractLookupReader lookup,
+        IContractRepository contracts,
         OvertimeCapChecker capChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -51,6 +53,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         _projectRepository = projectRepository;
         _employeeRepository = employeeRepository;
         _lookup = lookup;
+        _contracts = contracts;
         _capChecker = capChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -71,6 +74,12 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         if (existing.Status != OtRequestStatus.PendingApprover)
             throw new DomainValidationException(
                 $"Overtime request {request.Id} cannot be approved — current status is {existing.Status}. Cần PM Forward trước.");
+
+        // Case 8 — không duyệt OT cho NV đã chấm dứt/hết HĐ. HĐ có thể chấm dứt GIỮA lúc submit và
+        // duyệt nên phải kiểm lại ở đây, không chỉ ở lúc tạo đơn.
+        if (!await _contracts.HasActiveContractAsync(existing.EmployeeInformationId, cancellationToken))
+            throw new DomainValidationException(
+                "CONTRACT_NOT_ACTIVE: Nhân viên không còn hợp đồng lao động hiệu lực — không thể duyệt OT.");
 
         // BR-10 self-approval — Approver không được là người tạo HOẶC PM đã forward.
         if (existing.CreatedByUserId == userId)
