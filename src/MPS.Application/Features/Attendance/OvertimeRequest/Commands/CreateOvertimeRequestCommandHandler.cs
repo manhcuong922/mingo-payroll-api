@@ -85,6 +85,9 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             throw new DomainValidationException(
                 "CONTRACT_NOT_ACTIVE: Nhân viên không còn hợp đồng lao động hiệu lực — không thể đăng ký OT.");
 
+        // 1c. Case 4 — chặn ngày quá xa trong tương lai (quá khứ vẫn cho phép: truy lĩnh [D3]).
+        OvertimeWorkDateGuard.EnsureNotTooFarInFuture(request.WorkDate, _clock.UtcNow);
+
         // 2. Load & validate Project (đơn sản xuất)
         var project = await _projectRepository.GetByIdAsync(request.ProjectId, cancellationToken)
             ?? throw new NotFoundException($"Project {request.ProjectId} not found.");

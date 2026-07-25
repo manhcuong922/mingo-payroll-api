@@ -62,6 +62,9 @@ public class UpdatePendingOvertimeRequestCommandHandler
         if (request.OtStartTime == request.OtEndTime)
             throw new DomainValidationException("Giờ bắt đầu và kết thúc OT không được trùng.");
 
+        // Case 4 — chặn dời OT sang ngày quá xa trong tương lai (đồng bộ với lúc tạo đơn).
+        OvertimeWorkDateGuard.EnsureNotTooFarInFuture(request.WorkDate, _clock.UtcNow);
+
         var otHours = CalculateHours(request.OtStartTime, request.OtEndTime);
 
         // Guard trùng OT: exclude chính đơn đang sửa để không tự conflict với mình.

@@ -32,9 +32,14 @@ public sealed class OvertimeContractGuardTests
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     // ─── Create ─────────────────────────────────────────────────────────────
+    // Clock đặt trùng ngày WorkDate của lệnh test để guard "ngày tương lai" (Case 4) không can thiệp
+    // vào các test guard hợp đồng (Case 8).
+    private static readonly DateOnly CmdWorkDate = new(2026, 7, 20);
+    private readonly IClock _clock = Mock.Of<IClock>(c => c.UtcNow == new DateTime(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc));
+
     private CreateOvertimeRequestCommandHandler CreateSut() => new(
         _otRepo.Object, _projects.Object, Mock.Of<IProjectTaskRepository>(), _employees.Object,
-        _lookup.Object, _contracts.Object, null!, null!, null!, null!, _currentUser.Object, Mock.Of<IClock>());
+        _lookup.Object, _contracts.Object, null!, null!, null!, null!, _currentUser.Object, _clock);
 
     private void SetupEmployeeResolves()
     {
@@ -46,7 +51,7 @@ public sealed class OvertimeContractGuardTests
     }
 
     private static CreateOvertimeRequestCommand CreateCmd() =>
-        new(ProjectId: 1, WorkDate: new DateOnly(2026, 7, 20),
+        new(ProjectId: 1, WorkDate: CmdWorkDate,
             OtStartTime: new TimeOnly(18, 0), OtEndTime: new TimeOnly(20, 0), Reason: "[test]");
 
     [Fact]
