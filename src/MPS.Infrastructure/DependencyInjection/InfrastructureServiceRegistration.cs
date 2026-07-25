@@ -233,6 +233,9 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<ContractArchiveJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ContractArchiveJob>());
 
+        services.AddSingleton<TerminationAccountDeactivationJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<TerminationAccountDeactivationJob>());
+
         // Compliance module — background job
         services.AddSingleton<ComplianceActivationJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ComplianceActivationJob>());
