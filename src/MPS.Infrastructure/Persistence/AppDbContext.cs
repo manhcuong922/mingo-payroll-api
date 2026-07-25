@@ -108,6 +108,10 @@ public class AppDbContext : DbContext
     public DbSet<Domain.Entities.Payroll.ProductivityCoefficient> ProductivityCoefficients => Set<Domain.Entities.Payroll.ProductivityCoefficient>();
     public DbSet<Domain.Entities.Payroll.PayrollAdjustment> PayrollAdjustments => Set<Domain.Entities.Payroll.PayrollAdjustment>();
 
+    // ===== BHXH & Tax Payment Tracking module =====
+    public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligation> PaymentObligations
+        => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

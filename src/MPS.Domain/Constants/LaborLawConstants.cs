@@ -72,6 +72,17 @@ public static class LaborLawConstants
     }
 
     /// <summary>
+    /// Deadline nộp nghĩa vụ BHXH & TNCN cho module BHXH & Tax Payment Tracking.
+    /// Deadline = ngày thứ N của tháng liền sau kỳ lương (kỳ 2026-07 ⇒ BHXH hạn 2026-08-15,
+    /// TNCN hạn 2026-08-20). Chu kỳ TNCN mặc định là hàng THÁNG.
+    /// </summary>
+    public static class PaymentObligationDeadline
+    {
+        public const int BhxhDayOfNextMonth = 15;
+        public const int TncnMonthlyDayOfNextMonth = 20;
+    }
+
+    /// <summary>
     /// Mã 13 lý do chấm dứt HĐLĐ theo Điều 34 BLLĐ 2019 – dùng để seed ContractTerminationReasonRefs.
     /// </summary>
     public static class TerminationReasonCodes

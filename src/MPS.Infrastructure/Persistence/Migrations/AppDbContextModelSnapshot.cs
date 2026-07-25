@@ -3788,6 +3788,102 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("PasswordResetTokens", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountDue")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("AuthorityConfirmationImageObjectKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("BankReceiptImageObjectKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ConfirmedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Deadline")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("ObligationType")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("PaidAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("PaidDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("PaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PayrollPeriodId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("RecordedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RecordedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TransactionRef")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConfirmedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("RecordedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("PayrollPeriodId", "ObligationType")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "Deadline");
+
+                    b.ToTable("PaymentObligations", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollAdjustment", b =>
                 {
                     b.Property<int>("Id")
@@ -8829,6 +8925,45 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "ConfirmedByUser")
+                        .WithMany()
+                        .HasForeignKey("ConfirmedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Payroll.PayrollPeriod", "PayrollPeriod")
+                        .WithMany()
+                        .HasForeignKey("PayrollPeriodId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "RecordedByUser")
+                        .WithMany()
+                        .HasForeignKey("RecordedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ConfirmedByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("PayrollPeriod");
+
+                    b.Navigation("RecordedByUser");
+
+                    b.Navigation("UpdatedByUser");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollAdjustment", b =>

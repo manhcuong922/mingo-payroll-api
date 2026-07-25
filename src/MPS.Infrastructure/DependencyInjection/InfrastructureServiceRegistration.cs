@@ -116,6 +116,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPayrollFormulaSetRepository, PayrollFormulaSetRepository>();
         services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
         services.AddScoped<IPayrollAdjustmentRepository, PayrollAdjustmentRepository>();
+        services.AddScoped<IPaymentObligationRepository, PaymentObligationRepository>();
+        services.AddScoped<MPS.Application.Features.Payroll.BhxhTaxPayment.Common.BhxhTaxEvidenceUploader>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
         services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
@@ -236,6 +238,10 @@ public static class InfrastructureServiceRegistration
         // Compliance module — background job
         services.AddSingleton<ComplianceActivationJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ComplianceActivationJob>());
+
+        // BHXH & Tax Payment Tracking — daily deadline scanner
+        services.AddSingleton<BhxhTaxDeadlineJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<BhxhTaxDeadlineJob>());
 
         // ===== Compliance Auto-Update module (crawl + AI đề xuất cập nhật pháp luật) =====
         services.AddOptions<ComplianceAutoUpdateOptions>()
