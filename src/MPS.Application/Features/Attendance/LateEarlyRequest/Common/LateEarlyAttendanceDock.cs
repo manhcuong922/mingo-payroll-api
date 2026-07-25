@@ -28,8 +28,8 @@ public sealed class LateEarlyAttendanceDock
     }
 
     public async Task DockAsync(
-        int employeeInformationId, DateOnly workDate, int minutes, int approverUserId, DateTime nowUtc,
-        CancellationToken ct)
+        int employeeInformationId, DateOnly workDate, int minutes, int lateEarlyRequestId,
+        int approverUserId, DateTime nowUtc, CancellationToken ct)
     {
         if (minutes <= 0) return;
 
@@ -37,6 +37,16 @@ public sealed class LateEarlyAttendanceDock
         if (hoursToDock <= 0m) return;
 
         var records = await _records.GetByEmployeeAndDateAsync(employeeInformationId, workDate, ct);
+
+        // Case 2 — idempotent: đơn này đã được áp vào một bản ghi chấm công rồi thì KHÔNG trừ lại
+        // (chống trừ hai lần khi duyệt/áp lại).
+        if (records.Any(r => r.LateEarlyRequestId == lateEarlyRequestId))
+        {
+            _logger.LogInformation(
+                "Đơn đi muộn/về sớm #{RequestId} đã được áp vào chấm công trước đó — bỏ qua trừ giờ.",
+                lateEarlyRequestId);
+            return;
+        }
 
         // Chỉ trừ vào bản ghi CA CHÍNH (có ShiftTemplateId, không phải bản ghi OT) còn giờ ngày để trừ.
         var target = records
@@ -54,6 +64,7 @@ public sealed class LateEarlyAttendanceDock
 
         var newDayHours = Math.Max(0m, target.DayHours - hoursToDock);
         target.DayHours = newDayHours;
+        target.LateEarlyRequestId = lateEarlyRequestId;   // Case 2 — LIÊN KẾT đơn ↔ bản ghi chấm công.
         target.UpdatedAt = nowUtc;
         target.UpdatedByUserId = approverUserId;
         await _records.UpdateAsync(target, ct);

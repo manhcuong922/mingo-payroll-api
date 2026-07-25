@@ -181,6 +181,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("EmployeeInformationId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("LateEarlyRequestId")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("NightHours")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(5,2)")

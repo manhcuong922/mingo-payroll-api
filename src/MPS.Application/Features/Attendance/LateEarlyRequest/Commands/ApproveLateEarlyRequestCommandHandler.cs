@@ -110,7 +110,7 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
             // BS-4 (phần 2): không bù quỹ phép → trừ số giờ thiếu khỏi giờ công thực tế của ngày.
             await _attendanceDock.DockAsync(
                 existing.EmployeeInformationId, existing.WorkDate, existing.Minutes,
-                userId, now, cancellationToken);
+                existing.Id, userId, now, cancellationToken);
         }
 
         await _repository.UpdateAsync(existing, cancellationToken);
