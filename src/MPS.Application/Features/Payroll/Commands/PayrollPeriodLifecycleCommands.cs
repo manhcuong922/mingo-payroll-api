@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Payroll;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Payroll;
@@ -32,6 +33,45 @@ public sealed class FinalizePayrollPeriodCommandHandler : IRequestHandler<Finali
         period.UpdatedAt = DateTime.UtcNow;
         period.UpdatedByUserId = userId;
         await _periods.SaveChangesAsync(ct);
+    }
+}
+
+// ===== Khoá kỳ (Finalized → Locked) — publish PayrollPeriodLockedNotification =====
+public sealed record LockPayrollPeriodCommand(int PeriodId) : IRequest;
+
+public sealed class LockPayrollPeriodCommandHandler : IRequestHandler<LockPayrollPeriodCommand>
+{
+    private readonly IPayrollPeriodRepository _periods;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IMediator _mediator;
+
+    public LockPayrollPeriodCommandHandler(
+        IPayrollPeriodRepository periods,
+        ICurrentUserService currentUser,
+        IMediator mediator)
+    {
+        _periods = periods;
+        _currentUser = currentUser;
+        _mediator = mediator;
+    }
+
+    public async Task Handle(LockPayrollPeriodCommand request, CancellationToken ct)
+    {
+        var userId = _currentUser.UserId ?? throw new ForbiddenAccessException();
+        var period = await _periods.GetByIdAsync(request.PeriodId, asNoTracking: false, ct)
+            ?? throw new NotFoundException($"Không tìm thấy kỳ lương #{request.PeriodId}.");
+        if (period.Status != PayrollPeriodStatus.Finalized)
+            throw new ConflictException("Chỉ khoá được kỳ đã Chốt.");
+
+        var now = DateTime.UtcNow;
+        period.Status = PayrollPeriodStatus.Locked;
+        period.UpdatedAt = now;
+        period.UpdatedByUserId = userId;
+        await _periods.SaveChangesAsync(ct);
+
+        await _mediator.Publish(
+            new PayrollPeriodLockedNotification(period.Id, period.PeriodYear, period.PeriodMonth, userId, now),
+            ct);
     }
 }
 

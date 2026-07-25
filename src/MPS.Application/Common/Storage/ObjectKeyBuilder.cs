@@ -76,6 +76,20 @@ public static class ObjectKeyBuilder
         return key;
     }
 
+    /// <summary>
+    /// Object key ảnh evidence cho nghĩa vụ BHXH/TNCN. Kind = "bank-receipt" hoặc "authority-confirmation".
+    /// Path: <c>payroll/bhxh-tax-evidence/{obligationId}/{kind}/{guid}.{ext}</c>.
+    /// </summary>
+    public static string ForBhxhTaxEvidence(int obligationId, string kind, string contentType, Guid uniqueId)
+    {
+        if (obligationId <= 0) throw new ArgumentOutOfRangeException(nameof(obligationId));
+        ValidateSegment(kind, nameof(kind));
+        var ext = ResolveImageExtension(contentType);
+        var key = $"payroll/bhxh-tax-evidence/{obligationId}/{kind}/{uniqueId:N}.{ext}";
+        ValidateLength(key);
+        return key;
+    }
+
     private static string ResolveImageExtension(string contentType)
     {
         var normalized = (contentType ?? string.Empty).Trim().ToLowerInvariant();

@@ -87,6 +87,19 @@ public class PayrollController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Khoá kỳ (Finalized → Locked). Sự kiện <c>PayrollPeriodLockedNotification</c> được publish
+    /// sau khi lưu để handler tự sinh 2 nghĩa vụ nộp BHXH & TNCN vào module Payment Tracking.
+    /// </summary>
+    [HttpPost("periods/{id:int}/lock")]
+    [HasPermission(Permissions.PayrollLockAll)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Lock(int id, CancellationToken ct)
+    {
+        await _mediator.Send(new LockPayrollPeriodCommand(id), ct);
+        return NoContent();
+    }
+
     [HttpDelete("periods/{id:int}")]
     [HasPermission(Permissions.PayrollDeleteAll)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)

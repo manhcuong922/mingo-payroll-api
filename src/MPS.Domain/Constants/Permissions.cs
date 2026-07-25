@@ -345,6 +345,12 @@ public static class Permissions
 
     public const string ProductivityCoefficientReadAll   = "ProductivityCoefficient.Read.All";
     public const string ProductivityCoefficientUpdateAll = "ProductivityCoefficient.Update.All";
+
+    // ===== BHXH & Tax Payment Tracking module — IDs 266–269 =====
+    public const string PayrollLockAll             = "Payroll.Lock.All";
+    public const string BhxhTaxPaymentReadAll      = "BhxhTaxPayment.Read.All";
+    public const string BhxhTaxPaymentRecordAll    = "BhxhTaxPayment.Record.All";
+    public const string BhxhTaxPaymentConfirmAll   = "BhxhTaxPayment.Confirm.All";
 }
 
 public static class PermissionIds
@@ -674,4 +680,10 @@ public static class PermissionIds
 
     public const int ProductivityCoefficientReadAll   = 264;
     public const int ProductivityCoefficientUpdateAll = 265;
+
+    // ===== BHXH & Tax Payment Tracking module — IDs 266–269 =====
+    public const int PayrollLockAll             = 266;
+    public const int BhxhTaxPaymentReadAll      = 267;
+    public const int BhxhTaxPaymentRecordAll    = 268;
+    public const int BhxhTaxPaymentConfirmAll   = 269;
 }
