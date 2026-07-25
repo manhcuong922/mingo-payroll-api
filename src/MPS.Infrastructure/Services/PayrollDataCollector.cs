@@ -359,13 +359,26 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var segments = new List<OvertimePayCalculator.OvertimeSegment>(ots.Count);
         foreach (var ot in ots)
         {
-            if (!dayTypeByDate.TryGetValue(ot.WorkDate, out var dayType))
-                dayType = await _dayTypeResolver.ResolveAsync(employeeInformationId, ot.WorkDate, ct);
-            segments.Add(new OvertimePayCalculator.OvertimeSegment(dayType, ot.OtDayHours, ot.OtNightHours));
+            // Case 5 — resolve loại-ngày cho CẢ ngày đăng ký (D) và ngày kế (D+1): OT vắt nửa đêm sang
+            // ngày lễ/nghỉ phải tính hệ số theo đúng ngày lịch của từng phần giờ.
+            var dayTypeD = await ResolveDayTypeAsync(employeeInformationId, ot.WorkDate, dayTypeByDate, ct);
+            var dayTypeNext = await ResolveDayTypeAsync(employeeInformationId, ot.WorkDate.AddDays(1), dayTypeByDate, ct);
+
+            // Case 3 + 5 — dựng segment từ khung giờ THÔ (không dùng OtDayHours/OtNightHours đã gộp),
+            // để tách theo ngày lịch và đặt cờ "đêm sau ngày OT" (Đ.98.3) chính xác.
+            segments.AddRange(OvertimeSegmentBuilder.Build(
+                ot.OtStartTime, ot.OtEndTime, dayTypeD, dayTypeNext,
+                labor.NightStartTime, labor.NightEndTime));
         }
 
         return OvertimePayCalculator.Accumulate(segments, hourlyRate, _otMultiplier, labor);
     }
+
+    private async Task<DayType> ResolveDayTypeAsync(
+        int employeeInformationId, DateOnly date, IReadOnlyDictionary<DateOnly, DayType> cache, CancellationToken ct) =>
+        cache.TryGetValue(date, out var dayType)
+            ? dayType
+            : await _dayTypeResolver.ResolveAsync(employeeInformationId, date, ct);
 
     // #25 — ngày công chỉ hợp lệ khi rơi vào kỳ hiệu lực của một HĐ (đã loại HĐ Cancelled từ query).
     // Trả true khi employee không có HĐ nào để tránh vô tình xoá sạch công của dữ liệu lịch sử

@@ -12,7 +12,12 @@ namespace MPS.Application.Features.Attendance.OvertimeRequest.Common;
 /// </summary>
 public static class OvertimePayCalculator
 {
-    public readonly record struct OvertimeSegment(DayType DayType, decimal DayHours, decimal NightHours);
+    /// <param name="HasPrevDayOt">
+    /// Đ.98.3 — giờ OT ĐÊM đứng SAU giờ OT NGÀY (trong cùng ngày, cùng khối) thì đơn giá gốc để cộng
+    /// 20% là hệ số OT ngày (150% ngày thường) thay vì 100%. Chỉ ảnh hưởng phần giờ đêm ngày THƯỜNG.
+    /// </param>
+    public readonly record struct OvertimeSegment(
+        DayType DayType, decimal DayHours, decimal NightHours, bool HasPrevDayOt = false);
 
     public static (decimal Full, decimal Premium) Accumulate(
         IEnumerable<OvertimeSegment> segments,
@@ -25,11 +30,10 @@ public static class OvertimePayCalculator
         decimal full = 0m, premium = 0m;
         foreach (var seg in segments)
         {
-            // Phạm vi BS-2 = sửa hệ số theo LOẠI NGÀY. Giữ hasPrevDayOt=false (như code cũ) để giờ đêm
-            // ngày THƯỜNG vẫn ra 2.0 y hệt trước — không đổi số ngoài dự kiến. Tinh chỉnh "đêm sau ngày OT
-            // = 20%×150%" (Đ.98.3) là cải tiến riêng, để lần khác nếu cần.
+            // hasPrevDayOt chỉ áp cho phần giờ ĐÊM (Đ.98.3); giờ NGÀY không dùng cờ này. Segment đã được
+            // OvertimeSegmentBuilder tách theo loại ngày + đặt cờ đúng (đêm sau ngày OT = 20%×150%).
             var dayMult = multiplier.Calculate(seg.DayType, isNight: false, hasPrevDayOt: false, labor) / 100m;
-            var nightMult = multiplier.Calculate(seg.DayType, isNight: true, hasPrevDayOt: false, labor) / 100m;
+            var nightMult = multiplier.Calculate(seg.DayType, isNight: true, hasPrevDayOt: seg.HasPrevDayOt, labor) / 100m;
 
             full += hourlyRate * (seg.DayHours * dayMult + seg.NightHours * nightMult);
             premium += hourlyRate * (seg.DayHours * (dayMult - 1m) + seg.NightHours * (nightMult - 1m));

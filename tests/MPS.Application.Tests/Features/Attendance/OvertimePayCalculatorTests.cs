@@ -44,6 +44,18 @@ public sealed class OvertimePayCalculatorTests
     }
 
     [Fact]
+    public void NormalNight_AfterDayOt_Uses210_Not200()
+    {
+        // Case 3 (Đ.98.3): đêm ngày thường ĐỨNG SAU giờ ngày OT = 150 + 30 + 20%×150 = 210%.
+        var (full, premium) = Run(new OvertimePayCalculator.OvertimeSegment(
+            DayType.Normal, DayHours: 2m, NightHours: 1m, HasPrevDayOt: true));
+
+        // full = 50k×(2×1.5 + 1×2.1) = 50k×5.1 = 255k ; premium = 50k×(2×0.5 + 1×1.1) = 50k×2.1 = 105k
+        full.Should().Be(255_000m);
+        premium.Should().Be(105_000m);
+    }
+
+    [Fact]
     public void PublicHoliday_UsesTripleRate_NotHardcoded()
     {
         // BS-2: OT 4 giờ ban ngày vào NGÀY LỄ phải 300%, không phải 150%.
