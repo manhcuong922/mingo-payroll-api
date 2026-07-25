@@ -30,3 +30,13 @@ public sealed record UpdatePendingOvertimeRequest(
     TimeOnly OtStartTime,
     TimeOnly OtEndTime,
     string? Reason);
+
+/// <summary>Case 6 — Body tổ trưởng đăng ký OT hộ NV: kèm NV mục tiêu + route duyệt cuối.</summary>
+public sealed record CreateOvertimeOnBehalfBody(
+    int ProjectId,
+    int EmployeeInformationId,
+    DateOnly WorkDate,
+    TimeOnly OtStartTime,
+    TimeOnly OtEndTime,
+    OvertimeApproverRoute ApproverRoute,
+    string? Reason);

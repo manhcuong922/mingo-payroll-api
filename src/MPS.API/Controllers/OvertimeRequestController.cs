@@ -192,6 +192,28 @@ public class OvertimeRequestController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Case 6 — Tổ trưởng (Project.ResponsibleUserId) đăng ký OT HỘ cho NV trong đơn mình phụ trách.
+    /// Đơn vào thẳng PendingApprover (bỏ PM-review), ApproverRoute chọn ngay. Reuse permission
+    /// ReviewProject của tổ trưởng.
+    /// </summary>
+    [HttpPost("on-behalf")]
+    [HasPermission(Permissions.OvertimeRequestReviewProject)]
+    public async Task<IActionResult> CreateOnBehalf(
+        [FromBody] CreateOvertimeOnBehalfBody body,
+        CancellationToken cancellationToken)
+    {
+        var id = await _mediator.Send(new CreateOvertimeOnBehalfCommand(
+            body.ProjectId,
+            body.EmployeeInformationId,
+            body.WorkDate,
+            body.OtStartTime,
+            body.OtEndTime,
+            body.ApproverRoute,
+            body.Reason), cancellationToken);
+        return Ok(new { id });
+    }
+
     // =========================================================================
     // PM tầng 1: Review (Forward / Reject)
     // =========================================================================
