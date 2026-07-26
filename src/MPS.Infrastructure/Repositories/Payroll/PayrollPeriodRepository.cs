@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Entities.Payroll;
+using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Interfaces.Payroll;
 using MPS.Infrastructure.Persistence;
 
@@ -50,6 +51,17 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
             .OrderByDescending(p => p.PeriodYear * 12 + p.PeriodMonth)
             .FirstOrDefaultAsync(ct);
     }
+
+    public async Task<IReadOnlyList<PayrollRow>> GetEmployeeRowsAsync(
+        int employeeInformationId, int limit, CancellationToken ct = default) =>
+        await _context.Set<PayrollRow>().AsNoTracking()
+            .Include(r => r.Cells)
+            .Include(r => r.PayrollPeriod)
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                        && r.PayrollPeriod.Status != PayrollPeriodStatus.Draft)
+            .OrderByDescending(r => r.PayrollPeriod.PeriodYear * 12 + r.PayrollPeriod.PeriodMonth)
+            .Take(limit)
+            .ToListAsync(ct);
 
     public async Task<int> AddAsync(PayrollPeriod period, CancellationToken ct = default)
     {

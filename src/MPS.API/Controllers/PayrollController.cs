@@ -45,6 +45,12 @@ public class PayrollController : ControllerBase
         return File(file.Content, file.ContentType, file.FileName);
     }
 
+    /// <summary>NV xem phiếu lương của CHÍNH MÌNH (kỳ đã chốt), mặc định 6 kỳ gần nhất.</summary>
+    [HttpGet("me/payslips")]
+    [HasPermission(Permissions.PayrollReadSelf)]
+    public async Task<IActionResult> GetMyPayslips([FromQuery] int months, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetMyPayslipsQuery(months), ct));
+
     /// <summary>Sinh bảng lương tháng. Thiếu liệu → 422 kèm danh sách NV thiếu.</summary>
     [HttpPost("periods")]
     [HasPermission(Permissions.PayrollCreateAll)]

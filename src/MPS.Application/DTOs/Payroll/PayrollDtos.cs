@@ -66,6 +66,16 @@ public sealed record PayrollPeriodSummaryDto(
     DateOnly PayDate,
     int EmployeeCount);
 
+/// <summary>Phiếu lương rút gọn của chính NV (1 kỳ đã chốt): gross = TONGTHUNHAP, net = THUCNHAN.</summary>
+public sealed record MyPayslipDto(
+    int PeriodId,
+    int Year,
+    int Month,
+    DateOnly PayDate,
+    string Status,
+    decimal? Gross,
+    decimal? Net);
+
 public sealed record PayrollReadinessDto(
     int EmployeeInformationId,
     string EmployeeCode,

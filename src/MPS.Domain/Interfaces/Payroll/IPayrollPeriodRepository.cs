@@ -16,6 +16,13 @@ public interface IPayrollPeriodRepository
     /// <summary>Kỳ liền trước cùng công ty (dùng diff đổi luật). Kèm ComplianceRefs.</summary>
     Task<PayrollPeriod?> GetPreviousAsync(int year, int month, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Các dòng lương của 1 NV trong những kỳ đã chốt (Finalized/Locked), mới nhất trước,
+    /// tối đa <paramref name="limit"/> kỳ. Kèm Period + Cells (không kèm EmployeeInformation).
+    /// </summary>
+    Task<IReadOnlyList<PayrollRow>> GetEmployeeRowsAsync(
+        int employeeInformationId, int limit, CancellationToken cancellationToken = default);
+
     /// <summary>Persist toàn bộ aggregate (rows/cells/notes/refs) trong 1 transaction.</summary>
     Task<int> AddAsync(PayrollPeriod period, CancellationToken cancellationToken = default);
 

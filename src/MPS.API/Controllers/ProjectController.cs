@@ -41,6 +41,19 @@ public class ProjectController : ControllerBase
         CancellationToken ct = default)
         => Ok(await _mediator.Send(new ProjectGetPagedQuery(keyword, departmentId, page, pageSize, includeCancelled, status), ct));
 
+    /// <summary>
+    /// Đơn hàng NV hiện tại tham gia (có task được gán) + tiến độ. Không đòi Project.Read.* vì scope
+    /// đã tự giới hạn theo TaskAssignee của chính user — công nhân dùng cho workspace "Công việc".
+    /// </summary>
+    [HttpGet("my")]
+    [HasAnyPermission(
+        Permissions.TaskReadAssigned,
+        Permissions.TaskReadAll,
+        Permissions.TaskReadDepartment,
+        Permissions.TaskReadFullDepartment)]
+    public async Task<IActionResult> GetMine([FromQuery] bool includeCancelled, CancellationToken ct)
+        => Ok(await _mediator.Send(new ProjectGetMyQuery(includeCancelled), ct));
+
     [HttpGet("{id:int}")]
     [HasAnyPermission(Permissions.ProjectReadAll, Permissions.ProjectReadDepartment, Permissions.ProjectReadFullDepartment)]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
