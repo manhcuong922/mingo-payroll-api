@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
 
     // Contract module
     public DbSet<ContractParty> ContractParties => Set<ContractParty>();
@@ -62,6 +63,7 @@ public class AppDbContext : DbContext
     public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
 
     // Attendance module (FE-ATT)
+    public DbSet<FaceRegistration> FaceRegistrations => Set<FaceRegistration>();
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();

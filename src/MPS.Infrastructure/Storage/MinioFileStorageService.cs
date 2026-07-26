@@ -16,6 +16,7 @@ namespace MPS.Infrastructure.Storage;
 public sealed class MinioFileStorageService : IFileStorageService
 {
     private readonly IMinioClient _client;
+    private readonly IMinioClient _presignClient;
     private readonly MinioOptions _options;
     private readonly ILogger<MinioFileStorageService> _logger;
     private readonly ResiliencePipeline _retryPipeline;
@@ -29,6 +30,25 @@ public sealed class MinioFileStorageService : IFileStorageService
         _options = options.Value;
         _logger = logger;
         _retryPipeline = BuildRetryPipeline(_options.RetryCount, logger);
+        // Chữ ký S3 V4 bao gồm Host header, nên URL presigned phải được KÝ với đúng
+        // host mà browser sẽ gọi — thay host bằng string-replace sau khi ký sẽ làm
+        // MinIO trả SignatureDoesNotMatch.
+        _presignClient = string.IsNullOrWhiteSpace(_options.ExternalEndpoint)
+            ? client
+            : BuildExternalPresignClient(_options);
+    }
+
+    private static IMinioClient BuildExternalPresignClient(MinioOptions options)
+    {
+        var client = new MinioClient()
+            .WithEndpoint(options.ExternalEndpoint)
+            .WithCredentials(options.AccessKey, options.SecretKey)
+            // Region cố định để tránh lookup bucket-location qua mạng —
+            // ExternalEndpoint chỉ reachable từ browser, không phải từ container API.
+            .WithRegion("us-east-1");
+        if (options.ExternalUseSsl)
+            client = client.WithSSL();
+        return client.Build();
     }
 
     public async Task<StoredFileMetadata> UploadAsync(
@@ -188,15 +208,11 @@ public sealed class MinioFileStorageService : IFileStorageService
 
         try
         {
-            var url = await _client.PresignedGetObjectAsync(new PresignedGetObjectArgs()
+            var url = await _presignClient.PresignedGetObjectAsync(new PresignedGetObjectArgs()
                 .WithBucket(resolvedBucket)
                 .WithObject(objectKey)
                 .WithExpiry((int)expiry.TotalSeconds));
 
-            if (!string.IsNullOrWhiteSpace(_options.ExternalEndpoint))
-            {
-                url = url.Replace(_options.Endpoint, _options.ExternalEndpoint, StringComparison.OrdinalIgnoreCase);
-            }
             return url;
         }
         catch (Exception ex) when (IsTransient(ex))
@@ -224,15 +240,10 @@ public sealed class MinioFileStorageService : IFileStorageService
 
         try
         {
-            var url = await _client.PresignedPutObjectAsync(new PresignedPutObjectArgs()
+            var url = await _presignClient.PresignedPutObjectAsync(new PresignedPutObjectArgs()
                 .WithBucket(resolvedBucket)
                 .WithObject(objectKey)
                 .WithExpiry((int)expiry.TotalSeconds));
-
-            if (!string.IsNullOrWhiteSpace(_options.ExternalEndpoint))
-            {
-                url = url.Replace(_options.Endpoint, _options.ExternalEndpoint, StringComparison.OrdinalIgnoreCase);
-            }
 
             return new PresignedUploadResult(
                 Url: url,

@@ -134,7 +134,14 @@ builder.Services
 builder.Services.Configure<MPS.Application.Settings.AttendanceCheckinSettings>(
     builder.Configuration.GetSection(MPS.Application.Settings.AttendanceCheckinSettings.SectionName));
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ServiceAccount", policy =>
+        policy
+            .AddAuthenticationSchemes(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser()
+            .RequireRole("AiService"));
+});
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();
 // FT-39 — wrap middleware result handler để ghi audit AccessDenied trước khi trả 403.
@@ -150,9 +157,17 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        var allowedOrigins = builder.Configuration
-            .GetSection("Cors:AllowedOrigins")
-            .Get<string[]>() ?? Array.Empty<string>();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        }
+        else
+        {
+            var allowedOrigins = builder.Configuration
+                .GetSection("Cors:AllowedOrigins")
+                .Get<string[]>() ?? Array.Empty<string>();
 
         policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
@@ -160,6 +175,8 @@ builder.Services.AddCors(options =>
               // Không expose thì trình duyệt giấu header này khỏi JS, mọi endpoint tải file
               // (bảng lương, mẫu phân ca...) mất tên file do server đặt và phải đoán lại ở FE.
               .WithExposedHeaders("Content-Disposition");
+              
+        }
     });
 });
 

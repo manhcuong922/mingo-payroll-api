@@ -454,6 +454,51 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("EmployeeShiftAssignments", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.FaceRegistration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EmbeddingJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PhotoObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeInformationId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("FaceRegistrations", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.LateEarlyRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -3220,6 +3265,63 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.ToTable("Departments", (string)null);
                 });
 
+            modelBuilder.Entity("MPS.Domain.Entities.EmailOutboxMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("NextAttemptAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("StorageBucket")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("StorageObjectKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("ToEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<byte>("Type")
+                        .HasColumnType("tinyint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "NextAttemptAt")
+                        .HasDatabaseName("IX_EmailOutbox_Status_NextAttempt");
+
+                    b.ToTable("EmailOutboxMessages", (string)null);
+                });
+
             modelBuilder.Entity("MPS.Domain.Entities.Employee.DependentRegistrationRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -5935,6 +6037,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            Id = 10,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "AI Service account — chấm công và đọc embedding từ camera nhận diện khuôn mặt.",
+                            IsSystem = true,
+                            Name = "AiService"
+                        },
+                        new
+                        {
                             Id = 9,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình.",
@@ -7985,6 +8095,24 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Navigation("ScheduleTemplate");
 
                     b.Navigation("ShiftTemplate");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Attendance.FaceRegistration", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("EmployeeInformation");
+
+                    b.Navigation("ReviewedByUser");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Attendance.LateEarlyRequest", b =>

@@ -37,6 +37,7 @@ public sealed partial class DatabaseSeeder
     {
         await SeedDefaultAdminAsync(cancellationToken);
         await SeedDefaultRoleUsersAsync(cancellationToken);
+        await SeedAiServiceAccountAsync(cancellationToken);
         await SeedDefaultDepartmentsAsync(cancellationToken);
         await SeedDefaultPositionsAsync(cancellationToken);
         // Bộ tiêu chí đánh giá mặc định (module chấm điểm tháng) — để bảng-theo-đơn auto sinh được (tránh E3).
@@ -1359,4 +1360,131 @@ public sealed partial class DatabaseSeeder
     }
 
 
+    // Dọn account + dữ liệu demo theo công ty IT cũ (ngoài scope module sản xuất) khỏi DB đã seed trước đó.
+    // Giữ lại: admin, ai-service, hr, accountant, director + toàn bộ nhân sự sản xuất.
+    // Bọc try/catch: lỗi dọn KHÔNG được chặn khởi động app (worst case: data cũ còn, log cảnh báo).
+    private async Task CleanupOutOfScopeDemoAsync(CancellationToken ct)
+    {
+        // Account demo IT / role rỗng cần bỏ — role gắn xưởng (5/6/7) nay do nhân sự sản xuất đảm nhiệm.
+        var demoUsernames = new[]
+        {
+            "projmanager", "employee", "deptmanager",
+            "worker2", "worker3", "worker4", "worker5", "worker6",
+        };
+
+        try
+        {
+            // 1) Đơn demo [DEMO] + cây task + dòng gán (xoá set-based: assignee → task → project,
+            //    tôn trọng self-ref ParentTaskId Restrict vì xoá cả tập cùng lúc).
+            var demoProjectIds = await _context.Projects
+                .Where(p => p.Title.StartsWith("[DEMO]"))
+                .Select(p => p.Id)
+                .ToListAsync(ct);
+            if (demoProjectIds.Count > 0)
+            {
+                var demoTaskIds = await _context.ProjectTasks
+                    .Where(t => t.ProjectId != null && demoProjectIds.Contains(t.ProjectId.Value))
+                    .Select(t => t.Id)
+                    .ToListAsync(ct);
+                if (demoTaskIds.Count > 0)
+                    await _context.TaskAssignees.Where(a => demoTaskIds.Contains(a.TaskId)).ExecuteDeleteAsync(ct);
+                await _context.ProjectTasks
+                    .Where(t => t.ProjectId != null && demoProjectIds.Contains(t.ProjectId.Value))
+                    .ExecuteDeleteAsync(ct);
+                await _context.Projects.Where(p => demoProjectIds.Contains(p.Id)).ExecuteDeleteAsync(ct);
+            }
+
+            // 2) Quy trình mẫu demo IT (KHUNG-A4) + các bước.
+            var itTemplateIds = await _context.ProcessTemplates
+                .Where(t => t.Code == "KHUNG-A4")
+                .Select(t => t.Id)
+                .ToListAsync(ct);
+            if (itTemplateIds.Count > 0)
+            {
+                await _context.ProcessSteps.Where(s => itTemplateIds.Contains(s.ProcessTemplateId)).ExecuteDeleteAsync(ct);
+                await _context.ProcessTemplates.Where(t => itTemplateIds.Contains(t.Id)).ExecuteDeleteAsync(ct);
+            }
+
+            // 3) Account demo + hồ sơ NV. EmployeeInformation → User là Restrict ⇒ xoá NV trước; gỡ
+            //    Department.ManagerId nếu trỏ tới NV sắp xoá (VD xưởng IT đang lấy projmanager làm tổ trưởng).
+            var demoUserIds = await _context.Users
+                .Where(u => demoUsernames.Contains(u.Username))
+                .Select(u => u.Id)
+                .ToListAsync(ct);
+            if (demoUserIds.Count == 0)
+            {
+                _logger.LogDebug("Cleanup: không còn account demo IT nào để xoá.");
+                return;
+            }
+
+            var demoEmpIds = await _context.EmployeeInformations
+                .Where(e => e.UserId != null && demoUserIds.Contains(e.UserId.Value))
+                .Select(e => e.Id)
+                .ToListAsync(ct);
+            if (demoEmpIds.Count > 0)
+            {
+                var managedDepts = await _context.Departments
+                    .Where(d => d.ManagerId != null && demoEmpIds.Contains(d.ManagerId.Value))
+                    .ToListAsync(ct);
+                foreach (var dept in managedDepts) dept.ManagerId = null;
+                if (managedDepts.Count > 0) await _context.SaveChangesAsync(ct);
+
+                await _context.EmployeeInformations.Where(e => demoEmpIds.Contains(e.Id)).ExecuteDeleteAsync(ct);
+            }
+
+            // User: RefreshToken/PasswordResetToken cascade; AuditLog.UserId set-null → không vướng FK.
+            await _context.Users.Where(u => demoUserIds.Contains(u.Id)).ExecuteDeleteAsync(ct);
+
+            _logger.LogInformation(
+                "Cleanup: đã xoá {Users} account demo IT + đơn/template demo IT (ngoài scope sản xuất).",
+                demoUserIds.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Cleanup demo IT (ngoài scope) thất bại — bỏ qua, không chặn khởi động. " +
+                "Có thể account demo đang bị dữ liệu khác tham chiếu; dọn thủ công nếu cần.");
+        }
+    }
+
+    private async Task SeedAiServiceAccountAsync(CancellationToken cancellationToken)
+    {
+        const string username = "ai-service";
+        var exists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Username == username, cancellationToken);
+
+        if (exists)
+        {
+            _logger.LogDebug("AI service account already exists; skipping seed.");
+            return;
+        }
+
+        var section = _configuration.GetSection("AiServiceAccount");
+        var password = section["Password"];
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            _logger.LogWarning("AiServiceAccount:Password is not configured; skipping AI service account seed.");
+            return;
+        }
+
+        var aiUser = new User
+        {
+            EmployeeCode = "AI-SVC-001",
+            FullName = "AI Attendance Service",
+            RoleId = SystemRoles.AiServiceId,
+            Username = username,
+            PasswordHash = _passwordHasher.Hash(password),
+            Email = "ai-service@mingo.local",
+            Dob = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            PhoneNo = "0000000000",
+            Status = 1,
+            PasswordChangedAt = DateTime.UtcNow,
+        };
+
+        await _context.Users.AddAsync(aiUser, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded AI service account '{Username}'.", username);
+    }
 }
