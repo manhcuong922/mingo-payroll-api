@@ -8,6 +8,7 @@ using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Entities.Compliance;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Compliance;
+using MPS.Domain.Enums.Employee;
 
 namespace MPS.Infrastructure.Persistence;
 
@@ -136,11 +137,13 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        // FullName / Dob / SĐT lấy từ danh bạ nhân sự demo (StaffRoster) — cùng nguồn với
+        // SeedOfficeWorkforceDemoAsync để User.FullName và EmployeeInformation.FullName không lệch.
         var candidates = new[]
         {
-            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: "hr@mingo.local",         FullName: "HR Manager"),
-            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: "accountant@mingo.local", FullName: "Chief Accountant"),
-            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: "director@mingo.local",   FullName: "Director"),
+            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: "hr@mingo.local"),
+            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: "accountant@mingo.local"),
+            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: "director@mingo.local"),
         };
 
         var existing = await _context.Users
@@ -155,7 +158,7 @@ public sealed partial class DatabaseSeeder
         var now = DateTime.UtcNow;
         var toAdd = new List<User>();
 
-        foreach (var (roleId, code, username, email, fullName) in candidates)
+        foreach (var (roleId, code, username, email) in candidates)
         {
             if (existingUsernames.Contains(username)
                 || existingEmails.Contains(email)
@@ -167,16 +170,17 @@ public sealed partial class DatabaseSeeder
                 continue;
             }
 
+            var person = StaffRoster.GetValueOrDefault(username);
             toAdd.Add(new User
             {
                 EmployeeCode = code,
-                FullName = fullName,
+                FullName = person?.FullName ?? username,
                 RoleId = roleId,
                 Username = username,
                 PasswordHash = _passwordHasher.Hash(password),
                 Email = email,
-                Dob = new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                PhoneNo = "0000000000",
+                Dob = person?.Dob ?? new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                PhoneNo = person?.Phone ?? "0000000000",
                 Status = 1,
                 PasswordChangedAt = now,
             });
@@ -424,18 +428,21 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        // FullName lấy từ danh bạ nhân sự demo (StaffRoster) qua EnsureStaffAsync — các tên dưới đây
+        // chỉ là fallback khi thiếu danh bạ; chức danh (Trưởng phòng NS / Kế toán trưởng / Giám đốc /
+        // Trưởng phòng KD) nay do PositionId thể hiện, KHÔNG nhét vào ô họ tên.
         var seeds = new (string Username, string Code, string Email, string FullName, int RoleId, int PositionId, int DepartmentId)[]
         {
             // Backfill EmployeeInformation cho 3 user cấp công ty đã seed ở SeedDefaultRoleUsersAsync.
-            ("hr",         "HR001",   "hr@mingo.local",         "Trưởng phòng Nhân sự",
+            ("hr",         "HR001",   "hr@mingo.local",         "Phạm Thị Hồng Nhung",
                 SystemRoles.HrId,                 posMap["TPHR"], deptMap["HR"]),
-            ("accountant", "ACC001",  "accountant@mingo.local", "Kế toán trưởng",
+            ("accountant", "ACC001",  "accountant@mingo.local", "Vũ Thị Thu Hà",
                 SystemRoles.AccountantId,         posMap["KTT"],  deptMap["ACC"]),
-            ("director",   "DIR001",  "director@mingo.local",   "Giám đốc",
+            ("director",   "DIR001",  "director@mingo.local",   "Trần Quang Huy",
                 SystemRoles.DirectorId,           posMap["GD"],   deptMap["BGD"]),
 
             // Trưởng phòng Kinh doanh — role DepartmentManagerId để hưởng auto-route → HR khi nộp đơn.
-            ("tpkd",       "TPKD001", "tpkd@mingo.local",       "Trưởng phòng Kinh doanh",
+            ("tpkd",       "TPKD001", "tpkd@mingo.local",       "Lê Hoàng Nam",
                 SystemRoles.DepartmentManagerId,  posMap["TPKD"], deptMap["BIZ"]),
         };
 
@@ -507,6 +514,14 @@ public sealed partial class DatabaseSeeder
         // cho HR/Kế toán/Giám đốc ⇒ chính validator của hệ thống chặn không cho lưu lại 3 hồ sơ này.
         // Chuẩn hoá ngay tại nguồn: role quản trị ⇒ để trống xưởng.
         int? deptId = SystemRoles.DepartmentMemberRoleIds.Contains(roleId) ? departmentId : null;
+
+        // Danh tính thực (họ tên/giới tính/ngày sinh/SĐT/địa chỉ/số phụ thuộc) lấy từ danh bạ demo
+        // theo Username — thay cho placeholder "CN Thợ cắt X1.1". Người ngoài danh bạ dùng mặc định.
+        var person = StaffRoster.GetValueOrDefault(username);
+        var effectiveName = person?.FullName ?? fullName;
+        var dob = person?.Dob ?? new DateTime(1992, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var phone = person?.Phone ?? "0900000000";
+
         var user = await _context.Users.FirstOrDefaultAsync(
             u => u.Username == username || u.EmployeeCode == code || u.Email == email, ct);
         if (user is null)
@@ -514,17 +529,27 @@ public sealed partial class DatabaseSeeder
             user = new User
             {
                 EmployeeCode = code,
-                FullName = fullName,
+                FullName = effectiveName,
                 RoleId = roleId,
                 Username = username,
                 PasswordHash = _passwordHasher.Hash(password),
                 Email = email,
-                Dob = new DateTime(1992, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                PhoneNo = "0900000000",
+                Dob = dob,
+                PhoneNo = phone,
                 Status = 1,
                 PasswordChangedAt = DateTime.UtcNow,
             };
             await _context.Users.AddAsync(user, ct);
+            await _context.SaveChangesAsync(ct);
+        }
+        else if (person is not null
+            && (user.FullName != person.FullName || user.PhoneNo != person.Phone))
+        {
+            // Bản ghi cũ còn tên/SĐT placeholder → nâng về danh tính thực (chỉ với account demo trong
+            // danh bạ; nhân sự tạo qua API thật không có trong danh bạ nên không bị đụng).
+            user.FullName = person.FullName;
+            user.PhoneNo = person.Phone;
+            user.Dob = person.Dob;
             await _context.SaveChangesAsync(ct);
         }
 
@@ -546,15 +571,21 @@ public sealed partial class DatabaseSeeder
             emp = new EmployeeInformation
             {
                 UserId = user.Id,
-                FullName = fullName,
+                FullName = effectiveName,
                 Dob = user.Dob,
+                Gender = person?.Gender ?? Gender.Male,
                 CitizenId = citizenId,
-                PermanentAddress = "N/A (manufacturing seed)",
+                PermanentAddress = person?.Address ?? "Hà Nội, Việt Nam",
                 Email = email,
                 PhoneNo = user.PhoneNo,
                 PositionId = positionId,
                 DepartmentId = deptId,
-                DependentsNo = 0,
+                DependentsNo = person?.Dependents ?? 0,
+                // Mã số thuế / số BHXH / số tài khoản ngân hàng — sinh xác định từ user.Id (tái lập
+                // được), để payroll không phải điền chuỗi "DEMO..." vô nghĩa.
+                TaxNo = $"{8_000_000_000L + user.Id}",
+                SocialNo = $"{7_900_000_000L + user.Id}",
+                BankNumber = $"{190_300_000_000L + user.Id}",
             };
             await _context.EmployeeInformations.AddAsync(emp, ct);
             await _context.SaveChangesAsync(ct);
@@ -567,6 +598,19 @@ public sealed partial class DatabaseSeeder
             if (emp.UserId is null) { emp.UserId = user.Id; changed = true; }
             if (emp.DepartmentId != deptId) { emp.DepartmentId = deptId; changed = true; }
             if (emp.PositionId != positionId) { emp.PositionId = positionId; changed = true; }
+            // Nâng danh tính placeholder cũ về danh bạ thực (chỉ account demo có trong danh bạ).
+            if (person is not null)
+            {
+                if (emp.FullName != person.FullName) { emp.FullName = person.FullName; changed = true; }
+                if (emp.Gender != person.Gender) { emp.Gender = person.Gender; changed = true; }
+                if (emp.Dob != person.Dob) { emp.Dob = person.Dob; changed = true; }
+                if (emp.PhoneNo != person.Phone) { emp.PhoneNo = person.Phone; changed = true; }
+                if (emp.PermanentAddress == "N/A (manufacturing seed)")
+                {
+                    emp.PermanentAddress = person.Address;
+                    changed = true;
+                }
+            }
             if (changed) await _context.SaveChangesAsync(ct);
         }
 

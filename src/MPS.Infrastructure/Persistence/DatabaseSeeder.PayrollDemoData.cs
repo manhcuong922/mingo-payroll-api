@@ -188,8 +188,9 @@ public sealed partial class DatabaseSeeder
         var now = DateTime.UtcNow;
         foreach (var emp in emps)
         {
-            if (string.IsNullOrWhiteSpace(emp.BankNumber)) emp.BankNumber = $"DEMO{emp.Id:D10}";
-            if (string.IsNullOrWhiteSpace(emp.TaxNo)) emp.TaxNo = $"{emp.Id:D10}";
+            // Số tài khoản / mã số thuế còn trống → điền giá trị số hợp lệ (không dùng chuỗi "DEMO...").
+            if (string.IsNullOrWhiteSpace(emp.BankNumber)) emp.BankNumber = $"{190_300_000_000L + emp.Id}";
+            if (string.IsNullOrWhiteSpace(emp.TaxNo)) emp.TaxNo = $"{8_000_000_000L + emp.Id}";
 
             var hasAtt = await _context.AttendanceRecords
                 .AnyAsync(a => a.EmployeeInformationId == emp.Id && a.WorkDate >= periodStart && a.WorkDate <= periodEnd, ct);
