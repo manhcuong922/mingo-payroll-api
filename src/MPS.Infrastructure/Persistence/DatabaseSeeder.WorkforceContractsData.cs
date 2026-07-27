@@ -59,11 +59,14 @@ public sealed partial class DatabaseSeeder
             .ToDictionaryAsync(p => p.Code, p => p.Id, StringComparer.OrdinalIgnoreCase, ct);
 
         // Đảm bảo bậc lương theo chức danh (insert-if-missing theo Code) → map PositionId → (GradeId, Salary).
+        // Đồng thời map PositionId → tên chức danh để làm MÔ TẢ CÔNG VIỆC của HĐ (thay vì nhét tên người).
         var now = DateTime.UtcNow;
         var gradeByPos = new Dictionary<int, (int GradeId, decimal Salary)>();
+        var jobTitleByPos = new Dictionary<int, string>();
         foreach (var g in WorkforceGrades)
         {
             if (!posByCode.TryGetValue(g.PosCode, out var posId)) continue;
+            jobTitleByPos[posId] = g.GradeName;
             var grade = await _context.SalaryGrades.FirstOrDefaultAsync(x => x.Code == g.GradeCode, ct);
             if (grade is null)
             {
@@ -89,7 +92,7 @@ public sealed partial class DatabaseSeeder
 
         var emps = await _context.EmployeeInformations.AsNoTracking()
             .Where(e => coveredPositions.Contains(e.PositionId))
-            .Select(e => new { e.Id, e.PositionId, e.FullName })
+            .Select(e => new { e.Id, e.PositionId })
             .ToListAsync(ct);
 
         var effectiveFrom = DateTime.UtcNow.Date.AddYears(-1);
@@ -99,11 +102,12 @@ public sealed partial class DatabaseSeeder
             if (empIdsWithContract.Contains(e.Id)) continue;          // đã có HĐ (vd nhóm contract-test) → bỏ
             if (!gradeByPos.TryGetValue(e.PositionId, out var g)) continue;
 
+            var jobTitle = jobTitleByPos.TryGetValue(e.PositionId, out var t) ? t : "Nhân sự";
             contracts.Add(NewTestContract(
                 $"{WorkforceContractNoPrefix}{e.Id:D4}",
                 ContractEnums.ContractCategory.Indefinite, ContractEnums.ContractStatus.Active,
                 e.Id, party.Id, adminId, e.PositionId,
-                $"Nhân sự xưởng — {e.FullName}", "Xưởng sản xuất Mingo",
+                $"{jobTitle} — công việc theo chức danh tại Công ty Mingo", "Xưởng sản xuất Mingo",
                 effectiveFrom, null, g.GradeId, g.Salary,
                 signedAt: effectiveFrom, signedPlace: "Hà Nội", createdAt: effectiveFrom));
         }
