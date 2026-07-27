@@ -76,6 +76,24 @@ public sealed record MyPayslipDto(
     decimal? Gross,
     decimal? Net);
 
+/// <summary>Header phiếu lương cá nhân — thông tin NV để render tiêu đề phiếu.</summary>
+public sealed record EmployeePayslipHeaderDto(
+    int EmployeeInformationId,
+    string FullName,
+    string? PositionName,
+    string? BankAccountLast4);
+
+/// <summary>
+/// Phiếu lương chi tiết của chính NV trong 1 kỳ đã chốt. <c>Sheet</c> khớp 1-1 với
+/// <see cref="PayrollSheetDto"/> (FE tái dùng &lt;PayrollSheetTable&gt;) nhưng <c>Rows</c> chỉ có ĐÚNG 1
+/// phần tử — dòng của chính NV, không có dòng Total. <c>Gross</c>/<c>Net</c> tiện cho dashboard/biểu đồ.
+/// </summary>
+public sealed record MyPayslipDetailDto(
+    PayrollSheetDto Sheet,
+    EmployeePayslipHeaderDto Employee,
+    decimal? Gross,
+    decimal? Net);
+
 public sealed record PayrollReadinessDto(
     int EmployeeInformationId,
     string EmployeeCode,

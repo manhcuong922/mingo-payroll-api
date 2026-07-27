@@ -23,6 +23,15 @@ public interface IPayrollPeriodRepository
     Task<IReadOnlyList<PayrollRow>> GetEmployeeRowsAsync(
         int employeeInformationId, int limit, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Kỳ lương với DUY NHẤT dòng của 1 NV (nếu có) — kèm ComplianceRefs, Notes, Cells, và
+    /// EmployeeInformation + Position của dòng. Dùng cho self-service payslip để tái dùng
+    /// PayrollSheetMapper trên payload đã được thu hẹp về 1 row (không load Total + n-1 NV khác).
+    /// Trả null nếu kỳ không tồn tại. Rows sẽ rỗng nếu NV không có dòng trong kỳ.
+    /// </summary>
+    Task<PayrollPeriod?> GetPeriodWithEmployeeRowAsync(
+        int periodId, int employeeInformationId, CancellationToken cancellationToken = default);
+
     /// <summary>Persist toàn bộ aggregate (rows/cells/notes/refs) trong 1 transaction.</summary>
     Task<int> AddAsync(PayrollPeriod period, CancellationToken cancellationToken = default);
 

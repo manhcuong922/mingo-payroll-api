@@ -51,6 +51,27 @@ public class PayrollController : ControllerBase
     public async Task<IActionResult> GetMyPayslips([FromQuery] int months, CancellationToken ct)
         => Ok(await _mediator.Send(new GetMyPayslipsQuery(months), ct));
 
+    /// <summary>
+    /// NV xem chi tiết 1 phiếu lương của CHÍNH MÌNH: metadata kỳ, danh sách cột (label/nhóm/thứ tự)
+    /// và các ô của riêng NV. 404 nếu kỳ Draft, không tồn tại, hoặc NV không có dòng trong kỳ.
+    /// </summary>
+    [HttpGet("me/payslips/{periodId:int}")]
+    [HasPermission(Permissions.PayrollReadSelf)]
+    public async Task<IActionResult> GetMyPayslipDetail(int periodId, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetMyPayslipDetailQuery(periodId), ct));
+
+    /// <summary>
+    /// NV tải phiếu lương .xlsx của CHÍNH MÌNH — sheet "4. LUONG" chỉ dòng của NV, kèm biểu thuế
+    /// TNCN + tỷ lệ BHXH + ghi chú làm căn cứ. 404 nếu kỳ Draft, không tồn tại hoặc NV không có dòng.
+    /// </summary>
+    [HttpGet("me/payslips/{periodId:int}/export")]
+    [HasPermission(Permissions.PayrollReadSelf)]
+    public async Task<IActionResult> ExportMyPayslip(int periodId, CancellationToken ct)
+    {
+        var file = await _mediator.Send(new ExportMyPayslipQuery(periodId), ct);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
     /// <summary>Sinh bảng lương tháng. Thiếu liệu → 422 kèm danh sách NV thiếu.</summary>
     [HttpPost("periods")]
     [HasPermission(Permissions.PayrollCreateAll)]

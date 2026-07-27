@@ -63,6 +63,19 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
             .Take(limit)
             .ToListAsync(ct);
 
+    public Task<PayrollPeriod?> GetPeriodWithEmployeeRowAsync(
+        int periodId, int employeeInformationId, CancellationToken ct = default) =>
+        _context.PayrollPeriods.AsNoTrackingWithIdentityResolution()
+            .Include(p => p.ComplianceRefs)
+            .Include(p => p.Notes)
+            .Include(p => p.Rows.Where(r => r.EmployeeInformationId == employeeInformationId))
+                .ThenInclude(r => r.Cells)
+            .Include(p => p.Rows.Where(r => r.EmployeeInformationId == employeeInformationId))
+                .ThenInclude(r => r.EmployeeInformation!)
+                .ThenInclude(e => e.Position)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(p => p.Id == periodId, ct);
+
     public async Task<int> AddAsync(PayrollPeriod period, CancellationToken ct = default)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
