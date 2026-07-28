@@ -177,6 +177,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IFaceRegistrationRepository, MPS.Infrastructure.Repositories.Attendance.FaceRegistrationRepository>();
         services.AddScoped<IDayTypeResolver, DayTypeResolver>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IEmployeeDayOffChecker, EmployeeDayOffChecker>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IWorkHourSplitter, WorkHourSplitter>();
         services.AddScoped<MPS.Application.Common.Interfaces.IScheduleTemplateExpander, ScheduleTemplateExpander>();
         services.AddScoped<MPS.Application.Common.Interfaces.IRegularHoursCapChecker, RegularHoursCapChecker>();

@@ -27,6 +27,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
+    private readonly IEmployeeDayOffChecker _dayOffChecker;
     private readonly IClock _clock;
     private readonly ILogger<FaceCheckinCommandHandler> _logger;
     private readonly AttendanceCheckinSettings _checkinSettings;
@@ -40,6 +41,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
+        IEmployeeDayOffChecker dayOffChecker,
         IClock clock,
         ILogger<FaceCheckinCommandHandler> logger,
         IOptions<AttendanceCheckinSettings> checkinSettings)
@@ -52,6 +54,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
+        _dayOffChecker = dayOffChecker;
         _clock = clock;
         _logger = logger;
         _checkinSettings = checkinSettings.Value;
@@ -121,7 +124,15 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             employeeInformationId, scanDate, candidates.Count);
 
         if (candidates.Count == 0)
+        {
+            // Không có ca thường là do hôm nay nghỉ (nghỉ phép đã duyệt / ngày lễ / cuối tuần) —
+            // trả đúng lý do thay vì thông báo "chưa được phân ca" chung chung.
+            var dayOff = await _dayOffChecker.CheckAsync(employeeInformationId, scanDate, cancellationToken);
+            if (dayOff.IsDayOff)
+                return Fail(dayOff.Message!);
+
             return Fail($"Nhân viên {employeeInformationId} chưa được phân ca cho ngày {scanDate:yyyy-MM-dd}.");
+        }
 
         // ── Chọn ca có cửa sổ chấm công chứa thời điểm quét ──────────────────────
         var inWindow = candidates
@@ -175,6 +186,12 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         // ── Case 1: Chưa có record → Chấm công vào ca ────────────────────────────
         if (existing is null)
         {
+            // Có ca nhưng đang nghỉ phép đã duyệt → không cho mở ca mới. Chỉ chặn ở nhánh TẠO
+            // MỚI: ca đêm 22:00→06:00 vắt sang ngày nghỉ vẫn phải tan ca được (Case 3).
+            var dayOff = await _dayOffChecker.CheckAsync(employeeInformationId, workDate, cancellationToken);
+            if (dayOff.Reason == DayOffReasons.Leave)
+                return Fail(dayOff.Message!);
+
             var userId = _currentUser.UserId
                 ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
@@ -216,7 +233,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 CheckinType: FaceCheckinType.AlreadyComplete,
                 AttendanceLogId: existing.Id.ToString(),
                 Message: "Ca làm việc đã hoàn thành, không thể ghi thêm.",
-                ShiftName: existing.ShiftTemplate.Name,
+                ShiftName: existing.ShiftTemplate?.Name ?? shift.ShiftTemplate.Name,
                 CheckinTime: existing.CheckInAt is null ? null : TimeOnly.FromDateTime(existing.CheckInAt.Value),
                 CheckoutTime: TimeOnly.FromDateTime(existing.CheckOutAt.Value),
                 CooldownSecondsRemaining: null);
@@ -239,7 +256,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 CheckinType: FaceCheckinType.Cooldown,
                 AttendanceLogId: existing.Id.ToString(),
                 Message: $"Chưa đủ {CheckoutMinGapMinutes} phút để tan ca. Còn {remaining} giây.",
-                ShiftName: existing.ShiftTemplate.Name,
+                ShiftName: existing.ShiftTemplate?.Name ?? shift.ShiftTemplate.Name,
                 CheckinTime: TimeOnly.FromDateTime(existing.CheckInAt.Value),
                 CheckoutTime: null,
                 CooldownSecondsRemaining: remaining);
@@ -249,17 +266,19 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         var updateUserId = _currentUser.UserId
             ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
+        var shiftTemplate = existing.ShiftTemplate ?? shift.ShiftTemplate;
+
         // Re-resolve status khi đã có đủ CheckIn/CheckOut — giống chấm công tay,
         // nhờ đó bắt được EarlyLeave / HalfDay (trước đây luôn kẹt ở Present).
         var checkoutStatus = await ResolveStatusAsync(
-            existing.CheckInAt, localTime, existing.ShiftTemplate!, workDate, cancellationToken);
+            existing.CheckInAt, localTime, shiftTemplate, workDate, cancellationToken);
 
         // Tính DayHours/NightHours giống hệt luồng chấm công tay
         // (RecordAttendanceCommandHandler): splitter + break của ca + khung giờ đêm theo luật.
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(workDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter, checkoutStatus, existing.CheckInAt, localTime,
-            laborLaw.NightStartTime, laborLaw.NightEndTime, existing.ShiftTemplate!, workDate);
+            laborLaw.NightStartTime, laborLaw.NightEndTime, shiftTemplate, workDate);
 
         existing.CheckOutAt      = localTime;
         existing.Status          = checkoutStatus;
@@ -275,7 +294,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             CheckinType: FaceCheckinType.Checkout,
             AttendanceLogId: existing.Id.ToString(),
             Message: "Tan ca thành công.",
-            ShiftName: existing.ShiftTemplate.Name,
+            ShiftName: shiftTemplate.Name,
             CheckinTime: TimeOnly.FromDateTime(existing.CheckInAt.Value),
             CheckoutTime: TimeOnly.FromDateTime(localTime),
             CooldownSecondsRemaining: null);

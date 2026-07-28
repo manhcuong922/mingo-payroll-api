@@ -137,6 +137,20 @@ public class AttendanceController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Hôm nay user có nghỉ không (nghỉ phép đã duyệt / ngày lễ / cuối tuần không có ca).
+    /// Kiosk chấm công dùng để hiện thông báo và chặn vào trang quét khuôn mặt.
+    /// </summary>
+    [HttpGet("me/day-off")]
+    [HasPermission(Permissions.AttendanceReadSelf)]
+    public async Task<IActionResult> GetMyDayOff(
+        [FromQuery] DateOnly? date,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetMyDayOffStatusQuery(date), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost]
     [HasPermission(Permissions.AttendanceCreateAll)]
     public async Task<IActionResult> Record(
