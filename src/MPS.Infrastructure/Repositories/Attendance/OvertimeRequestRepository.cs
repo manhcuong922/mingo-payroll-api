@@ -179,6 +179,12 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         tracked.ReviewNote = entity.ReviewNote;
         tracked.ReviewedByUserId = entity.ReviewedByUserId;
         tracked.ReviewedAt = entity.ReviewedAt;
+        tracked.PmReviewedByUserId = entity.PmReviewedByUserId;
+        tracked.PmReviewedAt = entity.PmReviewedAt;
+        tracked.PmReviewNote = entity.PmReviewNote;
+        tracked.ApproverReviewedByUserId = entity.ApproverReviewedByUserId;
+        tracked.ApproverReviewedAt = entity.ApproverReviewedAt;
+        tracked.ApproverReviewNote = entity.ApproverReviewNote;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
 
