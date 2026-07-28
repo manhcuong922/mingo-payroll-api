@@ -12,6 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 using MPS.API.Authorization;
 using MPS.API.Middleware;
 using MPS.API.RateLimiting;
+using MPS.API.Serialization;
 using MPS.API.Services;
 using MPS.Application.Behaviors;
 using MPS.Application.Common.Interfaces;
@@ -28,6 +29,10 @@ builder.Services.AddControllers()
     {
         opts.JsonSerializerOptions.Converters.Add(
             new System.Text.Json.Serialization.JsonStringEnumConverter());
+        // DateTime từ EF/SQL Server bị mất Kind (Unspecified) — ép output có 'Z' để FE parse
+        // đúng UTC thay vì local time. Xem UtcDateTimeConverter.
+        opts.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
+        opts.JsonSerializerOptions.Converters.Add(new UtcNullableDateTimeConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
