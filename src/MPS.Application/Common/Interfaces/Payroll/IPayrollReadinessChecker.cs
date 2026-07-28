@@ -11,6 +11,12 @@ public sealed record PayrollEmployeeReadiness(
     IReadOnlyList<string> Missing)
 {
     public bool IsReady => Missing.Count == 0;
+
+    /// <summary>
+    /// #59/HOL-WARN01 — cảnh báo cấp kỳ (KHÔNG chặn, KHÔNG ảnh hưởng <see cref="IsReady"/>): vd tháng
+    /// có ngày lễ theo luật nhưng bảng <c>PublicHolidays</c> còn trống ⇒ công chuẩn/phụ trội lễ có thể sai.
+    /// </summary>
+    public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>

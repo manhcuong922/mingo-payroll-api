@@ -9,6 +9,7 @@ using MPS.Domain.Constants;
 using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces.Attendance;
 using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Payroll.Commands;
@@ -31,6 +32,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
     private readonly IPayrollFieldCatalog _catalog;
     private readonly IPayrollLawChangeNoteBuilder _noteBuilder;
     private readonly IPayrollAdjustmentRepository _adjustments;
+    private readonly IPublicHolidayRepository _holidays;
     private readonly ICurrentUserService _currentUser;
 
     public CreatePayrollPeriodCommandHandler(
@@ -38,7 +40,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         IPayrollReadinessChecker readiness, IPayrollDataCollector collector,
         IPayrollCalculator calculator, IColumnDependencyGraph graph, IPayrollFieldCatalog catalog,
         IPayrollLawChangeNoteBuilder noteBuilder, IPayrollAdjustmentRepository adjustments,
-        ICurrentUserService currentUser)
+        IPublicHolidayRepository holidays, ICurrentUserService currentUser)
     {
         _periods = periods;
         _formulaSets = formulaSets;
@@ -49,6 +51,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         _catalog = catalog;
         _noteBuilder = noteBuilder;
         _adjustments = adjustments;
+        _holidays = holidays;
         _currentUser = currentUser;
     }
 
@@ -81,7 +84,13 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
 
         // ===== Snapshot params/công chuẩn/payDate + gom liệu =====
         var payDate = new DateOnly(request.Year, request.Month, DateTime.DaysInMonth(request.Year, request.Month));
-        var standardDays = request.StandardWorkingDays ?? PayrollWorkingDays.CountWeekdays(request.Year, request.Month);
+        // #59: công chuẩn mặc định phải TRỪ ngày lễ (lễ luật dương lịch cố định + lễ đã nhập DB).
+        // Chỉ nạp lễ khi kế toán KHÔNG tự truyền standardWorkingDays.
+        var standardDays = request.StandardWorkingDays
+            ?? PayrollWorkingDays.CountStandardWorkingDays(request.Year, request.Month,
+                PayrollWorkingDays.HolidayDatesInMonth(
+                    await _holidays.GetByYearAsync(request.Year, includeInactive: false, ct),
+                    request.Year, request.Month));
 
         var collection = await _collector.CollectAsync(
             new PayrollCollectionRequest(request.Year, request.Month, payDate, standardDays, readyIds), ct);

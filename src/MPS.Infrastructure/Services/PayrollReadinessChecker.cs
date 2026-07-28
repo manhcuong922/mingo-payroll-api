@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces.Payroll;
+using MPS.Domain.Constants;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Enums.Contract;
 using MPS.Domain.Enums.Evaluation;
@@ -64,6 +65,8 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
                 && m.Status == EvaluationStatus.Approved)
             .Select(m => m.EmployeeUserId).Distinct().ToListAsync(ct)).ToHashSet();
 
+        var warnings = await BuildPeriodWarningsAsync(req, periodStart, periodEnd, ct);
+
         var result = new List<PayrollEmployeeReadiness>();
         foreach (var e in employees.OrderBy(e => e.Code))
         {
@@ -73,8 +76,36 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
             if (hasPendingOt.Contains(e.Id)) missing.Add("Còn đơn tăng ca chưa duyệt xong");
             if (!e.UserId.HasValue || !hasApprovedEval.Contains(e.UserId.Value)) missing.Add("Chưa có bảng đánh giá tháng được duyệt");
             if (string.IsNullOrWhiteSpace(e.BankNumber) || string.IsNullOrWhiteSpace(e.TaxNo)) missing.Add("Hồ sơ chi lương thiếu (số TK / mã số thuế)");
-            result.Add(new PayrollEmployeeReadiness(e.Id, e.Code ?? string.Empty, e.FullName, missing));
+            result.Add(new PayrollEmployeeReadiness(e.Id, e.Code ?? string.Empty, e.FullName, missing) { Warnings = warnings });
         }
         return result;
+    }
+
+    /// <summary>
+    /// #59/HOL-WARN01 ([D17]) — cảnh báo cấp kỳ, KHÔNG chặn: tháng có ngày lễ dương lịch cố định theo
+    /// luật nhưng chưa nhập mốc đó vào bảng <c>PublicHolidays</c> ⇒ công chuẩn và phụ trội ngày lễ có
+    /// thể sai. Trả rỗng nếu tháng không có lễ luật cố định hoặc đã nhập đủ.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> BuildPeriodWarningsAsync(
+        PayrollReadinessRequest req, DateOnly periodStart, DateOnly periodEnd, CancellationToken ct)
+    {
+        var statutory = LaborLawConstants.PublicHolidays.FixedSolarInMonth(req.Year, req.Month).ToList();
+        if (statutory.Count == 0) return Array.Empty<string>();
+
+        var entered = await _db.PublicHolidays.AsNoTracking()
+            .Where(h => h.IsActive && h.HolidayDate <= periodEnd && h.HolidayEndDate >= periodStart)
+            .Select(h => new { h.HolidayDate, h.HolidayEndDate })
+            .ToListAsync(ct);
+
+        bool IsCovered(DateOnly d) => entered.Any(h => h.HolidayDate <= d && h.HolidayEndDate >= d);
+        var missingStatutory = statutory.Where(d => !IsCovered(d)).ToList();
+        if (missingStatutory.Count == 0) return Array.Empty<string>();
+
+        return new[]
+        {
+            $"Tháng {req.Month:D2}/{req.Year} có ngày lễ theo luật ({string.Join(", ", missingStatutory.Select(d => d.ToString("dd/MM")))}) "
+            + "nhưng chưa nhập vào bảng ngày lễ (PublicHolidays) — công chuẩn và phụ trội ngày lễ có thể bị sai. "
+            + "Hãy nhập ngày lễ trước khi chốt lương.",
+        };
     }
 }

@@ -51,17 +51,59 @@ public sealed class PayrollReadinessCheckerTests
             "HĐ còn Draft (chưa ký) vẫn là thiếu dữ liệu");
     }
 
+    // ── HOL-WARN01 — cảnh báo ngày lễ (không chặn, không ảnh hưởng IsReady) ──
+
+    [Fact]
+    public async Task Warns_When_Statutory_Holiday_Month_Has_No_Entered_Holiday()
+    {
+        using var fx = new ContractIntegrationFixture();
+        // Tháng 9 có Quốc khánh 02/09 theo luật; không nhập PublicHolidays ⇒ phải cảnh báo.
+        var readiness = await SeedAndCheckAsync(fx, ContractStatus.Active,
+            effectiveFrom: new DateTime(Year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            effectiveTo: null, year: Year, month: 9);
+
+        readiness.Warnings.Should().Contain(w => w.Contains("ngày lễ"),
+            "tháng có lễ luật mà bảng PublicHolidays trống ⇒ cảnh báo");
+        readiness.IsReady.Should().BeTrue("cảnh báo KHÔNG được chặn readiness");
+    }
+
+    [Fact]
+    public async Task No_Warning_When_Statutory_Holiday_Is_Entered()
+    {
+        using var fx = new ContractIntegrationFixture();
+        var readiness = await SeedAndCheckAsync(fx, ContractStatus.Active,
+            effectiveFrom: new DateTime(Year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            effectiveTo: null, year: Year, month: 9,
+            enteredHoliday: (new DateOnly(Year, 9, 2), new DateOnly(Year, 9, 2)));
+
+        readiness.Warnings.Should().BeEmpty("đã nhập đủ ngày lễ ⇒ không cảnh báo");
+    }
+
     /// <summary>
     /// Seed một NV "đủ mọi thứ trừ HĐ" (chấm công + đánh giá Approved + hồ sơ chi lương đủ),
     /// gắn 1 HĐ với trạng thái/khoảng hiệu lực tùy biến, rồi trả readiness của chính NV đó.
     /// </summary>
     private static async Task<PayrollEmployeeReadiness> SeedAndCheckAsync(
-        ContractIntegrationFixture fx, ContractStatus contractStatus, DateTime effectiveFrom, DateTime? effectiveTo)
+        ContractIntegrationFixture fx, ContractStatus contractStatus, DateTime effectiveFrom, DateTime? effectiveTo,
+        int year = Year, int month = Month, (DateOnly Start, DateOnly End)? enteredHoliday = null)
     {
         var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
 
         employeeInfo.BankNumber = "0123456789";
         employeeInfo.TaxNo = "8000000001";
+
+        if (enteredHoliday is { } h)
+        {
+            await fx.Db.PublicHolidays.AddAsync(new PublicHoliday
+            {
+                Name = "Lễ",
+                HolidayDate = h.Start,
+                HolidayEndDate = h.End,
+                IsActive = true,
+                CreatedAt = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                CreatedByUserId = actor.Id,
+            });
+        }
 
         var contract = new ContractEntity
         {
@@ -92,31 +134,31 @@ public sealed class PayrollReadinessCheckerTests
         await fx.Db.AttendanceRecords.AddAsync(new AttendanceRecord
         {
             EmployeeInformationId = employeeInfo.Id,
-            WorkDate = new DateOnly(Year, Month, 10),
+            WorkDate = new DateOnly(year, month, 10),
             DayHours = 8m,
             NightHours = 0m,
             Status = AttendanceStatus.Present,
-            CreatedAt = new DateTime(Year, Month, 10, 0, 0, 0, DateTimeKind.Utc),
+            CreatedAt = new DateTime(year, month, 10, 0, 0, 0, DateTimeKind.Utc),
             CreatedByUserId = actor.Id,
         });
 
         await fx.Db.MonthlyEvaluations.AddAsync(new MonthlyEvaluation
         {
             EmployeeUserId = employeeInfo.UserId!.Value,
-            PeriodYear = Year,
-            PeriodMonth = Month,
+            PeriodYear = year,
+            PeriodMonth = month,
             SubjectRoleIdSnapshot = 7,
             Source = EvaluationSource.Direct,
             Status = EvaluationStatus.Approved,
             FinalScore = 90m,
             CreatedByUserId = actor.Id,
-            CreatedAt = new DateTime(Year, Month, 28, 0, 0, 0, DateTimeKind.Utc),
+            CreatedAt = new DateTime(year, month, 28, 0, 0, 0, DateTimeKind.Utc),
         });
 
         await fx.Db.SaveChangesAsync();
 
         var checker = new PayrollReadinessChecker(fx.Db);
-        var result = await checker.CheckAsync(new PayrollReadinessRequest(Year, Month), CancellationToken.None);
+        var result = await checker.CheckAsync(new PayrollReadinessRequest(year, month), CancellationToken.None);
         return result.Single();
     }
 }

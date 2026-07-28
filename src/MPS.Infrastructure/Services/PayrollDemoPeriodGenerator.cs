@@ -5,6 +5,7 @@ using MPS.Application.Common.Payroll.Formula;
 using MPS.Application.Features.Payroll.Common;
 using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Enums.Payroll;
+using MPS.Domain.Interfaces.Attendance;
 using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Infrastructure.Services;
@@ -25,13 +26,15 @@ public sealed class PayrollDemoPeriodGenerator
     private readonly IColumnDependencyGraph _graph;
     private readonly IPayrollFieldCatalog _catalog;
     private readonly IPayrollLawChangeNoteBuilder _noteBuilder;
+    private readonly IPublicHolidayRepository _holidays;
     private readonly ILogger<PayrollDemoPeriodGenerator> _logger;
 
     public PayrollDemoPeriodGenerator(
         IPayrollPeriodRepository periods, IPayrollFormulaSetRepository formulaSets,
         IPayrollReadinessChecker readiness, IPayrollDataCollector collector,
         IPayrollCalculator calculator, IColumnDependencyGraph graph, IPayrollFieldCatalog catalog,
-        IPayrollLawChangeNoteBuilder noteBuilder, ILogger<PayrollDemoPeriodGenerator> logger)
+        IPayrollLawChangeNoteBuilder noteBuilder, IPublicHolidayRepository holidays,
+        ILogger<PayrollDemoPeriodGenerator> logger)
     {
         _periods = periods;
         _formulaSets = formulaSets;
@@ -41,6 +44,7 @@ public sealed class PayrollDemoPeriodGenerator
         _graph = graph;
         _catalog = catalog;
         _noteBuilder = noteBuilder;
+        _holidays = holidays;
         _logger = logger;
     }
 
@@ -78,7 +82,10 @@ public sealed class PayrollDemoPeriodGenerator
 
         var readyIds = readiness.Select(r => r.EmployeeInformationId).ToList();
         var payDate = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-        var standardDays = PayrollWorkingDays.CountWeekdays(year, month);
+        // #59: công chuẩn mặc định trừ ngày lễ (lễ luật dương lịch + lễ đã nhập DB).
+        var enteredHolidays = PayrollWorkingDays.HolidayDatesInMonth(
+            await _holidays.GetByYearAsync(year, includeInactive: false, ct), year, month);
+        var standardDays = PayrollWorkingDays.CountStandardWorkingDays(year, month, enteredHolidays);
 
         var collection = await _collector.CollectAsync(
             new PayrollCollectionRequest(year, month, payDate, standardDays, readyIds), ct);
