@@ -233,7 +233,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 CheckinType: FaceCheckinType.AlreadyComplete,
                 AttendanceLogId: existing.Id.ToString(),
                 Message: "Ca làm việc đã hoàn thành, không thể ghi thêm.",
-                ShiftName: existing.ShiftTemplate?.Name ?? shift.ShiftTemplate.Name,
+                ShiftName: existing.ShiftTemplate.Name,
                 CheckinTime: existing.CheckInAt is null ? null : TimeOnly.FromDateTime(existing.CheckInAt.Value),
                 CheckoutTime: TimeOnly.FromDateTime(existing.CheckOutAt.Value),
                 CooldownSecondsRemaining: null);
@@ -256,7 +256,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 CheckinType: FaceCheckinType.Cooldown,
                 AttendanceLogId: existing.Id.ToString(),
                 Message: $"Chưa đủ {CheckoutMinGapMinutes} phút để tan ca. Còn {remaining} giây.",
-                ShiftName: existing.ShiftTemplate?.Name ?? shift.ShiftTemplate.Name,
+                ShiftName: existing.ShiftTemplate.Name,
                 CheckinTime: TimeOnly.FromDateTime(existing.CheckInAt.Value),
                 CheckoutTime: null,
                 CooldownSecondsRemaining: remaining);
@@ -266,19 +266,17 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         var updateUserId = _currentUser.UserId
             ?? throw new InvalidOperationException("Không xác định được user ID của AI service.");
 
-        var shiftTemplate = existing.ShiftTemplate ?? shift.ShiftTemplate;
-
         // Re-resolve status khi đã có đủ CheckIn/CheckOut — giống chấm công tay,
         // nhờ đó bắt được EarlyLeave / HalfDay (trước đây luôn kẹt ở Present).
         var checkoutStatus = await ResolveStatusAsync(
-            existing.CheckInAt, localTime, shiftTemplate, workDate, cancellationToken);
+            existing.CheckInAt, localTime, existing.ShiftTemplate!, workDate, cancellationToken);
 
         // Tính DayHours/NightHours giống hệt luồng chấm công tay
         // (RecordAttendanceCommandHandler): splitter + break của ca + khung giờ đêm theo luật.
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(workDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter, checkoutStatus, existing.CheckInAt, localTime,
-            laborLaw.NightStartTime, laborLaw.NightEndTime, shiftTemplate, workDate);
+            laborLaw.NightStartTime, laborLaw.NightEndTime, existing.ShiftTemplate!, workDate);
 
         existing.CheckOutAt      = localTime;
         existing.Status          = checkoutStatus;
@@ -294,7 +292,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             CheckinType: FaceCheckinType.Checkout,
             AttendanceLogId: existing.Id.ToString(),
             Message: "Tan ca thành công.",
-            ShiftName: shiftTemplate.Name,
+            ShiftName: existing.ShiftTemplate.Name,
             CheckinTime: TimeOnly.FromDateTime(existing.CheckInAt.Value),
             CheckoutTime: TimeOnly.FromDateTime(localTime),
             CooldownSecondsRemaining: null);
