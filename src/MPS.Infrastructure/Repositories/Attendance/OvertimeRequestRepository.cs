@@ -208,6 +208,28 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         return await query.ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<OvertimeRequest>> GetActiveInRangeForEmployeeAsync(
+        int employeeInformationId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        int? excludeId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.OvertimeRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                     && r.WorkDate >= fromDate
+                     && r.WorkDate <= toDate
+                     && (r.Status == OtRequestStatus.Pending
+                         || r.Status == OtRequestStatus.PendingApprover
+                         || r.Status == OtRequestStatus.Approved));
+
+        if (excludeId.HasValue)
+            query = query.Where(r => r.Id != excludeId.Value);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public async Task<bool> HasActiveInRangeAsync(
         int employeeInformationId,
         DateOnly startDate,

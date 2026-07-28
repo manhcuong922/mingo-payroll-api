@@ -100,9 +100,9 @@ public class CreateOvertimeOnBehalfCommandHandler : IRequestHandler<CreateOverti
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
         var otHours = CalculateHours(request.OtStartTime, request.OtEndTime);
 
-        // 5. Guard trùng OT trên ngày.
-        var existingSameDay = await _repository.GetActiveOnDateForEmployeeAsync(
-            request.EmployeeInformationId, request.WorkDate, excludeId: null, cancellationToken);
+        // 5. Guard trùng OT — #41: quét D±1 để bắt OT vắt nửa đêm (đơn D 22:00→02:00 chồng giờ đơn D+1).
+        var existingSameDay = await _repository.GetActiveInRangeForEmployeeAsync(
+            request.EmployeeInformationId, request.WorkDate.AddDays(-1), request.WorkDate.AddDays(1), excludeId: null, cancellationToken);
         var conflict = existingSameDay.FirstOrDefault(e => OvertimeTimeOverlap.Overlaps(
             request.WorkDate, request.OtStartTime, request.OtEndTime,
             e.WorkDate, e.OtStartTime, e.OtEndTime));

@@ -87,6 +87,18 @@ public interface IOvertimeRequestRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// #41 — Load các OT ACTIVE của 1 NV có WorkDate trong khoảng [fromDate, toDate], để check trùng
+    /// khung giờ CÓ XÉT OT vắt nửa đêm: đơn 22:00→02:00 lưu WorkDate=D nhưng chồng giờ với đơn của
+    /// D+1. Guard trùng-giờ lúc tạo/sửa phải quét D±1 (giống <c>OvertimeCapChecker</c>), không chỉ D.
+    /// </summary>
+    Task<IReadOnlyList<OvertimeRequest>> GetActiveInRangeForEmployeeAsync(
+        int employeeInformationId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        int? excludeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Trả về true nếu tồn tại OT ACTIVE (Pending / PendingApprover / Approved) của employee
     /// có WorkDate rơi vào bất kỳ ngày nào trong khoảng [startDate, endDate].
     /// Dùng cho cross-check chống trùng ngày giữa Leave/WFH/LateEarly và OT.
