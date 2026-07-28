@@ -5,6 +5,7 @@ using MPS.Application.Common.Interfaces.Payroll;
 using MPS.Application.Common.Payroll;
 using MPS.Application.Common.Payroll.Formula;
 using MPS.Application.Features.Payroll.Common;
+using MPS.Domain.Constants;
 using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
@@ -89,6 +90,15 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
             .Where(r => r.RowType == PayrollRowType.Employee && r.EmployeeInformationId.HasValue)
             .ToDictionary(r => r.EmployeeInformationId!.Value);
 
+        // #49: khoản truy lĩnh/truy thu ĐANG CHỜ mới (nguồn đổi SAU khi tạo kỳ), TRỪ khoản phát sinh
+        // từ CHÍNH kỳ này (sàn 0 #44 do ReplaceNetShortfallAsync xử lý riêng). Trước đây recalc chỉ
+        // khôi phục số cũ từ snapshot, không nạp khoản mới ⇒ tiền truy lĩnh của NLĐ bị nuốt; muốn có
+        // tiền phải xoá kỳ rồi tạo lại (mất hết ô đã ghim tay).
+        var pendingByEmp = (await _adjustments.GetPendingForEmployeesAsync(readyIds, ct))
+            .Where(a => a.SourcePeriodId != period.Id)
+            .GroupBy(a => a.EmployeeInformationId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<PayrollAdjustment>)g.ToList());
+
         var ordered = collection.Employees
             .OrderBy(e => e.Texts.GetValueOrDefault(PayrollFieldKeys.EmployeeCode, string.Empty))
             .ToList();
@@ -104,6 +114,14 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
             // này). Collector không biết chúng ⇒ phải khôi phục từ snapshot cũ, nếu không lần tính
             // lại sẽ âm thầm xoá số truy lĩnh khỏi bảng lương.
             CarryOverAdjustmentFields(row.InputSnapshotJson, inputs);
+            var carriedTruyLinh = inputs.Numbers.GetValueOrDefault(PayrollFieldKeys.TruyLinh, 0m);
+            var carriedTruyThu = inputs.Numbers.GetValueOrDefault(PayrollFieldKeys.TruyThu, 0m);
+
+            // #49: cộng THÊM truy lĩnh của khoản đang chờ MỚI vào phần đã carry (không thay thế).
+            var pending = pendingByEmp.GetValueOrDefault(inputs.EmployeeInformationId);
+            inputs.Numbers[PayrollFieldKeys.TruyLinh] =
+                carriedTruyLinh + (pending is null ? 0m : PayrollAdjustmentApplier.SumPositives(pending));
+
             row.InputSnapshotJson = inputs.ToSnapshotJson();
 
             var ctx = new PayrollCalcContext
@@ -114,6 +132,33 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
 
             // ComputeAll xoá sạch cells rồi tính lại từ số liệu mới (không giữ override).
             _calculator.ComputeAll(plan, ctx, row);
+
+            // #49: chốt truy thu của khoản chờ mới ở lượt hai (cần THỰC NHẬN trước để không âm),
+            // đánh dấu khoản đã áp vào kỳ này ⇒ lần tính lại sau không cộng dồn.
+            if (pending is not null)
+            {
+                var netBeforeClawback = EffectiveNumber(row, PayrollColumnCodes.ThucNhan);
+                var applyPlan = PayrollAdjustmentApplier.Build(pending, netBeforeClawback, DateTime.UtcNow);
+
+                foreach (var a in applyPlan.Applied) a.AppliedPeriod = period;
+                foreach (var c in applyPlan.Carried)
+                {
+                    c.AppliedPeriod = period;
+                    _adjustments.Add(c);
+                }
+
+                if (applyPlan.TruyThu != 0m)
+                {
+                    inputs.Numbers[PayrollFieldKeys.TruyThu] = carriedTruyThu + applyPlan.TruyThu;
+                    row.InputSnapshotJson = inputs.ToSnapshotJson();
+                    ctx = new PayrollCalcContext
+                    {
+                        Fields = inputs.ToFields(_catalog),
+                        FunctionContext = collection.FunctionContext,
+                    };
+                    _calculator.ComputeAll(plan, ctx, row);
+                }
+            }
 
             // Áp lại từng ô ghim rồi lan xuống downstream — đúng ngữ nghĩa EditPayrollCell.
             if (pinned.TryGetValue(inputs.EmployeeInformationId, out var pins))
@@ -161,6 +206,13 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
 
         var shortfall = PayrollNetFloor.Apply(row, period, userId, DateTime.UtcNow);
         if (shortfall is not null) _adjustments.Add(shortfall);
+    }
+
+    private static decimal EffectiveNumber(PayrollRow row, string columnCode)
+    {
+        var cell = row.Cells.FirstOrDefault(c => c.ColumnCode == columnCode);
+        if (cell is null) return 0m;
+        return (cell.IsOverridden ? cell.OverrideValue : cell.ComputedValue) ?? 0m;
     }
 
     /// <summary>Giữ nguyên 2 field truy lĩnh/truy thu từ snapshot cũ sang bộ input vừa gom lại.</summary>
