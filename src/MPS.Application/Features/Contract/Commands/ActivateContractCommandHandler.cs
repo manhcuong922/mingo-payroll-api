@@ -164,8 +164,10 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     {
         try
         {
+            // [D22]: cấp quỹ phép NĂM HIỆN TẠI (năm kích hoạt), không phải năm hiệu lực HĐ — HĐ có thể
+            // ký trước cho tương lai. Job 01/01 (chưa làm) lo các năm sau.
             await _leaveBalanceInitializer.EnsureAnnualBalanceAsync(
-                contract.EmployeeInformationId, contract.EffectiveFrom.Year, userId, ct);
+                contract.EmployeeInformationId, DateTime.UtcNow.Year, userId, ct);
         }
         catch (Exception ex)
         {

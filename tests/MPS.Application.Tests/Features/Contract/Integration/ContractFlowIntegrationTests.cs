@@ -357,9 +357,8 @@ public sealed class ContractFlowIntegrationTests
             SignedPlace: "Hà Nội",
             SignedBySource: "mingo-signing"), CancellationToken.None);
 
-        var saved = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
         leaveInit.Verify(l => l.EnsureAnnualBalanceAsync(
-            employeeInfo.Id, saved.EffectiveFrom.Year, actor.Id, It.IsAny<CancellationToken>()), Times.Once);
+            employeeInfo.Id, DateTime.UtcNow.Year, actor.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>

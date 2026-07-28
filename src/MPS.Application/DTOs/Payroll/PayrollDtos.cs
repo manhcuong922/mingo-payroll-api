@@ -81,4 +81,5 @@ public sealed record PayrollReadinessDto(
     string EmployeeCode,
     string FullName,
     bool IsReady,
-    IReadOnlyList<string> Missing);
+    IReadOnlyList<string> Missing,
+    IReadOnlyList<string> Warnings);

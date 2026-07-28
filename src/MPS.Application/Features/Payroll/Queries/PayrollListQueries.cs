@@ -20,7 +20,7 @@ public sealed class GetPayrollReadinessQueryHandler
         var result = await _readiness.CheckAsync(
             new PayrollReadinessRequest(request.Year, request.Month), ct);
         return result.Select(r => new PayrollReadinessDto(
-            r.EmployeeInformationId, r.EmployeeCode, r.FullName, r.IsReady, r.Missing)).ToList();
+            r.EmployeeInformationId, r.EmployeeCode, r.FullName, r.IsReady, r.Missing, r.Warnings)).ToList();
     }
 }
 
