@@ -47,6 +47,7 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
             .AsNoTracking()
             .Include(a => a.ShiftTemplate)
             .Include(a => a.EmployeeInformation)
+            .Include(a => a.ScheduleTemplate)
             .Where(a => a.WorkDate == workDate
                 && (a.ScheduleTemplateId == null
                     || a.ScheduleTemplate!.IsActive
@@ -75,6 +76,7 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
             .AsNoTracking()
             .Include(a => a.ShiftTemplate)
             .Include(a => a.EmployeeInformation)
+            .Include(a => a.ScheduleTemplate)
             .Where(a => employeeInformationIds.Contains(a.EmployeeInformationId)
                 && a.WorkDate >= fromDate
                 && a.WorkDate <= toDate);
@@ -323,11 +325,26 @@ public class EmployeeShiftAssignmentRepository : IEmployeeShiftAssignmentReposit
         var toRemove = stale
             .Where(a => !lockedSet.Contains((a.EmployeeInformationId, a.WorkDate, a.ShiftTemplateId)))
             .ToList();
-        if (toRemove.Count == 0) return 0;
+        // Locked stale = có AttendanceRecord nên không xoá được. Detach FK để không còn
+        // "thuộc" template — attendance history vẫn giữ, nhưng dept-view aggregate (lọc theo
+        // ScheduleTemplate.ApplyTarget) sẽ tự loại các row này. Nếu không detach, đổi ca / đổi
+        // applyTarget vẫn thấy chip cũ hiện lên trong "Tổng hợp theo phòng ban".
+        var toDetach = stale
+            .Where(a => lockedSet.Contains((a.EmployeeInformationId, a.WorkDate, a.ShiftTemplateId)))
+            .ToList();
 
-        _context.EmployeeShiftAssignments.RemoveRange(toRemove);
+        if (toRemove.Count == 0 && toDetach.Count == 0) return 0;
+
+        if (toRemove.Count > 0)
+        {
+            _context.EmployeeShiftAssignments.RemoveRange(toRemove);
+        }
+        foreach (var a in toDetach)
+        {
+            a.ScheduleTemplateId = null;
+        }
         await _context.SaveChangesAsync(cancellationToken);
-        return toRemove.Count;
+        return toRemove.Count + toDetach.Count;
     }
 
     public async Task<int> DeleteUnlockedByScheduleTemplateAsync(

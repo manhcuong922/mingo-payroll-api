@@ -19,18 +19,22 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
     private readonly ICurrentUserService _currentUser;
     private readonly ILogger<ActivateContractAppendixCommandHandler> _logger;
 
+    private readonly Domain.Interfaces.Payroll.IPayrollSourceChangeHandler _payrollChange;
+
     public ActivateContractAppendixCommandHandler(
         IContractAppendixRepository appendices,
         AppendixApplier applier,
         IFileStorageService storage,
         ICurrentUserService currentUser,
-        ILogger<ActivateContractAppendixCommandHandler> logger)
+        ILogger<ActivateContractAppendixCommandHandler> logger,
+        Domain.Interfaces.Payroll.IPayrollSourceChangeHandler payrollChange)
     {
         _appendices = appendices;
         _applier = applier;
         _storage = storage;
         _currentUser = currentUser;
         _logger = logger;
+        _payrollChange = payrollChange;
     }
 
     public async Task<int> Handle(ActivateContractAppendixCommand request, CancellationToken cancellationToken)
@@ -91,13 +95,14 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
             UploadedByUserId = userId,
         };
 
+        int appendixFileId;
         try
         {
-            return await _appendices.ActivateDraftAsync(
+            appendixFileId = await _appendices.ActivateDraftAsync(
                 appendixId: request.AppendixId,
                 file: file,
-                apply: (contract, allowances) =>
-                    _applier.ApplyAsync(contract, allowances, change, DateTime.UtcNow, cancellationToken),
+                apply: (contract, allowances, appendix) =>
+                    _applier.ApplyAsync(contract, allowances, appendix, change, DateTime.UtcNow, cancellationToken),
                 signedAtUtc: request.SignedAt,
                 cancellationToken: cancellationToken);
         }
@@ -116,5 +121,16 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
             }
             throw;
         }
+
+        // BS-6 + BS-5: phụ lục đổi lương/phụ cấp có hiệu lực từ EffectiveFrom
+        // → mark stale mọi kỳ Draft từ tháng đó về sau (APX-X01);
+        // → nếu có kỳ Finalized nằm sau EffectiveFrom (ký phụ lục sau khi kỳ đã chốt), capture bù cho NV.
+        await _payrollChange.OnEffectiveFromChangedAsync(
+            appendix.EffectiveFrom.Year, appendix.EffectiveFrom.Month,
+            appendix.Contract.EmployeeInformationId,
+            $"Kích hoạt phụ lục HĐ {appendix.AppendixNo} (hiệu lực {appendix.EffectiveFrom:dd/MM/yyyy})",
+            cancellationToken);
+
+        return appendixFileId;
     }
 }

@@ -68,6 +68,88 @@ public class WfhRequestRepository : IWfhRequestRepository
         return entity.Id;
     }
 
+    // ⭐ BS-4 / [D11]: duyệt WFH phải sinh chấm công, nếu không ngày WFH biến mất khỏi bảng lương.
+    // Đối xứng với LeaveRequestRepository.ApproveAndApplyAsync (nghỉ phép → OnLeave), khác ở chỗ
+    // WFH là ngày ĐI LÀM ⇒ Present + đủ giờ chuẩn của ca được phân.
+    public async Task<bool> ApproveAndApplyAsync(
+        int requestId,
+        int reviewedByUserId,
+        string? reviewNote,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        var request = await _context.WfhRequests.FirstOrDefaultAsync(r => r.Id == requestId, cancellationToken);
+        if (request is null)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        // Mỗi bản ghi chấm công bắt buộc gắn ShiftTemplateId (CK_AttendanceRecords_ShiftOrOvertime),
+        // nên chỉ ngày ĐÃ PHÂN CA mới sinh được bản ghi — giống luồng nghỉ phép.
+        var assignments = await _context.EmployeeShiftAssignments
+            .AsNoTracking()
+            .Where(a => a.EmployeeInformationId == request.EmployeeInformationId
+                && a.WorkDate >= request.StartDate
+                && a.WorkDate <= request.EndDate)
+            .Select(a => new { a.WorkDate, a.ShiftTemplateId, a.ShiftTemplate!.StandardHours })
+            .ToListAsync(cancellationToken);
+
+        var existingRecords = await _context.AttendanceRecords
+            .Where(r => r.EmployeeInformationId == request.EmployeeInformationId
+                && r.WorkDate >= request.StartDate
+                && r.WorkDate <= request.EndDate
+                && r.ShiftTemplateId != null)
+            .ToListAsync(cancellationToken);
+
+        var existingByKey = existingRecords.ToDictionary(r => (r.WorkDate, r.ShiftTemplateId!.Value));
+        var autoNote = $"Auto-applied from approved WFH request #{request.Id}";
+
+        foreach (var assignment in assignments)
+        {
+            if (existingByKey.TryGetValue((assignment.WorkDate, assignment.ShiftTemplateId), out var existing))
+            {
+                // Đã chấm công thật (check-in/out) thì GIỮ NGUYÊN giờ — không ghi đè số liệu thực tế.
+                if (existing.DayHours > 0m || existing.NightHours > 0m) continue;
+
+                existing.Status = AttendanceStatus.Present;
+                existing.DayHours = assignment.StandardHours;
+                existing.NightHours = 0m;
+                existing.Notes = autoNote;
+                existing.UpdatedAt = nowUtc;
+                existing.UpdatedByUserId = reviewedByUserId;
+            }
+            else
+            {
+                await _context.AttendanceRecords.AddAsync(new AttendanceRecord
+                {
+                    EmployeeInformationId = request.EmployeeInformationId,
+                    WorkDate = assignment.WorkDate,
+                    ShiftTemplateId = assignment.ShiftTemplateId,
+                    Status = AttendanceStatus.Present,
+                    DayHours = assignment.StandardHours,
+                    NightHours = 0m,
+                    Notes = autoNote,
+                    CreatedAt = nowUtc,
+                    CreatedByUserId = reviewedByUserId
+                }, cancellationToken);
+            }
+        }
+
+        request.Status = WfhRequestStatus.Approved;
+        request.ReviewedByUserId = reviewedByUserId;
+        request.ReviewedAt = nowUtc;
+        request.ReviewNote = reviewNote;
+        request.UpdatedAt = nowUtc;
+        request.UpdatedByUserId = reviewedByUserId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> UpdateAsync(WfhRequest entity, CancellationToken cancellationToken = default)
     {
         var tracked = await _context.WfhRequests.FirstOrDefaultAsync(r => r.Id == entity.Id, cancellationToken);

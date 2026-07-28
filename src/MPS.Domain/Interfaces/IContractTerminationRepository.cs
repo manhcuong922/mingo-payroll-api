@@ -24,4 +24,12 @@ public interface IContractTerminationRepository
     Task<int> AddAndMarkContractTerminatedAsync(
         ContractTermination termination,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Case 7 — EmployeeInformationId (distinct) của các NV có bản ghi chấm dứt HĐ đã TỚI HẠN
+    /// (<c>TerminationDate &lt;= asOfUtc</c>). Dùng cho job vô hiệu hoá tài khoản: chấm dứt có thể
+    /// đặt ngày hiệu lực ở tương lai (thời gian báo trước) nên chỉ xử lý khi đã qua mốc đó.
+    /// </summary>
+    Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithMaturedTerminationAsync(
+        DateTime asOfUtc, CancellationToken cancellationToken = default);
 }

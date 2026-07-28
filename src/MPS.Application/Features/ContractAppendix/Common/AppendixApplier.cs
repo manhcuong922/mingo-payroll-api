@@ -29,11 +29,13 @@ public sealed class AppendixApplier
     public async Task ApplyAsync(
         Domain.Entities.Contract contract,
         ICollection<ContractAllowance> contractAllowances,
+        Domain.Entities.ContractAppendix appendix,
         AppendixChangeSet change,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(appendix);
         ArgumentNullException.ThrowIfNull(change);
 
         if (change.JobDescription is not null)
@@ -57,8 +59,13 @@ public sealed class AppendixApplier
         if (change.WorkingTimeJson is not null)
             contract.WorkingTimeJson = change.WorkingTimeJson;
 
-        // SalaryGrade swap: chỉ đổi reference, KHÔNG re-freeze SalaryAmountSnapshot
-        // (snapshot giữ giá trị tại lần ký gốc; phụ lục tự ghi nhận giá trị mới trong PDF).
+        // [D12] — đổi bậc lương qua phụ lục: ngoài việc đổi tham chiếu thang lương, phải ĐÓNG BĂNG
+        // mức lương mới NGAY TRÊN PHỤ LỤC, gắn với mốc `EffectiveFrom` của nó.
+        //
+        // Hợp đồng chỉ có MỘT ô `SalaryAmountSnapshot` (giá trị lần ký gốc) nên trước đây không có
+        // chỗ nào ghi mức mới: bảng lương đọc thẳng ô của hợp đồng ⇒ tăng lương qua phụ lục KHÔNG
+        // BAO GIỜ vào lương thực nhận. Còn nếu ghi đè thẳng ô đó thì tính lại một kỳ CŨ sẽ ra mức
+        // mới ⇒ sai lịch sử lương. Ghi kèm mốc hiệu lực là cách duy nhất đúng cả hai chiều.
         if (change.SalaryGradeId is { } newGradeId && newGradeId != contract.SalaryGradeId)
         {
             var grade = await _lookup.GetSalaryGradeSnapshotAsync(newGradeId, cancellationToken)
@@ -66,6 +73,8 @@ public sealed class AppendixApplier
             if (!grade.IsActive)
                 throw new DomainValidationException($"SalaryGrade {newGradeId} is inactive.");
             contract.SalaryGradeId = newGradeId;
+            appendix.SalaryAmountSnapshot = grade.BaseSalary;
+            appendix.SalaryCurrencySnapshot = contract.SalaryCurrencySnapshot;
         }
 
         await ApplyAllowanceChangesAsync(contract, contractAllowances, change, nowUtc, cancellationToken);

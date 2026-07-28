@@ -1,3 +1,5 @@
+using MPS.Domain.Enums.Attendance;
+
 namespace MPS.Application.DTOs.Attendance;
 
 public sealed record MonthlyScheduleParseResult(
@@ -8,6 +10,11 @@ public sealed record MonthlyScheduleParseResult(
     IReadOnlyList<MonthlyScheduleParsedAssignment> Assignments,
     IReadOnlyList<MonthlyScheduleParseError> Errors);
 
+/// <summary>
+/// Assignment thô đọc từ Excel. <see cref="EmployeeCode"/> chứa mã đích của row —
+/// theo mode: Employees → EmployeeCode, Departments → DepartmentCode.
+/// <see cref="EmployeeName"/> chứa tên hiển thị (Họ tên hoặc Tên phòng ban).
+/// </summary>
 public sealed record MonthlyScheduleParsedAssignment(
     int RowIndex,
     int ColumnIndex,
@@ -31,7 +38,19 @@ public sealed record MonthlyScheduleImportPreviewDto(
     int ResolvedOperations,
     int SkippedCells,
     IReadOnlyList<MonthlyScheduleImportErrorDto> Errors,
-    IReadOnlyList<MonthlyScheduleImportResolvedItemDto> ResolvedItems);
+    IReadOnlyList<MonthlyScheduleImportResolvedItemDto> ResolvedItems,
+    ScheduleApplyTarget ApplyTarget,
+    IReadOnlyList<MonthlyScheduleResolvedDepartmentDto>? ResolvedDepartments);
+
+/// <summary>
+/// Chỉ populate cho Departments mode — cho HR biết mỗi row phòng ban đã expand ra
+/// bao nhiêu NV active. Null / empty cho Employees mode.
+/// </summary>
+public sealed record MonthlyScheduleResolvedDepartmentDto(
+    int Id,
+    string Code,
+    string Name,
+    int EmployeeCount);
 
 public sealed record MonthlyScheduleImportResolvedItemDto(
     string EmployeeCode,

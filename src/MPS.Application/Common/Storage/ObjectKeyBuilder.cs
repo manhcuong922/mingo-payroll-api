@@ -66,6 +66,44 @@ public static class ObjectKeyBuilder
     public static string ForFacePhoto(int employeeId, Guid registrationId) =>
         $"face-photos/{employeeId}/{registrationId:N}.jpg";
 
+    public static string ForLeaveMedicalCertificate(int employeeId, string contentType, Guid uniqueId)
+    {
+        if (employeeId <= 0) throw new ArgumentOutOfRangeException(nameof(employeeId));
+        var ext = ResolveImageExtension(contentType);
+        var now = DateTime.UtcNow;
+        var key = $"leave-medical-certificates/{now:yyyy}/{now:MM}/{employeeId}/{uniqueId:N}.{ext}";
+        ValidateLength(key);
+        return key;
+    }
+
+    /// <summary>
+    /// Object key ảnh evidence cho nghĩa vụ BHXH/TNCN. Kind = "bank-receipt" hoặc "authority-confirmation".
+    /// Path: <c>payroll/bhxh-tax-evidence/{obligationId}/{kind}/{guid}.{ext}</c>.
+    /// </summary>
+    public static string ForBhxhTaxEvidence(int obligationId, string kind, string contentType, Guid uniqueId)
+    {
+        if (obligationId <= 0) throw new ArgumentOutOfRangeException(nameof(obligationId));
+        ValidateSegment(kind, nameof(kind));
+        var ext = ResolveImageExtension(contentType);
+        var key = $"payroll/bhxh-tax-evidence/{obligationId}/{kind}/{uniqueId:N}.{ext}";
+        ValidateLength(key);
+        return key;
+    }
+
+    private static string ResolveImageExtension(string contentType)
+    {
+        var normalized = (contentType ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "image/jpeg" or "image/jpg" => "jpg",
+            "image/png" => "png",
+            "image/webp" => "webp",
+            _ => throw new ArgumentException(
+                $"Unsupported medical certificate content type '{contentType}'. Allowed: image/jpeg, image/png, image/webp.",
+                nameof(contentType)),
+        };
+    }
+
     public static void EnsureValid(string objectKey)
     {
         if (string.IsNullOrWhiteSpace(objectKey))

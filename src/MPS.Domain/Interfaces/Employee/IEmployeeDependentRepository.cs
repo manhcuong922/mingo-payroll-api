@@ -20,4 +20,14 @@ public interface IEmployeeDependentRepository
         string citizenId,
         int? excludeDependentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Người phụ thuộc đang hiệu lực mang CCCD này — dò trên TOÀN CÔNG TY, không giới hạn trong một
+    /// nhân viên: mỗi người phụ thuộc chỉ được một người lao động tính giảm trừ gia cảnh.
+    /// Trả về kèm nhân viên đang đăng ký để báo lỗi nêu rõ vướng ở đâu.
+    /// </summary>
+    Task<EmployeeDependent?> FindActiveByCitizenIdAsync(
+        string citizenId,
+        int? excludeDependentId,
+        CancellationToken cancellationToken = default);
 }

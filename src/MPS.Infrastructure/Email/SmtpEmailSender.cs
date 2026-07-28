@@ -8,14 +8,19 @@ using MPS.Infrastructure.Email.Templates;
 
 namespace MPS.Infrastructure.Email;
 
-public sealed class SmtpEmailSender : IEmailSender
+public sealed class SmtpEmailSender : IRealEmailSender
 {
     private readonly SmtpOptions _options;
+    private readonly IFileStorageService _storage;
     private readonly ILogger<SmtpEmailSender> _logger;
 
-    public SmtpEmailSender(IOptions<SmtpOptions> options, ILogger<SmtpEmailSender> logger)
+    public SmtpEmailSender(
+        IOptions<SmtpOptions> options,
+        IFileStorageService storage,
+        ILogger<SmtpEmailSender> logger)
     {
         _options = options.Value;
+        _storage = storage;
         _logger = logger;
     }
 
@@ -47,11 +52,12 @@ public sealed class SmtpEmailSender : IEmailSender
         return SendAsync(toEmail, AccountCredentialsTemplate.Subject, html, plain, attachment: null, cancellationToken);
     }
 
-    public Task SendContractActivationAsync(
+    public async Task SendContractActivationAsync(
         string toEmail,
         string fullName,
         ContractActivationEmailPayload payload,
-        Stream pdfStream,
+        string storageBucket,
+        string storageObjectKey,
         string pdfFileName,
         CancellationToken cancellationToken = default)
     {
@@ -63,8 +69,12 @@ public sealed class SmtpEmailSender : IEmailSender
             fullName, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
             payload.Username, payload.PlainPassword, loginUrl);
 
+        // Tải PDF từ MinIO ngay lúc gửi (thay vì nhận stream). Giữ trong request/worker thread ngắn gọn.
+        var download = await _storage.DownloadAsync(storageObjectKey, storageBucket, cancellationToken);
+        await using var pdfStream = download.Content;
+
         var attachment = new EmailAttachment(pdfFileName, pdfStream, "application/pdf");
-        return SendAsync(toEmail, ContractActivationTemplate.Subject, html, plain, attachment, cancellationToken);
+        await SendAsync(toEmail, ContractActivationTemplate.Subject, html, plain, attachment, cancellationToken);
     }
 
     private async Task SendAsync(

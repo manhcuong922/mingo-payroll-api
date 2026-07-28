@@ -77,13 +77,18 @@ public class ReapplyScheduleTemplateCommandHandler
             }
         }
 
+        // Explicit override qua query param OR flag đã lưu trên template. Persist là
+        // trách nhiệm của Update/Create — Reapply chỉ đọc để batch, tránh double-write.
+        var includeRestDaysAndHolidays = request.IncludeRestDaysAndHolidays
+            || template.IncludeRestDaysAndHolidays;
+
         var batch = await _mediator.Send(
             new BatchUpdateShiftAssignmentsCommand(
                 operations,
                 BatchShiftConflictPolicy.ReplaceIfNoAttendance,
                 SourceScheduleTemplateId: template.Id,
                 AcknowledgeWeeklyOvertimeWarnings: request.AcknowledgeWeeklyOvertimeWarnings,
-                IncludeRestDaysAndHolidays: request.IncludeRestDaysAndHolidays),
+                IncludeRestDaysAndHolidays: includeRestDaysAndHolidays),
             cancellationToken);
 
         return new ScheduleTemplateApplyResultDto(

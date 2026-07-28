@@ -18,4 +18,15 @@ public sealed record CreateContractTerminationCommand(
     bool NoNoticeRequired,
     int? WrittenNoticeFileId,
     string LegalBasis,
-    string? Notes) : IRequest<int>, IContractScopedCommand;
+    string? Notes) : IRequest<CreateContractTerminationResult>, IContractScopedCommand;
+
+/// <summary>
+/// Kết quả chấm dứt HĐ. <paramref name="OpenTasks"/> là CẢNH BÁO (#28): NV vẫn còn công đoạn
+/// chưa hoàn thành đứng tên mình tại thời điểm chấm dứt — HR phải sắp xếp bàn giao.
+/// Không chặn thao tác (quyết định nghiệp vụ 2026-07-21), chỉ phơi ra để FE hiển thị.
+/// </summary>
+public sealed record CreateContractTerminationResult(
+    int Id,
+    IReadOnlyList<OpenTaskWarning> OpenTasks);
+
+public sealed record OpenTaskWarning(int TaskId, string Title, string Status, int? ProjectId);

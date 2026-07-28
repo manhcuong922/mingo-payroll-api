@@ -1,9 +1,11 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using OvertimeRequestEntity = MPS.Domain.Entities.Attendance.OvertimeRequest;
@@ -30,7 +32,9 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
     private readonly IProjectTaskRepository _taskRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IContractLookupReader _lookup;
+    private readonly IContractRepository _contracts;
     private readonly OvertimeCapChecker _capChecker;
+    private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
@@ -42,7 +46,9 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         IProjectTaskRepository taskRepository,
         IEmployeeInformationRepository employeeRepository,
         IContractLookupReader lookup,
+        IContractRepository contracts,
         OvertimeCapChecker capChecker,
+        AttendanceRequestDayConflictChecker dayConflictChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
@@ -53,7 +59,9 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         _taskRepository = taskRepository;
         _employeeRepository = employeeRepository;
         _lookup = lookup;
+        _contracts = contracts;
         _capChecker = capChecker;
+        _dayConflictChecker = dayConflictChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
@@ -70,6 +78,15 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             ?? throw new NotFoundException($"No employee profile linked to user {userId}.");
         var employee = await _employeeRepository.GetByIdAsync(employeeId, cancellationToken)
             ?? throw new NotFoundException($"Employee {employeeId} not found.");
+
+        // 1b. Case 8 — NV phải còn quan hệ lao động (HĐ Active) mới được đăng ký OT. HĐ đã chấm dứt/
+        // hết hạn thì không phát sinh OT nữa (đồng bộ với guard giao việc — TaskAssigneeGuard).
+        if (!await _contracts.HasActiveContractAsync(employeeId, cancellationToken))
+            throw new DomainValidationException(
+                "CONTRACT_NOT_ACTIVE: Nhân viên không còn hợp đồng lao động hiệu lực — không thể đăng ký OT.");
+
+        // 1c. Case 4 — chặn ngày quá xa trong tương lai (quá khứ vẫn cho phép: truy lĩnh [D3]).
+        OvertimeWorkDateGuard.EnsureNotTooFarInFuture(request.WorkDate, _clock.UtcNow);
 
         // 2. Load & validate Project (đơn sản xuất)
         var project = await _projectRepository.GetByIdAsync(request.ProjectId, cancellationToken)
@@ -105,6 +122,16 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             throw new DomainValidationException(
                 $"Bạn đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) giao thoa khung giờ này.");
         }
+
+        // 5b. [D8] — chặn CHÉO LOẠI: 1 ngày đã có đơn Leave/WFH/LateEarly đang active thì không
+        // nhận thêm OT (giữ theo cơ chế thống nhất của toàn hệ thống — AttendanceRequestDayConflictChecker).
+        await _dayConflictChecker.EnsureNoConflictAsync(
+            employeeId,
+            request.WorkDate,
+            request.WorkDate,
+            AttendanceRequestKind.Overtime,
+            excludeRequestId: null,
+            cancellationToken);
 
         // 6. Cap check + split
         await _capChecker.CheckAsync(

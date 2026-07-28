@@ -33,6 +33,26 @@ public class AttendanceSetting
     /// <summary>Độ dài tối thiểu của WorkPlan trong đơn WFH. Null = 20.</summary>
     public int? WfhWorkPlanMinLength { get; set; }
 
+    // ===== Grace period cho auto-resolve AttendanceStatus =====
+
+    /// <summary>
+    /// Grace period đi muộn — check-in muộn ≤ N phút vẫn tính Present.
+    /// Null = dùng default (5 phút).
+    /// </summary>
+    public int? LateGraceMinutes { get; set; }
+
+    /// <summary>
+    /// Grace period về sớm — check-out sớm ≤ M phút vẫn tính Present.
+    /// Null = dùng default (5 phút).
+    /// </summary>
+    public int? EarlyLeaveGraceMinutes { get; set; }
+
+    /// <summary>
+    /// Ngưỡng nửa ngày — muộn hoặc về sớm ≥ K phút thì downgrade sang HalfDay.
+    /// Null = dùng default (240 phút = 4h).
+    /// </summary>
+    public int? HalfDayThresholdMinutes { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public int? CreatedByUserId { get; set; }
     public User? CreatedByUser { get; set; }

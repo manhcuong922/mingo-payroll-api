@@ -31,10 +31,10 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var byRole = await LoadCriteriaTemplatesByRoleAsync(ct);
-        if (!byRole.TryGetValue(SystemRoles.EmployeeId, out var workerTpl) || workerTpl.Count == 0)
+        var rubric = await LoadRubricTemplateAsync(ct);
+        if (rubric.Count == 0)
         {
-            _logger.LogWarning("Chưa có tiêu chí cho công nhân (role 7); bỏ qua seed dữ liệu chấm điểm demo.");
+            _logger.LogWarning("Chưa có tiêu chí đánh giá (rubric rỗng); bỏ qua seed dữ liệu chấm điểm demo.");
             return;
         }
 
@@ -63,7 +63,7 @@ public sealed partial class DatabaseSeeder
         {
             var monthDate = new DateTime(now.Year, now.Month, 15, 9, 0, 0).AddMonths(-back);
             var isApproved = back > 0;   // kỳ hiện tại (back=0) để Draft
-            totalMonthly += await SeedMonthAsync(monthDate, isApproved, shops, directPeople, byRole, hrId, directorId, ct);
+            totalMonthly += await SeedMonthAsync(monthDate, isApproved, shops, directPeople, rubric, hrId, directorId, ct);
         }
 
         _logger.LogInformation(
@@ -74,7 +74,7 @@ public sealed partial class DatabaseSeeder
     private async Task<int> SeedMonthAsync(
         DateTime monthDate, bool isApproved, IReadOnlyList<ShopStaff> shops,
         IReadOnlyList<(int UserId, int RoleId)> directPeople,
-        IReadOnlyDictionary<int, List<MetricTemplate>> byRole, int hrId, int directorId, CancellationToken ct)
+        IReadOnlyList<MetricTemplate> rubric, int hrId, int directorId, CancellationToken ct)
     {
         var year = monthDate.Year;
         var month = monthDate.Month;
@@ -111,7 +111,7 @@ public sealed partial class DatabaseSeeder
                 CreatedAt = monthDate,
                 Subjects = shop.WorkerUserIds.Select(workerId =>
                 {
-                    var lines = ScoredLines(byRole, SystemRoles.EmployeeId, workerId + month);
+                    var lines = ScoredLines(rubric, workerId + month);
                     return new OrderEvaluationSubject
                     {
                         EmployeeUserId = workerId,
@@ -156,9 +156,7 @@ public sealed partial class DatabaseSeeder
         // 3) Bảng tháng Direct (Director chấm tổ trưởng/quản đốc/HR/Kế toán).
         foreach (var (userId, roleId) in directPeople)
         {
-            if (!byRole.TryGetValue(roleId, out var tpl) || tpl.Count == 0) continue;
-
-            var lines = ScoredLines(byRole, roleId, userId + month);
+            var lines = ScoredLines(rubric, userId + month);
             _context.MonthlyEvaluations.Add(new MonthlyEvaluation
             {
                 EmployeeUserId = userId,
@@ -183,9 +181,8 @@ public sealed partial class DatabaseSeeder
 
     // Điểm demo 3–5 (tất đã chấm đủ) — xác định theo seed để tái lập được.
     private static List<EvaluationScoreLine> ScoredLines(
-        IReadOnlyDictionary<int, List<MetricTemplate>> byRole, int roleId, int seed)
+        IReadOnlyList<MetricTemplate> tpl, int seed)
     {
-        var tpl = byRole.TryGetValue(roleId, out var t) ? t : new List<MetricTemplate>();
         var lines = new List<EvaluationScoreLine>(tpl.Count);
         for (var i = 0; i < tpl.Count; i++)
         {
@@ -204,26 +201,19 @@ public sealed partial class DatabaseSeeder
         return lines;
     }
 
-    private async Task<Dictionary<int, List<MetricTemplate>>> LoadCriteriaTemplatesByRoleAsync(CancellationToken ct)
+    // Rubric CHUNG toàn công ty (không lọc theo role — quyết định 2026-07-16): nạp mọi PerformanceMetric
+    // 1 lần, dùng chung cho mọi người bị chấm (công nhân qua bảng-theo-đơn; tổ trưởng/quản đốc/HR/Kế toán
+    // qua Direct). Bỏ phụ thuộc TargetRoles (trước đây rỗng nên demo không bao giờ sinh — bug S1).
+    private async Task<List<MetricTemplate>> LoadRubricTemplateAsync(CancellationToken ct)
     {
         var metrics = await _context.PerformanceMetrics
             .AsNoTracking()
             .Include(m => m.TypePerformanceMetric)
-            .Include(m => m.TargetRoles)
+            .OrderBy(m => m.TypePerformanceMetricId).ThenBy(m => m.Id)
             .ToListAsync(ct);
 
-        var byRole = new Dictionary<int, List<MetricTemplate>>();
-        foreach (var m in metrics)
-        {
-            foreach (var role in m.TargetRoles)
-            {
-                if (!byRole.TryGetValue(role.Id, out var list))
-                    byRole[role.Id] = list = new List<MetricTemplate>();
-                list.Add(new MetricTemplate(
-                    m.Id, m.TypePerformanceMetric.Name, m.Name, m.TypePerformanceMetric.Weight, m.Weight));
-            }
-        }
-        return byRole;
+        return metrics.Select(m => new MetricTemplate(
+            m.Id, m.TypePerformanceMetric.Name, m.Name, m.TypePerformanceMetric.Weight, m.Weight)).ToList();
     }
 
     private async Task<List<ShopStaff>> LoadShopStaffAsync(CancellationToken ct)

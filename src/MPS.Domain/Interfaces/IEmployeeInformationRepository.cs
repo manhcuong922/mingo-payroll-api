@@ -8,6 +8,7 @@ public interface IEmployeeInformationRepository
     Task<EmployeeInformation?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
         bool? hasActiveUser = null,
+        string? keyword = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Employee có gắn User và User.Status == 1. Dùng cho attendance/phân ca thay cho contract-active.</summary>
@@ -38,6 +39,12 @@ public interface IEmployeeInformationRepository
 
     Task<bool> PositionExistsAsync(int positionId, CancellationToken cancellationToken = default);
     Task<bool> EmailExistsAsync(string email, int? excludeId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// #1 — CCCD có unique index ở DB nhưng trước đây không được kiểm ở tầng ứng dụng ⇒ trùng CCCD
+    /// trả 500 thay vì 400 kèm thông báo. Đối xứng với <see cref="EmailExistsAsync"/>.
+    /// </summary>
+    Task<bool> CitizenIdExistsAsync(string citizenId, int? excludeId = null, CancellationToken cancellationToken = default);
     Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default);
 
     Task<int> AddAsync(EmployeeInformation entity, CancellationToken cancellationToken = default);

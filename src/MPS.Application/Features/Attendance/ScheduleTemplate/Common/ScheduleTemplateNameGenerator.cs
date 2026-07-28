@@ -92,7 +92,7 @@ internal static class ScheduleTemplateNameGenerator
             if (ids.Count == 0) return string.Empty;
 
             // Fetch dept names bulk — GetAllAsync trả active depts, dept đã ngừng sẽ không có tên → bỏ qua
-            var allDepts = await deptRepo.GetAllAsync(includeInactive: true, cancellationToken);
+            var allDepts = await deptRepo.GetAllAsync(includeInactive: true, keyword: null, ct: cancellationToken);
             var byId = allDepts.ToDictionary(d => d.Id, d => d.Name);
             var firstName = ids.Where(byId.ContainsKey).Select(id => byId[id]).FirstOrDefault();
             if (firstName is null) return $"{ids.Count} PB";

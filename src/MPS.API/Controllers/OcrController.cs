@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MPS.API.RateLimiting;
 using MPS.API.Authorization;
 using MPS.Application.Common.Interfaces;
 using MPS.Domain.Constants;
@@ -35,7 +36,7 @@ public class OcrController : ControllerBase
     [HasPermission(Permissions.ContractCreateAll)]
     [RequestSizeLimit(5_242_880)]
     [Consumes("multipart/form-data")]
-    [EnableRateLimiting("ocr-citizen-id")]
+    [EnableRateLimiting(RateLimitPolicies.Ocr)]
     public async Task<IActionResult> RecognizeCitizenId(IFormFile image, CancellationToken cancellationToken)
     {
         var metadataError = ValidateImageMetadata(image);
@@ -52,7 +53,7 @@ public class OcrController : ControllerBase
     [HasPermission(Permissions.ContractCreateAll)]
     [RequestSizeLimit(5_242_880)]
     [Consumes("multipart/form-data")]
-    [EnableRateLimiting("ocr-citizen-id")]
+    [EnableRateLimiting(RateLimitPolicies.Ocr)]
     public async Task<IActionResult> RecognizeCitizenIdBack(IFormFile image, CancellationToken cancellationToken)
     {
         var metadataError = ValidateImageMetadata(image);

@@ -28,7 +28,7 @@ namespace MPS.Infrastructure.Persistence;
 /// Tài khoản test (mật khẩu Test@1234):
 ///   hr.user   HR — tạo HĐ, ký phụ lục, chấm dứt
 ///   employee1 Nam   — Draft + Active IND + 2 historical Definite  [có guardian]
-///   employee2 Hoa   — Active Tech Lead + 1 phụ lục Draft          [KHÔNG guardian]
+///   employee2 Hoa   — Active Tổ trưởng + 1 phụ lục Draft          [KHÔNG guardian]
 ///   employee3 Cường — Cancelled + Terminated + Archived           [có guardian]
 ///   employee4 Linh  — Draft Probation + Active 24m                [có guardian]
 ///   employee5 Tuấn  — AutoConvert + Expire candidates             [KHÔNG guardian]
@@ -91,10 +91,10 @@ public sealed partial class DatabaseSeeder
     {
         var seeds = new[]
         {
-            (Code: "BE", Name: "Backend Engineer"),
-            (Code: "FE", Name: "Frontend Engineer"),
-            (Code: "LEAD", Name: "Tech Lead"),
-            (Code: "HR", Name: "HR Specialist"),
+            (Code: "MOC", Name: "Thợ mộc khung tranh"),
+            (Code: "SON", Name: "Thợ sơn hoàn thiện"),
+            (Code: "TOTR", Name: "Tổ trưởng sản xuất"),
+            (Code: "HR", Name: "Nhân viên nhân sự"),
         };
         var codes = seeds.Select(s => s.Code).ToArray();
 
@@ -185,32 +185,32 @@ public sealed partial class DatabaseSeeder
             // Nam — có guardian: mẹ
             (Username: "employee1", FullName: "Nguyễn Văn Nam", Dob: Utc(1995, 3, 15), Gender: Gender.Male,
              CitizenId: "012345678902", Address: "Quận Cầu Giấy, Hà Nội", Email: "nam@mingo.local", Phone: "0902222000",
-             Pos: "BE", Dependents: 1, TaxNo: "8800002222", SocialNo: "BHXH002", Bank: "VCB002",
+             Pos: "MOC", Dependents: 1, TaxNo: "8800002222", SocialNo: "BHXH002", Bank: "VCB002",
              GName: (string?)"Nguyễn Thị Bích", GRel: (string?)"Mẹ", GPhone: (string?)"0922222111", GAddr: (string?)"Quận Cầu Giấy, Hà Nội"),
             // Hoa — KHÔNG có guardian (test optional path)
             (Username: "employee2", FullName: "Trần Thị Hoa", Dob: Utc(1993, 8, 25), Gender: Gender.Female,
              CitizenId: "012345678903", Address: "Quận 1, TP.HCM", Email: "hoa@mingo.local", Phone: "0903333000",
-             Pos: "LEAD", Dependents: 2, TaxNo: "8800003333", SocialNo: "BHXH003", Bank: "VCB003",
+             Pos: "TOTR", Dependents: 2, TaxNo: "8800003333", SocialNo: "BHXH003", Bank: "VCB003",
              GName: (string?)null, GRel: (string?)null, GPhone: (string?)null, GAddr: (string?)null),
             // Cường — có guardian: bố
             (Username: "employee3", FullName: "Lê Văn Cường", Dob: Utc(1990, 11, 10), Gender: Gender.Male,
              CitizenId: "012345678904", Address: "Quận Hai Bà Trưng, Hà Nội", Email: "cuong@mingo.local", Phone: "0904444000",
-             Pos: "FE", Dependents: 0, TaxNo: "8800004444", SocialNo: "BHXH004", Bank: "VCB004",
+             Pos: "SON", Dependents: 0, TaxNo: "8800004444", SocialNo: "BHXH004", Bank: "VCB004",
              GName: (string?)"Lê Văn Hùng", GRel: (string?)"Bố", GPhone: (string?)"0944444111", GAddr: (string?)"Quận Hai Bà Trưng, Hà Nội"),
             // Linh — có guardian: bố
             (Username: "employee4", FullName: "Phạm Thị Linh", Dob: Utc(1997, 7, 8), Gender: Gender.Female,
              CitizenId: "012345678905", Address: "Quận Ba Đình, Hà Nội", Email: "linh@mingo.local", Phone: "0905555000",
-             Pos: "BE", Dependents: 0, TaxNo: "8800005555", SocialNo: "BHXH005", Bank: "VCB005",
+             Pos: "MOC", Dependents: 0, TaxNo: "8800005555", SocialNo: "BHXH005", Bank: "VCB005",
              GName: (string?)"Phạm Văn Mạnh", GRel: (string?)"Bố", GPhone: (string?)"0955555111", GAddr: (string?)"Quận Ba Đình, Hà Nội"),
             // Tuấn — KHÔNG có guardian (test optional path)
             (Username: "employee5", FullName: "Hoàng Văn Tuấn", Dob: Utc(1992, 2, 14), Gender: Gender.Male,
              CitizenId: "012345678906", Address: "Quận 3, TP.HCM", Email: "tuan@mingo.local", Phone: "0906666000",
-             Pos: "BE", Dependents: 1, TaxNo: "8800006666", SocialNo: "BHXH006", Bank: "VCB006",
+             Pos: "MOC", Dependents: 1, TaxNo: "8800006666", SocialNo: "BHXH006", Bank: "VCB006",
              GName: (string?)null, GRel: (string?)null, GPhone: (string?)null, GAddr: (string?)null),
             // Mai — guardian partial (thiếu Address) — test partial path
             (Username: "employee6", FullName: "Vũ Thị Mai", Dob: Utc(1996, 9, 30), Gender: Gender.Female,
              CitizenId: "012345678907", Address: "Quận Long Biên, Hà Nội", Email: "mai@mingo.local", Phone: "0907777000",
-             Pos: "FE", Dependents: 0, TaxNo: "8800007777", SocialNo: "BHXH007", Bank: "VCB007",
+             Pos: "SON", Dependents: 0, TaxNo: "8800007777", SocialNo: "BHXH007", Bank: "VCB007",
              GName: (string?)"Vũ Văn Hải", GRel: (string?)"Anh", GPhone: (string?)"0977777111", GAddr: (string?)null),
         };
         var citizenIds = seeds.Select(s => s.CitizenId).ToArray();
@@ -343,12 +343,12 @@ public sealed partial class DatabaseSeeder
     {
         var seeds = new[]
         {
-            (Code: "BE-1", Name: "Backend Bậc 1 (Junior)", Pos: "BE", Level: 1, Salary: 15_000_000m, Desc: (string?)"Mới ra trường, 0-1 năm KN", IsActive: true),
-            (Code: "BE-2", Name: "Backend Bậc 2 (Mid)", Pos: "BE", Level: 2, Salary: 25_000_000m, Desc: (string?)"2-3 năm KN", IsActive: true),
-            (Code: "BE-3", Name: "Backend Bậc 3 (Senior)", Pos: "BE", Level: 3, Salary: 35_000_000m, Desc: (string?)"4-6 năm KN", IsActive: true),
-            (Code: "FE-2", Name: "Frontend Bậc 2", Pos: "FE", Level: 2, Salary: 22_000_000m, Desc: (string?)null, IsActive: true),
-            (Code: "LEAD-1", Name: "Tech Lead Bậc 1", Pos: "LEAD", Level: 1, Salary: 50_000_000m, Desc: (string?)"Quản lý 3-5 người", IsActive: true),
-            (Code: "BE-99", Name: "Backend Bậc lỗi thời", Pos: "BE", Level: 99, Salary: 10_000_000m, Desc: (string?)"Demo soft-delete: grade inactive", IsActive: false),
+            (Code: "MOC-1", Name: "Thợ mộc Bậc 1", Pos: "MOC", Level: 1, Salary: 15_000_000m, Desc: (string?)"Mới vào nghề, 0-1 năm KN", IsActive: true),
+            (Code: "MOC-2", Name: "Thợ mộc Bậc 2", Pos: "MOC", Level: 2, Salary: 25_000_000m, Desc: (string?)"Tay nghề khá, 2-3 năm KN", IsActive: true),
+            (Code: "MOC-3", Name: "Thợ mộc Bậc 3 (thợ cả)", Pos: "MOC", Level: 3, Salary: 35_000_000m, Desc: (string?)"Thợ cả, 4-6 năm KN", IsActive: true),
+            (Code: "SON-2", Name: "Thợ sơn Bậc 2", Pos: "SON", Level: 2, Salary: 22_000_000m, Desc: (string?)null, IsActive: true),
+            (Code: "TOTR-1", Name: "Tổ trưởng sản xuất Bậc 1", Pos: "TOTR", Level: 1, Salary: 50_000_000m, Desc: (string?)"Quản lý tổ 3-5 người", IsActive: true),
+            (Code: "MOC-99", Name: "Thợ mộc Bậc lỗi thời", Pos: "MOC", Level: 99, Salary: 10_000_000m, Desc: (string?)"Demo soft-delete: grade inactive", IsActive: false),
         };
         var codes = seeds.Select(s => s.Code).ToArray();
 
@@ -393,7 +393,7 @@ public sealed partial class DatabaseSeeder
         {
             (Code: "LUNCH", Name: "Phụ cấp ăn trưa", Desc: (string?)"Theo TT 26/2016/TT-BLDTBXH", Amount: (decimal?)730_000m, IsBhxh: false, IsTaxable: false, IsActive: true),
             (Code: "TRANSPORT", Name: "Phụ cấp đi lại", Desc: (string?)null, Amount: (decimal?)500_000m, IsBhxh: false, IsTaxable: true, IsActive: true),
-            (Code: "RESPONSIBILITY", Name: "Phụ cấp trách nhiệm", Desc: (string?)"Áp dụng Tech Lead / Manager", Amount: (decimal?)2_000_000m, IsBhxh: true, IsTaxable: true, IsActive: true),
+            (Code: "RESPONSIBILITY", Name: "Phụ cấp trách nhiệm", Desc: (string?)"Áp dụng Tổ trưởng / Quản lý", Amount: (decimal?)2_000_000m, IsBhxh: true, IsTaxable: true, IsActive: true),
             (Code: "LEGACY", Name: "Phụ cấp cũ (ngừng)", Desc: (string?)"Demo inactive — UI grey", Amount: (decimal?)100_000m, IsBhxh: false, IsTaxable: false, IsActive: false),
             // PHONE thường đã được SeedDefaultAllowanceTypesAsync tạo trước — chỉ chèn nếu thiếu.
             (Code: "PHONE", Name: "Phụ cấp điện thoại", Desc: (string?)null, Amount: (decimal?)300_000m, IsBhxh: false, IsTaxable: true, IsActive: true),
@@ -490,25 +490,25 @@ public sealed partial class DatabaseSeeder
         var eiLinh = employeeIds["employee4"];
         var eiTuan = employeeIds["employee5"];
         var eiMai = employeeIds["employee6"];
-        var posBe = positionIds["BE"];
-        var posFe = positionIds["FE"];
-        var posLead = positionIds["LEAD"];
+        var posBe = positionIds["MOC"];
+        var posFe = positionIds["SON"];
+        var posLead = positionIds["TOTR"];
 
         // #1 DRAFT cho Nam — test edit/cancel/activate
         var draft = NewTestContract("HDLD-DRAFT-NAM-001",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Draft,
             eiNam, partyId, hrUserId, posBe,
-            "Backend developer — phát triển API + microservice", "Hà Nội",
+            "Thợ mộc — gia công, lắp ráp khung tranh gỗ", "Hà Nội",
             today.AddDays(30), today.AddDays(30).AddYears(1),
-            gradeIds["BE-2"], 25_000_000m);
+            gradeIds["MOC-2"], 25_000_000m);
 
         // #2 ACTIVE Indefinite cho Nam (chính) — test phụ lục + termination
         var activeNamInd = NewTestContract("HDLD-ACTIVE-NAM-IND",
             ContractEnums.ContractCategory.Indefinite, ContractEnums.ContractStatus.Active,
             eiNam, partyId, hrUserId, posBe,
-            "Backend developer cấp Senior", "Hà Nội",
+            "Thợ mộc bậc cao — khung tranh cao cấp", "Hà Nội",
             Utc(2024, 1, 1), null,
-            gradeIds["BE-3"], 35_000_000m,
+            gradeIds["MOC-3"], 35_000_000m,
             signedAt: Utc(2024, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2023, 12, 25), updatedAt: Utc(2024, 1, 1));
 
@@ -518,17 +518,17 @@ public sealed partial class DatabaseSeeder
         var namHist1 = NewTestContract("HDLD-NAM-HIST-DEF-1",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Expired,
             eiNam, partyId, hrUserId, posBe,
-            "Backend Bậc 1", "Hà Nội",
+            "Thợ mộc Bậc 1", "Hà Nội",
             Utc(2022, 1, 1), Utc(2022, 12, 31),
-            gradeIds["BE-1"], 15_000_000m,
+            gradeIds["MOC-1"], 15_000_000m,
             signedAt: Utc(2022, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2021, 12, 15), updatedAt: Utc(2022, 12, 31));
         var namHist2 = NewTestContract("HDLD-NAM-HIST-DEF-2",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Expired,
             eiNam, partyId, hrUserId, posBe,
-            "Backend Bậc 2", "Hà Nội",
+            "Thợ mộc Bậc 2", "Hà Nội",
             Utc(2023, 1, 1), Utc(2023, 12, 31),
-            gradeIds["BE-2"], 25_000_000m,
+            gradeIds["MOC-2"], 25_000_000m,
             signedAt: Utc(2023, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2022, 12, 15), updatedAt: Utc(2023, 12, 31));
 
@@ -536,9 +536,9 @@ public sealed partial class DatabaseSeeder
         var activeHoa = NewTestContract("HDLD-ACTIVE-HOA-LEAD",
             ContractEnums.ContractCategory.Indefinite, ContractEnums.ContractStatus.Active,
             eiHoa, partyId, hrUserId, posLead,
-            "Tech Lead — quản lý team backend 5 người", "TP.HCM",
+            "Tổ trưởng — quản lý tổ sản xuất 5 người", "TP.HCM",
             Utc(2023, 6, 1), null,
-            gradeIds["LEAD-1"], 50_000_000m,
+            gradeIds["TOTR-1"], 50_000_000m,
             signedAt: Utc(2023, 6, 1), signedPlace: "TP.HCM",
             createdAt: Utc(2023, 5, 28));
 
@@ -546,9 +546,9 @@ public sealed partial class DatabaseSeeder
         var draftLinhProb = NewTestContract("HDLD-DRAFT-LINH-PROB",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Draft,
             eiLinh, partyId, hrUserId, posBe,
-            "Backend Junior — thử việc 2 tháng", "Hà Nội",
+            "Thợ mộc — thử việc 2 tháng", "Hà Nội",
             today.AddDays(15), today.AddMonths(3),
-            gradeIds["BE-1"], 15_000_000m,
+            gradeIds["MOC-1"], 15_000_000m,
             subtype: ContractEnums.ContractSubtype.Probation);
         draftLinhProb.HasProbation = true;
         draftLinhProb.ProbationStartDate = today.AddDays(15);
@@ -560,9 +560,9 @@ public sealed partial class DatabaseSeeder
         var activeLinh24M = NewTestContract("HDLD-ACTIVE-LINH-24M",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Active,
             eiLinh, partyId, hrUserId, posBe,
-            "Backend Bậc 2", "Hà Nội",
+            "Thợ mộc Bậc 2", "Hà Nội",
             today.AddDays(-180), today.AddDays(-180).AddYears(2),
-            gradeIds["BE-2"], 25_000_000m,
+            gradeIds["MOC-2"], 25_000_000m,
             signedAt: today.AddDays(-180), signedPlace: "Hà Nội",
             createdAt: today.AddDays(-185));
 
@@ -570,9 +570,9 @@ public sealed partial class DatabaseSeeder
         var activeMai6M = NewTestContract("HDLD-ACTIVE-MAI-6M",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Active,
             eiMai, partyId, hrUserId, posFe,
-            "Frontend Bậc 2 — short-term project", "Hà Nội",
+            "Thợ sơn Bậc 2 — đơn ngắn hạn", "Hà Nội",
             today.AddMonths(-2), today.AddMonths(4),
-            gradeIds["FE-2"], 22_000_000m,
+            gradeIds["SON-2"], 22_000_000m,
             signedAt: today.AddMonths(-2), signedPlace: "Hà Nội",
             createdAt: today.AddMonths(-2).AddDays(-5));
 
@@ -580,18 +580,18 @@ public sealed partial class DatabaseSeeder
         var cancelCuong = NewTestContract("HDLD-CANCEL-CUONG",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Cancelled,
             eiCuong, partyId, hrUserId, posFe,
-            "Frontend developer (HĐ bị hủy do Cường rút lời)", "Hà Nội",
+            "Thợ sơn (HĐ bị hủy do Cường rút lời)", "Hà Nội",
             Utc(2026, 1, 1), Utc(2026, 12, 31),
-            gradeIds["FE-2"], 22_000_000m,
+            gradeIds["SON-2"], 22_000_000m,
             createdAt: Utc(2025, 12, 20), updatedAt: Utc(2025, 12, 22));
 
         // #10 TERMINATED cho Cường — view termination flow
         var termCuong = NewTestContract("HDLD-TERM-CUONG",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Terminated,
             eiCuong, partyId, hrUserId, posFe,
-            "Frontend developer (đã chấm dứt theo Điều 34 k.1)", "Hà Nội",
+            "Thợ sơn (đã chấm dứt theo Điều 34 k.1)", "Hà Nội",
             Utc(2024, 1, 1), Utc(2025, 12, 31),
-            gradeIds["FE-2"], 22_000_000m,
+            gradeIds["SON-2"], 22_000_000m,
             signedAt: Utc(2024, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2023, 12, 20), updatedAt: Utc(2025, 12, 31));
 
@@ -599,9 +599,9 @@ public sealed partial class DatabaseSeeder
         var archCuong = NewTestContract("HDLD-ARCH-CUONG-2014",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Terminated,
             eiCuong, partyOldId, hrUserId, posFe,
-            "Frontend dev (HĐ cũ 2014 — đã archive sau 10 năm chấm dứt)", "Hà Nội",
+            "Thợ sơn(HĐ cũ 2014 — đã archive sau 10 năm chấm dứt)", "Hà Nội",
             Utc(2014, 1, 1), Utc(2015, 12, 31),
-            gradeIds["BE-99"], 10_000_000m,
+            gradeIds["MOC-99"], 10_000_000m,
             workingTimeJson: "{}",
             signedAt: Utc(2014, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2013, 12, 20), updatedAt: Utc(2015, 12, 31));
@@ -611,9 +611,9 @@ public sealed partial class DatabaseSeeder
         var expMaiOld = NewTestContract("HDLD-EXP-MAI-OLD-2014",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Expired,
             eiMai, partyOldId, hrUserId, posFe,
-            "Frontend dev (HĐ Expired 2014 — chờ archive job)", "Hà Nội",
+            "Thợ sơn(HĐ Expired 2014 — chờ archive job)", "Hà Nội",
             today.AddYears(-12), today.AddYears(-11),
-            gradeIds["FE-2"], 18_000_000m,
+            gradeIds["SON-2"], 18_000_000m,
             workingTimeJson: "{}",
             signedAt: today.AddYears(-12), signedPlace: "Hà Nội",
             createdAt: today.AddYears(-12), updatedAt: today.AddYears(-11));
@@ -622,10 +622,10 @@ public sealed partial class DatabaseSeeder
         var autoConvertTuan = NewTestContract("HDLD-AUTOCVT-TUAN",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Active,
             eiTuan, partyId, hrUserId, posBe,
-            "Backend Bậc 2 (HĐ Định hạn hết hạn 45 ngày trước, vẫn Active → AutoConvertJob sẽ chuyển thành Indefinite)",
+            "Thợ mộc Bậc 2 (HĐ Định hạn hết hạn 45 ngày trước, vẫn Active → AutoConvertJob sẽ chuyển thành Indefinite)",
             "TP.HCM",
             today.AddYears(-2), today.AddDays(-45),
-            gradeIds["BE-2"], 25_000_000m,
+            gradeIds["MOC-2"], 25_000_000m,
             signedAt: today.AddYears(-2), signedPlace: "TP.HCM",
             createdAt: today.AddYears(-2).AddDays(-5));
 
@@ -633,9 +633,9 @@ public sealed partial class DatabaseSeeder
         var expireParent = NewTestContract("HDLD-EXPCAND-PARENT",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Active,
             eiTuan, partyId, hrUserId, posBe,
-            "Backend Bậc 1 (HĐ Định hạn parent — hết hạn 2 ngày trước, đã có HĐ con)", "TP.HCM",
+            "Thợ mộc Bậc 1 (HĐ Định hạn parent — hết hạn 2 ngày trước, đã có HĐ con)", "TP.HCM",
             today.AddYears(-1), today.AddDays(-2),
-            gradeIds["BE-1"], 15_000_000m,
+            gradeIds["MOC-1"], 15_000_000m,
             signedAt: today.AddYears(-1), signedPlace: "TP.HCM",
             createdAt: today.AddYears(-1).AddDays(-3));
 
@@ -643,9 +643,9 @@ public sealed partial class DatabaseSeeder
         var expireChild = NewTestContract("HDLD-EXPCAND-CHILD",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Active,
             eiTuan, partyId, hrUserId, posBe,
-            "Backend Bậc 2 (HĐ mới sau khi #14 hết hạn)", "TP.HCM",
+            "Thợ mộc Bậc 2 (HĐ mới sau khi #14 hết hạn)", "TP.HCM",
             today.AddDays(-1), today.AddYears(1),
-            gradeIds["BE-2"], 25_000_000m,
+            gradeIds["MOC-2"], 25_000_000m,
             signedAt: today.AddDays(-1), signedPlace: "TP.HCM",
             createdAt: today.AddDays(-5));
         expireChild.ParentContract = expireParent; // EF tự resolve ParentContractId khi save
@@ -728,11 +728,11 @@ public sealed partial class DatabaseSeeder
             // Nam Active Indefinite (#2): ăn trưa + đi lại
             ("HDLD-ACTIVE-NAM-IND", "LUNCH", 730_000m, null),
             ("HDLD-ACTIVE-NAM-IND", "TRANSPORT", 500_000m, null),
-            // Hoa Tech Lead (#5): full bộ
+            // Hoa Tổ trưởng (#5): full bộ
             ("HDLD-ACTIVE-HOA-LEAD", "LUNCH", 730_000m, null),
             ("HDLD-ACTIVE-HOA-LEAD", "TRANSPORT", 1_500_000m, "Đi công tác nhiều"),
             ("HDLD-ACTIVE-HOA-LEAD", "PHONE", 500_000m, null),
-            ("HDLD-ACTIVE-HOA-LEAD", "RESPONSIBILITY", 5_000_000m, "Phụ cấp Tech Lead"),
+            ("HDLD-ACTIVE-HOA-LEAD", "RESPONSIBILITY", 5_000_000m, "Phụ cấp Tổ trưởng"),
             // Linh 24m (#7): ăn trưa
             ("HDLD-ACTIVE-LINH-24M", "LUNCH", 730_000m, null),
             // Mai 6m (#8): ăn trưa + điện thoại
@@ -874,10 +874,10 @@ public sealed partial class DatabaseSeeder
             ContractId = contractNamId,
             AppendixNo = "PL-2025-002",
             AppendixType = ContractEnums.AppendixType.Amendment,
-            Title = "Thăng chức Senior + tăng lương + thêm phụ cấp điện thoại",
+            Title = "Thăng bậc thợ cả + tăng lương + thêm phụ cấp điện thoại",
             ChangedClausesJson =
-                $@"{{""jobDescription"":""Senior Backend Engineer (promoted)"",""addAllowances"":[{{""allowanceTypeId"":{phoneId},""amount"":300000,""currency"":""VND"",""note"":""Cấp mới sau thăng chức""}}]}}",
-            AppendixText = "Hai bên thỏa thuận thăng chức Nam thành Senior + bổ sung phụ cấp điện thoại.",
+                $@"{{""jobDescription"":""Thợ mộc bậc cao (thăng bậc thợ cả)"",""addAllowances"":[{{""allowanceTypeId"":{phoneId},""amount"":300000,""currency"":""VND"",""note"":""Cấp mới sau thăng bậc""}}]}}",
+            AppendixText = "Hai bên thỏa thuận thăng Nam lên thợ cả + bổ sung phụ cấp điện thoại.",
             NoticeSentAt = Utc(2025, 10, 1),
             EffectiveFrom = Utc(2025, 10, 15),
             SignedAt = Utc(2025, 10, 10),
@@ -894,7 +894,7 @@ public sealed partial class DatabaseSeeder
             AppendixType = ContractEnums.AppendixType.Amendment,
             Title = "Đổi địa điểm làm việc TP.HCM → Hà Nội",
             ChangedClausesJson =
-                @"{""workLocation"":""Hà Nội"",""jobDescription"":""Tech Lead — chuyển ra HN làm việc tại trụ sở chính""}",
+                @"{""workLocation"":""Hà Nội"",""jobDescription"":""Tổ trưởng — chuyển ra HN làm việc tại trụ sở chính""}",
             AppendixText = "Hai bên thỏa thuận chuyển NLĐ Hoa từ chi nhánh TP.HCM ra trụ sở Hà Nội.",
             NoticeSentAt = today.AddDays(-2),
             EffectiveFrom = today.AddDays(10),

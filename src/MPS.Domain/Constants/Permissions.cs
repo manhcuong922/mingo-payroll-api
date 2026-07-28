@@ -110,8 +110,6 @@ public static class Permissions
     public const string AllowanceExemptThresholdUpdateAll = "AllowanceExemptThreshold.Update.All";
     public const string AllowanceExemptThresholdDeleteAll = "AllowanceExemptThreshold.Delete.All";
 
-    // (81–84 reserved unused)
-
     public const string LaborLawConstantsReadAll = "LaborLawConstants.Read.All";
     public const string LaborLawConstantsCreateAll = "LaborLawConstants.Create.All";
     public const string LaborLawConstantsUpdateAll = "LaborLawConstants.Update.All";
@@ -207,9 +205,14 @@ public static class Permissions
     public const string CompanyPolicyUpdateAll = "CompanyPolicy.Update.All";
     public const string CompanyPolicyDeleteAll = "CompanyPolicy.Delete.All";
 
-    // ===== FaceRegistration (IDs 134–136) — retired: module gỡ ở nhánh remove/face-attendance =====
+    // ===== FaceRegistration (Track B) — IDs 134–136 =====
+
+    public const string FaceRegistrationSubmitSelf = "FaceRegistration.Submit.Self";
+    public const string FaceRegistrationReadAll    = "FaceRegistration.Read.All";
+    public const string FaceRegistrationApproveAll = "FaceRegistration.Approve.All";
+
     // ===== OvertimeSlotTemplate (IDs 137–140) — retired: module gỡ ở nhánh dev =====
-    // IDs 134–140 giữ trống cho audit continuity (không tái sử dụng).
+    // IDs 137–140 giữ trống cho audit continuity (không tái sử dụng).
 
     // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
 
@@ -331,6 +334,28 @@ public static class Permissions
     public const string MonthlyEvaluationScoreDirectAll = "MonthlyEvaluation.ScoreDirect.All";
     public const string MonthlyEvaluationApproveAll     = "MonthlyEvaluation.Approve.All";
     public const string MonthlyEvaluationReopenAll      = "MonthlyEvaluation.Reopen.All";
+
+    // ===== Payroll module (bảng lương hàng tháng) — IDs 252–265 =====
+    public const string PayrollReadAll   = "Payroll.Read.All";
+    public const string PayrollReadSelf  = "Payroll.Read.Self";
+    public const string PayrollCreateAll = "Payroll.Create.All";
+    public const string PayrollUpdateAll = "Payroll.Update.All";     // override cell / thêm-sửa cột / thêm note
+    public const string PayrollFinalizeAll = "Payroll.Finalize.All"; // chốt/khoá kỳ
+    public const string PayrollDeleteAll = "Payroll.Delete.All";
+
+    public const string PayrollFormulaSetReadAll   = "PayrollFormulaSet.Read.All";
+    public const string PayrollFormulaSetCreateAll = "PayrollFormulaSet.Create.All";
+    public const string PayrollFormulaSetUpdateAll = "PayrollFormulaSet.Update.All";
+    public const string PayrollFormulaSetDeleteAll = "PayrollFormulaSet.Delete.All";
+
+    public const string ProductivityCoefficientReadAll   = "ProductivityCoefficient.Read.All";
+    public const string ProductivityCoefficientUpdateAll = "ProductivityCoefficient.Update.All";
+
+    // ===== BHXH & Tax Payment Tracking module — IDs 266–269 =====
+    public const string PayrollLockAll             = "Payroll.Lock.All";
+    public const string BhxhTaxPaymentReadAll      = "BhxhTaxPayment.Read.All";
+    public const string BhxhTaxPaymentRecordAll    = "BhxhTaxPayment.Record.All";
+    public const string BhxhTaxPaymentConfirmAll   = "BhxhTaxPayment.Confirm.All";
 }
 
 public static class PermissionIds
@@ -430,17 +455,20 @@ public static class PermissionIds
     public const int PitRegulationUpdateAll = 71;
     public const int PitRegulationDeleteAll = 72;
 
-    public const int MinimumWageReadAll = 73;
-    public const int MinimumWageCreateAll = 74;
-    public const int MinimumWageUpdateAll = 75;
-    public const int MinimumWageDeleteAll = 76;
+    // ⚠️ 73–76 là OtRate.* — module OtRate đã bị gỡ (migration 20260616082959) nhưng 4 dòng
+    // Permissions vẫn nằm trong DB. KHÔNG tái sử dụng dải này cho quyền mới; nếu cần thì phải
+    // viết migration xoá RolePermissions + Permissions 73–76 trước.
+    // (73–76 retired: OtRate.Read/Create/Update/Delete.All)
 
-    public const int AllowanceExemptThresholdReadAll = 77;
-    public const int AllowanceExemptThresholdCreateAll = 78;
-    public const int AllowanceExemptThresholdUpdateAll = 79;
-    public const int AllowanceExemptThresholdDeleteAll = 80;
+    public const int MinimumWageReadAll = 77;
+    public const int MinimumWageCreateAll = 78;
+    public const int MinimumWageUpdateAll = 79;
+    public const int MinimumWageDeleteAll = 80;
 
-    // (81–84 reserved unused)
+    public const int AllowanceExemptThresholdReadAll = 81;
+    public const int AllowanceExemptThresholdCreateAll = 82;
+    public const int AllowanceExemptThresholdUpdateAll = 83;
+    public const int AllowanceExemptThresholdDeleteAll = 84;
 
     public const int LaborLawConstantsReadAll = 85;
     public const int LaborLawConstantsCreateAll = 86;
@@ -448,10 +476,13 @@ public static class PermissionIds
     public const int LaborLawConstantsDeleteAll = 88;
 
     // ===== AuditLog + LegalDocument + Compliance Auto-Update — IDs 89–94 =====
+    // ⚠️ Thứ tự Id KHÔNG khớp thứ tự khai báo lịch sử: DB có AuditLog.Read.All = 90 (seed bởi
+    // migration AddAuditLogs), còn 89 bỏ trống. LegalDocument.Read.All nay chiếm 89
+    // (migration 20260721*_AddLegalDocumentReadPermission). Đây là SỰ THẬT trong DB — trước đây
+    // hằng số ở file này lệch 4 đơn vị so với DB nhưng chưa lộ vì runtime chỉ dùng chuỗi Code.
 
-    public const int AuditLogReadAll = 89;
-
-    public const int LegalDocumentReadAll = 90;
+    public const int LegalDocumentReadAll = 89;
+    public const int AuditLogReadAll = 90;
     public const int LegalDocumentWriteAll = 91;
 
     public const int ComplianceAutoUpdateRunAll = 92;
@@ -512,9 +543,14 @@ public static class PermissionIds
     public const int CompanyPolicyUpdateAll = 132;
     public const int CompanyPolicyDeleteAll = 133;
 
-    // ===== FaceRegistration (IDs 134–136) — retired: module gỡ ở nhánh remove/face-attendance =====
+    // ===== FaceRegistration (Track B) — IDs 134–136 =====
+
+    public const int FaceRegistrationSubmitSelf = 134;
+    public const int FaceRegistrationReadAll    = 135;
+    public const int FaceRegistrationApproveAll = 136;
+
     // ===== OvertimeSlotTemplate (IDs 137–140) — retired: module gỡ ở nhánh dev =====
-    // IDs 134–140 giữ trống cho audit continuity (không tái sử dụng).
+    // IDs 137–140 giữ trống cho audit continuity (không tái sử dụng).
 
     // ===== AttendanceSetting (Attendance ext) — IDs 141–142 =====
 
@@ -635,4 +671,29 @@ public static class PermissionIds
     public const int DependentRequestCancelSelf      = 249;
     public const int EmployeeDependentReadAll        = 250;
     public const int EmployeeDependentReadSelf       = 251;
+
+    // ===== Payroll module (bảng lương hàng tháng) — IDs 252–265 =====
+    public const int PayrollReadAll     = 252;
+    public const int PayrollReadSelf    = 253;
+    public const int PayrollCreateAll   = 254;
+    public const int PayrollUpdateAll   = 255;
+    public const int PayrollFinalizeAll = 256;
+    public const int PayrollDeleteAll   = 257;
+
+    public const int PayrollFormulaSetReadAll   = 258;
+    public const int PayrollFormulaSetCreateAll = 259;
+    public const int PayrollFormulaSetUpdateAll = 260;
+    public const int PayrollFormulaSetDeleteAll = 261;
+
+    // 262, 263 = PayrollParameter Read/Update — ĐÃ BỎ (mọi tham số lấy từ HĐ/công chuẩn/hiệu suất).
+    // KHÔNG tái dùng 2 ID này cho quyền mới.
+
+    public const int ProductivityCoefficientReadAll   = 264;
+    public const int ProductivityCoefficientUpdateAll = 265;
+
+    // ===== BHXH & Tax Payment Tracking module — IDs 266–269 =====
+    public const int PayrollLockAll             = 266;
+    public const int BhxhTaxPaymentReadAll      = 267;
+    public const int BhxhTaxPaymentRecordAll    = 268;
+    public const int BhxhTaxPaymentConfirmAll   = 269;
 }

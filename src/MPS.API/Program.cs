@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using MediatR;
@@ -137,7 +139,14 @@ builder.Services
 builder.Services.Configure<MPS.Application.Settings.AttendanceCheckinSettings>(
     builder.Configuration.GetSection(MPS.Application.Settings.AttendanceCheckinSettings.SectionName));
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ServiceAccount", policy =>
+        policy
+            .AddAuthenticationSchemes(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser()
+            .RequireRole("AiService"));
+});
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();
 // FT-39 — wrap middleware result handler để ghi audit AccessDenied trước khi trả 403.
@@ -145,76 +154,34 @@ builder.Services.AddSingleton<
     Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler,
     AuditAccessDeniedHandler>();
 
-// ===== Rate Limiting =====
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    options.AddPolicy("auth-login", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            }));
-
-    options.AddPolicy("auth-refresh", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 20,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            }));
-
-    // Contract file uploads (activate / replace): 5 uploads/min per user, fall back to IP.
-    options.AddPolicy("contract-upload", context =>
-    {
-        var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            ?? context.Connection.RemoteIpAddress?.ToString()
-            ?? "anonymous";
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: userId,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            });
-    });
-
-    // OCR citizen-id: 10 req/min per user, fall back to IP.
-    options.AddPolicy("ocr-citizen-id", context =>
-    {
-        var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            ?? context.Connection.RemoteIpAddress?.ToString()
-            ?? "anonymous";
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: userId,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            });
-    });
-});
+// ===== Rate Limiting ===== (khai báo chi tiết: MPS.API/RateLimiting/RateLimitingSetup.cs)
+builder.Services.AddMpsRateLimiting(builder.Configuration);
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        var allowedOrigins = builder.Configuration
-            .GetSection("Cors:AllowedOrigins")
-            .Get<string[]>() ?? Array.Empty<string>();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        }
+        else
+        {
+            var allowedOrigins = builder.Configuration
+                .GetSection("Cors:AllowedOrigins")
+                .Get<string[]>() ?? Array.Empty<string>();
 
         policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              // Không expose thì trình duyệt giấu header này khỏi JS, mọi endpoint tải file
+              // (bảng lương, mẫu phân ca...) mất tên file do server đặt và phải đoán lại ở FE.
+              .WithExposedHeaders("Content-Disposition");
+              
+        }
     });
 });
 
@@ -223,9 +190,21 @@ var app = builder.Build();
 // ===== Apply migrations + seed default admin =====
 using (var scope = app.Services.CreateScope())
 {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Seed:ResetOnStartup=true -> XÓA SẠCH database rồi tạo lại từ migration + seed, để DB luôn về đúng
+    // trạng thái seeder mỗi lần khởi động (dùng cho môi trường DEMO: mỗi lần deploy = data sạch giống seed).
+    // Mặc định false (an toàn cho local/dev/test). Bật qua env Seed__ResetOnStartup ở compose/.env.
+    // ⚠️ CẢNH BÁO: bật cờ này thì MỌI lần container api khởi động (deploy, reboot, crash) đều mất toàn bộ dữ liệu.
+    if (builder.Configuration.GetValue<bool>("Seed:ResetOnStartup"))
+    {
+        app.Logger.LogWarning(
+            "Seed:ResetOnStartup=true -> xóa toàn bộ database rồi seed lại từ đầu (mọi dữ liệu hiện có sẽ mất).");
+        await db.Database.EnsureDeletedAsync();
+    }
+
     // Tự áp các migration còn thiếu khi khởi động (idempotent).
     // Cần thiết cho deploy container: DB mới sẽ được tạo schema đầy đủ.
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
@@ -245,8 +224,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors();
-app.UseRateLimiter();
+// Thứ tự quan trọng: UseRateLimiter phải chạy SAU UseAuthentication thì policy phân vùng theo
+// người dùng (tải file hợp đồng, OCR) mới đọc được claim; nếu không, mọi người dùng chung một IP
+// bị gộp vào một rổ và chặn nhầm nhau. Vẫn đặt TRƯỚC UseAuthorization để request bị từ chối
+// quyền cũng bị tính hạn mức (chống dò endpoint).
 app.UseAuthentication();
+app.UseMiddleware<LoginIdentityMiddleware>();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 

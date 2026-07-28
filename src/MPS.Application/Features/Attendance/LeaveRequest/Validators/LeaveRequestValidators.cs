@@ -11,8 +11,6 @@ public class CreateLeaveRequestCommandValidator : AbstractValidator<CreateLeaveR
         RuleFor(x => x.LeaveTypeId).GreaterThan(0);
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate);
         RuleFor(x => x.Reason).MaximumLength(500);
-        RuleFor(x => x.SupportingDocumentUrl).MaximumLength(1000);
-        RuleFor(x => x.MedicalCertificateUrl).MaximumLength(1000);
         RuleFor(x => x.InsuranceCertNumber)
             .MaximumLength(50)
             .Matches(@"^[0-9A-Za-z\-/]*$")
@@ -27,7 +25,6 @@ public class ApproveLeaveRequestCommandValidator : AbstractValidator<ApproveLeav
     {
         RuleFor(x => x.Id).GreaterThan(0);
         RuleFor(x => x.ReviewNote).MaximumLength(500);
-        RuleFor(x => x.MedicalCertificateUrl).MaximumLength(1000);
         RuleFor(x => x.InsuranceCertNumber).MaximumLength(50);
         RuleFor(x => x.OverrideReason).MaximumLength(500);
     }

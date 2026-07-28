@@ -54,6 +54,7 @@ internal static class ScheduleTemplateMapper
             entity.CreatedAt,
             entity.UpdatedAt,
             entity.ApplyTarget,
-            ScheduleTemplateValidation.FromCsvMask(entity.TargetDepartmentIds));
+            ScheduleTemplateValidation.FromCsvMask(entity.TargetDepartmentIds),
+            entity.IncludeRestDaysAndHolidays);
     }
 }

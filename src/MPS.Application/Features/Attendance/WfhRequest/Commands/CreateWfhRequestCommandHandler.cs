@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.WfhRequest.Common;
@@ -87,6 +87,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
 
         await _editLockChecker.EnsureCanModifyAsync(request.StartDate, request.OverrideReason, cancellationToken);
 
+        // [D8] — chặn CHÉO LOẠI: cả WFH↔WFH, WFH↔LateEarly, WFH↔Nghỉ (Pending/Approved), WFH↔OT.
         await _dayConflictChecker.EnsureNoConflictAsync(
             employeeId,
             request.StartDate,

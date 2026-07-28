@@ -158,6 +158,70 @@ public class ProjectGetPagedQueryHandler : IRequestHandler<ProjectGetPagedQuery,
     }
 }
 
+/// <summary>
+/// Đơn hàng NV hiện tại tham gia (có task được gán) + tiến độ thật. Không đòi Project.Read.* —
+/// scope tự giới hạn theo TaskAssignee của chính user, nên công nhân (Task.Read.Assigned) dùng được.
+/// </summary>
+public class ProjectGetMyQueryHandler : IRequestHandler<ProjectGetMyQuery, IReadOnlyList<ProjectDto>>
+{
+    private readonly IProjectRepository _projects;
+    private readonly IProjectTaskRepository _tasks;
+    private readonly IProgressService _progress;
+    private readonly ICurrentUserService _currentUser;
+
+    public ProjectGetMyQueryHandler(
+        IProjectRepository projects,
+        IProjectTaskRepository tasks,
+        IProgressService progress,
+        ICurrentUserService currentUser)
+    {
+        _projects = projects;
+        _tasks = tasks;
+        _progress = progress;
+        _currentUser = currentUser;
+    }
+
+    public async Task<IReadOnlyList<ProjectDto>> Handle(ProjectGetMyQuery request, CancellationToken ct)
+    {
+        var userId = _currentUser.UserId;
+        if (userId is null) return Array.Empty<ProjectDto>();
+
+        var projectIds = await _tasks.GetAssignedProjectIdsByUserAsync(userId.Value, ct);
+        if (projectIds.Count == 0) return Array.Empty<ProjectDto>();
+
+        var projects = new List<Domain.Entities.Project>(projectIds.Count);
+        foreach (var projectId in projectIds)
+        {
+            var project = await _projects.GetByIdAsync(projectId, ct);
+            if (project is null) continue;
+            if (project.DeletedAt is not null && !request.IncludeCancelled) continue;
+            projects.Add(project);
+        }
+        if (projects.Count == 0) return Array.Empty<ProjectDto>();
+
+        // Tiến độ tính trên TRỌN cây task của đơn (không chỉ task của NV) — để con số khớp với
+        // những gì quản lý xưởng thấy.
+        var tasks = await _tasks.GetByProjectIdsAsync(
+            projects.Select(p => p.Id).ToArray(), ct, request.IncludeCancelled);
+        var tasksByProject = tasks
+            .Where(t => t.ProjectId.HasValue)
+            .GroupBy(t => t.ProjectId!.Value)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Entities.ProjectTask>)g.ToList());
+
+        return projects
+            .Select(p => ProjectMapper.ToDtoWithProgress(
+                p,
+                tasksByProject.TryGetValue(p.Id, out var projectTasks)
+                    ? projectTasks
+                    : Array.Empty<Domain.Entities.ProjectTask>(),
+                _progress,
+                VietnamClock.Now))
+            .OrderByDescending(p => p.Status == nameof(Domain.Enums.ProjectStatus.Active))
+            .ThenBy(p => p.Deadline ?? DateTime.MaxValue)
+            .ToList();
+    }
+}
+
 public class ProjectGetByIdQueryHandler : IRequestHandler<ProjectGetByIdQuery, ProjectDto?>
 {
     private readonly IProjectRepository _projects;

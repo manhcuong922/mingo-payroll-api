@@ -1,6 +1,7 @@
-using System.Data;
+﻿using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using MPS.Domain.Common;
 using MPS.Application.Common.Interfaces;
 using MPS.Domain.Entities.Compliance;
 using MPS.Domain.Exceptions;
@@ -41,13 +42,12 @@ public sealed class SocialInsuranceRateRepository : ISocialInsuranceRateReposito
         return await query.OrderByDescending(x => x.ValidFrom).ToListAsync(ct);
     }
 
+    // ⭐ #12: "active" = phiên bản ĐANG CÓ HIỆU LỰC HÔM NAY, không phải "hàng có cờ IsActive".
+    // Cờ IsActive do ComplianceActivationJob bật; nếu job chưa chạy (hoặc seed quên bật) thì endpoint
+    // /active trả 404 và ComplianceLookupService ném InvalidOperationException dù dữ liệu vẫn đầy đủ.
+    // Uỷ quyền sang GetActiveAtAsync(hôm nay) — vẫn ưu tiên bản có cờ, có fallback theo ValidFrom.
     public Task<SocialInsuranceRateVersion?> GetActiveAsync(CancellationToken ct) =>
-        _context.SocialInsuranceRateVersions
-            .AsNoTracking()
-            .Include(x => x.Funds)
-            .Include(x => x.CreatedByUser)
-            .Include(x => x.UpdatedByUser)
-            .FirstOrDefaultAsync(x => x.IsActive && !x.IsArchived, ct);
+        GetActiveAtAsync(DateOnly.FromDateTime(VietnamClock.Now), ct);
 
     public async Task<SocialInsuranceRateVersion?> GetActiveAtAsync(DateOnly date, CancellationToken ct)
     {
