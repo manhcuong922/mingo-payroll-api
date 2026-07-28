@@ -496,16 +496,44 @@ public class ContractRepository : IContractRepository
                 && c.ConvertedFromDefiniteFlag == false)
             .ToListAsync(cancellationToken);
 
+        if (candidates.Count == 0) return 0;
+
+        // #57: KHÔNG nới HĐ ra vô hạn nếu NV đã ký HĐ khác tiếp quản sau khi HĐ này hết hạn —
+        // nếu không sẽ sinh 2 HĐ Active chồng khoảng hiệu lực (đi vòng qua guard CONTRACT_OVERLAP,
+        // vốn chỉ chặn ở ActivateAsync). Đúng tinh thần Đ.20 k.2: đã ký HĐ mới thì không gia hạn ngầm
+        // ⇒ HĐ hết hạn này chỉ đơn thuần Expired, không auto-convert.
+        var employeeIds = candidates.Select(c => c.EmployeeInformationId).Distinct().ToList();
+        var candidateIds = candidates.Select(c => c.Id).ToHashSet();
+        var otherActive = await _context.Contracts.AsNoTracking()
+            .Where(c => employeeIds.Contains(c.EmployeeInformationId)
+                && c.Status == ContractStatus.Active
+                && c.ArchivedAt == null
+                && !candidateIds.Contains(c.Id))
+            .Select(c => new { c.EmployeeInformationId, c.EffectiveTo })
+            .ToListAsync(cancellationToken);
+
         foreach (var contract in candidates)
         {
-            contract.ContractCategory = ContractCategory.Indefinite;
-            contract.EffectiveTo = null;
-            contract.ConvertedFromDefiniteFlag = true;
+            var effectiveTo = contract.EffectiveTo!.Value;
+            var hasSuccessor = otherActive.Any(o =>
+                o.EmployeeInformationId == contract.EmployeeInformationId
+                && (o.EffectiveTo == null || o.EffectiveTo.Value > effectiveTo));
+
+            if (hasSuccessor)
+            {
+                // NV đã có HĐ Active khác phủ khoảng sau EffectiveTo ⇒ HĐ này hết hạn thật.
+                contract.Status = ContractStatus.Expired;
+            }
+            else
+            {
+                contract.ContractCategory = ContractCategory.Indefinite;
+                contract.EffectiveTo = null;
+                contract.ConvertedFromDefiniteFlag = true;
+            }
             contract.UpdatedAt = nowUtc;
         }
 
-        if (candidates.Count > 0)
-            await _context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
         return candidates.Count;
     }
 

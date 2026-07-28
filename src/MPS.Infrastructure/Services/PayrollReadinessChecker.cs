@@ -30,7 +30,10 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
         var empIds = contracts.Select(c => c.EmployeeInformationId).Distinct().ToList();
         if (empIds.Count == 0) return Array.Empty<PayrollEmployeeReadiness>();
 
-        var activeContractEmp = contracts.Where(c => c.Status == ContractStatus.Active)
+        // #60: đủ điều kiện HĐ = có HĐ ĐÃ KÝ (bất kỳ trạng thái != Draft) phủ khoảng hiệu lực lên kỳ —
+        // KHÔNG hỏi "HĐ còn Active BÂY GIỜ không". Người chấm dứt/hết hạn giữa tháng vẫn phải chốt lương
+        // những ngày đã làm; chỉ HĐ còn Draft (chưa ai ký) mới tính là thiếu dữ liệu.
+        var signedContractEmp = contracts.Where(c => c.Status != ContractStatus.Draft)
             .Select(c => c.EmployeeInformationId).ToHashSet();
 
         var employees = await _db.EmployeeInformations.AsNoTracking()
@@ -65,7 +68,7 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
         foreach (var e in employees.OrderBy(e => e.Code))
         {
             var missing = new List<string>();
-            if (!activeContractEmp.Contains(e.Id)) missing.Add("Chưa có hợp đồng hiệu lực (Active) trong kỳ");
+            if (!signedContractEmp.Contains(e.Id)) missing.Add("Chưa có hợp đồng đã ký hiệu lực trong kỳ");
             if (!hasAttendance.Contains(e.Id)) missing.Add("Chưa có dữ liệu chấm công trong kỳ");
             if (hasPendingOt.Contains(e.Id)) missing.Add("Còn đơn tăng ca chưa duyệt xong");
             if (!e.UserId.HasValue || !hasApprovedEval.Contains(e.UserId.Value)) missing.Add("Chưa có bảng đánh giá tháng được duyệt");
