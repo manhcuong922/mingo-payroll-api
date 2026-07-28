@@ -37,6 +37,7 @@ public class OrderEvaluationRepository : IOrderEvaluationRepository
 
     public Task<OrderEvaluation?> GetByIdForUpdateAsync(int id, CancellationToken ct) =>
         _context.OrderEvaluations
+            .Include(x => x.Project)   // #63: cần Project.ResponsibleUserId (tổ trưởng ĐANG phụ trách) để phân quyền sửa
             .Include(x => x.Subjects).ThenInclude(s => s.Scores)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 

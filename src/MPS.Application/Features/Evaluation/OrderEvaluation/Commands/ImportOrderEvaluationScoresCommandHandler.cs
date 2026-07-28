@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Evaluation.Common;
+using MPS.Application.Features.Evaluation.OrderEvaluation.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Evaluation;
 using MPS.Domain.Exceptions;
@@ -36,8 +37,8 @@ public class ImportOrderEvaluationScoresCommandHandler : IRequestHandler<ImportO
         var evaluation = await _repo.GetByIdForUpdateAsync(request.Id, ct)
             ?? throw new NotFoundException($"Không tìm thấy bảng đánh giá theo đơn #{request.Id}.");
 
-        if (evaluation.EvaluatorUserId != userId && !_currentUser.HasPermission(Permissions.OrderEvaluationReadAll))
-            throw new ForbiddenAccessException("Bạn không phụ trách bảng đánh giá này.");
+        OrderEvaluationEditGuard.EnsureCanEdit(
+            evaluation, userId, _currentUser.HasPermission(Permissions.OrderEvaluationReadAll));
 
         if (evaluation.Status != EvaluationStatus.Draft)
             throw new DomainValidationException("Bảng đã chốt (Submitted), không thể nhập điểm.");
