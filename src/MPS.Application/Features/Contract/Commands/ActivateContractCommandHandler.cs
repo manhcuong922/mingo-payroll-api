@@ -9,6 +9,7 @@ using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Contract.Commands;
 
@@ -21,6 +22,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     private readonly IEmployeeInformationRepository _eiRepository;
     private readonly IEmployeeAccountProvisioner _accountProvisioner;
     private readonly IEmailSender _emailSender;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
     private readonly ILogger<ActivateContractCommandHandler> _logger;
 
     public ActivateContractCommandHandler(
@@ -31,6 +33,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         IEmployeeInformationRepository eiRepository,
         IEmployeeAccountProvisioner accountProvisioner,
         IEmailSender emailSender,
+        IPayrollSourceChangeHandler payrollChange,
         ILogger<ActivateContractCommandHandler> logger)
     {
         _repository = repository;
@@ -40,6 +43,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         _eiRepository = eiRepository;
         _accountProvisioner = accountProvisioner;
         _emailSender = emailSender;
+        _payrollChange = payrollChange;
         _logger = logger;
     }
 
@@ -141,7 +145,29 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         // any failure here is logged but does NOT roll back the contract.
         await TrySendActivationEmailAsync(contract, metadata, request.FileName, cancellationToken);
 
+        // #61/[D27] — kích hoạt HĐ thêm một dòng NGƯỜI vào bảng lương từ tháng EffectiveFrom trở về
+        // sau ⇒ mark stale mọi kỳ Draft từ tháng đó (giống ký phụ lục). Best-effort như email.
+        await TryMarkPayrollStaleAsync(contract, cancellationToken);
+
         return activatedContractId;
+    }
+
+    private async Task TryMarkPayrollStaleAsync(Domain.Entities.Contract contract, CancellationToken ct)
+    {
+        try
+        {
+            await _payrollChange.OnEffectiveFromChangedAsync(
+                contract.EffectiveFrom.Year, contract.EffectiveFrom.Month,
+                contract.EmployeeInformationId,
+                $"Kích hoạt hợp đồng {contract.ContractNo} (hiệu lực {contract.EffectiveFrom:dd/MM/yyyy})",
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to mark payroll stale after activating contract {ContractId}; activation itself succeeded.",
+                contract.Id);
+        }
     }
 
     private async Task TrySendActivationEmailAsync(
