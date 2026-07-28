@@ -127,6 +127,9 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPayrollAdjustmentCapture, PayrollAdjustmentCapture>();
         // Gộp BS-6 + BS-5: 8 handler nguồn gọi qua đây, service tự phân nhánh Draft/Finalized.
         services.AddScoped<IPayrollSourceChangeHandler, PayrollSourceChangeHandler>();
+        // #34/[D22]: tự cấp quỹ phép năm khi HĐ chuyển Active (hook trong ActivateContractCommandHandler).
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveBalance.Common.ILeaveBalanceInitializer,
+            MPS.Application.Features.Attendance.LeaveBalance.Common.LeaveBalanceInitializer>();
         // Formula engine + calculator (stateless → singleton).
         services.AddSingleton<IFormulaFunctionRegistry, FormulaFunctionRegistry>();
         services.AddSingleton<IFormulaEvaluator, FormulaEvaluator>();

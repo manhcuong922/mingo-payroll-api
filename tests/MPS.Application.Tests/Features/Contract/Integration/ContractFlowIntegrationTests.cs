@@ -5,6 +5,7 @@ using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Payroll;
+using MPS.Application.Features.Attendance.LeaveBalance.Common;
 using MPS.Application.Features.Contract.Commands;
 using MPS.Application.Features.Contract.Common;
 using MPS.Application.Features.Contract.Queries;
@@ -214,6 +215,7 @@ public sealed class ContractFlowIntegrationTests
             Mock.Of<IEmployeeAccountProvisioner>(),
             Mock.Of<IEmailSender>(),
             new NoopPayrollSourceChangeHandler(),
+            new NoopLeaveBalanceInitializer(),
             NullLogger<ActivateContractCommandHandler>.Instance);
 
         var fileId = await activateHandler.Handle(new ActivateContractCommand(
@@ -288,6 +290,7 @@ public sealed class ContractFlowIntegrationTests
             Mock.Of<IEmployeeAccountProvisioner>(),
             Mock.Of<IEmailSender>(),
             payrollChange.Object,
+            new NoopLeaveBalanceInitializer(),
             NullLogger<ActivateContractCommandHandler>.Instance);
 
         var pdfBytes = BuildFakePdfBytes("Toàn văn HĐ đã ký");
@@ -305,6 +308,58 @@ public sealed class ContractFlowIntegrationTests
         payrollChange.Verify(p => p.OnEffectiveFromChangedAsync(
             saved.EffectiveFrom.Year, saved.EffectiveFrom.Month, employeeInfo.Id,
             It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// #34/[D22] — kích hoạt HĐ phải tự cấp quỹ phép năm ANNUAL cho NV (hook). Verify
+    /// EnsureAnnualBalanceAsync được gọi đúng NV + năm EffectiveFrom.
+    /// </summary>
+    [Fact]
+    public async Task Activate_Initializes_Annual_Leave_Balance()
+    {
+        using var fx = new ContractIntegrationFixture();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
+
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
+        currentUser.Setup(c => c.HasPermission(MPS.Domain.Constants.Permissions.ContractReadAll)).Returns(true);
+
+        var repo = new ContractRepository(fx.Db);
+        var lookup = new ContractLookupReader(fx.Db);
+        var preflight = new ContractPreflightChecker(lookup, repo);
+        var storage = new FakeFileStorageService();
+
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object, new ContractNoGenerator(fx.Db));
+        var contractId = await createHandler.Handle(
+            ContractCommandFactory.ValidCreate(
+                employeeInformationId: employeeInfo.Id, employerPartyId: party.Id,
+                employerSignerUserId: actor.Id, positionId: position.Id, salaryGradeId: grade.Id),
+            CancellationToken.None);
+
+        var leaveInit = new Mock<ILeaveBalanceInitializer>();
+        var activateHandler = new ActivateContractCommandHandler(
+            repo, lookup, storage, currentUser.Object,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IEmailSender>(),
+            new NoopPayrollSourceChangeHandler(),
+            leaveInit.Object,
+            NullLogger<ActivateContractCommandHandler>.Instance);
+
+        var pdfBytes = BuildFakePdfBytes("Toàn văn HĐ đã ký");
+        await activateHandler.Handle(new ActivateContractCommand(
+            ContractId: contractId,
+            PdfStream: new MemoryStream(pdfBytes),
+            FileSizeBytes: pdfBytes.Length,
+            FileName: "HDLD-2026-0001-v1.pdf",
+            ContentType: "application/pdf",
+            SignedAt: DateTime.UtcNow.AddMinutes(-1),
+            SignedPlace: "Hà Nội",
+            SignedBySource: "mingo-signing"), CancellationToken.None);
+
+        var saved = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
+        leaveInit.Verify(l => l.EnsureAnnualBalanceAsync(
+            employeeInfo.Id, saved.EffectiveFrom.Year, actor.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>
@@ -342,6 +397,7 @@ public sealed class ContractFlowIntegrationTests
             Mock.Of<IEmployeeAccountProvisioner>(),
             Mock.Of<IEmailSender>(),
             new NoopPayrollSourceChangeHandler(),
+            new NoopLeaveBalanceInitializer(),
             NullLogger<ActivateContractCommandHandler>.Instance);
 
         var pdfBytes = BuildFakePdfBytes();
@@ -392,6 +448,7 @@ public sealed class ContractFlowIntegrationTests
             Mock.Of<IEmployeeAccountProvisioner>(),
             Mock.Of<IEmailSender>(),
             new NoopPayrollSourceChangeHandler(),
+            new NoopLeaveBalanceInitializer(),
             NullLogger<ActivateContractCommandHandler>.Instance);
 
         var v1Bytes = BuildFakePdfBytes("v1 content");

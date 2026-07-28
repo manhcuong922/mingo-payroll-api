@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models.Storage;
 using MPS.Application.Common.Storage;
+using MPS.Application.Features.Attendance.LeaveBalance.Common;
 using MPS.Application.Features.Contract.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities;
@@ -23,6 +24,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     private readonly IEmployeeAccountProvisioner _accountProvisioner;
     private readonly IEmailSender _emailSender;
     private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly ILeaveBalanceInitializer _leaveBalanceInitializer;
     private readonly ILogger<ActivateContractCommandHandler> _logger;
 
     public ActivateContractCommandHandler(
@@ -34,6 +36,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         IEmployeeAccountProvisioner accountProvisioner,
         IEmailSender emailSender,
         IPayrollSourceChangeHandler payrollChange,
+        ILeaveBalanceInitializer leaveBalanceInitializer,
         ILogger<ActivateContractCommandHandler> logger)
     {
         _repository = repository;
@@ -44,6 +47,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         _accountProvisioner = accountProvisioner;
         _emailSender = emailSender;
         _payrollChange = payrollChange;
+        _leaveBalanceInitializer = leaveBalanceInitializer;
         _logger = logger;
     }
 
@@ -149,7 +153,26 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         // sau ⇒ mark stale mọi kỳ Draft từ tháng đó (giống ký phụ lục). Best-effort như email.
         await TryMarkPayrollStaleAsync(contract, cancellationToken);
 
+        // #34/[D22] — HĐ chuyển Active ⇒ tự cấp quỹ phép năm (NV mới không bị chặn cứng lúc duyệt
+        // đơn muộn/sớm vì "chưa có quỹ phép"). Best-effort như email.
+        await TryInitLeaveBalanceAsync(contract, userId, cancellationToken);
+
         return activatedContractId;
+    }
+
+    private async Task TryInitLeaveBalanceAsync(Domain.Entities.Contract contract, int userId, CancellationToken ct)
+    {
+        try
+        {
+            await _leaveBalanceInitializer.EnsureAnnualBalanceAsync(
+                contract.EmployeeInformationId, contract.EffectiveFrom.Year, userId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to init annual leave balance after activating contract {ContractId}; activation itself succeeded.",
+                contract.Id);
+        }
     }
 
     private async Task TryMarkPayrollStaleAsync(Domain.Entities.Contract contract, CancellationToken ct)

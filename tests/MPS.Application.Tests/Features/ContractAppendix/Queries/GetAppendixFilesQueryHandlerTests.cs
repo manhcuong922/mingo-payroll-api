@@ -115,6 +115,7 @@ public sealed class GetAppendixFilesQueryHandlerTests
             Mock.Of<IEmployeeAccountProvisioner>(),
             Mock.Of<IEmailSender>(),
             new NoopPayrollSourceChangeHandler(),
+            new NoopLeaveBalanceInitializer(),
             NullLogger<ActivateContractCommandHandler>.Instance);
         var pdf = BuildFakePdfBytes();
         await activateHandler.Handle(new ActivateContractCommand(
