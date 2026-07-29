@@ -99,7 +99,9 @@ public static class DefaultPayrollFormulaSet
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagBh), N.Literal(InsuranceFlags.NoMealFlatTax)),
                 N.Const(0m), N.Field(Fk.ContractAllowanceCom)), money: true);
         Add(Cc.CongTac, "Hỗ trợ công tác", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
-        Add(Cc.Khac, "Khác (cưới/sinh...)", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
+        // #64/[D15] — cột "Khác" nhận mặc định TỔNG phụ cấp HĐ mã lạ (ngoài 4 mã cứng) để tiền không
+        // biến mất; vẫn là Input nên kế toán chỉnh tay được (thưởng cưới/sinh...) đè lên mặc định.
+        Add(Cc.Khac, "Khác (phụ cấp mã lạ / cưới, sinh...)", GD, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceKhac, money: true);
 
         // ===== Khối E — thu nhập chịu thuế =====
         Add(Cc.ThuNhap, "Thu nhập", GE, ColumnDataType.Money, ColumnValueSource.Formula, money: true,

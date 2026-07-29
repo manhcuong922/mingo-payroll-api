@@ -22,6 +22,8 @@ public static class PayrollFieldKeys
     public const string ContractAllowanceDienThoai = "contract.allowanceDienThoai";
     public const string ContractAllowanceXangXe = "contract.allowanceXangXe";
     public const string ContractAllowanceCom = "contract.allowanceCom";
+    // #64/[D15] — tổng các phụ cấp HĐ có mã KHÁC 4 mã cứng (HOUSING/PHONE/FUEL/MEAL) để không mất tiền.
+    public const string ContractAllowanceKhac = "contract.allowanceKhac";
 
     // ===== Chấm công =====
     public const string CongChuan = "period.congChuan";

@@ -40,6 +40,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     private static readonly IReadOnlyDictionary<DateOnly, DayType> EmptyDayTypes =
         new Dictionary<DateOnly, DayType>();
 
+    // #64/[D15] — 4 mã có cột riêng trên bảng lương; mọi mã khác gom vào cột "Khác" (AllowanceOther).
+    private static readonly HashSet<string> HardcodedAllowanceCodes =
+        new(StringComparer.OrdinalIgnoreCase) { "HOUSING", "PHONE", "FUEL", "MEAL" };
+
     public async Task<PayrollCollectionResult> CollectAsync(PayrollCollectionRequest req, CancellationToken ct)
     {
         var periodStart = new DateOnly(req.Year, req.Month, 1);
@@ -215,6 +219,13 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             decimal AllowanceByCode(string code) =>
                 activeContract?.ContractAllowances.Where(a => a.AllowanceType.Code == code).Sum(a => a.Amount) ?? 0m;
 
+            // #64/[D15] — phụ cấp mã KHÁC 4 mã cứng (HOUSING/PHONE/FUEL/MEAL) trước đây RƠI mất khỏi
+            // bảng lương (không cột nào nhận). Gom về cột "Khác" để tiền vào Thu nhập, không biến mất.
+            decimal AllowanceOther() =>
+                activeContract?.ContractAllowances
+                    .Where(a => !HardcodedAllowanceCodes.Contains(a.AllowanceType.Code))
+                    .Sum(a => a.Amount) ?? 0m;
+
             var inputs = new PayrollEmployeeInputs { EmployeeInformationId = e.Id };
             var n = inputs.Numbers; var t = inputs.Texts;
 
@@ -232,6 +243,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractAllowanceDienThoai] = AllowanceByCode("PHONE");
             n[ContractAllowanceXangXe] = AllowanceByCode("FUEL");
             n[ContractAllowanceCom] = AllowanceByCode("MEAL");
+            n[ContractAllowanceKhac] = AllowanceOther();
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
             n[CongThuViec] = congThuViec;
