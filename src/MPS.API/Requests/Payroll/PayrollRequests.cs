@@ -9,4 +9,5 @@ public sealed record CreatePayrollPeriodRequest(
 public sealed record EditPayrollCellRequest(
     int RowId,
     string ColumnCode,
-    decimal? OverrideValue);
+    decimal? OverrideValue,
+    string? OverrideText = null);

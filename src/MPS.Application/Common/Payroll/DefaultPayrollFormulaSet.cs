@@ -70,7 +70,9 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.SoTaiKhoan, "Số tài khoản", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.EmployeeBankAccount, editable: false);
         Add(Cc.NgayVao, "Ngày vào", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.EmployeeJoinDate, editable: false);
         Add(Cc.Thang, "Tháng", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.PeriodMonthLabel, editable: false);
-        Add(Cc.FlagBh, "Cờ BH", GA, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractInsuranceFlag, editable: false);
+        // #62/[D23] — Cờ BH là cột Input MỞ cho kế toán đè tay (thai sản "TS", ốm dài ngày); default
+        // vẫn suy từ hợp đồng. (Cờ thuế FLAGTHUE ở Khối G giữ editable:false — khoán 20% là điểm chết.)
+        Add(Cc.FlagBh, "Cờ BH", GA, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractInsuranceFlag, editable: true);
 
         // ===== Khối B — ngày công =====
         Add(Cc.CongChuan, "Công chuẩn", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongChuan);
