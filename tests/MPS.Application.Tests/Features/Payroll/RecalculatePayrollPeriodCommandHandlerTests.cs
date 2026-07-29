@@ -43,6 +43,10 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
         _adjustments.Setup(a => a.GetPendingFromSourcePeriodAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<PayrollAdjustment>());
+        // #49: mặc định KHÔNG có khoản chờ mới; test cụ thể sẽ override.
+        _adjustments.Setup(a => a.GetPendingForEmployeesAsync(
+                It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<PayrollAdjustment>());
     }
 
     private RecalculatePayrollPeriodCommandHandler Sut() => new(
@@ -159,6 +163,72 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
         var after = PayrollEmployeeInputs.FromSnapshotJson(EmpId, empRow.InputSnapshotJson);
         after.Numbers[PayrollFieldKeys.TruyLinh].Should().Be(2_000_000m);
         after.Numbers[PayrollFieldKeys.TruyThu].Should().Be(-500_000m);
+    }
+
+    [Fact]
+    public async Task Recalculate_PullsPendingRetroPay_Into_TruyLinh_49()
+    {
+        // Kỳ tạo lúc đầu đã có 1tr truy lĩnh (đã áp). Sau đó nguồn kỳ khác đổi ⇒ sinh khoản chờ 3tr.
+        // Trước #49, recalc chỉ carry 1tr, nuốt mất 3tr; nay phải ra 4tr.
+        var period = DraftPeriodWithOneEmployee(stale: true);
+        var empRow = period.Rows.First(r => r.RowType == PayrollRowType.Employee);
+        empRow.InputSnapshotJson = new PayrollEmployeeInputs
+        {
+            EmployeeInformationId = EmpId,
+            Numbers = { [PayrollFieldKeys.TruyLinh] = 1_000_000m },
+        }.ToSnapshotJson();
+
+        _periods.Setup(p => p.GetFullAsync(PeriodId, false, It.IsAny<CancellationToken>())).ReturnsAsync(period);
+        SetupReady(EmpId);
+        SetupCollectFor(EmpId);
+
+        var pending = new PayrollAdjustment
+        {
+            Id = 55, EmployeeInformationId = EmpId, SourcePeriodId = 999, Amount = 3_000_000m,
+            Reason = "Duyệt OT sau khi chốt kỳ nguồn",
+            CreatedAt = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByUserId = 2,
+        };
+        _adjustments.Setup(a => a.GetPendingForEmployeesAsync(
+                It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { pending });
+
+        await Sut().Handle(new RecalculatePayrollPeriodCommand(PeriodId), CancellationToken.None);
+
+        var after = PayrollEmployeeInputs.FromSnapshotJson(EmpId, empRow.InputSnapshotJson);
+        after.Numbers[PayrollFieldKeys.TruyLinh].Should().Be(4_000_000m, "1tr carry + 3tr khoản chờ mới");
+        pending.AppliedPeriod.Should().BeSameAs(period, "khoản chờ được đánh dấu áp vào kỳ này");
+    }
+
+    [Fact]
+    public async Task Recalculate_Ignores_Pending_Sourced_From_This_Period_49()
+    {
+        // Khoản chờ phát sinh từ CHÍNH kỳ này (sàn 0 #44) KHÔNG được nạp như truy lĩnh mới.
+        var period = DraftPeriodWithOneEmployee(stale: true);
+        var empRow = period.Rows.First(r => r.RowType == PayrollRowType.Employee);
+        empRow.InputSnapshotJson = new PayrollEmployeeInputs
+        {
+            EmployeeInformationId = EmpId,
+            Numbers = { [PayrollFieldKeys.TruyLinh] = 1_000_000m },
+        }.ToSnapshotJson();
+
+        _periods.Setup(p => p.GetFullAsync(PeriodId, false, It.IsAny<CancellationToken>())).ReturnsAsync(period);
+        SetupReady(EmpId);
+        SetupCollectFor(EmpId);
+
+        var ownShortfall = new PayrollAdjustment
+        {
+            Id = 77, EmployeeInformationId = EmpId, SourcePeriodId = PeriodId, Amount = 3_000_000m,
+            Reason = "Sàn 0 kỳ này", CreatedAt = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc), CreatedByUserId = 2,
+        };
+        _adjustments.Setup(a => a.GetPendingForEmployeesAsync(
+                It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ownShortfall });
+
+        await Sut().Handle(new RecalculatePayrollPeriodCommand(PeriodId), CancellationToken.None);
+
+        var after = PayrollEmployeeInputs.FromSnapshotJson(EmpId, empRow.InputSnapshotJson);
+        after.Numbers[PayrollFieldKeys.TruyLinh].Should().Be(1_000_000m, "không cộng khoản của chính kỳ này");
+        ownShortfall.AppliedPeriod.Should().BeNull();
     }
 
     [Fact]

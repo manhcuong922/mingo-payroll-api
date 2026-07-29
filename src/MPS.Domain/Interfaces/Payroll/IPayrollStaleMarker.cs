@@ -18,4 +18,10 @@ public interface IPayrollStaleMarker
     /// vì thay đổi có hiệu lực kéo dài sang các kỳ kế tiếp chưa chốt.
     /// </summary>
     Task MarkStaleFromMonthAsync(int year, int month, string reason, CancellationToken ct = default);
+
+    /// <summary>
+    /// [D27] — đánh cờ MỌI kỳ Draft (không lọc theo tháng). Dùng cho tham số dùng chung toàn hệ
+    /// thống như band hệ số năng suất: đổi một lần là lương gốc của mọi NV ở mọi kỳ đang mở đều lệch.
+    /// </summary>
+    Task MarkAllStaleAsync(string reason, CancellationToken ct = default);
 }

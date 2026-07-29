@@ -70,7 +70,9 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.SoTaiKhoan, "Số tài khoản", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.EmployeeBankAccount, editable: false);
         Add(Cc.NgayVao, "Ngày vào", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.EmployeeJoinDate, editable: false);
         Add(Cc.Thang, "Tháng", GA, ColumnDataType.Text, ColumnValueSource.Lookup, Fk.PeriodMonthLabel, editable: false);
-        Add(Cc.FlagBh, "Cờ BH", GA, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractInsuranceFlag, editable: false);
+        // #62/[D23] — Cờ BH là cột Input MỞ cho kế toán đè tay (thai sản "TS", ốm dài ngày); default
+        // vẫn suy từ hợp đồng. (Cờ thuế FLAGTHUE ở Khối G giữ editable:false — khoán 20% là điểm chết.)
+        Add(Cc.FlagBh, "Cờ BH", GA, ColumnDataType.Text, ColumnValueSource.Input, Fk.ContractInsuranceFlag, editable: true);
 
         // ===== Khối B — ngày công =====
         Add(Cc.CongChuan, "Công chuẩn", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongChuan);
@@ -97,7 +99,9 @@ public static class DefaultPayrollFormulaSet
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagBh), N.Literal(InsuranceFlags.NoMealFlatTax)),
                 N.Const(0m), N.Field(Fk.ContractAllowanceCom)), money: true);
         Add(Cc.CongTac, "Hỗ trợ công tác", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
-        Add(Cc.Khac, "Khác (cưới/sinh...)", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
+        // #64/[D15] — cột "Khác" nhận mặc định TỔNG phụ cấp HĐ mã lạ (ngoài 4 mã cứng) để tiền không
+        // biến mất; vẫn là Input nên kế toán chỉnh tay được (thưởng cưới/sinh...) đè lên mặc định.
+        Add(Cc.Khac, "Khác (phụ cấp mã lạ / cưới, sinh...)", GD, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceKhac, money: true);
 
         // ===== Khối E — thu nhập chịu thuế =====
         Add(Cc.ThuNhap, "Thu nhập", GE, ColumnDataType.Money, ColumnValueSource.Formula, money: true,

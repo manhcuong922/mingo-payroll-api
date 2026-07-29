@@ -3,12 +3,14 @@ using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models.Storage;
 using MPS.Application.Common.Storage;
+using MPS.Application.Features.Attendance.LeaveBalance.Common;
 using MPS.Application.Features.Contract.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Contract.Commands;
 
@@ -21,6 +23,8 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     private readonly IEmployeeInformationRepository _eiRepository;
     private readonly IEmployeeAccountProvisioner _accountProvisioner;
     private readonly IEmailSender _emailSender;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly ILeaveBalanceInitializer _leaveBalanceInitializer;
     private readonly ILogger<ActivateContractCommandHandler> _logger;
 
     public ActivateContractCommandHandler(
@@ -31,6 +35,8 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         IEmployeeInformationRepository eiRepository,
         IEmployeeAccountProvisioner accountProvisioner,
         IEmailSender emailSender,
+        IPayrollSourceChangeHandler payrollChange,
+        ILeaveBalanceInitializer leaveBalanceInitializer,
         ILogger<ActivateContractCommandHandler> logger)
     {
         _repository = repository;
@@ -40,6 +46,8 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         _eiRepository = eiRepository;
         _accountProvisioner = accountProvisioner;
         _emailSender = emailSender;
+        _payrollChange = payrollChange;
+        _leaveBalanceInitializer = leaveBalanceInitializer;
         _logger = logger;
     }
 
@@ -141,7 +149,50 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         // any failure here is logged but does NOT roll back the contract.
         await TrySendActivationEmailAsync(contract, metadata, request.FileName, cancellationToken);
 
+        // #61/[D27] — kích hoạt HĐ thêm một dòng NGƯỜI vào bảng lương từ tháng EffectiveFrom trở về
+        // sau ⇒ mark stale mọi kỳ Draft từ tháng đó (giống ký phụ lục). Best-effort như email.
+        await TryMarkPayrollStaleAsync(contract, cancellationToken);
+
+        // #34/[D22] — HĐ chuyển Active ⇒ tự cấp quỹ phép năm (NV mới không bị chặn cứng lúc duyệt
+        // đơn muộn/sớm vì "chưa có quỹ phép"). Best-effort như email.
+        await TryInitLeaveBalanceAsync(contract, userId, cancellationToken);
+
         return activatedContractId;
+    }
+
+    private async Task TryInitLeaveBalanceAsync(Domain.Entities.Contract contract, int userId, CancellationToken ct)
+    {
+        try
+        {
+            // [D22]: cấp quỹ phép NĂM HIỆN TẠI (năm kích hoạt), không phải năm hiệu lực HĐ — HĐ có thể
+            // ký trước cho tương lai. Job 01/01 (chưa làm) lo các năm sau.
+            await _leaveBalanceInitializer.EnsureAnnualBalanceAsync(
+                contract.EmployeeInformationId, DateTime.UtcNow.Year, userId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to init annual leave balance after activating contract {ContractId}; activation itself succeeded.",
+                contract.Id);
+        }
+    }
+
+    private async Task TryMarkPayrollStaleAsync(Domain.Entities.Contract contract, CancellationToken ct)
+    {
+        try
+        {
+            await _payrollChange.OnEffectiveFromChangedAsync(
+                contract.EffectiveFrom.Year, contract.EffectiveFrom.Month,
+                contract.EmployeeInformationId,
+                $"Kích hoạt hợp đồng {contract.ContractNo} (hiệu lực {contract.EffectiveFrom:dd/MM/yyyy})",
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to mark payroll stale after activating contract {ContractId}; activation itself succeeded.",
+                contract.Id);
+        }
     }
 
     private async Task TrySendActivationEmailAsync(

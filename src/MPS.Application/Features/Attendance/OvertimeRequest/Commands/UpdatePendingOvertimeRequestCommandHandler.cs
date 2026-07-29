@@ -67,9 +67,9 @@ public class UpdatePendingOvertimeRequestCommandHandler
 
         var otHours = CalculateHours(request.OtStartTime, request.OtEndTime);
 
-        // Guard trùng OT: exclude chính đơn đang sửa để không tự conflict với mình.
-        var existingSameDay = await _repository.GetActiveOnDateForEmployeeAsync(
-            existing.EmployeeInformationId, request.WorkDate, excludeId: existing.Id, cancellationToken);
+        // Guard trùng OT — #41: quét D±1 (bắt OT vắt nửa đêm); exclude chính đơn đang sửa.
+        var existingSameDay = await _repository.GetActiveInRangeForEmployeeAsync(
+            existing.EmployeeInformationId, request.WorkDate.AddDays(-1), request.WorkDate.AddDays(1), excludeId: existing.Id, cancellationToken);
         var conflict = existingSameDay.FirstOrDefault(e => OvertimeTimeOverlap.Overlaps(
             request.WorkDate, request.OtStartTime, request.OtEndTime,
             e.WorkDate, e.OtStartTime, e.OtEndTime));

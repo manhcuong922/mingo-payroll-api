@@ -87,7 +87,8 @@ public class PayrollController : ControllerBase
     [HasPermission(Permissions.PayrollUpdateAll)]
     public async Task<IActionResult> EditCell(int id, [FromBody] EditPayrollCellRequest request, CancellationToken ct)
     {
-        await _mediator.Send(new EditPayrollCellCommand(id, request.RowId, request.ColumnCode, request.OverrideValue), ct);
+        await _mediator.Send(new EditPayrollCellCommand(
+            id, request.RowId, request.ColumnCode, request.OverrideValue, request.OverrideText), ct);
         return NoContent();
     }
 

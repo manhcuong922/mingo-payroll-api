@@ -48,7 +48,14 @@ public sealed class UpdateProductivityCoefficientCommandHandler
     : IRequestHandler<UpdateProductivityCoefficientCommand>
 {
     private readonly IProductivityCoefficientRepository _repo;
-    public UpdateProductivityCoefficientCommandHandler(IProductivityCoefficientRepository repo) => _repo = repo;
+    private readonly IPayrollStaleMarker _payrollStale;
+
+    public UpdateProductivityCoefficientCommandHandler(
+        IProductivityCoefficientRepository repo, IPayrollStaleMarker payrollStale)
+    {
+        _repo = repo;
+        _payrollStale = payrollStale;
+    }
 
     public async Task Handle(UpdateProductivityCoefficientCommand request, CancellationToken ct)
     {
@@ -63,6 +70,12 @@ public sealed class UpdateProductivityCoefficientCommandHandler
             IsActive = request.IsActive,
         }, ct);
         if (!ok) throw new NotFoundException($"Không tìm thấy band hệ số #{request.Id}.");
+
+        // #66/[D27] — band hệ số map điểm đánh giá → hệ số nhân lương gốc, áp cho TOÀN BỘ NV nên
+        // không khoanh theo tháng/người được: đánh cờ mọi kỳ Draft đang mở. MarkAllStaleAsync tự
+        // nuốt lỗi (side-effect phụ, không làm hỏng việc sửa band).
+        await _payrollStale.MarkAllStaleAsync(
+            $"Sửa band hệ số năng suất #{request.Id} (hệ số {request.Coefficient})", ct);
     }
 }
 

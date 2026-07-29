@@ -45,6 +45,10 @@ public sealed class PayrollStaleMarker : IPayrollStaleMarker
         return MarkAsync(p => p.PeriodYear * 12 + p.PeriodMonth >= floor, reason, ct);
     }
 
+    // [D27] — không lọc tháng: band hệ số áp cho TOÀN BỘ NV nên đổi band làm mọi kỳ Draft cần tính lại.
+    public Task MarkAllStaleAsync(string reason, CancellationToken ct = default) =>
+        MarkAsync(_ => true, reason, ct);
+
     private async Task MarkAsync(
         System.Linq.Expressions.Expression<Func<Domain.Entities.Payroll.PayrollPeriod, bool>> scope,
         string reason,

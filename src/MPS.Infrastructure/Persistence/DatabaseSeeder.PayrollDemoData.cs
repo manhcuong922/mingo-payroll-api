@@ -72,25 +72,36 @@ public sealed partial class DatabaseSeeder
         if (set is null) return;
 
         var defaults = DefaultPayrollFormulaSet.BuildColumns();
+        var defaultByCode = defaults.ToDictionary(d => d.ColumnCode, StringComparer.OrdinalIgnoreCase);
         var existingCodes = set.Columns.Select(c => c.ColumnCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missing = defaults.Where(d => !existingCodes.Contains(d.ColumnCode)).ToList();
-        if (missing.Count == 0) return;
 
         foreach (var column in missing) set.Columns.Add(column);
 
-        // Cột mới nằm giữa bảng ⇒ đồng bộ lại DisplayOrder + công thức của các cột hệ thống theo
-        // bản mặc định (THUCNHAN phải cộng thêm 2 cột mới, nếu không tiền truy lĩnh sẽ không chảy vào).
-        var defaultByCode = defaults.ToDictionary(d => d.ColumnCode, StringComparer.OrdinalIgnoreCase);
+        // Đồng bộ ĐỊNH NGHĨA cột HỆ THỐNG theo bản mã nguồn (nguồn sự thật) — để thay đổi cột hệ thống
+        // trong code áp được vào DB đang chạy mà KHÔNG cần migration (kỳ mới dùng snapshot mới; kỳ cũ
+        // vẫn giữ snapshot đã đóng băng). VD: #64 nối LookupKey cho cột "Khác", #62 mở editable cột Cờ BH.
+        var changed = missing.Count > 0;
         foreach (var column in set.Columns.Where(c => c.IsSystem))
         {
             if (!defaultByCode.TryGetValue(column.ColumnCode, out var d)) continue;
-            column.DisplayOrder = d.DisplayOrder;
-            column.FormulaJson = d.FormulaJson;
+            if (column.DisplayOrder != d.DisplayOrder) { column.DisplayOrder = d.DisplayOrder; changed = true; }
+            if (column.FormulaJson != d.FormulaJson) { column.FormulaJson = d.FormulaJson; changed = true; }
+            if (column.LookupKey != d.LookupKey) { column.LookupKey = d.LookupKey; changed = true; }
+            if (column.ValueSource != d.ValueSource) { column.ValueSource = d.ValueSource; changed = true; }
+            if (column.IsEditable != d.IsEditable) { column.IsEditable = d.IsEditable; changed = true; }
+            if (column.IsMoney != d.IsMoney) { column.IsMoney = d.IsMoney; changed = true; }
+            if (column.DataType != d.DataType) { column.DataType = d.DataType; changed = true; }
+            if (column.Rounding != d.Rounding) { column.Rounding = d.Rounding; changed = true; }
+            if (column.Label != d.Label) { column.Label = d.Label; changed = true; }
+            if (column.GroupName != d.GroupName) { column.GroupName = d.GroupName; changed = true; }
         }
+
+        if (!changed) return;
 
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation(
-            "Nâng cấp bảng công thức mặc định: thêm {Count} cột hệ thống mới ({Codes}).",
+            "Đồng bộ bảng công thức mặc định: {Missing} cột mới ({Codes}) + cập nhật định nghĩa cột hệ thống.",
             missing.Count, string.Join(", ", missing.Select(m => m.ColumnCode)));
     }
 
