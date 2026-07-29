@@ -164,10 +164,13 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     {
         try
         {
-            // [D22]: cấp quỹ phép NĂM HIỆN TẠI (năm kích hoạt), không phải năm hiệu lực HĐ — HĐ có thể
-            // ký trước cho tương lai. Job 01/01 (chưa làm) lo các năm sau.
+            // [D22]: cấp quỹ phép cho năm NV thực sự bắt đầu được hưởng — năm hiện tại nếu HĐ đã có
+            // hiệu lực, hoặc năm hiệu lực nếu HĐ ký trước cho tương lai. Cấp cho năm hiện tại một HĐ
+            // của năm sau sẽ ra 0 ngày (công thức chia theo số tháng làm việc), tức NV mới coi như
+            // không được cấp gì. Các năm tiếp theo do AnnualLeaveGrantJob (01/01) lo.
+            var grantYear = Math.Max(DateTime.UtcNow.Year, contract.EffectiveFrom.Year);
             await _leaveBalanceInitializer.EnsureAnnualBalanceAsync(
-                contract.EmployeeInformationId, DateTime.UtcNow.Year, userId, ct);
+                contract.EmployeeInformationId, grantYear, userId, ct);
         }
         catch (Exception ex)
         {

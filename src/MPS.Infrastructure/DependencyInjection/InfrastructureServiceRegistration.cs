@@ -130,6 +130,8 @@ public static class InfrastructureServiceRegistration
         // #34/[D22]: tự cấp quỹ phép năm khi HĐ chuyển Active (hook trong ActivateContractCommandHandler).
         services.AddScoped<MPS.Application.Features.Attendance.LeaveBalance.Common.ILeaveBalanceInitializer,
             MPS.Application.Features.Attendance.LeaveBalance.Common.LeaveBalanceInitializer>();
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveBalance.Common.IAnnualLeaveGrantService,
+            MPS.Application.Features.Attendance.LeaveBalance.Common.AnnualLeaveGrantService>();
         // Formula engine + calculator (stateless → singleton).
         services.AddSingleton<IFormulaFunctionRegistry, FormulaFunctionRegistry>();
         services.AddSingleton<IFormulaEvaluator, FormulaEvaluator>();
@@ -261,6 +263,10 @@ public static class InfrastructureServiceRegistration
 
         services.AddSingleton<TerminationAccountDeactivationJob>();
         services.AddHostedService(sp => sp.GetRequiredService<TerminationAccountDeactivationJob>());
+
+        // [D22] — cấp quỹ phép năm cho toàn bộ NV vào đầu năm (tick ngày, chỉ chạy trong tháng 01).
+        services.AddSingleton<AnnualLeaveGrantJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<AnnualLeaveGrantJob>());
 
         // Compliance module — background job
         services.AddSingleton<ComplianceActivationJob>();
