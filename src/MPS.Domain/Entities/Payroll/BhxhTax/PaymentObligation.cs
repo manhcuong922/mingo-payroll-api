@@ -5,12 +5,10 @@ using MPS.Domain.Enums.Payroll;
 namespace MPS.Domain.Entities.Payroll.BhxhTax;
 
 /// <summary>
-/// 1 nghĩa vụ nộp cho cơ quan BHXH hoặc Thuế TNCN của một kỳ lương. Auto-sinh khi
-/// <see cref="PayrollPeriod.Status"/> chuyển sang Locked (handler
-/// <c>CreatePaymentObligationsOnPeriodLockedHandler</c>). Không tính lại số tiền —
-/// <see cref="AmountDue"/> là snapshot bất biến từ Payroll Engine tại thời điểm khoá.
-/// Ghi nhận nộp: điền các trường <see cref="PaidDate"/>, <see cref="PaidAmount"/>,
-/// <see cref="PaymentMethod"/>, <see cref="TransactionRef"/> và 2 object key ảnh evidence.
+/// 1 nghĩa vụ nộp cho cơ quan BHXH hoặc Thuế TNCN của một kỳ lương (v3 line-level model).
+/// Auto-sinh khi <see cref="PayrollPeriod.Status"/> chuyển sang Locked. Cha giữ tổng
+/// <see cref="AmountDue"/> (sum lines tại lúc lock, bất biến) + trạng thái vòng đời +
+/// evidence collection. Payment ghi nhận ở từng <see cref="PaymentObligationLine"/>.
 /// </summary>
 [Auditable]
 public class PaymentObligation
@@ -22,7 +20,7 @@ public class PaymentObligation
 
     public PaymentObligationType ObligationType { get; set; }
 
-    /// <summary>Số tiền phải nộp — snapshot từ cell Total lúc kỳ khoá, không đổi về sau.</summary>
+    /// <summary>Tổng phải nộp — sum(lines.TotalAmount) tại thời điểm lock. Bất biến.</summary>
     public decimal AmountDue { get; set; }
 
     /// <summary>Hạn nộp — tính bằng <c>BhxhTaxDeadlineCalculator</c>.</summary>
@@ -30,31 +28,15 @@ public class PaymentObligation
 
     public PaymentObligationStatus Status { get; set; } = PaymentObligationStatus.Pending;
 
-    // ===== Ghi nhận nộp (một lần duy nhất trên 1 nghĩa vụ) =====
-    public DateTime? PaidDate { get; set; }
-    public decimal? PaidAmount { get; set; }
-    public PaymentMethod? PaymentMethod { get; set; }
-
-    /// <summary>Mã giao dịch/số biên lai.</summary>
-    public string? TransactionRef { get; set; }
-
-    /// <summary>MinIO object key ảnh biên lai chuyển khoản (JPG/PNG/WEBP).</summary>
-    public string? BankReceiptImageObjectKey { get; set; }
-
-    /// <summary>MinIO object key ảnh xác nhận từ cơ quan BHXH/Thuế (JPG/PNG/WEBP).</summary>
-    public string? AuthorityConfirmationImageObjectKey { get; set; }
-
+    /// <summary>Ghi chú tự do cấp cha.</summary>
     public string? Notes { get; set; }
 
-    public int? RecordedByUserId { get; set; }
-    public User? RecordedByUser { get; set; }
-    public DateTime? RecordedAt { get; set; }
+    // ===== Hoàn thành (khi user bấm nút Complete) =====
+    public DateTime? CompletedAt { get; set; }
+    public int? CompletedByUserId { get; set; }
+    public User? CompletedByUser { get; set; }
 
-    /// <summary>Set khi user xác nhận chấp nhận số chênh lệch (Discrepancy → Confirmed).</summary>
-    public int? ConfirmedByUserId { get; set; }
-    public User? ConfirmedByUser { get; set; }
-    public DateTime? ConfirmedAt { get; set; }
-
+    // ===== Audit convention =====
     public DateTime CreatedAt { get; set; }
     public int? CreatedByUserId { get; set; }
     public User? CreatedByUser { get; set; }
@@ -64,4 +46,7 @@ public class PaymentObligation
 
     [Timestamp]
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    public ICollection<PaymentObligationLine> Lines { get; set; } = new List<PaymentObligationLine>();
+    public ICollection<PaymentObligationEvidence> Evidences { get; set; } = new List<PaymentObligationEvidence>();
 }

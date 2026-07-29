@@ -113,6 +113,10 @@ public class AppDbContext : DbContext
     // ===== BHXH & Tax Payment Tracking module =====
     public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligation> PaymentObligations
         => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligation>();
+    public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligationLine> PaymentObligationLines
+        => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligationLine>();
+    public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence> PaymentObligationEvidences
+        => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

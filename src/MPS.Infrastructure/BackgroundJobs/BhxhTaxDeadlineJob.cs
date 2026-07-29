@@ -8,8 +8,9 @@ using MPS.Domain.Interfaces.Payroll;
 namespace MPS.Infrastructure.BackgroundJobs;
 
 /// <summary>
-/// Daily tick: quét mọi nghĩa vụ BHXH/TNCN đang <see cref="PaymentObligationStatus.Pending"/> có
-/// <c>Deadline &lt; hôm nay (UTC)</c> và chuyển sang <see cref="PaymentObligationStatus.Overdue"/>.
+/// Daily tick: quét mọi nghĩa vụ BHXH/TNCN đang <see cref="PaymentObligationStatus.Pending"/> hoặc
+/// <see cref="PaymentObligationStatus.PartiallyPaid"/> có <c>Deadline &lt; hôm nay (UTC)</c> và
+/// chuyển sang <see cref="PaymentObligationStatus.Overdue"/>. Không đụng obligation Completed.
 /// Không tính tiền phạt — chỉ đổi cờ để UI cảnh báo.
 /// </summary>
 public sealed class BhxhTaxDeadlineJob : BackgroundService
@@ -61,7 +62,7 @@ public sealed class BhxhTaxDeadlineJob : BackgroundService
             var repo = scope.ServiceProvider.GetRequiredService<IPaymentObligationRepository>();
 
             var today = clock.UtcNow.Date;
-            var overdueCandidates = await repo.ListPendingWithDeadlineBeforeAsync(today, cancellationToken);
+            var overdueCandidates = await repo.ListPendingOrPartiallyPaidWithDeadlineBeforeAsync(today, cancellationToken);
             if (overdueCandidates.Count == 0)
             {
                 _logger.LogDebug("BhxhTaxDeadlineJob: no pending obligation past deadline.");

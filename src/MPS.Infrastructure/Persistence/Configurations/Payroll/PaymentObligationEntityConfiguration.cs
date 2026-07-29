@@ -13,15 +13,9 @@ public class PaymentObligationEntityConfiguration : IEntityTypeConfiguration<Pay
 
         builder.Property(e => e.ObligationType).HasConversion<int>();
         builder.Property(e => e.Status).HasConversion<int>();
-        builder.Property(e => e.PaymentMethod).HasConversion<int?>();
 
         builder.Property(e => e.AmountDue).HasColumnType("decimal(18,2)").IsRequired();
-        builder.Property(e => e.PaidAmount).HasColumnType("decimal(18,2)");
         builder.Property(e => e.Deadline).IsRequired();
-
-        builder.Property(e => e.TransactionRef).HasMaxLength(100);
-        builder.Property(e => e.BankReceiptImageObjectKey).HasMaxLength(500);
-        builder.Property(e => e.AuthorityConfirmationImageObjectKey).HasMaxLength(500);
         builder.Property(e => e.Notes).HasMaxLength(1000);
 
         builder.Property(e => e.CreatedAt).IsRequired();
@@ -29,9 +23,7 @@ public class PaymentObligationEntityConfiguration : IEntityTypeConfiguration<Pay
 
         builder.HasOne(e => e.PayrollPeriod).WithMany().HasForeignKey(e => e.PayrollPeriodId)
             .OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(e => e.RecordedByUser).WithMany().HasForeignKey(e => e.RecordedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(e => e.ConfirmedByUser).WithMany().HasForeignKey(e => e.ConfirmedByUserId)
+        builder.HasOne(e => e.CompletedByUser).WithMany().HasForeignKey(e => e.CompletedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(e => e.CreatedByUser).WithMany().HasForeignKey(e => e.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);

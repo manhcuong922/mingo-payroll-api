@@ -2,6 +2,11 @@ using MPS.Domain.Enums.Payroll;
 
 namespace MPS.Application.DTOs.Payroll;
 
+/// <summary>
+/// Chi tiết obligation cha (v3 line-level model) — không kèm lines/evidence (dùng endpoint riêng).
+/// Các field aggregate (PaidAmountAggregate, ExcludedAmountAggregate, RemainingAmount, ...) compute
+/// từ lines tại thời điểm query.
+/// </summary>
 public sealed record PaymentObligationDto(
     int Id,
     int PayrollPeriodId,
@@ -12,16 +17,17 @@ public sealed record PaymentObligationDto(
     DateTime Deadline,
     int DaysUntilDeadline,
     PaymentObligationStatus Status,
-    DateTime? PaidDate,
-    decimal? PaidAmount,
-    PaymentMethod? PaymentMethod,
-    string? TransactionRef,
-    string? BankReceiptImageObjectKey,
-    string? AuthorityConfirmationImageObjectKey,
     string? Notes,
-    int? RecordedByUserId,
-    DateTime? RecordedAt,
-    int? ConfirmedByUserId,
-    DateTime? ConfirmedAt,
+    DateTime? CompletedAt,
+    int? CompletedByUserId,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    decimal PaidAmountAggregate,
+    decimal ExcludedAmountAggregate,
+    decimal RemainingAmount,
+    int TotalLinesCount,
+    int PaidLinesCount,
+    int ExcludedLinesCount,
+    int PendingLinesCount,
+    int EvidenceCount,
+    bool CanBeCompleted);

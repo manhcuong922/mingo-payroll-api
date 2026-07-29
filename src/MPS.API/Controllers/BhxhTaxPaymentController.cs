@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using MPS.API.Authorization;
 using MPS.API.Requests.BhxhTaxPayment;
 using MPS.Application.Features.Payroll.BhxhTaxPayment.Commands;
-using MPS.Application.Features.Payroll.BhxhTaxPayment.Common;
 using MPS.Application.Features.Payroll.BhxhTaxPayment.Queries;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Payroll;
@@ -11,8 +10,9 @@ using MPS.Domain.Enums.Payroll;
 namespace MPS.API.Controllers;
 
 /// <summary>
-/// Module BHXH & Tax Payment Tracking: quản lý vòng đời nghĩa vụ nộp BHXH/TNCN sau khi
-/// Payroll Period được khoá. Không tính toán lại — chỉ ghi nhận đã nộp + bằng chứng.
+/// Module BHXH & Tax Payment Tracking (v3 line-level): quản lý vòng đời nghĩa vụ nộp BHXH/TNCN.
+/// Payment ghi nhận theo từng NV (line); evidence upload nhiều ảnh ở cha; user bấm nút "Hoàn thành"
+/// để chốt (khoá mọi mutation).
 /// </summary>
 [ApiController]
 [Route("api/bhxh-tax-payment")]
@@ -20,6 +20,8 @@ public class BhxhTaxPaymentController : ControllerBase
 {
     private readonly IMediator _mediator;
     public BhxhTaxPaymentController(IMediator mediator) => _mediator = mediator;
+
+    // ===== Obligation-level =====
 
     [HttpGet("obligations")]
     [HasPermission(Permissions.BhxhTaxPaymentReadAll)]
@@ -39,87 +41,118 @@ public class BhxhTaxPaymentController : ControllerBase
         return dto is null ? NotFound() : Ok(dto);
     }
 
-    /// <summary>Ghi nhận đã nộp (paidDate, paidAmount, method, transactionRef, notes).</summary>
-    [HttpPost("obligations/{id:int}/record")]
+    /// <summary>Bấm nút "Hoàn thành" — chốt nghĩa vụ (mọi line ∈ {Paid, Excluded} + ≥1 evidence).</summary>
+    [HttpPost("obligations/{id:int}/complete")]
+    [HasPermission(Permissions.BhxhTaxPaymentConfirmAll)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> CompleteObligation(int id, CancellationToken ct)
+    {
+        await _mediator.Send(new CompleteObligationCommand(id), ct);
+        return NoContent();
+    }
+
+    // ===== Line-level =====
+
+    [HttpGet("obligations/{id:int}/lines")]
+    [HasPermission(Permissions.BhxhTaxPaymentReadAll)]
+    public async Task<IActionResult> GetLines(
+        int id,
+        [FromQuery] PaymentLineStatus? status,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(
+            new GetPaymentObligationLinesQuery(id, status, search, page, pageSize), ct);
+        return Ok(result);
+    }
+
+    [HttpGet("obligations/{id:int}/lines/export")]
+    [HasPermission(Permissions.BhxhTaxPaymentReadAll)]
+    public async Task<IActionResult> ExportLines(int id, CancellationToken ct)
+    {
+        var file = await _mediator.Send(new ExportPaymentObligationLinesQuery(id), ct);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    [HttpPost("lines/{lineId:int}/record")]
     [HasPermission(Permissions.BhxhTaxPaymentRecordAll)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> RecordPayment(
-        int id, [FromBody] RecordPaymentRequest request, CancellationToken ct)
+    public async Task<IActionResult> RecordLine(
+        int lineId, [FromBody] RecordLinePaymentRequest request, CancellationToken ct)
     {
-        await _mediator.Send(new RecordPaymentCommand(
-            ObligationId: id,
+        await _mediator.Send(new RecordLinePaymentCommand(
+            LineId: lineId,
             PaidDate: request.PaidDate,
             PaidAmount: request.PaidAmount,
             PaymentMethod: request.PaymentMethod,
             TransactionRef: request.TransactionRef,
-            Notes: request.Notes), ct);
+            PaymentNotes: request.PaymentNotes,
+            RowVersion: request.RowVersion), ct);
         return NoContent();
     }
 
-    /// <summary>Xác nhận chấp nhận số chênh lệch (Discrepancy → Confirmed).</summary>
-    [HttpPost("obligations/{id:int}/confirm-discrepancy")]
-    [HasPermission(Permissions.BhxhTaxPaymentConfirmAll)]
+    [HttpPost("lines/{lineId:int}/exclude")]
+    [HasPermission(Permissions.BhxhTaxPaymentRecordAll)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> ConfirmDiscrepancy(
-        int id, [FromBody] ConfirmDiscrepancyRequest request, CancellationToken ct)
+    public async Task<IActionResult> ExcludeLine(
+        int lineId, [FromBody] ExcludeLineRequest request, CancellationToken ct)
     {
-        await _mediator.Send(new ConfirmPaymentDiscrepancyCommand(id, request.ConfirmationNote), ct);
+        await _mediator.Send(new ExcludeLineCommand(lineId, request.ExcludedReason, request.RowVersion), ct);
         return NoContent();
     }
 
-    /// <summary>Upload ảnh biên lai chuyển khoản (multipart, JPG/PNG/WEBP ≤5MB).</summary>
-    [HttpPost("obligations/{id:int}/evidence/bank-receipt")]
+    [HttpPost("lines/{lineId:int}/revert")]
     [HasPermission(Permissions.BhxhTaxPaymentRecordAll)]
-    public Task<IActionResult> UploadBankReceipt(
-        int id, [FromForm] UploadEvidenceRequest request, CancellationToken ct)
-        => UploadEvidenceInternal(id, BhxhTaxEvidenceKind.BankReceipt, request, ct);
-
-    /// <summary>Upload ảnh xác nhận từ cơ quan BHXH/Thuế (multipart, JPG/PNG/WEBP ≤5MB).</summary>
-    [HttpPost("obligations/{id:int}/evidence/authority-confirmation")]
-    [HasPermission(Permissions.BhxhTaxPaymentRecordAll)]
-    public Task<IActionResult> UploadAuthorityConfirmation(
-        int id, [FromForm] UploadEvidenceRequest request, CancellationToken ct)
-        => UploadEvidenceInternal(id, BhxhTaxEvidenceKind.AuthorityConfirmation, request, ct);
-
-    /// <summary>Lấy presigned URL (TTL 5 phút) để hiển thị ảnh evidence.</summary>
-    [HttpGet("obligations/{id:int}/evidence/{kind}/download-url")]
-    [HasPermission(Permissions.BhxhTaxPaymentReadAll)]
-    public async Task<IActionResult> GetEvidenceDownloadUrl(
-        int id, string kind, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RevertLine(
+        int lineId, [FromBody] RevertLineRequest request, CancellationToken ct)
     {
-        if (!TryParseKind(kind, out var parsed))
-            return BadRequest(new { errors = new[] { "kind phải là 'bank-receipt' hoặc 'authority-confirmation'." } });
-
-        var url = await _mediator.Send(new GetEvidenceDownloadUrlQuery(id, parsed), ct);
-        return url is null ? NotFound() : Ok(new { downloadUrl = url });
+        await _mediator.Send(new RevertLineCommand(lineId, request.RowVersion), ct);
+        return NoContent();
     }
 
-    private async Task<IActionResult> UploadEvidenceInternal(
-        int obligationId, BhxhTaxEvidenceKind kind, UploadEvidenceRequest request, CancellationToken ct)
+    // ===== Evidence =====
+
+    [HttpGet("obligations/{id:int}/evidence")]
+    [HasPermission(Permissions.BhxhTaxPaymentReadAll)]
+    public async Task<IActionResult> ListEvidence(int id, CancellationToken ct)
+        => Ok(await _mediator.Send(new ListEvidenceQuery(id), ct));
+
+    [HttpPost("obligations/{id:int}/evidence")]
+    [HasPermission(Permissions.BhxhTaxPaymentRecordAll)]
+    public async Task<IActionResult> UploadEvidence(
+        int id, [FromForm] UploadEvidenceRequest request, CancellationToken ct)
     {
         if (request.File is null || request.File.Length <= 0)
             return BadRequest(new { errors = new[] { "file là bắt buộc." } });
 
         await using var stream = request.File.OpenReadStream();
-        var objectKey = await _mediator.Send(new UploadObligationEvidenceCommand(
-            ObligationId: obligationId,
-            Kind: kind,
+        var evidenceId = await _mediator.Send(new UploadObligationEvidenceCommand(
+            ObligationId: id,
             Content: stream,
             ContentType: request.File.ContentType ?? string.Empty,
-            SizeBytes: request.File.Length), ct);
-        return Ok(new { objectKey });
+            SizeBytes: request.File.Length,
+            OriginalFileName: request.File.FileName ?? string.Empty,
+            Description: request.Description), ct);
+        return Ok(new { evidenceId });
     }
 
-    private static bool TryParseKind(string kind, out BhxhTaxEvidenceKind parsed)
+    [HttpGet("evidence/{evidenceId:int}/download-url")]
+    [HasPermission(Permissions.BhxhTaxPaymentReadAll)]
+    public async Task<IActionResult> GetEvidenceDownloadUrl(int evidenceId, CancellationToken ct)
     {
-        switch (kind?.ToLowerInvariant())
-        {
-            case "bank-receipt":
-                parsed = BhxhTaxEvidenceKind.BankReceipt; return true;
-            case "authority-confirmation":
-                parsed = BhxhTaxEvidenceKind.AuthorityConfirmation; return true;
-            default:
-                parsed = default; return false;
-        }
+        var url = await _mediator.Send(new GetEvidenceDownloadUrlQuery(evidenceId), ct);
+        return url is null ? NotFound() : Ok(new { downloadUrl = url });
+    }
+
+    [HttpDelete("evidence/{evidenceId:int}")]
+    [HasPermission(Permissions.BhxhTaxPaymentRecordAll)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> DeleteEvidence(int evidenceId, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteObligationEvidenceCommand(evidenceId), ct);
+        return NoContent();
     }
 }

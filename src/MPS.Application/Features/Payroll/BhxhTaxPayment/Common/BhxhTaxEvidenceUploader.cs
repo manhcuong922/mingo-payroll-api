@@ -6,19 +6,10 @@ using MPS.Domain.Exceptions;
 
 namespace MPS.Application.Features.Payroll.BhxhTaxPayment.Common;
 
-/// <summary>Loại ảnh evidence cho nghĩa vụ nộp BHXH/TNCN.</summary>
-public enum BhxhTaxEvidenceKind
-{
-    /// <summary>Ảnh biên lai chuyển khoản ngân hàng.</summary>
-    BankReceipt = 1,
-    /// <summary>Ảnh xác nhận / email từ cơ quan BHXH hoặc Thuế.</summary>
-    AuthorityConfirmation = 2,
-}
-
 /// <summary>
-/// Upload ảnh evidence (biên lai bank / xác nhận cơ quan) cho <c>PaymentObligation</c> lên MinIO.
-/// Validate content-type + size, build object key, wrap storage errors thành <c>DomainValidationException</c>
-/// tiếng Việt. Chỉ chấp nhận JPG/PNG/WEBP, ≤5MB. Caller có trách nhiệm delete object khi bước persist fail.
+/// Upload ảnh chứng từ nộp BHXH/TNCN lên MinIO cho 1 <c>PaymentObligation</c>. v3 model: không
+/// còn phân biệt bank-receipt vs authority-confirmation — chỉ là ảnh evidence với description tuỳ ý.
+/// Chỉ chấp nhận JPG/PNG/WEBP ≤5MB. Caller có trách nhiệm delete object khi bước persist DB fail.
 /// </summary>
 public sealed class BhxhTaxEvidenceUploader
 {
@@ -38,7 +29,6 @@ public sealed class BhxhTaxEvidenceUploader
     /// <summary>Validate + upload. Trả về objectKey mới (bucket dùng default).</summary>
     public async Task<string> UploadAsync(
         int obligationId,
-        BhxhTaxEvidenceKind kind,
         Stream content,
         string contentType,
         long sizeBytes,
@@ -55,8 +45,7 @@ public sealed class BhxhTaxEvidenceUploader
             throw new DomainValidationException(
                 "Chỉ hỗ trợ ảnh JPG/PNG/WEBP cho bằng chứng nộp BHXH/Thuế.");
 
-        var objectKey = ObjectKeyBuilder.ForBhxhTaxEvidence(
-            obligationId, KindToSegment(kind), contentType, Guid.NewGuid());
+        var objectKey = ObjectKeyBuilder.ForBhxhTaxEvidence(obligationId, contentType, Guid.NewGuid());
 
         var uploadRequest = new FileUploadRequest(
             Content: content,
@@ -72,8 +61,8 @@ public sealed class BhxhTaxEvidenceUploader
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "Upload BHXH/Tax evidence to MinIO failed. ObligationId={ObligationId}, Kind={Kind}, ObjectKey={ObjectKey}.",
-                obligationId, kind, objectKey);
+                "Upload BHXH/Tax evidence to MinIO failed. ObligationId={ObligationId}, ObjectKey={ObjectKey}.",
+                obligationId, objectKey);
             throw new DomainValidationException("Không thể lưu ảnh bằng chứng — vui lòng thử lại.");
         }
     }
@@ -92,11 +81,4 @@ public sealed class BhxhTaxEvidenceUploader
                 "Best-effort delete BHXH/Tax evidence MinIO object failed. ObjectKey={ObjectKey}.", objectKey);
         }
     }
-
-    private static string KindToSegment(BhxhTaxEvidenceKind kind) => kind switch
-    {
-        BhxhTaxEvidenceKind.BankReceipt => "bank-receipt",
-        BhxhTaxEvidenceKind.AuthorityConfirmation => "authority-confirmation",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
-    };
 }

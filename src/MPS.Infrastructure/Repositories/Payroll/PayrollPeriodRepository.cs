@@ -24,7 +24,7 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
             .Include(p => p.ComplianceRefs)
             .Include(p => p.Notes)
             .Include(p => p.Rows).ThenInclude(r => r.Cells)
-            .Include(p => p.Rows).ThenInclude(r => r.EmployeeInformation)
+            .Include(p => p.Rows).ThenInclude(r => r.EmployeeInformation!).ThenInclude(e => e.User)
             .AsSplitQuery();
         if (asNoTracking) q = q.AsNoTrackingWithIdentityResolution();
         return q.FirstOrDefaultAsync(p => p.Id == id, ct);

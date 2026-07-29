@@ -24,6 +24,11 @@ public sealed class GetPaymentObligationByIdQueryHandler
     {
         var item = await _repo.GetByIdAsync(request.Id, asNoTracking: true, ct);
         if (item is null) return null;
-        return PaymentObligationMapper.Map(item, _clock.UtcNow.Date);
+
+        var counts = await _repo.CountLinesByStatusAsync(item.Id, ct);
+        var aggregates = await _repo.GetLineAggregatesAsync(item.Id, ct);
+        var evidenceCount = await _repo.CountEvidenceAsync(item.Id, ct);
+
+        return PaymentObligationMapper.Map(item, _clock.UtcNow.Date, counts, aggregates, evidenceCount);
     }
 }

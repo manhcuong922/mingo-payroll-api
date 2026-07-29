@@ -1,25 +1,28 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Payroll.BhxhTaxPayment.Common;
+using MPS.Domain.Entities.Payroll.BhxhTax;
+using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Payroll.BhxhTaxPayment.Commands;
 
 /// <summary>
-/// Upload ảnh evidence (bank receipt hoặc authority confirmation) cho 1 nghĩa vụ BHXH/TNCN.
-/// Ghi trực tiếp objectKey vào field tương ứng trên <c>PaymentObligation</c>; delete object cũ nếu có.
-/// Trả về object key mới. Không phụ thuộc trạng thái nghĩa vụ (có thể upload bổ sung sau khi record).
+/// Upload 1 ảnh chứng từ nộp BHXH/TNCN cho obligation. Tạo row mới trong
+/// <c>PaymentObligationEvidences</c>. Block khi obligation đã <c>Completed</c>.
+/// Rollback (delete MinIO object) nếu persist DB fail.
 /// </summary>
 public sealed record UploadObligationEvidenceCommand(
     int ObligationId,
-    BhxhTaxEvidenceKind Kind,
     Stream Content,
     string ContentType,
-    long SizeBytes) : IRequest<string>;
+    long SizeBytes,
+    string OriginalFileName,
+    string? Description) : IRequest<int>;
 
 public sealed class UploadObligationEvidenceCommandHandler
-    : IRequestHandler<UploadObligationEvidenceCommand, string>
+    : IRequestHandler<UploadObligationEvidenceCommand, int>
 {
     private readonly IPaymentObligationRepository _repo;
     private readonly BhxhTaxEvidenceUploader _uploader;
@@ -38,43 +41,50 @@ public sealed class UploadObligationEvidenceCommandHandler
         _clock = clock;
     }
 
-    public async Task<string> Handle(UploadObligationEvidenceCommand request, CancellationToken ct)
+    public async Task<int> Handle(UploadObligationEvidenceCommand request, CancellationToken ct)
     {
         var userId = _currentUser.UserId ?? throw new ForbiddenAccessException();
-        var obligation = await _repo.GetByIdAsync(request.ObligationId, asNoTracking: false, ct)
+
+        var obligation = await _repo.GetByIdAsync(request.ObligationId, asNoTracking: true, ct)
             ?? throw new NotFoundException($"Không tìm thấy nghĩa vụ nộp #{request.ObligationId}.");
 
-        var newObjectKey = await _uploader.UploadAsync(
-            request.ObligationId, request.Kind, request.Content, request.ContentType, request.SizeBytes, ct);
+        if (obligation.Status == PaymentObligationStatus.Completed)
+            throw new ConflictException("Nghĩa vụ đã hoàn thành — không thể tải thêm chứng từ.");
 
-        var oldObjectKey = request.Kind == BhxhTaxEvidenceKind.BankReceipt
-            ? obligation.BankReceiptImageObjectKey
-            : obligation.AuthorityConfirmationImageObjectKey;
+        if (string.IsNullOrWhiteSpace(request.OriginalFileName))
+            throw new DomainValidationException("Tên file gốc là bắt buộc.");
 
-        if (request.Kind == BhxhTaxEvidenceKind.BankReceipt)
-            obligation.BankReceiptImageObjectKey = newObjectKey;
-        else
-            obligation.AuthorityConfirmationImageObjectKey = newObjectKey;
+        var objectKey = await _uploader.UploadAsync(
+            request.ObligationId, request.Content, request.ContentType, request.SizeBytes, ct);
 
-        obligation.UpdatedAt = _clock.UtcNow;
-        obligation.UpdatedByUserId = userId;
+        var evidence = new PaymentObligationEvidence
+        {
+            PaymentObligationId = request.ObligationId,
+            ObjectKey = objectKey,
+            OriginalFileName = Truncate(request.OriginalFileName, 200),
+            ContentType = Truncate(request.ContentType ?? string.Empty, 100),
+            SizeBytes = request.SizeBytes,
+            Description = string.IsNullOrWhiteSpace(request.Description)
+                ? null
+                : Truncate(request.Description.Trim(), 500),
+            UploadedByUserId = userId,
+            UploadedAt = _clock.UtcNow,
+        };
 
         try
         {
+            await _repo.AddEvidenceAsync(evidence, ct);
             await _repo.SaveChangesAsync(ct);
         }
         catch
         {
-            await _uploader.TryDeleteAsync(newObjectKey, CancellationToken.None);
+            await _uploader.TryDeleteAsync(objectKey, CancellationToken.None);
             throw;
         }
 
-        if (!string.IsNullOrWhiteSpace(oldObjectKey)
-            && !string.Equals(oldObjectKey, newObjectKey, StringComparison.Ordinal))
-        {
-            await _uploader.TryDeleteAsync(oldObjectKey, CancellationToken.None);
-        }
-
-        return newObjectKey;
+        return evidence.Id;
     }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value.Substring(0, max);
 }

@@ -3904,18 +3904,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("AmountDue")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<string>("AuthorityConfirmationImageObjectKey")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("BankReceiptImageObjectKey")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime?>("ConfirmedAt")
+                    b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("ConfirmedByUserId")
+                    b.Property<int?>("CompletedByUserId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
@@ -3934,6 +3926,134 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("ObligationType")
                         .HasColumnType("int");
 
+                    b.Property<int>("PayrollPeriodId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("PayrollPeriodId", "ObligationType")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "Deadline");
+
+                    b.ToTable("PaymentObligations", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("PaymentObligationId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UploadedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ObjectKey")
+                        .IsUnique();
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("PaymentObligationId", "UploadedAt");
+
+                    b.ToTable("PaymentObligationEvidences", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligationLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EmployeeCodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("EmployeeContribution")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("EmployeeFullNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("EmployerContribution")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("ExcludedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ExcludedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExcludedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("LineStatus")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("PaidAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -3943,7 +4063,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int?>("PaymentMethod")
                         .HasColumnType("int");
 
-                    b.Property<int>("PayrollPeriodId")
+                    b.Property<string>("PaymentNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PaymentObligationId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("RecordedAt")
@@ -3958,8 +4082,10 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
+                    b.Property<decimal>("TotalAmount")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("decimal(18,2)")
+                        .HasComputedColumnSql("[EmployeeContribution] + [EmployerContribution]", true);
 
                     b.Property<string>("TransactionRef")
                         .HasMaxLength(100)
@@ -3973,20 +4099,20 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ConfirmedByUserId");
+                    b.HasIndex("EmployeeInformationId");
 
-                    b.HasIndex("CreatedByUserId");
+                    b.HasIndex("ExcludedByUserId");
 
                     b.HasIndex("RecordedByUserId");
 
                     b.HasIndex("UpdatedByUserId");
 
-                    b.HasIndex("PayrollPeriodId", "ObligationType")
+                    b.HasIndex("PaymentObligationId", "EmployeeInformationId")
                         .IsUnique();
 
-                    b.HasIndex("Status", "Deadline");
+                    b.HasIndex("PaymentObligationId", "LineStatus");
 
-                    b.ToTable("PaymentObligations", (string)null);
+                    b.ToTable("PaymentObligationLines", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollAdjustment", b =>
@@ -9060,9 +9186,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", b =>
                 {
-                    b.HasOne("MPS.Domain.Entities.User", "ConfirmedByUser")
+                    b.HasOne("MPS.Domain.Entities.User", "CompletedByUser")
                         .WithMany()
-                        .HasForeignKey("ConfirmedByUserId")
+                        .HasForeignKey("CompletedByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
@@ -9076,6 +9202,58 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CompletedByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("PayrollPeriod");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", "PaymentObligation")
+                        .WithMany("Evidences")
+                        .HasForeignKey("PaymentObligationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "UploadedByUser")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PaymentObligation");
+
+                    b.Navigation("UploadedByUser");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligationLine", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.EmployeeInformation", "EmployeeInformation")
+                        .WithMany()
+                        .HasForeignKey("EmployeeInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MPS.Domain.Entities.User", "ExcludedByUser")
+                        .WithMany()
+                        .HasForeignKey("ExcludedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", "PaymentObligation")
+                        .WithMany("Lines")
+                        .HasForeignKey("PaymentObligationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("MPS.Domain.Entities.User", "RecordedByUser")
                         .WithMany()
                         .HasForeignKey("RecordedByUserId")
@@ -9086,11 +9264,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UpdatedByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.Navigation("ConfirmedByUser");
+                    b.Navigation("EmployeeInformation");
 
-                    b.Navigation("CreatedByUser");
+                    b.Navigation("ExcludedByUser");
 
-                    b.Navigation("PayrollPeriod");
+                    b.Navigation("PaymentObligation");
 
                     b.Navigation("RecordedByUser");
 
@@ -9577,6 +9755,13 @@ namespace MPS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MPS.Domain.Entities.Evaluation.OrderEvaluationSubject", b =>
                 {
                     b.Navigation("Scores");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", b =>
+                {
+                    b.Navigation("Evidences");
+
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.PayrollFormulaSet", b =>

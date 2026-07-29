@@ -77,15 +77,14 @@ public static class ObjectKeyBuilder
     }
 
     /// <summary>
-    /// Object key ảnh evidence cho nghĩa vụ BHXH/TNCN. Kind = "bank-receipt" hoặc "authority-confirmation".
-    /// Path: <c>payroll/bhxh-tax-evidence/{obligationId}/{kind}/{guid}.{ext}</c>.
+    /// Object key ảnh evidence cho nghĩa vụ BHXH/TNCN (v3 line-level model — không phân biệt kind).
+    /// Path: <c>payroll/bhxh-tax-evidence/{obligationId}/{guid}.{ext}</c>.
     /// </summary>
-    public static string ForBhxhTaxEvidence(int obligationId, string kind, string contentType, Guid uniqueId)
+    public static string ForBhxhTaxEvidence(int obligationId, string contentType, Guid uniqueId)
     {
         if (obligationId <= 0) throw new ArgumentOutOfRangeException(nameof(obligationId));
-        ValidateSegment(kind, nameof(kind));
         var ext = ResolveImageExtension(contentType);
-        var key = $"payroll/bhxh-tax-evidence/{obligationId}/{kind}/{uniqueId:N}.{ext}";
+        var key = $"payroll/bhxh-tax-evidence/{obligationId}/{uniqueId:N}.{ext}";
         ValidateLength(key);
         return key;
     }
