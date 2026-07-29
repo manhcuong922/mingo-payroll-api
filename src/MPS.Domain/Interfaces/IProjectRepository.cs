@@ -9,6 +9,16 @@ public interface IProjectRepository
     // status=null: không lọc theo trạng thái (mặc định) — trả mọi trạng thái đơn (trừ Cancelled nếu includeCancelled=false).
     Task<IReadOnlyList<Project>> GetAllAsync(CancellationToken ct, bool includeCancelled = false, ProjectStatus? status = null);
     Task<Project?> GetByIdAsync(int id, CancellationToken ct);
+
+    /// <summary>
+    /// Bản TRACKED của đơn — bắt buộc dùng khi lệnh có SỬA dữ liệu.
+    /// <para><c>GetByIdAsync</c> trả bản <c>AsNoTracking</c>; gọi <c>Update(entity)</c> trên bản đó
+    /// làm EF gán <c>OriginalValue = CurrentValue</c> cho MỌI trường ⇒
+    /// <c>AuditSaveChangesInterceptor</c> thấy "không trường nào đổi" và <b>bỏ qua, không ghi audit
+    /// nào cả</b>. Đây đúng là lỗi #20 đã sửa cho <c>Task</c> (xem
+    /// <c>ITaskRepository.GetByIdForUpdateAsync</c>).</para>
+    /// </summary>
+    Task<Project?> GetByIdForUpdateAsync(int id, CancellationToken ct);
     Task<Project?> GetByIdWithTasksAsync(int id, CancellationToken ct);   // include Tasks + DependsOn cho EV/PV
     Task<IReadOnlyList<Project>> GetByDepartmentAsync(
         int departmentId, CancellationToken ct, bool includeCancelled = false, ProjectStatus? status = null);

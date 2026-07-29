@@ -40,6 +40,11 @@ public class ProjectRepository : IProjectRepository
             .Include(p => p.CreatedBy)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
+    // Có tracking (khác GetByIdAsync) để interceptor audit so được giá trị trước–sau. Xem ghi chú
+    // ở IProjectRepository.GetByIdForUpdateAsync.
+    public Task<Project?> GetByIdForUpdateAsync(int id, CancellationToken ct) =>
+        _context.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
+
     public Task<Project?> GetByIdWithTasksAsync(int id, CancellationToken ct) =>
         _context.Projects
             .AsNoTracking()
