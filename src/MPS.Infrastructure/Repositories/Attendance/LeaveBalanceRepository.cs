@@ -22,13 +22,14 @@ public class LeaveBalanceRepository : ILeaveBalanceRepository
                 && b.Year == year
                 && b.LeaveTypeId == leaveTypeId, cancellationToken);
 
-    public async Task<IReadOnlyList<LeaveBalance>> GetByEmployeeAsync(int employeeInformationId, int year, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<LeaveBalance>> GetByEmployeeAsync(int employeeInformationId, int? year, CancellationToken cancellationToken = default)
     {
         return await _context.LeaveBalances
             .AsNoTracking()
             .Include(b => b.LeaveType)
-            .Where(b => b.EmployeeInformationId == employeeInformationId && b.Year == year)
-            .OrderBy(b => b.LeaveType.Code)
+            .Where(b => b.EmployeeInformationId == employeeInformationId && (year == null || b.Year == year.Value))
+            .OrderByDescending(b => b.Year)
+            .ThenBy(b => b.LeaveType.Code)
             .ToListAsync(cancellationToken);
     }
 
