@@ -22,6 +22,7 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .AsQueryable();
 
         if (!includeCancelled)
@@ -38,6 +39,7 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public Task<Project?> GetByIdWithTasksAsync(int id, CancellationToken ct) =>
@@ -46,6 +48,7 @@ public class ProjectRepository : IProjectRepository
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
             .Include(p => p.CompletedBy)
+            .Include(p => p.ResponsibleUser)
             .Include(p => p.Tasks).ThenInclude(t => t.Assignees).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
@@ -56,6 +59,7 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .Where(p => p.DepartmentId == departmentId)
             .AsQueryable();
 
@@ -76,6 +80,7 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .AsQueryable();
 
         if (departmentId.HasValue)
