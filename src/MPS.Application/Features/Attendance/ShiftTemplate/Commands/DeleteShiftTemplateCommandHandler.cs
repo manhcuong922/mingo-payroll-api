@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.ShiftTemplate.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 
@@ -28,6 +29,14 @@ public class DeleteShiftTemplateCommandHandler : IRequestHandler<DeleteShiftTemp
 
         var existing = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (existing is null) return false;
+
+        if (existing.IsActive)
+        {
+            var today = DateOnly.FromDateTime(_clock.UtcNow);
+            var usage = await _repository.GetFutureUsageAsync(request.Id, today, cancellationToken);
+            if (usage.HasAny)
+                throw new ConflictException(ShiftTemplateFutureUsageMessage.Build(existing.Name, usage));
+        }
 
         return await _repository.DeactivateAsync(request.Id, userId, _clock.UtcNow, cancellationToken);
     }

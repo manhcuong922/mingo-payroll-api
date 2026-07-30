@@ -97,8 +97,27 @@ public static class ProjectScopeGuard
 
     // === Đọc task ===
 
+    /// <summary>
+    /// Công nhân (Task.Read.Assigned) có task trong đơn X → được ĐỌC mọi task của đơn X (xem cả việc
+    /// của đồng nghiệp trong cùng đơn để nắm bối cảnh dây chuyền). Đơn không tham gia vẫn bị chặn,
+    /// và task IsConfidential vẫn lọc riêng ở đầu EnsureCanReadTaskAsync.
+    /// </summary>
+    public static async Task<bool> CanReadTasksOfJoinedProjectAsync(
+        int? projectId,
+        IProjectTaskRepository tasks,
+        ICurrentUserService currentUser,
+        CancellationToken ct)
+    {
+        if (projectId is null) return false;                                  // task nội bộ, không thuộc đơn
+        if (!currentUser.HasPermission(Permissions.TaskReadAssigned)) return false;
+        if (currentUser.UserId is not int userId) return false;
+
+        return await tasks.HasAssignedTaskInProjectAsync(userId, projectId.Value, ct);
+    }
+
     // ReadAll → mọi task; ReadFullDepartment/ReadDepartment + là quản lý xưởng → trọn cây xưởng;
-    // ReadAssigned + là assignee → task được giao. (refactor: bỏ lọc theo AssignedPmUserId.)
+    // ReadAssigned + là assignee → task được giao, HOẶC task thuộc đơn mình có tham gia
+    // (CanReadTasksOfJoinedProjectAsync). (refactor: bỏ lọc theo AssignedPmUserId.)
     public static async Task EnsureCanReadTaskAsync(
         ProjectTaskEntity task,
         IProjectTaskRepository tasks,
@@ -127,6 +146,9 @@ public static class ProjectScopeGuard
         if (canReadDepartment && isManagerOfTaskDepartment) return;
 
         if (currentUser.HasPermission(Permissions.TaskReadAssigned) && isAssignee) return;
+
+        // Công nhân xem task của đồng nghiệp trong đơn mình cùng làm.
+        if (await CanReadTasksOfJoinedProjectAsync(task.ProjectId, tasks, currentUser, ct)) return;
 
         throw new ForbiddenAccessException("Bạn không có quyền xem task này.");
     }

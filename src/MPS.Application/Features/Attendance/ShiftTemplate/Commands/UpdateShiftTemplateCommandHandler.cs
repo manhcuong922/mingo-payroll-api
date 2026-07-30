@@ -37,6 +37,14 @@ public class UpdateShiftTemplateCommandHandler : IRequestHandler<UpdateShiftTemp
         var existing = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (existing is null) return false;
 
+        if (existing.IsActive && !request.IsActive)
+        {
+            var today = DateOnly.FromDateTime(_clock.UtcNow);
+            var usage = await _repository.GetFutureUsageAsync(request.Id, today, cancellationToken);
+            if (usage.HasAny)
+                throw new ConflictException(ShiftTemplateFutureUsageMessage.Build(existing.Name, usage));
+        }
+
         var name = request.Name.Trim();
 
         if (string.IsNullOrWhiteSpace(name))

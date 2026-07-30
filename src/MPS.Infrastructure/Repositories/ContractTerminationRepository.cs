@@ -29,6 +29,15 @@ public class ContractTerminationRepository : IContractTerminationRepository
             .AsNoTracking()
             .AnyAsync(t => t.ContractId == contractId, cancellationToken);
 
+    public async Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithMaturedTerminationAsync(
+        DateTime asOfUtc, CancellationToken cancellationToken = default) =>
+        await _context.ContractTerminations
+            .AsNoTracking()
+            .Where(t => t.TerminationDate <= asOfUtc)
+            .Select(t => t.Contract.EmployeeInformationId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task<int> AddAndMarkContractTerminatedAsync(
         ContractTermination termination,
         CancellationToken cancellationToken = default)

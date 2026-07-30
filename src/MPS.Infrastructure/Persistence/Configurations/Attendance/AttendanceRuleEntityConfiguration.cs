@@ -13,12 +13,11 @@ public class AttendanceRuleEntityConfiguration : IEntityTypeConfiguration<Attend
         builder.Property(e => e.Id).UseIdentityColumn();
 
         builder.Property(e => e.Name).HasMaxLength(150).IsRequired();
-        builder.HasIndex(e => e.Name).IsUnique();
+        builder.HasIndex(e => e.Name)
+            .IsUnique()
+            .HasFilter("[IsActive] = 1");
 
         builder.Property(e => e.Description).HasMaxLength(500);
-        builder.Property(e => e.WorkRateNormal).HasColumnType("decimal(6,2)").IsRequired().HasDefaultValue(100.00m);
-        builder.Property(e => e.WorkRateWeeklyRest).HasColumnType("decimal(6,2)").IsRequired().HasDefaultValue(200.00m);
-        builder.Property(e => e.WorkRateHoliday).HasColumnType("decimal(6,2)").IsRequired().HasDefaultValue(300.00m);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
 
         builder.Property(e => e.CreatedAt).IsRequired();

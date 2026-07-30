@@ -67,8 +67,12 @@ public interface IEmployeeShiftAssignmentRepository
 
     /// <summary>
     /// Deletes assignments owned by the given ScheduleTemplate whose <c>WorkDate</c>
-    /// is NOT in <paramref name="retainDates"/> (i.e. dates removed from the pattern
-    /// after an update), skipping (emp, date, shift) that have an <c>AttendanceRecord</c>.
+    /// / <c>ShiftTemplateId</c> / <c>EmployeeInformationId</c> is NOT in the retain sets
+    /// (i.e. rows no longer matching the template's current pattern/shifts/targets).
+    /// Locked rows (có <c>AttendanceRecord</c>) không xoá được nhưng sẽ được <b>detach</b>
+    /// (set <c>ScheduleTemplateId = null</c>) để không còn thuộc template — attendance
+    /// history vẫn giữ, dept-view aggregate không còn tính vào phòng ban của template.
+    /// Return = tổng số row đã remove + detach.
     /// </summary>
     Task<int> DeleteStaleByScheduleTemplateAsync(
         int scheduleTemplateId,
@@ -79,5 +83,16 @@ public interface IEmployeeShiftAssignmentRepository
 
     Task<int> DeleteUnlockedByScheduleTemplateAsync(
         int scheduleTemplateId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gỡ ca của (template, employee) từ <paramref name="fromDate"/> trở đi.
+    /// Skip assignment locked (có AttendanceRecord tương ứng). Dùng bởi
+    /// AutoApplyScheduleOnDepartmentChangeHandler khi NV rời dept.
+    /// </summary>
+    Task<int> DeleteUnlockedByTemplateEmployeeFromDateAsync(
+        int scheduleTemplateId,
+        int employeeInformationId,
+        DateOnly fromDate,
         CancellationToken cancellationToken = default);
 }

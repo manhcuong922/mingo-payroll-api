@@ -1,10 +1,12 @@
-using FluentAssertions;
+﻿using FluentAssertions;
+using MPS.Application.Tests.TestHelpers;
 using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Evaluation.MonthlyEvaluation.Commands;
 using MPS.Domain.Entities.Evaluation;
 using MPS.Domain.Enums.Evaluation;
 using MPS.Domain.Exceptions;
+using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Evaluation;
 using Xunit;
 
@@ -14,10 +16,12 @@ public class ApproveMonthlyEvaluationHandlerTests
 {
     private readonly Mock<IMonthlyEvaluationRepository> _repo = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
+    private readonly Mock<IContractLookupReader> _lookup = new();
 
     private static readonly string RowVersion = Convert.ToBase64String(new byte[8]);
 
-    private ApproveMonthlyEvaluationCommandHandler Sut() => new(_repo.Object, _currentUser.Object);
+    private ApproveMonthlyEvaluationCommandHandler Sut() =>
+        new(_repo.Object, _currentUser.Object, _lookup.Object, new NoopPayrollSourceChangeHandler());
 
     private void ReturnBoard(MPS.Domain.Entities.Evaluation.MonthlyEvaluation board)
     {

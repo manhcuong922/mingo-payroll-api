@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
 
     // Contract module
     public DbSet<ContractParty> ContractParties => Set<ContractParty>();
@@ -62,6 +63,7 @@ public class AppDbContext : DbContext
     public DbSet<ComplianceLead> ComplianceLeads => Set<ComplianceLead>();
 
     // Attendance module (FE-ATT)
+    public DbSet<FaceRegistration> FaceRegistrations => Set<FaceRegistration>();
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
     public DbSet<EmployeeShiftAssignment> EmployeeShiftAssignments => Set<EmployeeShiftAssignment>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
@@ -71,8 +73,13 @@ public class AppDbContext : DbContext
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
+    public DbSet<LateEarlyRequest> LateEarlyRequests => Set<LateEarlyRequest>();
+    public DbSet<WfhRequest> WfhRequests => Set<WfhRequest>();
+    public DbSet<MPS.Domain.Entities.Employee.EmployeeDependent> EmployeeDependents => Set<MPS.Domain.Entities.Employee.EmployeeDependent>();
+    public DbSet<MPS.Domain.Entities.Employee.DependentRegistrationRequest> DependentRegistrationRequests => Set<MPS.Domain.Entities.Employee.DependentRegistrationRequest>();
     public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
     public DbSet<AttendanceRule> AttendanceRules => Set<AttendanceRule>();
+    public DbSet<AttendanceRuleVersion> AttendanceRuleVersions => Set<AttendanceRuleVersion>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<ScheduleTemplateEmployee> ScheduleTemplateEmployees => Set<ScheduleTemplateEmployee>();
     public DbSet<ScheduleTemplateShift> ScheduleTemplateShifts => Set<ScheduleTemplateShift>();
@@ -91,6 +98,25 @@ public class AppDbContext : DbContext
     public DbSet<Domain.Entities.Evaluation.MonthlyEvaluation> MonthlyEvaluations => Set<Domain.Entities.Evaluation.MonthlyEvaluation>();
     public DbSet<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink> MonthlyEvaluationSourceLinks => Set<Domain.Entities.Evaluation.MonthlyEvaluationSourceLink>();
     public DbSet<Domain.Entities.Evaluation.EvaluationScoreLine> EvaluationScoreLines => Set<Domain.Entities.Evaluation.EvaluationScoreLine>();
+
+    // ===== Payroll module (bảng lương hàng tháng) =====
+    public DbSet<Domain.Entities.Payroll.PayrollFormulaSet> PayrollFormulaSets => Set<Domain.Entities.Payroll.PayrollFormulaSet>();
+    public DbSet<Domain.Entities.Payroll.SalaryColumnDefinition> SalaryColumnDefinitions => Set<Domain.Entities.Payroll.SalaryColumnDefinition>();
+    public DbSet<Domain.Entities.Payroll.PayrollPeriod> PayrollPeriods => Set<Domain.Entities.Payroll.PayrollPeriod>();
+    public DbSet<Domain.Entities.Payroll.PayrollComplianceRef> PayrollComplianceRefs => Set<Domain.Entities.Payroll.PayrollComplianceRef>();
+    public DbSet<Domain.Entities.Payroll.PayrollRow> PayrollRows => Set<Domain.Entities.Payroll.PayrollRow>();
+    public DbSet<Domain.Entities.Payroll.PayrollCellValue> PayrollCellValues => Set<Domain.Entities.Payroll.PayrollCellValue>();
+    public DbSet<Domain.Entities.Payroll.PayrollNote> PayrollNotes => Set<Domain.Entities.Payroll.PayrollNote>();
+    public DbSet<Domain.Entities.Payroll.ProductivityCoefficient> ProductivityCoefficients => Set<Domain.Entities.Payroll.ProductivityCoefficient>();
+    public DbSet<Domain.Entities.Payroll.PayrollAdjustment> PayrollAdjustments => Set<Domain.Entities.Payroll.PayrollAdjustment>();
+
+    // ===== BHXH & Tax Payment Tracking module =====
+    public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligation> PaymentObligations
+        => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligation>();
+    public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligationLine> PaymentObligationLines
+        => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligationLine>();
+    public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence> PaymentObligationEvidences
+        => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

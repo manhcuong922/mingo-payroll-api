@@ -12,6 +12,8 @@ public interface ILeaveRequestRepository
         DateOnly? toDate,
         int page,
         int size,
+        int? departmentIdFilter = null,
+        OvertimeApproverRoute? approverRouteFilter = null,
         CancellationToken cancellationToken = default);
 
     Task<LeaveRequest?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
@@ -22,7 +24,30 @@ public interface ILeaveRequestRepository
 
     Task<int> AddAsync(LeaveRequest entity, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Lưu nhiều đơn nghỉ trong MỘT lượt ghi.
+    /// Dùng cho `[D2]`: đơn xin vượt quỹ được tách thành phần CÓ LƯƠNG (dùng nốt quỹ) và phần
+    /// KHÔNG LƯƠNG. Hai phần phải cùng sống hoặc cùng chết — nếu chỉ phần có lương được lưu thì
+    /// người lao động mất số ngày nghỉ đã xin, còn nếu chỉ phần không lương được lưu thì họ mất
+    /// quỹ phép. Trả về id theo đúng thứ tự truyền vào.
+    /// </summary>
+    Task<IReadOnlyList<int>> AddRangeAsync(
+        IReadOnlyList<LeaveRequest> entities,
+        CancellationToken cancellationToken = default);
+
     Task<bool> UpdateAsync(LeaveRequest entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Trả về true nếu tồn tại đơn nghỉ phép Pending hoặc Approved của employee
+    /// chồng lấp bất kỳ ngày nào trong khoảng [startDate, endDate].
+    /// Dùng cho cross-check chống trùng ngày giữa Leave/WFH/LateEarly.
+    /// </summary>
+    Task<bool> HasPendingOrApprovedInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// FT-13: atomically approve a pending leave request.
@@ -37,6 +62,20 @@ public interface ILeaveRequestRepository
         int requestId,
         int reviewedByUserId,
         string? reviewNote,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cancel a request. If it is Approved, transactionally reverts LeaveBalance.UsedDays
+    /// and removes auto-created AttendanceRecords for the range [StartDate, EndDate].
+    /// Only the creator may cancel; a Pending request may be cancelled unconditionally,
+    /// an Approved one only if StartDate is strictly in the future.
+    /// </summary>
+    /// <returns>true if cancelled; false if the request is missing.</returns>
+    Task<bool> CancelAsync(
+        int requestId,
+        int cancelledByUserId,
+        string? cancelReason,
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
 }

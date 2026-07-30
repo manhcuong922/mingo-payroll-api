@@ -36,6 +36,19 @@ public class AttendanceAdjustmentController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>NV xem đơn AttendanceAdjustment của chính mình (scope theo current user).</summary>
+    [HttpGet("me")]
+    [HasPermission(Permissions.AttendanceAdjustmentCreateSelf)]
+    public async Task<IActionResult> GetMine(
+        [FromQuery] AdjustmentStatus? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int size = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _mediator.Send(new GetMyAttendanceAdjustmentsQuery(status, page, size), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [HasPermission(Permissions.AttendanceAdjustmentReadAll)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)

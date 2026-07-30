@@ -40,7 +40,9 @@ public class AttendanceRuleRepository : IAttendanceRuleRepository
     public Task<bool> ExistsByNameAsync(string name, int? excludeId, CancellationToken cancellationToken = default)
     {
         var normalized = name.Trim();
-        var query = _context.AttendanceRules.AsNoTracking().Where(r => r.Name == normalized);
+        var query = _context.AttendanceRules
+            .AsNoTracking()
+            .Where(r => r.IsActive && r.Name == normalized);
         if (excludeId.HasValue)
             query = query.Where(r => r.Id != excludeId.Value);
         return query.AnyAsync(cancellationToken);
@@ -51,6 +53,15 @@ public class AttendanceRuleRepository : IAttendanceRuleRepository
         return await _context.ShiftTemplates.AsNoTracking()
             .Where(s => s.AppliedAttendanceRuleId == ruleId)
             .Select(s => s.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> GetActiveShiftTemplateNamesUsingRuleAsync(int ruleId, CancellationToken cancellationToken = default)
+    {
+        return await _context.ShiftTemplates.AsNoTracking()
+            .Where(s => s.AppliedAttendanceRuleId == ruleId && s.IsActive)
+            .OrderBy(s => s.Name)
+            .Select(s => s.Name)
             .ToListAsync(cancellationToken);
     }
 
@@ -68,9 +79,6 @@ public class AttendanceRuleRepository : IAttendanceRuleRepository
 
         tracked.Name = entity.Name;
         tracked.Description = entity.Description;
-        tracked.WorkRateNormal = entity.WorkRateNormal;
-        tracked.WorkRateWeeklyRest = entity.WorkRateWeeklyRest;
-        tracked.WorkRateHoliday = entity.WorkRateHoliday;
         tracked.IsActive = entity.IsActive;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;

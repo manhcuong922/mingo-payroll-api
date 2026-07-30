@@ -33,6 +33,7 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
 
     public async Task<IReadOnlyList<EmployeeInformation>> GetAllAsync(
         bool? hasActiveUser = null,
+        string? keyword = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.EmployeeInformations
@@ -43,6 +44,17 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
             .AsQueryable();
 
         query = ApplyActiveUserFilter(query, hasActiveUser);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            // COLLATE Latin1_General_CI_AI: case + accent insensitive (nhất quán với GetPagedAsync).
+            // Fields: FullName + User.EmployeeCode + Department.Name — phục vụ search "Tổng hợp phân ca".
+            query = query.Where(e =>
+                EF.Functions.Like(EF.Functions.Collate(e.FullName, "Latin1_General_CI_AI"), $"%{kw}%")
+                || (e.User != null && EF.Functions.Like(EF.Functions.Collate(e.User.EmployeeCode, "Latin1_General_CI_AI"), $"%{kw}%"))
+                || (e.Department != null && EF.Functions.Like(EF.Functions.Collate(e.Department.Name, "Latin1_General_CI_AI"), $"%{kw}%")));
+        }
 
         return await query.ToListAsync(cancellationToken);
     }
@@ -100,10 +112,14 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         if (!string.IsNullOrWhiteSpace(keyword))
         {
             var kw = keyword.Trim();
+            // COLLATE Latin1_General_CI_AI: case + accent insensitive, phân rã cả chữ Việt đặc biệt
+            // (ư→u, ơ→o, đ→d, ă/â→a, ê→e, ô→o) nên "xuong" match "xưởng", "dat" match "Đạt".
+            // Vietnamese_CI_AI KHÔNG làm được vì nó coi ư/ơ/đ… là chữ cái riêng của bảng chữ VN.
+            // Non-sargable (bỏ qua index trên cột), OK vì bảng NV không lớn và search chỉ ở modal picker.
             query = query.Where(e =>
-                EF.Functions.Like(e.FullName, $"%{kw}%") ||
-                EF.Functions.Like(e.CitizenId, $"%{kw}%") ||
-                (e.Email != null && EF.Functions.Like(e.Email, $"%{kw}%")));
+                EF.Functions.Like(EF.Functions.Collate(e.FullName, "Latin1_General_CI_AI"), $"%{kw}%") ||
+                EF.Functions.Like(EF.Functions.Collate(e.CitizenId, "Latin1_General_CI_AI"), $"%{kw}%") ||
+                (e.Email != null && EF.Functions.Like(EF.Functions.Collate(e.Email, "Latin1_General_CI_AI"), $"%{kw}%")));
         }
 
         if (positionId.HasValue)
@@ -160,6 +176,11 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         _context.EmployeeInformations
             .AsNoTracking()
             .AnyAsync(e => e.Email == email && (excludeId == null || e.Id != excludeId), cancellationToken);
+
+    public Task<bool> CitizenIdExistsAsync(string citizenId, int? excludeId = null, CancellationToken cancellationToken = default) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.CitizenId == citizenId && (excludeId == null || e.Id != excludeId), cancellationToken);
 
     public Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default) =>
         _context.Positions

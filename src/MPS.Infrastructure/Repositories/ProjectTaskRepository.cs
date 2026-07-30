@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using MPS.Domain.Common;
 using MPS.Domain.Entities;
@@ -30,6 +32,26 @@ public class ProjectTaskRepository : IProjectTaskRepository
             .Include(t => t.Children).ThenInclude(c => c.Assignees).ThenInclude(a => a.User)
             .Include(t => t.Children).ThenInclude(c => c.RequiredPosition)
             .FirstOrDefaultAsync(t => t.Id == id, ct);
+
+    // ⭐ #20: đường GHI phải dùng entity TRACKED. Bản AsNoTracking + DbSet.Update khiến EF set
+    // OriginalValue = CurrentValue cho mọi property ⇒ AuditSaveChangesInterceptor tính diff rỗng
+    // ⇒ bỏ qua, audit-history luôn trống. Không Include collection để tránh EF coi TaskAssignee
+    // (khóa ghép) là orphan khi handler reset danh sách.
+    public Task<ProjectTask?> GetByIdForUpdateAsync(int id, CancellationToken ct) =>
+        _context.ProjectTasks.FirstOrDefaultAsync(t => t.Id == id, ct);
+
+    public async Task<IReadOnlyList<int>> GetAssigneeUserIdsAsync(int taskId, CancellationToken ct) =>
+        await _context.TaskAssignees
+            .AsNoTracking()
+            .Where(a => a.TaskId == taskId)
+            .Select(a => a.UserId)
+            .ToListAsync(ct);
+
+    public async Task<bool> SaveTrackedAsync(CancellationToken ct)
+    {
+        await _context.SaveChangesAsync(ct);
+        return true;
+    }
 
     public async Task<IReadOnlyList<ProjectTask>> GetByProjectIdAsync(
         int projectId, CancellationToken ct, bool includeCancelled = false)
@@ -127,6 +149,60 @@ public class ProjectTaskRepository : IProjectTaskRepository
                 && t.Status == TaskItemStatus.InProgress
                 && t.Assignees.Any(a => a.UserId == userId), ct);
 
+    // ⭐ #24: chống giao việc chồng — task lá chưa xong (Todo/InProgress), bỏ qua Paused/Cancelled/Done
+    // và task đã soft-delete.
+    public Task<int> CountOpenByUserAsync(int userId, CancellationToken ct) =>
+        _context.ProjectTasks.CountAsync(
+            t => !t.IsBatchParent
+                && t.DeletedAt == null
+                && (t.Status == TaskItemStatus.Todo || t.Status == TaskItemStatus.InProgress)
+                && t.Assignees.Any(a => a.UserId == userId), ct);
+
+    // ⭐ #28: liệt kê công đoạn chưa xong của 1 người — cảnh báo khi chấm dứt HĐ.
+    public async Task<IReadOnlyList<ProjectTask>> GetOpenAssignedTasksByUserAsync(int userId, CancellationToken ct) =>
+        await _context.ProjectTasks
+            .AsNoTracking()
+            .Where(t => !t.IsBatchParent
+                && t.DeletedAt == null
+                && (t.Status == TaskItemStatus.Todo || t.Status == TaskItemStatus.InProgress)
+                && t.Assignees.Any(a => a.UserId == userId))
+            .OrderBy(t => t.Deadline)
+            .ThenBy(t => t.Id)
+            .ToListAsync(ct);
+
+    // ⭐ OT workflow v3 (Q18): NV tạo OT cho đơn được assign task bất kỳ Status.
+    public Task<bool> HasAssignedTaskInProjectAsync(int userId, int projectId, CancellationToken ct) =>
+        _context.ProjectTasks.AnyAsync(
+            t => !t.IsBatchParent
+                && t.ProjectId == projectId
+                && t.DeletedAt == null
+                && t.Assignees.Any(a => a.UserId == userId), ct);
+
+    public async Task<IReadOnlyList<ProjectTask>> GetAssignedTasksByUserInProjectAsync(
+        int userId, int projectId, CancellationToken ct)
+    {
+        return await _context.ProjectTasks
+            .Where(t => !t.IsBatchParent
+                && t.ProjectId == projectId
+                && t.DeletedAt == null
+                && t.Assignees.Any(a => a.UserId == userId))
+            .OrderBy(t => t.Deadline)
+            .ThenBy(t => t.Priority)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<int>> GetAssignedProjectIdsByUserAsync(int userId, CancellationToken ct)
+    {
+        return await _context.ProjectTasks
+            .Where(t => !t.IsBatchParent
+                && t.ProjectId != null
+                && t.DeletedAt == null
+                && t.Assignees.Any(a => a.UserId == userId))
+            .Select(t => t.ProjectId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
     // Chỉ tính con Quantity — Gate (Milestone) không có sản lượng, không tham gia giới hạn PlannedQuantity cha.
     public Task<int> SumChildrenPlannedQuantityAsync(int parentTaskId, int? excludeTaskId, CancellationToken ct) =>
         _context.ProjectTasks
@@ -145,6 +221,57 @@ public class ProjectTaskRepository : IProjectTaskRepository
     {
         _context.ProjectTasks.AddRange(entities);
         await _context.SaveChangesAsync(ct);
+    }
+
+    // ⭐ #16: check-then-insert không khoá ⇒ 2 request song song sinh 2 cây task chồng nhau.
+    // sp_getapplock (scope Transaction) serialize theo khoá nghiệp vụ "project-generate-tasks:{id}";
+    // request thứ 2 chờ, vào trong thấy đã có task và bị huỷ. Khoá tự nhả khi transaction kết thúc.
+    public async Task<int?> GenerateExclusiveAsync(
+        int projectId,
+        Func<CancellationToken, Task<IReadOnlyList<ProjectTask>?>> buildTasks,
+        CancellationToken ct)
+    {
+        const int lockTimeoutMs = 15_000;
+
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+
+        var lockResult = await AcquireAppLockAsync($"project-generate-tasks:{projectId}", lockTimeoutMs, ct);
+        if (lockResult < 0)
+            throw new InvalidOperationException(
+                $"Không lấy được khoá sinh task cho đơn #{projectId} (sp_getapplock trả {lockResult}).");
+
+        if (await _context.ProjectTasks.AnyAsync(t => t.ProjectId == projectId, ct))
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        var tasks = await buildTasks(ct);
+        if (tasks is null)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        _context.ProjectTasks.AddRange(tasks);
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return tasks.Count;
+    }
+
+    private async Task<int> AcquireAppLockAsync(string resource, int timeoutMs, CancellationToken ct)
+    {
+        var result = new SqlParameter("@result", SqlDbType.Int) { Direction = ParameterDirection.Output };
+        var resourceParam = new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = resource };
+        var timeoutParam = new SqlParameter("@timeout", SqlDbType.Int) { Value = timeoutMs };
+
+        await _context.Database.ExecuteSqlRawAsync(
+            "EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', " +
+            "@LockOwner = 'Transaction', @LockTimeout = @timeout;",
+            new[] { result, resourceParam, timeoutParam },
+            ct);
+
+        return result.Value is int code ? code : -999;
     }
 
     public async Task<bool> UpdateAsync(ProjectTask entity, CancellationToken ct)

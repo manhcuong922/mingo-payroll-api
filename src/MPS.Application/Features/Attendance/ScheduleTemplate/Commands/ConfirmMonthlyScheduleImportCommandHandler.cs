@@ -23,6 +23,8 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
     private readonly IScheduleTemplateRepository _scheduleRepository;
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IDepartmentRepository _departmentRepository;
+    private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IRegularHoursCapChecker _capChecker;
 
     public ConfirmMonthlyScheduleImportCommandHandler(
@@ -33,6 +35,8 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         IScheduleTemplateRepository scheduleRepository,
         IShiftTemplateRepository shiftRepository,
         IEmployeeInformationRepository employeeRepository,
+        IDepartmentRepository departmentRepository,
+        IEmployeeShiftAssignmentRepository assignmentRepository,
         IRegularHoursCapChecker capChecker)
     {
         _cache = cache;
@@ -42,8 +46,16 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         _scheduleRepository = scheduleRepository;
         _shiftRepository = shiftRepository;
         _employeeRepository = employeeRepository;
+        _departmentRepository = departmentRepository;
+        _assignmentRepository = assignmentRepository;
         _capChecker = capChecker;
     }
+
+    /// <summary>
+    /// Group key: shift bắt buộc, dept optional. Dept mode → 1 template per (shift, dept).
+    /// Employees mode → dept=null → 1 template per shift (behavior cũ).
+    /// </summary>
+    private sealed record GroupKey(int ShiftTemplateId, int? DepartmentId);
 
     public async Task<MonthlyScheduleImportConfirmResult> Handle(
         ConfirmMonthlyScheduleImportCommand request,
@@ -79,26 +91,67 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
             entry.Operations.Select(o => o.EmployeeInformationId).Distinct().ToArray(),
             cancellationToken);
 
-        // Group ops by shift để tạo 1 ScheduleTemplate per shift code.
+        // Group ops:
+        //   - Employees mode: 1 ScheduleTemplate per shift.
+        //   - Departments mode: 1 ScheduleTemplate per (shift, dept) — DeptIdByOpIndex map
+        //     op-index về dept nguồn để tách group. Templates tạo ra có ApplyTarget=Departments
+        //     + TargetDepartmentIds=[dept] → AutoApplyScheduleOnDepartmentChangeHandler tự
+        //     phân ca cho NV mới join dept sau này.
+        var isDeptMode = entry.ApplyTarget == ScheduleApplyTarget.Departments
+            && entry.DeptIdByOpIndex is not null;
+
         var groups = entry.Operations
-            .GroupBy(o => o.ShiftTemplateId!.Value)
-            .OrderBy(g => g.Key)
+            .Select((op, index) => (Op: op, Index: index))
+            .GroupBy(x => new GroupKey(
+                ShiftTemplateId: x.Op.ShiftTemplateId!.Value,
+                DepartmentId: isDeptMode && entry.DeptIdByOpIndex!.TryGetValue(x.Index, out var deptId)
+                    ? deptId
+                    : (int?)null))
+            .OrderBy(g => g.Key.ShiftTemplateId)
+            .ThenBy(g => g.Key.DepartmentId ?? 0)
             .ToList();
 
         // Preload tên/code + StandardHours shift để đặt tên ScheduleTemplate và pre-check cap.
         var shiftCodeById = new Dictionary<int, string>();
         var shiftHoursById = new Dictionary<int, decimal>();
-        foreach (var shiftId in groups.Select(g => g.Key))
+        foreach (var shiftId in groups.Select(g => g.Key.ShiftTemplateId).Distinct())
         {
             var shift = await _shiftRepository.GetByIdAsync(shiftId, cancellationToken);
             shiftCodeById[shiftId] = shift?.Code ?? $"SHIFT-{shiftId}";
             shiftHoursById[shiftId] = shift?.StandardHours ?? 0m;
         }
 
+        // Preload dept name để đặt tên template khi dept mode.
+        var deptCodeAndNameById = new Dictionary<int, (string Code, string Name)>();
+        if (isDeptMode)
+        {
+            var deptIdsInBatch = groups
+                .Select(g => g.Key.DepartmentId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+            foreach (var deptId in deptIdsInBatch)
+            {
+                var dept = await _departmentRepository.GetByIdAsync(deptId, cancellationToken);
+                if (dept is not null)
+                    deptCodeAndNameById[deptId] = (dept.Code, dept.Name);
+            }
+        }
+
         // Pre-check cap before creating any ScheduleTemplate.
         // If this fails in the loop below, earlier groups may already be committed.
+        // Loại các ngày đã có ca bị khoá do AttendanceRecord — batch handler sẽ skip
+        // với status SkippedAttendanceExists nên pre-check phải đồng bộ để không throw
+        // false-positive "Vượt 8h/ngày" (Điều 105 BLLĐ).
+        var opEmployeeIds = entry.Operations.Select(o => o.EmployeeInformationId).Distinct().ToList();
+        var lockedRows = await _assignmentRepository.GetLockedShiftsAsync(
+            opEmployeeIds, fromDate, toDate, cancellationToken);
+        var lockedDays = lockedRows.Select(r => (r.EmployeeInformationId, r.WorkDate)).ToHashSet();
+
         var deltas = entry.Operations
-            .Where(o => o.ShiftTemplateId.HasValue)
+            .Where(o => o.ShiftTemplateId.HasValue
+                && !lockedDays.Contains((o.EmployeeInformationId, o.WorkDate)))
             .Select(o => new WeeklyCapDelta(
                 o.EmployeeInformationId,
                 o.WorkDate,
@@ -124,17 +177,36 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         {
             foreach (var group in groups)
             {
-                var shiftId = group.Key;
+                var shiftId = group.Key.ShiftTemplateId;
+                var deptId = group.Key.DepartmentId;
                 var shiftCode = shiftCodeById[shiftId];
-                var ops = group.ToList();
+                var ops = group.Select(x => x.Op).ToList();
 
                 var dates = ops.Select(o => o.WorkDate).Distinct().OrderBy(d => d).ToList();
                 var empIds = ops.Select(o => o.EmployeeInformationId).Distinct().OrderBy(i => i).ToList();
                 var daysOfMonth = dates.Select(d => d.Day).Distinct().OrderBy(d => d).ToList();
 
+                // Dept mode: tên template có kèm mã phòng ban, template ApplyTarget=Departments
+                // để AutoApply handler kích hoạt cho NV mới join dept.
+                string templateName;
+                ScheduleApplyTarget applyTarget;
+                string? targetDepartmentIdsMask;
+                if (deptId.HasValue && deptCodeAndNameById.TryGetValue(deptId.Value, out var deptInfo))
+                {
+                    templateName = TruncateName($"{batchLabel} — {shiftCode} — {deptInfo.Code}");
+                    applyTarget = ScheduleApplyTarget.Departments;
+                    targetDepartmentIdsMask = deptId.Value.ToString(CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    templateName = TruncateName($"{batchLabel} — {shiftCode}");
+                    applyTarget = ScheduleApplyTarget.Employees;
+                    targetDepartmentIdsMask = null;
+                }
+
                 var st = new ScheduleTemplateEntity
                 {
-                    Name = TruncateName($"{batchLabel} — {shiftCode}"),
+                    Name = templateName,
                     ShiftTemplateId = shiftId,
                     EffectiveFrom = dates.First(),
                     EffectiveTo = dates.Last(),
@@ -144,6 +216,8 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
                     DaysOfMonthMask = string.Join(",", daysOfMonth),
                     IsActive = true,
                     Notes = $"Auto-created from monthly import — {entry.ScheduleName ?? "(không tên)"}.",
+                    ApplyTarget = applyTarget,
+                    TargetDepartmentIds = targetDepartmentIdsMask,
                     CreatedAt = now,
                     CreatedByUserId = userId,
                 };

@@ -1,19 +1,26 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 
 /// <summary>
-/// BR-10: Self-approval is forbidden.
-/// Re-check BR-7/8 tại thời điểm approve (race condition giữa multiple Pending).
-/// Multi-shift: KHÔNG auto-upsert AttendanceRecord — vì grain mới (emp, date, shift)
-/// có thể có nhiều ca/ngày, OT không chỉ rõ ca nào để gắn. DM/HR chấm công riêng.
+/// Approver (HR hoặc DM tuỳ ApproverRoute) duyệt cuối OT — luồng v3 §5.4.
+///
+/// Guard:
+///   - Status = PendingApprover (đã qua PM Forward).
+///   - Role currentUser phải khớp ApproverRoute.
+///   - Nếu route=DepartmentManager: DM phải cùng Dept với Project.
+///   - Self-approval BR-10: currentUser != CreatedByUserId AND != PmReviewedByUserId.
+///
+/// Re-run cap check + re-split hours (Compliance có thể đã đổi từ lúc submit).
+/// Set ApproverReview* (audit tầng 2) + mirror ReviewedBy* (final = Approved).
 /// </summary>
 public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvertimeRequestCommand, bool>
 {
@@ -21,32 +28,38 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
     private readonly IProjectRepository _projectRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
     private readonly IContractLookupReader _lookup;
+    private readonly IContractRepository _contracts;
     private readonly OvertimeCapChecker _capChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ApproveOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
         IProjectRepository projectRepository,
         IEmployeeInformationRepository employeeRepository,
         IContractLookupReader lookup,
+        IContractRepository contracts,
         OvertimeCapChecker capChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _projectRepository = projectRepository;
         _employeeRepository = employeeRepository;
         _lookup = lookup;
+        _contracts = contracts;
         _capChecker = capChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
         _clock = clock;
+        _payrollChange = payrollChange;
     }
 
     public async Task<bool> Handle(ApproveOvertimeRequestCommand request, CancellationToken cancellationToken)
@@ -57,16 +70,24 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         var existing = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (existing is null) return false;
 
-        if (existing.Status != OtRequestStatus.Pending)
+        // v3: Approver chỉ duyệt được request đã qua PM Forward (Status=PendingApprover).
+        if (existing.Status != OtRequestStatus.PendingApprover)
             throw new DomainValidationException(
-                $"Overtime request {request.Id} cannot be approved — current status is {existing.Status}.");
+                $"Overtime request {request.Id} cannot be approved — current status is {existing.Status}. Cần PM Forward trước.");
 
-        // BR-10 self-approval check
+        // Case 8 — không duyệt OT cho NV đã chấm dứt/hết HĐ. HĐ có thể chấm dứt GIỮA lúc submit và
+        // duyệt nên phải kiểm lại ở đây, không chỉ ở lúc tạo đơn.
+        if (!await _contracts.HasActiveContractAsync(existing.EmployeeInformationId, cancellationToken))
+            throw new DomainValidationException(
+                "CONTRACT_NOT_ACTIVE: Nhân viên không còn hợp đồng lao động hiệu lực — không thể duyệt OT.");
+
+        // BR-10 self-approval — Approver không được là người tạo HOẶC PM đã forward.
         if (existing.CreatedByUserId == userId)
-            throw new DomainValidationException("BR-10: Self-approval is forbidden.");
+            throw new DomainValidationException("BR-10: bạn không thể duyệt request của chính mình.");
+        if (existing.PmReviewedByUserId == userId)
+            throw new DomainValidationException("BR-10: bạn đã forward request này với vai trò PM — không được duyệt cuối.");
 
-        // Batch workflow gate — approver role phải khớp ApproverRoute (nếu request có route).
-        // Legacy record (ApproverRoute = null) giữ hành vi cũ: ai có Approve.All đều duyệt được.
+        // Gate: role currentUser phải khớp ApproverRoute (Hr → RoleId=2, DM → RoleId=5).
         EnsureApproverRouteMatches(existing.ApproverRoute, _currentUser.RoleId);
 
         // Route = DepartmentManager: DM phải cùng phòng ban với project của đơn OT.
@@ -77,14 +98,16 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
             await EnsureDmSameDepartmentAsProjectAsync(userId, projectId, cancellationToken);
         }
 
-        // Re-check caps for race-condition safety
+        // Re-check caps for race-condition safety. Exclude chính đơn đang duyệt (status hiện tại
+        // PendingApprover đã nằm trong cumulative sum) để tránh double-count.
         await _capChecker.CheckAsync(
             existing.EmployeeInformationId,
             existing.WorkDate,
             existing.OtStartTime,
             existing.OtEndTime,
             existing.OtHours,
-            cancellationToken);
+            cancellationToken,
+            excludeRequestId: existing.Id);
 
         // Phase B: recompute night split tại thời điểm approve — Compliance version
         // có thể đã đổi (vd HR sửa night window) giữa create và approve.
@@ -101,13 +124,27 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         existing.Status = OtRequestStatus.Approved;
         existing.OtDayHours = breakdown.DayHours;
         existing.OtNightHours = breakdown.NightHours;
+
+        // v3: Audit tầng 2 — Approver decide
+        existing.ApproverReviewedByUserId = userId;
+        existing.ApproverReviewedAt = now;
+        existing.ApproverReviewNote = request.ReviewNote;
+
+        // Mirror final reviewer (payroll & query cũ đọc field này)
         existing.ReviewedByUserId = userId;
         existing.ReviewedAt = now;
         existing.ReviewNote = request.ReviewNote;
+
         existing.UpdatedAt = now;
         existing.UpdatedByUserId = userId;
 
         await _repository.UpdateAsync(existing, cancellationToken);
+
+        // BS-6 + BS-5: duyệt OT → tháng có kỳ Draft mark stale; kỳ Finalized capture chênh lệch NV.
+        await _payrollChange.OnSourceChangedAsync(
+            existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
+            $"Duyệt OT ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
+
         return true;
     }
 
@@ -132,11 +169,15 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
 
     internal static void EnsureApproverRouteMatches(OvertimeApproverRoute? route, int? currentRoleId)
     {
-        if (route is null) return; // legacy record — không gate
+        if (route is null)
+            throw new DomainValidationException(
+                "Request thiếu ApproverRoute — chưa qua PM Forward, không thể duyệt cuối.");
+
         var expected = route switch
         {
             OvertimeApproverRoute.Hr => SystemRoles.HrId,
             OvertimeApproverRoute.DepartmentManager => SystemRoles.DepartmentManagerId,
+            OvertimeApproverRoute.Director => SystemRoles.DirectorId,
             _ => throw new DomainValidationException($"Unknown approver route: {route}."),
         };
         if (currentRoleId != expected)

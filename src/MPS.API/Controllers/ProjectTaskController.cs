@@ -33,8 +33,13 @@ public class ProjectTaskController : ControllerBase
     public async Task<IActionResult> GetByDepartment(int id, [FromQuery] bool includeCancelled, CancellationToken ct)
         => Ok(await _mediator.Send(new TaskGetByDepartmentQuery(id, includeCancelled), ct));
 
+    // TaskReadAssigned: công nhân xem trọn cây task của đơn mình tham gia (handler chặn đơn không tham gia).
     [HttpGet("project/{id:int}")]
-    [HasAnyPermission(Permissions.TaskReadAll, Permissions.TaskReadDepartment, Permissions.TaskReadFullDepartment)]
+    [HasAnyPermission(
+        Permissions.TaskReadAll,
+        Permissions.TaskReadDepartment,
+        Permissions.TaskReadFullDepartment,
+        Permissions.TaskReadAssigned)]
     public async Task<IActionResult> GetByProject(int id, [FromQuery] bool includeCancelled, CancellationToken ct)
         => Ok(await _mediator.Send(new TaskGetByProjectQuery(id, includeCancelled), ct));
 

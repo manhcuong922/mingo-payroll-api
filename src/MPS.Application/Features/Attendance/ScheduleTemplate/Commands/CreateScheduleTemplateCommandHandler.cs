@@ -5,6 +5,7 @@ using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.EmployeeShift.Commands;
 using MPS.Application.Features.Attendance.ScheduleTemplate.Common;
 using MPS.Application.Features.Attendance.ShiftTemplate.Common;
+using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -19,6 +20,7 @@ public class CreateScheduleTemplateCommandHandler
 {
     private readonly IScheduleTemplateRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
+    private readonly IDepartmentRepository _departmentRepository;
     private readonly IScheduleTemplateExpander _expander;
     private readonly IEmployeeShiftAssignmentRepository _assignmentRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
@@ -30,6 +32,7 @@ public class CreateScheduleTemplateCommandHandler
     public CreateScheduleTemplateCommandHandler(
         IScheduleTemplateRepository repository,
         IShiftTemplateRepository shiftRepository,
+        IDepartmentRepository departmentRepository,
         IScheduleTemplateExpander expander,
         IEmployeeShiftAssignmentRepository assignmentRepository,
         IEmployeeInformationRepository employeeRepository,
@@ -40,6 +43,7 @@ public class CreateScheduleTemplateCommandHandler
     {
         _repository = repository;
         _shiftRepository = shiftRepository;
+        _departmentRepository = departmentRepository;
         _expander = expander;
         _assignmentRepository = assignmentRepository;
         _employeeRepository = employeeRepository;
@@ -57,10 +61,6 @@ public class CreateScheduleTemplateCommandHandler
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
 
         var name = request.Name?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(name))
-        {
-            throw new DomainValidationException("Tên bảng phân ca không được rỗng.");
-        }
 
         var employeeIds = await ScheduleTemplateEmployeeResolver.ResolveAsync(
             request.ApplyTarget,
@@ -79,7 +79,24 @@ public class CreateScheduleTemplateCommandHandler
             request.DaysOfMonth,
             employeeIds);
 
-        if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
+        if (string.IsNullOrEmpty(name))
+        {
+            // Auto-sinh tên nếu user không nhập — luôn unique (generator tự append suffix).
+            name = await ScheduleTemplateNameGenerator.GenerateAsync(
+                request.ShiftTemplateIds,
+                request.ApplyTarget,
+                request.EmployeeInformationIds,
+                request.DepartmentIds,
+                request.EffectiveFrom,
+                request.EffectiveTo,
+                excludeTemplateId: null,
+                _shiftRepository,
+                _departmentRepository,
+                _employeeRepository,
+                _repository,
+                cancellationToken);
+        }
+        else if (await _repository.ExistsByNameAsync(name, excludeId: null, cancellationToken))
         {
             throw new ConflictException($"Bảng phân ca với tên '{name}' đã tồn tại.");
         }
@@ -116,6 +133,7 @@ public class CreateScheduleTemplateCommandHandler
             cancellationToken);
 
         var now = _clock.UtcNow;
+        var applyTarget = request.ApplyTarget ?? ScheduleApplyTarget.Employees;
         var entity = new ScheduleTemplateEntity
         {
             Name = name,
@@ -128,6 +146,11 @@ public class CreateScheduleTemplateCommandHandler
             DaysOfMonthMask = ScheduleTemplateValidation.ToCsvMask(request.DaysOfMonth),
             IsActive = true,
             Notes = request.Notes,
+            IncludeRestDaysAndHolidays = request.IncludeRestDaysAndHolidays,
+            ApplyTarget = applyTarget,
+            TargetDepartmentIds = applyTarget == ScheduleApplyTarget.Departments
+                ? ScheduleTemplateValidation.ToCsvMask(request.DepartmentIds)
+                : null,
             CreatedAt = now,
             CreatedByUserId = userId
         };
@@ -198,11 +221,23 @@ public class CreateScheduleTemplateCommandHandler
         var dates = _expander.ExpandDates(templateShape);
         if (dates.Count == 0 || employeeIds.Count == 0) return;
 
+        // Loại các ngày đã có ca bị khoá do AttendanceRecord — batch handler sẽ skip
+        // các ngày này với status SkippedAttendanceExists, không tạo delta. Pre-check phải
+        // đồng bộ để không throw false-positive "Vượt 8h/ngày" (Điều 105 BLLĐ).
+        var fromDate = dates.Min();
+        var toDate = dates.Max();
+        var lockedRows = await _assignmentRepository.GetLockedShiftsAsync(
+            employeeIds, fromDate, toDate, cancellationToken);
+        var lockedDays = lockedRows.Select(r => (r.EmployeeInformationId, r.WorkDate)).ToHashSet();
+
         var deltas = new List<WeeklyCapDelta>(dates.Count * employeeIds.Count * shifts.Count);
         foreach (var empId in employeeIds)
         foreach (var date in dates)
-        foreach (var shift in shifts)
-            deltas.Add(new WeeklyCapDelta(empId, date, shift.StandardHours));
+        {
+            if (lockedDays.Contains((empId, date))) continue;
+            foreach (var shift in shifts)
+                deltas.Add(new WeeklyCapDelta(empId, date, shift.StandardHours));
+        }
 
         var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
         var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);

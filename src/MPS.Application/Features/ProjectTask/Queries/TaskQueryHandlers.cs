@@ -34,7 +34,9 @@ public class TaskGetByIdQueryHandler : IRequestHandler<TaskGetByIdQuery, Project
 
         var includeChildren = _currentUser.HasPermission(Permissions.TaskReadAll)
             || _currentUser.HasPermission(Permissions.TaskReadDepartment)
-            || _currentUser.HasPermission(Permissions.TaskReadFullDepartment);
+            || _currentUser.HasPermission(Permissions.TaskReadFullDepartment)
+            // Công nhân mở node công đoạn của đơn mình tham gia → cần thấy task con.
+            || await ProjectScopeGuard.CanReadTasksOfJoinedProjectAsync(task.ProjectId, _tasks, _currentUser, ct);
         return TaskMapper.ToDto(task, includeChildren: includeChildren);
     }
 }
@@ -123,11 +125,15 @@ public class TaskGetByProjectQueryHandler
                 ?? throw new NotFoundException($"Không tìm thấy đơn #{request.ProjectId}.");
 
             var userId = _currentUser.UserId;
-            if (userId is null || project.DepartmentId is null
-                || !await _authorizer.IsManagerOfAsync(userId.Value, project.DepartmentId.Value, ct))
-            {
+            var isManagerOfProjectDepartment = userId is not null && project.DepartmentId is not null
+                && await _authorizer.IsManagerOfAsync(userId.Value, project.DepartmentId.Value, ct);
+
+            // Công nhân có task trong đơn này → xem được trọn cây task của đơn (task nhạy cảm vẫn lọc dưới).
+            var joinedProject = await ProjectScopeGuard.CanReadTasksOfJoinedProjectAsync(
+                request.ProjectId, _tasks, _currentUser, ct);
+
+            if (!isManagerOfProjectDepartment && !joinedProject)
                 throw new ForbiddenAccessException("Bạn không có quyền xem task của đơn này.");
-            }
         }
 
         var items = await _tasks.GetByProjectIdAsync(request.ProjectId, ct, request.IncludeCancelled);

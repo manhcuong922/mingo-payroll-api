@@ -72,6 +72,17 @@ public static class LaborLawConstants
     }
 
     /// <summary>
+    /// Deadline nộp nghĩa vụ BHXH & TNCN cho module BHXH & Tax Payment Tracking.
+    /// Deadline = ngày thứ N của tháng liền sau kỳ lương (kỳ 2026-07 ⇒ BHXH hạn 2026-08-15,
+    /// TNCN hạn 2026-08-20). Chu kỳ TNCN mặc định là hàng THÁNG.
+    /// </summary>
+    public static class PaymentObligationDeadline
+    {
+        public const int BhxhDayOfNextMonth = 15;
+        public const int TncnMonthlyDayOfNextMonth = 20;
+    }
+
+    /// <summary>
     /// Mã 13 lý do chấm dứt HĐLĐ theo Điều 34 BLLĐ 2019 – dùng để seed ContractTerminationReasonRefs.
     /// </summary>
     public static class TerminationReasonCodes
@@ -89,5 +100,26 @@ public static class LaborLawConstants
         public const string EmployerLayoffC11 = "ART34_C11_EMPLOYER_LAYOFF";
         public const string WorkPermitExpiredC12 = "ART34_C12_WORK_PERMIT_EXPIRED";
         public const string ProbationFailedC13 = "ART34_C13_PROBATION_FAILED";
+    }
+
+    /// <summary>
+    /// Đ.112 BLLĐ 2019 — ngày nghỉ lễ hưởng nguyên lương. Chỉ liệt kê các mốc DƯƠNG LỊCH cố định;
+    /// Tết Âm lịch (5 ngày) và Giỗ Tổ 10/3 âm lịch cần lịch âm nên phải nhập tay vào bảng
+    /// <c>PublicHolidays</c> (xem cảnh báo readiness — HOL-WARN01/[D17]).
+    /// </summary>
+    public static class PublicHolidays
+    {
+        /// <summary>(Tháng, Ngày) của các mốc lễ dương lịch cố định.</summary>
+        public static readonly IReadOnlyList<(int Month, int Day)> FixedSolarDates = new[]
+        {
+            (1, 1),   // Tết Dương lịch
+            (4, 30),  // Ngày Giải phóng miền Nam
+            (5, 1),   // Quốc tế Lao động
+            (9, 2),   // Quốc khánh 02/9 (ngày liền kề do NSDLĐ chọn hằng năm ⇒ không cố định, không kể ở đây)
+        };
+
+        /// <summary>Các ngày lễ dương lịch cố định RƠI VÀO tháng đang xét.</summary>
+        public static IEnumerable<DateOnly> FixedSolarInMonth(int year, int month) =>
+            FixedSolarDates.Where(h => h.Month == month).Select(h => new DateOnly(year, h.Month, h.Day));
     }
 }

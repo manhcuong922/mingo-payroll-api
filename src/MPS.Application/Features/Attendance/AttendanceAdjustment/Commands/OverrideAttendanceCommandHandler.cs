@@ -3,6 +3,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using AttendanceAdjustmentEntity = MPS.Domain.Entities.Attendance.AttendanceAdjustment;
 
 namespace MPS.Application.Features.Attendance.AttendanceAdjustment.Commands;
@@ -18,19 +19,22 @@ public class OverrideAttendanceCommandHandler : IRequestHandler<OverrideAttendan
     private readonly ICurrentUserService _currentUser;
     private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly IClock _clock;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public OverrideAttendanceCommandHandler(
         IAttendanceAdjustmentRepository repository,
         IAttendanceRecordRepository recordRepository,
         ICurrentUserService currentUser,
         IAttendanceEditLockChecker lockChecker,
-        IClock clock)
+        IClock clock,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _repository = repository;
         _recordRepository = recordRepository;
         _currentUser = currentUser;
         _lockChecker = lockChecker;
         _clock = clock;
+        _payrollChange = payrollChange;
     }
 
     public async Task<int> Handle(OverrideAttendanceCommand request, CancellationToken cancellationToken)
@@ -66,6 +70,13 @@ public class OverrideAttendanceCommandHandler : IRequestHandler<OverrideAttendan
             CreatedByUserId = userId
         };
 
-        return await _repository.OverrideAndApplyAsync(adjustment, _clock.UtcNow, cancellationToken);
+        var id = await _repository.OverrideAndApplyAsync(adjustment, _clock.UtcNow, cancellationToken);
+
+        // BS-6 + BS-5: sửa công tay → mark stale kỳ Draft, capture Finalized cho NV.
+        await _payrollChange.OnSourceChangedAsync(
+            request.WorkDate.Year, request.WorkDate.Month, request.EmployeeInformationId,
+            $"HR override chấm công ngày {request.WorkDate:dd/MM/yyyy}", cancellationToken);
+
+        return id;
     }
 }

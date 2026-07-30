@@ -15,4 +15,5 @@ public sealed class MinioOptions
     public bool EnableVersioning { get; init; } = true;
     public int RetryCount { get; init; } = 3;
     public string? ExternalEndpoint { get; init; }
+    public bool ExternalUseSsl { get; init; }
 }

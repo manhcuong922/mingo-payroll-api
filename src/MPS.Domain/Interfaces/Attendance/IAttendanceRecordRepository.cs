@@ -39,6 +39,15 @@ public interface IAttendanceRecordRepository
     Task<IReadOnlyList<AttendanceRecord>> GetByDateAsync(DateOnly workDate, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Toàn bộ AttendanceRecord trong khoảng ngày. Include ShiftTemplate + Employee + OT.
+    /// Dùng bởi Bảng chấm công tháng (matrix NV × ngày).
+    /// </summary>
+    Task<IReadOnlyList<AttendanceRecord>> GetByRangeAsync(
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Lookup record đã chấm cho 1 OvertimeRequest. Unique index nên trả tối đa 1.
     /// Null → chưa chấm.
     /// </summary>

@@ -111,6 +111,9 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
         tracked.DaysOfMonthMask = entity.DaysOfMonthMask;
         tracked.IsActive = entity.IsActive;
         tracked.Notes = entity.Notes;
+        tracked.IncludeRestDaysAndHolidays = entity.IncludeRestDaysAndHolidays;
+        tracked.ApplyTarget = entity.ApplyTarget;
+        tracked.TargetDepartmentIds = entity.TargetDepartmentIds;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
 
@@ -197,5 +200,38 @@ public class ScheduleTemplateRepository : IScheduleTemplateRepository
         return rows
             .Select(r => (r.TemplateId, r.TemplateName, r.EmployeeInformationId, r.EmployeeFullName))
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<ScheduleTemplate>> GetActiveByDepartmentIdAsync(
+        int departmentId,
+        DateOnly onOrAfter,
+        CancellationToken cancellationToken = default)
+    {
+        // TargetDepartmentIds là CSV ("3,7,12") — SQL LIKE với padded pattern để chính xác.
+        // Số template Departments trong tenant thường nhỏ (<100) → filter in-memory nhanh và đơn giản
+        // hơn full-text search. Nếu scale > 1k template thì cần đổi sang bảng junction.
+        var candidates = await _context.ScheduleTemplates
+            .AsNoTracking()
+            .Include(t => t.ShiftTemplate)
+            .Include(t => t.Shifts)
+                .ThenInclude(s => s.ShiftTemplate)
+            .Where(t => t.IsActive
+                && t.ApplyTarget != null
+                && t.TargetDepartmentIds != null
+                && t.EffectiveTo >= onOrAfter)
+            .ToListAsync(cancellationToken);
+
+        var target = departmentId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return candidates
+            .Where(t => ParseCsv(t.TargetDepartmentIds!).Contains(target))
+            .ToList();
+    }
+
+    private static IEnumerable<string> ParseCsv(string csv)
+    {
+        foreach (var part in csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            yield return part;
+        }
     }
 }

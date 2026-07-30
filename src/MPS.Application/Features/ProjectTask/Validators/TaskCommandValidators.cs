@@ -60,9 +60,12 @@ public class TaskUpdateCommandValidator : AbstractValidator<TaskUpdateCommand>
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.PlannedQuantity).GreaterThanOrEqualTo(0);
         RuleFor(x => x.PlannedWorkUnits).GreaterThanOrEqualTo(0);
-        RuleFor(x => x.AssigneeUserIds)
-            .Must(list => list is null || list.Count > 0)
-            .WithMessage("Assignee list cannot be empty when provided.");
+        // ⭐ #21: phân biệt rõ null = KHÔNG đổi assignee, [] = XOÁ HẾT assignee.
+        // Trước đây [] bị chặn cứng ⇒ không có đường API nào gỡ hết người khỏi task.
+        RuleFor(x => x.AssigneeUserIds!)
+            .Must(list => list.Distinct().Count() == list.Count)
+            .WithMessage("Assignee list contains duplicated user ids.")
+            .When(x => x.AssigneeUserIds is not null);
     }
 }
 

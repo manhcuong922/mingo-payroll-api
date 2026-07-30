@@ -22,8 +22,11 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         DateOnly? toDate,
         int? createdByUserId,
         int? projectId,
+        int? projectResponsibleUserId,
         int page,
         int size,
+        OvertimeApproverRoute? approverRoute = null,
+        int? projectDepartmentId = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.OvertimeRequests
@@ -44,6 +47,12 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
             query = query.Where(r => r.CreatedByUserId == createdByUserId.Value);
         if (projectId.HasValue)
             query = query.Where(r => r.ProjectId == projectId.Value);
+        if (projectResponsibleUserId.HasValue)
+            query = query.Where(r => r.Project != null && r.Project.ResponsibleUserId == projectResponsibleUserId.Value);
+        if (approverRoute.HasValue)
+            query = query.Where(r => r.ApproverRoute == approverRoute.Value);
+        if (projectDepartmentId.HasValue)
+            query = query.Where(r => r.Project != null && r.Project.DepartmentId == projectDepartmentId.Value);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
@@ -62,30 +71,86 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
             .Include(r => r.EmployeeInformation)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-    public async Task<decimal> GetTotalOtHoursInMonthAsync(int employeeInformationId, int year, int month, CancellationToken cancellationToken = default)
+    public async Task<decimal> GetTotalOtHoursInMonthAsync(
+        int employeeInformationId,
+        int year,
+        int month,
+        IReadOnlyCollection<OtRequestStatus>? statuses = null,
+        CancellationToken cancellationToken = default)
     {
         var start = new DateOnly(year, month, 1);
         var end = start.AddMonths(1);
+        var effectiveStatuses = statuses ?? new[] { OtRequestStatus.Approved };
         return await _context.OvertimeRequests
             .AsNoTracking()
             .Where(r => r.EmployeeInformationId == employeeInformationId
-                && r.Status == OtRequestStatus.Approved
+                && effectiveStatuses.Contains(r.Status)
                 && r.WorkDate >= start
                 && r.WorkDate < end)
             .SumAsync(r => (decimal?)r.OtHours, cancellationToken) ?? 0m;
     }
 
-    public async Task<decimal> GetTotalOtHoursInYearAsync(int employeeInformationId, int year, CancellationToken cancellationToken = default)
+    public async Task<decimal> GetTotalOtHoursInYearAsync(
+        int employeeInformationId,
+        int year,
+        IReadOnlyCollection<OtRequestStatus>? statuses = null,
+        CancellationToken cancellationToken = default)
     {
         var start = new DateOnly(year, 1, 1);
         var end = new DateOnly(year + 1, 1, 1);
+        var effectiveStatuses = statuses ?? new[] { OtRequestStatus.Approved };
         return await _context.OvertimeRequests
             .AsNoTracking()
             .Where(r => r.EmployeeInformationId == employeeInformationId
-                && r.Status == OtRequestStatus.Approved
+                && effectiveStatuses.Contains(r.Status)
                 && r.WorkDate >= start
                 && r.WorkDate < end)
             .SumAsync(r => (decimal?)r.OtHours, cancellationToken) ?? 0m;
+    }
+
+    public async Task<decimal> GetTotalOtHoursOnDateAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        IReadOnlyCollection<OtRequestStatus> statuses,
+        int? excludeId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.OvertimeRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                && r.WorkDate == workDate
+                && statuses.Contains(r.Status));
+
+        if (excludeId.HasValue)
+            query = query.Where(r => r.Id != excludeId.Value);
+
+        return await query.SumAsync(r => (decimal?)r.OtHours, cancellationToken) ?? 0m;
+    }
+
+    public async Task<IReadOnlyList<decimal>> GetMonthlyOtHoursInYearAsync(
+        int employeeInformationId,
+        int year,
+        IReadOnlyCollection<OtRequestStatus> statuses,
+        CancellationToken cancellationToken = default)
+    {
+        var start = new DateOnly(year, 1, 1);
+        var end = new DateOnly(year + 1, 1, 1);
+        var grouped = await _context.OvertimeRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                && statuses.Contains(r.Status)
+                && r.WorkDate >= start
+                && r.WorkDate < end)
+            .GroupBy(r => r.WorkDate.Month)
+            .Select(g => new { Month = g.Key, Hours = g.Sum(r => r.OtHours) })
+            .ToListAsync(cancellationToken);
+
+        var result = new decimal[12];
+        foreach (var row in grouped)
+        {
+            result[row.Month - 1] = row.Hours;
+        }
+        return result;
     }
 
     public async Task<int> AddAsync(OvertimeRequest entity, CancellationToken cancellationToken = default)
@@ -114,6 +179,12 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         tracked.ReviewNote = entity.ReviewNote;
         tracked.ReviewedByUserId = entity.ReviewedByUserId;
         tracked.ReviewedAt = entity.ReviewedAt;
+        tracked.PmReviewedByUserId = entity.PmReviewedByUserId;
+        tracked.PmReviewedAt = entity.PmReviewedAt;
+        tracked.PmReviewNote = entity.PmReviewNote;
+        tracked.ApproverReviewedByUserId = entity.ApproverReviewedByUserId;
+        tracked.ApproverReviewedAt = entity.ApproverReviewedAt;
+        tracked.ApproverReviewNote = entity.ApproverReviewNote;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
 
@@ -127,16 +198,64 @@ public class OvertimeRequestRepository : IOvertimeRequestRepository
         int? excludeId,
         CancellationToken cancellationToken = default)
     {
+        // "Active" = mọi status chưa final: Pending (chờ PM), PendingApprover (đã forward, chờ HR/DM), Approved.
+        // Rejected/Cancelled loại trừ vì không còn chiếm khung giờ.
         var query = _context.OvertimeRequests
             .AsNoTracking()
             .Where(r => r.EmployeeInformationId == employeeInformationId
                      && r.WorkDate == workDate
-                     && (r.Status == OtRequestStatus.Pending || r.Status == OtRequestStatus.Approved));
+                     && (r.Status == OtRequestStatus.Pending
+                         || r.Status == OtRequestStatus.PendingApprover
+                         || r.Status == OtRequestStatus.Approved));
 
         if (excludeId.HasValue)
             query = query.Where(r => r.Id != excludeId.Value);
 
         return await query.ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<OvertimeRequest>> GetActiveInRangeForEmployeeAsync(
+        int employeeInformationId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        int? excludeId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.OvertimeRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                     && r.WorkDate >= fromDate
+                     && r.WorkDate <= toDate
+                     && (r.Status == OtRequestStatus.Pending
+                         || r.Status == OtRequestStatus.PendingApprover
+                         || r.Status == OtRequestStatus.Approved));
+
+        if (excludeId.HasValue)
+            query = query.Where(r => r.Id != excludeId.Value);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    public async Task<bool> HasActiveInRangeAsync(
+        int employeeInformationId,
+        DateOnly startDate,
+        DateOnly endDate,
+        int? excludeRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.OvertimeRequests
+            .AsNoTracking()
+            .Where(r => r.EmployeeInformationId == employeeInformationId
+                     && r.WorkDate >= startDate
+                     && r.WorkDate <= endDate
+                     && (r.Status == OtRequestStatus.Pending
+                         || r.Status == OtRequestStatus.PendingApprover
+                         || r.Status == OtRequestStatus.Approved));
+
+        if (excludeRequestId.HasValue)
+            query = query.Where(r => r.Id != excludeRequestId.Value);
+
+        return await query.AnyAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<OvertimeRequest>> GetApprovedWithoutAttendanceOnDateAsync(

@@ -75,25 +75,94 @@ public class LeaveRequestController : ControllerBase
     [HttpPost]
     [HasPermission(Permissions.LeaveRequestCreateSelf)]
     public async Task<IActionResult> Create(
-        [FromBody] CreateLeaveRequest request,
+        [FromForm] CreateLeaveRequest request,
         CancellationToken cancellationToken)
     {
-        var id = await _mediator.Send(new CreateLeaveRequestCommand(
-            request.LeaveTypeId, request.StartDate, request.EndDate,
-            request.Reason, request.SupportingDocumentUrl), cancellationToken);
-        return Created($"/api/leave-requests/{id}", new { id });
+        Stream? certStream = null;
+        if (request.MedicalCertificate is { Length: > 0 })
+            certStream = request.MedicalCertificate.OpenReadStream();
+
+        try
+        {
+            var result = await _mediator.Send(new CreateLeaveRequestCommand(
+                request.LeaveTypeId,
+                request.StartDate,
+                request.EndDate,
+                request.Reason,
+                request.InsuranceCertNumber,
+                request.ApproverRoute,
+                request.OverrideReason,
+                certStream,
+                request.MedicalCertificate?.ContentType,
+                request.MedicalCertificate?.Length), cancellationToken);
+            return Created($"/api/leave-requests/{result.Id}", result);
+        }
+        finally
+        {
+            if (certStream is not null) await certStream.DisposeAsync();
+        }
     }
 
     [HttpPut("{id:int}/approve")]
     [HasPermission(Permissions.LeaveRequestApproveAll)]
     public async Task<IActionResult> Approve(
         int id,
-        [FromBody] ReviewLeaveRequest request,
+        [FromForm] ApproveLeaveRequestBody request,
         CancellationToken cancellationToken)
     {
-        var ok = await _mediator.Send(new ApproveLeaveRequestCommand(id, request.ReviewNote), cancellationToken);
+        Stream? certStream = null;
+        if (request.MedicalCertificate is { Length: > 0 })
+            certStream = request.MedicalCertificate.OpenReadStream();
+
+        try
+        {
+            var ok = await _mediator.Send(new ApproveLeaveRequestCommand(
+                id,
+                request.ReviewNote,
+                request.InsuranceCertNumber,
+                request.OverrideReason,
+                certStream,
+                request.MedicalCertificate?.ContentType,
+                request.MedicalCertificate?.Length), cancellationToken);
+            if (!ok) return NotFound();
+            return NoContent();
+        }
+        finally
+        {
+            if (certStream is not null) await certStream.DisposeAsync();
+        }
+    }
+
+    [HttpPost("{id:int}/medical-certificate")]
+    [HasAnyPermission(Permissions.LeaveRequestReadSelf, Permissions.LeaveRequestApproveAll)]
+    public async Task<IActionResult> UploadMedicalCertificate(
+        int id,
+        [FromForm] UploadLeaveMedicalCertificateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.MedicalCertificate is null || request.MedicalCertificate.Length <= 0)
+            return BadRequest(new { errors = new[] { "medicalCertificate is required." } });
+
+        await using var stream = request.MedicalCertificate.OpenReadStream();
+        var ok = await _mediator.Send(new UploadLeaveMedicalCertificateCommand(
+            LeaveRequestId: id,
+            Content: stream,
+            ContentType: request.MedicalCertificate.ContentType ?? string.Empty,
+            SizeBytes: request.MedicalCertificate.Length,
+            OverrideReason: request.OverrideReason), cancellationToken);
         if (!ok) return NotFound();
         return NoContent();
+    }
+
+    [HttpGet("{id:int}/medical-certificate/download-url")]
+    [HasAnyPermission(Permissions.LeaveRequestReadSelf, Permissions.LeaveRequestReadAll)]
+    public async Task<IActionResult> GetMedicalCertificateDownloadUrl(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetLeaveMedicalCertificateDownloadUrlQuery(id), cancellationToken);
+        if (result is null) return NotFound();
+        return Ok(result);
     }
 
     [HttpPut("{id:int}/reject")]
@@ -104,6 +173,18 @@ public class LeaveRequestController : ControllerBase
         CancellationToken cancellationToken)
     {
         var ok = await _mediator.Send(new RejectLeaveRequestCommand(id, request.ReviewNote), cancellationToken);
+        if (!ok) return NotFound();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/cancel")]
+    [HasPermission(Permissions.LeaveRequestCancelSelf)]
+    public async Task<IActionResult> Cancel(
+        int id,
+        [FromBody] CancelLeaveRequestBody request,
+        CancellationToken cancellationToken)
+    {
+        var ok = await _mediator.Send(new CancelLeaveRequestCommand(id, request.CancelReason), cancellationToken);
         if (!ok) return NotFound();
         return NoContent();
     }

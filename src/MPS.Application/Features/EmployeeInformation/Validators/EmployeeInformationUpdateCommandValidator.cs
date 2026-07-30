@@ -1,6 +1,5 @@
 using FluentValidation;
 using MPS.Application.Features.EmployeeInformation.Commands;
-using MPS.Domain.Constants;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.EmployeeInformation.Validators;
@@ -20,7 +19,12 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
 
         RuleFor(x => x.CitizenId)
             .NotEmpty().WithMessage("CitizenId is required.")
-            .MaximumLength(20).WithMessage("CitizenId must not exceed 20 characters.");
+            // #42 — đối xứng với Create: CCCD phải đúng 12 chữ số (xem chú thích ở Create validator).
+            .Matches(@"^\d{12}$").WithMessage("CitizenId phải đúng 12 chữ số.")
+            // #1 — đối xứng với Create: chặn trùng CCCD ở tầng ứng dụng (400) thay vì để DB nổ 500.
+            .MustAsync(async (cmd, citizenId, ct) =>
+                string.IsNullOrWhiteSpace(citizenId) || !await repository.CitizenIdExistsAsync(citizenId.Trim(), cmd.Id, ct))
+            .WithMessage("CitizenId is already used by another employee.");
 
         RuleFor(x => x.PermanentAddress)
             .NotEmpty().WithMessage("PermanentAddress is required.");
@@ -71,16 +75,11 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
                 !departmentId.HasValue || await departmentRepository.GetByIdAsync(departmentId.Value, ct) is not null)
             .WithMessage("Department does not exist.");
 
-        // Cấu trúc xưởng: chỉ role sản xuất (ProjectManager/Employee) được trực thuộc xưởng.
-        // Loại nhóm quản trị cấp công ty. Chỉ áp khi vừa gán xưởng vừa có tài khoản.
-        RuleFor(x => x)
-            .MustAsync(async (cmd, ct) =>
-            {
-                if (cmd.DepartmentId is null || cmd.UserId is null) return true;
-                var roleId = await repository.GetUserRoleIdAsync(cmd.UserId.Value, ct);
-                return roleId is null || SystemRoles.DepartmentMemberRoleIds.Contains(roleId.Value);
-            })
-            .WithMessage("Only production roles (workshop manager or employee) can belong to a department. Company-level admin roles are not allowed.");
+        // #47 — KHÔNG chặn ở đây nữa. Trước đây rule này chặn khi role quản trị công ty có
+        // DepartmentId, nhưng seed lỡ gán xưởng cho 3 hồ sơ quản trị ⇒ "đọc-ghi-lại-y-nguyên" bị
+        // chặn, HR bế tắc không sửa nổi field nào của họ. Theo §3.1 hệ thống phải "để trống thông
+        // tin xưởng cho các hồ sơ này thay vì chặn" ⇒ handler tự chuẩn hoá DepartmentId về null cho
+        // role quản trị. Nhánh CREATE vẫn giữ rule chặn (assign xưởng cho admin → 400, EI-DEPT-ROLE01).
 
         RuleFor(x => x.DependentsNo)
             .GreaterThanOrEqualTo(0).WithMessage("DependentsNo must be 0 or greater.");

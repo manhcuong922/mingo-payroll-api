@@ -65,6 +65,11 @@ public class LeaveTypeController : ControllerBase
             request.TargetEmployeeIds,
             request.RequireDocument,
             request.DeductsBalance,
+            request.MinNoticeDaysForShort,
+            request.MinNoticeDaysForMedium,
+            request.MinNoticeDaysForLong,
+            request.AutoFallbackToUnpaid,
+            request.AllowRetroactive,
             request.IsActive), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
@@ -93,6 +98,11 @@ public class LeaveTypeController : ControllerBase
             request.TargetEmployeeIds,
             request.RequireDocument,
             request.DeductsBalance,
+            request.MinNoticeDaysForShort,
+            request.MinNoticeDaysForMedium,
+            request.MinNoticeDaysForLong,
+            request.AutoFallbackToUnpaid,
+            request.AllowRetroactive,
             request.IsActive), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();

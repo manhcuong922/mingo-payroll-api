@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -22,9 +22,14 @@ using MPS.Infrastructure.ComplianceAutoUpdate.Validation;
 using MPS.Infrastructure.Email;
 using MPS.Infrastructure.Persistence;
 using MPS.Infrastructure.Persistence.Interceptors;
+using MPS.Application.Common.Interfaces.Payroll;
+using MPS.Application.Common.Payroll;
+using MPS.Application.Common.Payroll.Formula;
+using MPS.Domain.Interfaces.Payroll;
 using MPS.Infrastructure.Repositories;
 using MPS.Infrastructure.Repositories.Attendance;
 using MPS.Infrastructure.Repositories.Compliance;
+using MPS.Infrastructure.Repositories.Payroll;
 using MPS.Infrastructure.Security;
 using MPS.Infrastructure.Services;
 using MPS.Infrastructure.Storage;
@@ -44,6 +49,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<MPS.Application.Services.IDepartmentManagerAuthorizer,
             MPS.Application.Services.DepartmentManagerAuthorizer>();
+        services.AddScoped<MPS.Application.Features.Attendance.Common.ApproverDepartmentGuard>();
 
         // Task/Production module
         services.AddScoped<IProcessTemplateRepository, ProcessTemplateRepository>();
@@ -63,6 +69,8 @@ public static class InfrastructureServiceRegistration
             MPS.Infrastructure.Repositories.Evaluation.EvaluationCriteriaSnapshotService>();
         services.AddScoped<MPS.Application.Features.Evaluation.Common.IMonthlyAggregationService,
             MPS.Application.Features.Evaluation.Common.MonthlyAggregationService>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IOrderEvaluationExcelService,
+            MPS.Infrastructure.Services.OrderEvaluationExcelService>();
 
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
@@ -104,8 +112,46 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<ComplianceCacheInvalidator>();
         services.AddScoped<IComplianceLookupService, ComplianceLookupService>();
 
+        // ===== Payroll module (bảng lương hàng tháng) =====
+        services.AddScoped<IPayrollFormulaSetRepository, PayrollFormulaSetRepository>();
+        services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
+        services.AddScoped<IPayrollAdjustmentRepository, PayrollAdjustmentRepository>();
+        services.AddScoped<IPaymentObligationRepository, PaymentObligationRepository>();
+        services.AddScoped<MPS.Application.Features.Payroll.BhxhTaxPayment.Common.BhxhTaxEvidenceUploader>();
+        services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
+        services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
+        services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
+        // BS-6: đánh cờ "cần tính lại" cho kỳ Draft khi nguồn (chấm công/đơn/phụ lục/đánh giá) đổi.
+        services.AddScoped<IPayrollStaleMarker, PayrollStaleMarker>();
+        // BS-5: capture chênh lệch THUCNHAN của NV khi kỳ Finalized bị sửa nguồn.
+        services.AddScoped<IPayrollAdjustmentCapture, PayrollAdjustmentCapture>();
+        // Gộp BS-6 + BS-5: 8 handler nguồn gọi qua đây, service tự phân nhánh Draft/Finalized.
+        services.AddScoped<IPayrollSourceChangeHandler, PayrollSourceChangeHandler>();
+        // #34/[D22]: tự cấp quỹ phép năm khi HĐ chuyển Active (hook trong ActivateContractCommandHandler).
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveBalance.Common.ILeaveBalanceInitializer,
+            MPS.Application.Features.Attendance.LeaveBalance.Common.LeaveBalanceInitializer>();
+        // Formula engine + calculator (stateless → singleton).
+        services.AddSingleton<IFormulaFunctionRegistry, FormulaFunctionRegistry>();
+        services.AddSingleton<IFormulaEvaluator, FormulaEvaluator>();
+        services.AddSingleton<IColumnDependencyGraph, ColumnDependencyGraph>();
+        services.AddSingleton<IPayrollCalculator, PayrollCalculator>();
+        services.AddSingleton<IPayrollFieldCatalog, PayrollFieldCatalog>();
+        services.AddSingleton<IPayrollFormulaValidator, PayrollFormulaValidator>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IPayrollExcelExporter,
+            MPS.Infrastructure.Services.Payroll.PayrollExcelExporter>();
+        services.AddSingleton<IPayrollLawChangeNoteBuilder, PayrollLawChangeNoteBuilder>();
+
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
+        // BS-8: trừ thật vào quỹ phép năm khi approver bật DeductFromLeaveBalance.
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLeaveDeduction>();
+        // BS-4 (phần 2): trừ giờ công khi duyệt đi muộn/về sớm không bù quỹ phép.
+        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyAttendanceDock>();
+        services.AddScoped<MPS.Application.Features.Attendance.WfhRequest.Common.WfhQuotaChecker>();
+        services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.MedicalCertificateUploader>();
+        services.AddScoped<MPS.Application.Features.Attendance.Common.AttendanceRequestDayConflictChecker>();
         services.AddScoped<
             MPS.Application.Features.Attendance.OvertimeRequest.Common.IOvertimeMultiplierCalculator,
             MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeMultiplierCalculator>();
@@ -120,15 +166,27 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveTypeRepository, LeaveTypeRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveRequestRepository, LeaveRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.ILeaveBalanceRepository, LeaveBalanceRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.ILateEarlyRequestRepository, LateEarlyRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IWfhRequestRepository, WfhRequestRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Employee.IEmployeeDependentRepository, MPS.Infrastructure.Repositories.Employee.EmployeeDependentRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Employee.IDependentRegistrationRequestRepository, MPS.Infrastructure.Repositories.Employee.DependentRegistrationRequestRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceAdjustmentRepository, AttendanceAdjustmentRepository>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleRepository, AttendanceRuleRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IAttendanceRuleVersionRepository, AttendanceRuleVersionRepository>();
+        services.AddScoped<MPS.Application.Common.Services.IAttendanceRateResolver,
+            MPS.Application.Common.Services.AttendanceRateResolver>();
+        services.AddSingleton<MPS.Application.Common.Services.IAttendanceStatusResolver,
+            MPS.Application.Common.Services.AttendanceStatusResolver>();
         services.AddScoped<MPS.Domain.Interfaces.Attendance.IScheduleTemplateRepository, ScheduleTemplateRepository>();
+        services.AddScoped<MPS.Domain.Interfaces.Attendance.IFaceRegistrationRepository, MPS.Infrastructure.Repositories.Attendance.FaceRegistrationRepository>();
         services.AddScoped<IDayTypeResolver, DayTypeResolver>();
+        services.AddScoped<MPS.Application.Common.Interfaces.IEmployeeDayOffChecker, EmployeeDayOffChecker>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IWorkHourSplitter, WorkHourSplitter>();
         services.AddScoped<MPS.Application.Common.Interfaces.IScheduleTemplateExpander, ScheduleTemplateExpander>();
         services.AddScoped<MPS.Application.Common.Interfaces.IRegularHoursCapChecker, RegularHoursCapChecker>();
         services.AddScoped<MPS.Application.Common.Interfaces.IAttendanceEditLockChecker, MPS.Application.Features.Attendance.AttendanceSetting.Common.AttendanceEditLockChecker>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleExcelParser, MonthlyScheduleExcelParser>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.IPublicHolidayExcelParser, PublicHolidayExcelParser>();
         services.AddSingleton<MPS.Application.Common.Interfaces.IMonthlyScheduleImportCache, MonthlyScheduleImportCache>();
 
         // Compliance options
@@ -145,12 +203,31 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IPermissionResolver, PermissionResolver>();
+        // Email: handler inject IEmailSender = OutboxEmailSender (chỉ ghi outbox, không gửi).
+        // Bên GỬI THẬT là IRealEmailSender (SMTP nếu cấu hình, ngược lại Logging) — worker dùng.
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         var smtpConfigured = !string.IsNullOrWhiteSpace(configuration[$"{SmtpOptions.SectionName}:Host"]);
         if (smtpConfigured)
-            services.AddScoped<IEmailSender, SmtpEmailSender>();
+            services.AddScoped<IRealEmailSender, SmtpEmailSender>();
         else
-            services.AddScoped<IEmailSender, LoggingEmailSender>();
+            services.AddScoped<IRealEmailSender, LoggingEmailSender>();
+
+        services.AddScoped<IEmailSender, OutboxEmailSender>();
+        services.AddScoped<IEmailOutboxRepository, EmailOutboxRepository>();
+
+        // Mã hóa payload nhạy cảm (mật khẩu thô) lúc nằm ở Pending. Có key → AES-256-GCM;
+        // không key (dev) → no-op (plaintext). Key sai định dạng → fail-fast tại startup.
+        var payloadKey = configuration[$"{EmailDispatchOptions.SectionName}:EncryptionKey"];
+        if (!string.IsNullOrWhiteSpace(payloadKey))
+            services.AddSingleton<IOutboxPayloadProtector>(new AesOutboxPayloadProtector(payloadKey));
+        else
+            services.AddSingleton<IOutboxPayloadProtector, NoOpOutboxPayloadProtector>();
+
+        services.Configure<EmailDispatchOptions>(configuration.GetSection(EmailDispatchOptions.SectionName));
+        services.AddSingleton<EmailDispatchJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<EmailDispatchJob>());
+        services.AddSingleton<EmailOutboxCleanupJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<EmailOutboxCleanupJob>());
 
         // Cross-cutting application services
         services.AddScoped<IEmployeeAccountProvisioner, EmployeeAccountProvisioner>();
@@ -164,6 +241,7 @@ public static class InfrastructureServiceRegistration
         services.AddHttpClient<ICitizenIdOcrService, FptAiCitizenIdOcrService>();
 
         // Startup seeding
+        services.AddScoped<MPS.Infrastructure.Services.PayrollDemoPeriodGenerator>();
         services.AddScoped<DatabaseSeeder>();
 
         // Background jobs
@@ -181,9 +259,16 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<ContractArchiveJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ContractArchiveJob>());
 
+        services.AddSingleton<TerminationAccountDeactivationJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<TerminationAccountDeactivationJob>());
+
         // Compliance module — background job
         services.AddSingleton<ComplianceActivationJob>();
         services.AddHostedService(sp => sp.GetRequiredService<ComplianceActivationJob>());
+
+        // BHXH & Tax Payment Tracking — daily deadline scanner
+        services.AddSingleton<BhxhTaxDeadlineJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<BhxhTaxDeadlineJob>());
 
         // ===== Compliance Auto-Update module (crawl + AI đề xuất cập nhật pháp luật) =====
         services.AddOptions<ComplianceAutoUpdateOptions>()

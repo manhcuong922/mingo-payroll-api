@@ -8,6 +8,7 @@ using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Entities.Compliance;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Compliance;
+using MPS.Domain.Enums.Employee;
 
 namespace MPS.Infrastructure.Persistence;
 
@@ -17,23 +18,27 @@ public sealed partial class DatabaseSeeder
     private readonly IPasswordHasher _passwordHasher;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DatabaseSeeder> _logger;
+    private readonly Services.PayrollDemoPeriodGenerator _payrollGenerator;
 
     public DatabaseSeeder(
         AppDbContext context,
         IPasswordHasher passwordHasher,
         IConfiguration configuration,
-        ILogger<DatabaseSeeder> logger)
+        ILogger<DatabaseSeeder> logger,
+        Services.PayrollDemoPeriodGenerator payrollGenerator)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _configuration = configuration;
         _logger = logger;
+        _payrollGenerator = payrollGenerator;
     }
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         await SeedDefaultAdminAsync(cancellationToken);
         await SeedDefaultRoleUsersAsync(cancellationToken);
+        await SeedAiServiceAccountAsync(cancellationToken);
         await SeedDefaultDepartmentsAsync(cancellationToken);
         await SeedDefaultPositionsAsync(cancellationToken);
         // Bộ tiêu chí đánh giá mặc định (module chấm điểm tháng) — để bảng-theo-đơn auto sinh được (tránh E3).
@@ -41,20 +46,36 @@ public sealed partial class DatabaseSeeder
         // Nhân sự công ty SẢN XUẤT: 3 xưởng × (1 quản đốc role 5 + 1 tổ trưởng role 6 + 6 công nhân role 7),
         // đúng role + chức danh sản xuất — đủ để test luồng tạo đơn → chọn tổ trưởng → gán người theo chức danh.
         await SeedManufacturingWorkforceDemoAsync(cancellationToken);
-        // Dọn account/data demo theo công ty IT cũ (ngoài scope sản xuất) khỏi DB đã seed trước đó.
-        await CleanupOutOfScopeDemoAsync(cancellationToken);
+        // Nhân sự các PHÒNG OFFICE: gắn EmployeeInformation cho HR/Accountant/Director (đã có User),
+        // seed thêm trưởng phòng Kinh doanh + IT (role DepartmentManager) để test auto-routing
+        // đơn từ nhân sự: HR tạo → Director; Trưởng phòng tạo → HR.
+        await SeedOfficeWorkforceDemoAsync(cancellationToken);
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
         // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (100/200/300 %) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
+        await SeedDefaultLeaveTypesAsync(cancellationToken);
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
+        // Module Task (LÕI sản xuất): quy trình mẫu "Khung tranh" + đơn 3 tầng/xưởng (cần xưởng + chức
+        // danh + công nhân đã seed ở trên) — xem DatabaseSeeder.ProductionTaskDemoData.cs.
+        await SeedProductionTaskDemoAsync(cancellationToken);
         // Dữ liệu chấm điểm demo vài kỳ gần nhất (cần tiêu chí + nhân sự đã seed ở trên) —
         // xem DatabaseSeeder.EvaluationDemoData.cs.
         await SeedEvaluationDemoDataAsync(cancellationToken);
+        // HĐ lao động cho TOÀN BỘ workforce xưởng + văn phòng → payroll bao phủ cả công ty (không chỉ
+        // nhóm contract-test). Phải chạy TRƯỚC SeedPayrollAsync — xem DatabaseSeeder.WorkforceContractsData.cs.
+        await SeedWorkforceContractsAsync(cancellationToken);
+        // Quỹ phép năm cho mọi NV có HĐ — mô phỏng job cấp quỹ 01/01 mà hệ thống thật đã chạy.
+        // Phải chạy SAU hợp đồng (cần ngày vào làm để tính thâm niên) — xem
+        // DatabaseSeeder.LeaveBalancesData.cs.
+        await SeedLeaveBalancesAsync(cancellationToken);
+        // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
+        // xem DatabaseSeeder.PayrollDemoData.cs.
+        await SeedPayrollAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)
@@ -116,11 +137,13 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        // FullName / Dob / SĐT lấy từ danh bạ nhân sự demo (StaffRoster) — cùng nguồn với
+        // SeedOfficeWorkforceDemoAsync để User.FullName và EmployeeInformation.FullName không lệch.
         var candidates = new[]
         {
-            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: "hr@mingo.local",         FullName: "HR Manager"),
-            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: "accountant@mingo.local", FullName: "Chief Accountant"),
-            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: "director@mingo.local",   FullName: "Director"),
+            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: "hr@mingo.local"),
+            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: "accountant@mingo.local"),
+            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: "director@mingo.local"),
         };
 
         var existing = await _context.Users
@@ -135,7 +158,7 @@ public sealed partial class DatabaseSeeder
         var now = DateTime.UtcNow;
         var toAdd = new List<User>();
 
-        foreach (var (roleId, code, username, email, fullName) in candidates)
+        foreach (var (roleId, code, username, email) in candidates)
         {
             if (existingUsernames.Contains(username)
                 || existingEmails.Contains(email)
@@ -147,16 +170,17 @@ public sealed partial class DatabaseSeeder
                 continue;
             }
 
+            var person = StaffRoster.GetValueOrDefault(username);
             toAdd.Add(new User
             {
                 EmployeeCode = code,
-                FullName = fullName,
+                FullName = person?.FullName ?? username,
                 RoleId = roleId,
                 Username = username,
                 PasswordHash = _passwordHasher.Hash(password),
                 Email = email,
-                Dob = new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                PhoneNo = "0000000000",
+                Dob = person?.Dob ?? new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                PhoneNo = person?.Phone ?? "0000000000",
                 Status = 1,
                 PasswordChangedAt = now,
             });
@@ -190,8 +214,7 @@ public sealed partial class DatabaseSeeder
             new() { Code = "BGD", Name = "Ban Giám đốc", Description = "Ban điều hành công ty." },
             new() { Code = "HR", Name = "Phòng Nhân sự", Description = "Quản lý nhân sự, tuyển dụng, chế độ." },
             new() { Code = "ACC", Name = "Phòng Kế toán", Description = "Kế toán, tài chính, lương." },
-            new() { Code = "BIZ", Name = "Phòng Kinh doanh", Description = "Kinh doanh, dự án, khách hàng." },
-            new() { Code = "IT", Name = "Phòng Công nghệ thông tin", Description = "Phát triển & vận hành hệ thống." },
+            new() { Code = "BIZ", Name = "Phòng Kinh doanh", Description = "Kinh doanh, bán hàng, chăm sóc khách hàng." },
         };
 
         var toAdd = seeds.Where(d => !existing.Contains(d.Code)).ToList();
@@ -211,11 +234,12 @@ public sealed partial class DatabaseSeeder
     }
 
     // Dọn phòng ban thừa do migration DepartmentIsActive (bản cũ) seed với Code KHÁC DatabaseSeeder:
-    // KT/NS/KD. DatabaseSeeder là nguồn chính thức (KT→ACC, NS→HR, KD→BIZ). CHỈ xóa khi phòng đó
+    // KT/NS/KD + IT. DatabaseSeeder là nguồn chính thức (KT→ACC, NS→HR, KD→BIZ). IT (phần mềm nội bộ)
+    // bị loại vì công ty là xưởng sản xuất khung tranh, không có phòng CNTT dev. CHỈ xóa khi phòng đó
     // CHƯA có nhân viên gắn vào và CHƯA được đặt làm tổ trưởng — an toàn, không phá dữ liệu thật.
     private async Task CleanupLegacyDepartmentsAsync(CancellationToken cancellationToken)
     {
-        var legacyCodes = new[] { "KT", "NS", "KD" };
+        var legacyCodes = new[] { "KT", "NS", "KD", "IT" };
 
         var legacyDepartments = await _context.Departments
             .Where(d => legacyCodes.Contains(d.Code))
@@ -278,11 +302,6 @@ public sealed partial class DatabaseSeeder
             // Phòng Kinh doanh
             new() { Code = "TPKD", Name = "Trưởng phòng Kinh doanh", Description = "Quản lý phòng Kinh doanh." },
             new() { Code = "SALE", Name = "Nhân viên Kinh doanh", Description = "Kinh doanh, chăm sóc khách hàng." },
-
-            // Phòng IT
-            new() { Code = "TPIT", Name = "Trưởng phòng IT", Description = "Quản lý phòng Công nghệ thông tin." },
-            new() { Code = "DEV", Name = "Lập trình viên", Description = "Phát triển phần mềm." },
-            new() { Code = "QA", Name = "Kiểm thử viên", Description = "Kiểm thử chất lượng phần mềm." },
 
             // Chung
             new() { Code = "TT", Name = "Thực tập sinh", Description = "Thử việc, đào tạo — chưa thuộc phòng ban cố định." },
@@ -373,6 +392,72 @@ public sealed partial class DatabaseSeeder
             departments.Count, totalUsers);
     }
 
+    // Nhân sự OFFICE (khối văn phòng công ty sản xuất khung tranh Mingo). Idempotent qua EnsureStaffAsync.
+    // - HR (username=hr, role HrId, chức danh Trưởng phòng NS): gắn EmployeeInformation → HR nộp được đơn
+    //   (auto-route → Director duyệt).
+    // - Accountant (username=accountant, role AccountantId, chức danh Kế toán trưởng): gắn EmployeeInformation.
+    // - Director (username=director, role DirectorId, chức danh Giám đốc): gắn EmployeeInformation → duyệt đơn
+    //   HR đẩy lên.
+    // - Trưởng phòng Kinh doanh (role DepartmentManagerId, phòng BIZ): phụ trách bán khung tranh — nhận
+    //   auto-route "trưởng phòng tạo → HR".
+    // Quản đốc 3 xưởng sản xuất (Khung tranh / Nội thất / Cơ khí) đã được seed riêng ở
+    // SeedManufacturingWorkforceDemoAsync — không lặp lại ở đây.
+    private async Task SeedOfficeWorkforceDemoAsync(CancellationToken ct)
+    {
+        var section = _configuration.GetSection("DefaultRoleUsers");
+        var configuredPassword = section["Password"];
+        var password = string.IsNullOrWhiteSpace(configuredPassword) ? "Demo@12345" : configuredPassword;
+
+        var deptCodes = new[] { "HR", "ACC", "BIZ", "BGD" };
+        var posCodes = new[] { "TPHR", "KTT", "TPKD", "GD" };
+
+        var deptMap = await _context.Departments
+            .Where(d => deptCodes.Contains(d.Code))
+            .ToDictionaryAsync(d => d.Code, d => d.Id, StringComparer.OrdinalIgnoreCase, ct);
+        var posMap = await _context.Positions
+            .Where(p => posCodes.Contains(p.Code))
+            .ToDictionaryAsync(p => p.Code, p => p.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+        var missingDepts = deptCodes.Where(c => !deptMap.ContainsKey(c)).ToList();
+        var missingPos = posCodes.Where(c => !posMap.ContainsKey(c)).ToList();
+        if (missingDepts.Count > 0 || missingPos.Count > 0)
+        {
+            _logger.LogWarning(
+                "Skip SeedOfficeWorkforceDemoAsync — thiếu department: {Depts}; thiếu position: {Positions}.",
+                string.Join(",", missingDepts), string.Join(",", missingPos));
+            return;
+        }
+
+        // FullName lấy từ danh bạ nhân sự demo (StaffRoster) qua EnsureStaffAsync — các tên dưới đây
+        // chỉ là fallback khi thiếu danh bạ; chức danh (Trưởng phòng NS / Kế toán trưởng / Giám đốc /
+        // Trưởng phòng KD) nay do PositionId thể hiện, KHÔNG nhét vào ô họ tên.
+        var seeds = new (string Username, string Code, string Email, string FullName, int RoleId, int PositionId, int DepartmentId)[]
+        {
+            // Backfill EmployeeInformation cho 3 user cấp công ty đã seed ở SeedDefaultRoleUsersAsync.
+            ("hr",         "HR001",   "hr@mingo.local",         "Phạm Thị Hồng Nhung",
+                SystemRoles.HrId,                 posMap["TPHR"], deptMap["HR"]),
+            ("accountant", "ACC001",  "accountant@mingo.local", "Vũ Thị Thu Hà",
+                SystemRoles.AccountantId,         posMap["KTT"],  deptMap["ACC"]),
+            ("director",   "DIR001",  "director@mingo.local",   "Trần Quang Huy",
+                SystemRoles.DirectorId,           posMap["GD"],   deptMap["BGD"]),
+
+            // Trưởng phòng Kinh doanh — role DepartmentManagerId để hưởng auto-route → HR khi nộp đơn.
+            ("tpkd",       "TPKD001", "tpkd@mingo.local",       "Lê Hoàng Nam",
+                SystemRoles.DepartmentManagerId,  posMap["TPKD"], deptMap["BIZ"]),
+        };
+
+        foreach (var s in seeds)
+        {
+            await EnsureStaffAsync(
+                s.Username, s.Code, s.Email, s.FullName,
+                s.RoleId, s.PositionId, s.DepartmentId, password, ct);
+        }
+
+        _logger.LogInformation(
+            "Seeded office workforce: {Count} nhân sự khối văn phòng (HR + KTT + GĐ + TP Kinh doanh).",
+            seeds.Length);
+    }
+
     // Chèn Position còn thiếu theo Code; trả về map Code → Id cho toàn bộ tập truyền vào.
     private async Task<Dictionary<string, int>> EnsurePositionsByCodeAsync(
         (string Code, string Name, string Desc)[] defs, CancellationToken ct)
@@ -425,6 +510,18 @@ public sealed partial class DatabaseSeeder
         string username, string code, string email, string fullName,
         int roleId, int positionId, int departmentId, string password, CancellationToken ct)
     {
+        // #47 — vai trò quản trị cấp công ty KHÔNG trực thuộc xưởng (§3.1). Trước đây seed gán xưởng
+        // cho HR/Kế toán/Giám đốc ⇒ chính validator của hệ thống chặn không cho lưu lại 3 hồ sơ này.
+        // Chuẩn hoá ngay tại nguồn: role quản trị ⇒ để trống xưởng.
+        int? deptId = SystemRoles.DepartmentMemberRoleIds.Contains(roleId) ? departmentId : null;
+
+        // Danh tính thực (họ tên/giới tính/ngày sinh/SĐT/địa chỉ/số phụ thuộc) lấy từ danh bạ demo
+        // theo Username — thay cho placeholder "CN Thợ cắt X1.1". Người ngoài danh bạ dùng mặc định.
+        var person = StaffRoster.GetValueOrDefault(username);
+        var effectiveName = person?.FullName ?? fullName;
+        var dob = person?.Dob ?? new DateTime(1992, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var phone = person?.Phone ?? "0900000000";
+
         var user = await _context.Users.FirstOrDefaultAsync(
             u => u.Username == username || u.EmployeeCode == code || u.Email == email, ct);
         if (user is null)
@@ -432,48 +529,88 @@ public sealed partial class DatabaseSeeder
             user = new User
             {
                 EmployeeCode = code,
-                FullName = fullName,
+                FullName = effectiveName,
                 RoleId = roleId,
                 Username = username,
                 PasswordHash = _passwordHasher.Hash(password),
                 Email = email,
-                Dob = new DateTime(1992, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                PhoneNo = "0900000000",
+                Dob = dob,
+                PhoneNo = phone,
                 Status = 1,
                 PasswordChangedAt = DateTime.UtcNow,
             };
             await _context.Users.AddAsync(user, ct);
             await _context.SaveChangesAsync(ct);
         }
+        else if (person is not null
+            && (user.FullName != person.FullName || user.PhoneNo != person.Phone))
+        {
+            // Bản ghi cũ còn tên/SĐT placeholder → nâng về danh tính thực (chỉ với account demo trong
+            // danh bạ; nhân sự tạo qua API thật không có trong danh bạ nên không bị đụng).
+            user.FullName = person.FullName;
+            user.PhoneNo = person.Phone;
+            user.Dob = person.Dob;
+            await _context.SaveChangesAsync(ct);
+        }
 
-        var citizenId = $"DEMO{user.Id:D9}";
-        var emp = await _context.EmployeeInformations
-            .FirstOrDefaultAsync(e => e.UserId == user.Id || e.CitizenId == citizenId, ct);
+        // #42 — CCCD phải đúng 12 chữ số (validator mới). Trước đây seed sinh "DEMO000000005" (13 ký
+        // tự, có chữ) ⇒ 31 hồ sơ seed không lưu lại được sau khi thêm regex. Sinh 12 chữ số dẫn xuất
+        // từ user.Id, mở đầu bằng "9" để đủ 12 số và không đụng dải CCCD thật.
+        var citizenId = $"9{user.Id:D11}";
+
+        // ⚠️ Tra theo UserId TRƯỚC, chỉ fallback CitizenId khi chưa có bản ghi gắn user. Dùng OR
+        // `UserId == x OR CitizenId == c` trong MỘT truy vấn là bẫy: CitizenId sinh theo user.Id có
+        // thể TRÙNG CitizenId (sinh theo cách khác) của một hồ sơ KHÁC ⇒ FirstOrDefault trả nhầm
+        // bản ghi, seed cập nhật sai người và bỏ sót người cần sửa (đã gây mất xưởng của tổ trưởng/
+        // công nhân xưởng 1).
+        var emp = await _context.EmployeeInformations.FirstOrDefaultAsync(e => e.UserId == user.Id, ct)
+            ?? await _context.EmployeeInformations.FirstOrDefaultAsync(
+                   e => e.UserId == null && e.CitizenId == citizenId, ct);
         if (emp is null)
         {
             emp = new EmployeeInformation
             {
                 UserId = user.Id,
-                FullName = fullName,
+                FullName = effectiveName,
                 Dob = user.Dob,
+                Gender = person?.Gender ?? Gender.Male,
                 CitizenId = citizenId,
-                PermanentAddress = "N/A (manufacturing seed)",
+                PermanentAddress = person?.Address ?? "Hà Nội, Việt Nam",
                 Email = email,
                 PhoneNo = user.PhoneNo,
                 PositionId = positionId,
-                DepartmentId = departmentId,
-                DependentsNo = 0,
+                DepartmentId = deptId,
+                DependentsNo = person?.Dependents ?? 0,
+                // Mã số thuế / số BHXH / số tài khoản ngân hàng — sinh xác định từ user.Id (tái lập
+                // được), để payroll không phải điền chuỗi "DEMO..." vô nghĩa.
+                TaxNo = $"{8_000_000_000L + user.Id}",
+                SocialNo = $"{7_900_000_000L + user.Id}",
+                BankNumber = $"{190_300_000_000L + user.Id}",
             };
             await _context.EmployeeInformations.AddAsync(emp, ct);
             await _context.SaveChangesAsync(ct);
         }
         else
         {
-            // Bản ghi cũ (từ lần seed trước) — chỉnh về đúng xưởng/chức danh nếu lệch.
+            // Bản ghi cũ (từ lần seed trước) — chỉnh về đúng xưởng/chức danh nếu lệch. Với role quản
+            // trị thì đúng-đắn là để trống xưởng (#47), nên đồng bộ về `deptId` (có thể null).
             var changed = false;
             if (emp.UserId is null) { emp.UserId = user.Id; changed = true; }
-            if (emp.DepartmentId != departmentId) { emp.DepartmentId = departmentId; changed = true; }
+            if (emp.DepartmentId != deptId) { emp.DepartmentId = deptId; changed = true; }
             if (emp.PositionId != positionId) { emp.PositionId = positionId; changed = true; }
+            // Nâng danh tính placeholder cũ về danh bạ thực (chỉ account demo có trong danh bạ).
+            if (person is not null)
+            {
+                if (emp.FullName != person.FullName) { emp.FullName = person.FullName; changed = true; }
+                if (emp.Gender != person.Gender) { emp.Gender = person.Gender; changed = true; }
+                if (emp.Dob != person.Dob) { emp.Dob = person.Dob; changed = true; }
+                if (emp.PhoneNo != person.Phone) { emp.PhoneNo = person.Phone; changed = true; }
+                if (emp.PermanentAddress == "N/A (manufacturing seed)")
+                {
+                    emp.PermanentAddress = person.Address;
+                    changed = true;
+                }
+            }
             if (changed) await _context.SaveChangesAsync(ct);
         }
 
@@ -995,21 +1132,34 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        var now = DateTime.UtcNow;
         var rule = new AttendanceRule
         {
             Name = DefaultAttendanceRuleName,
             Description = "Tiêu chuẩn",
-            WorkRateNormal = 100.00m,
-            WorkRateWeeklyRest = 200.00m,
-            WorkRateHoliday = 300.00m,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
             CreatedByUserId = adminId,
         };
 
         await _context.AttendanceRules.AddAsync(rule, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded default AttendanceRule '{Name}' (100/200/300 %%).", DefaultAttendanceRuleName);
+
+        var initialVersion = new AttendanceRuleVersion
+        {
+            AttendanceRuleId = rule.Id,
+            EffectiveFrom = new DateOnly(2000, 1, 1),
+            EffectiveTo = null,
+            WorkRateNormal = 100.00m,
+            WorkRateWeeklyRest = 200.00m,
+            WorkRateHoliday = 300.00m,
+            CreatedAt = now,
+            CreatedByUserId = adminId,
+        };
+        await _context.AttendanceRuleVersions.AddAsync(initialVersion, ct);
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Seeded default AttendanceRule '{Name}' (100/200/300 %%) + version đầu tiên.", DefaultAttendanceRuleName);
     }
 
     // 4 ca làm việc mặc định: CA-SANG, CA-CHIEU, CA-DEM, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".
@@ -1124,6 +1274,136 @@ public sealed partial class DatabaseSeeder
     }
 
 
+    // Seed các LeaveType tối thiểu để module Request hoạt động:
+    //   • ANNUAL     — phép năm (12 ngày, cấu hình notice period 1/3/14, auto-fallback sang UNPAID khi hết)
+    //   • UNPAID     — nghỉ không lương (fallback khi ANNUAL hết quỹ; không yêu cầu chứng từ)
+    //   • SICK       — nghỉ ốm (BHXH chi trả; retroactive; require document + InsuranceCertNumber)
+    //   • MATERNITY  — thai sản (BHXH; retroactive; require document + InsuranceCertNumber; 180 ngày/năm)
+    private async Task SeedDefaultLeaveTypesAsync(CancellationToken ct)
+    {
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.RoleId == SystemRoles.SystemAdminId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+        if (adminId == 0)
+        {
+            _logger.LogWarning("No system admin found; skipping default LeaveType seed.");
+            return;
+        }
+
+        var existingCodes = await _context.LeaveTypes
+            .AsNoTracking()
+            .Select(t => t.Code)
+            .ToListAsync(ct);
+        var existing = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var now = DateTime.UtcNow;
+        var seeds = new List<LeaveType>
+        {
+            new()
+            {
+                Code = "ANNUAL",
+                Name = "Phép năm",
+                Description = "Nghỉ phép hưởng nguyên lương theo BLLĐ (tối thiểu 12 ngày/năm).",
+                IsPaid = true,
+                PaidRate = 1.0m,
+                MaxDaysPerRequest = 30m,
+                MaxDaysPerYear = 12m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = false,
+                DeductsBalance = true,
+                MinNoticeDaysForShort = 1,
+                MinNoticeDaysForMedium = 3,
+                MinNoticeDaysForLong = 14,
+                AutoFallbackToUnpaid = true,
+                AllowRetroactive = false,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "UNPAID",
+                Name = "Nghỉ không lương",
+                Description = "Nghỉ không hưởng lương — dùng khi hết quỹ phép hoặc nghỉ ngoài chính sách.",
+                IsPaid = false,
+                PaidRate = null,
+                MaxDaysPerRequest = 60m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = false,
+                DeductsBalance = false,
+                MinNoticeDaysForShort = 1,
+                MinNoticeDaysForMedium = 3,
+                MinNoticeDaysForLong = 14,
+                AutoFallbackToUnpaid = false,
+                AllowRetroactive = false,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "SICK",
+                Name = "Nghỉ ốm",
+                Description = "Do quỹ BHXH chi trả (mẫu C65-HD). Cho phép nộp trễ; yêu cầu chứng từ y tế + InsuranceCertNumber.",
+                IsPaid = false,
+                PaidRate = null,
+                MaxDaysPerRequest = 30m,
+                MaxDaysPerYear = 30m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = true,
+                DeductsBalance = true,
+                MinNoticeDaysForShort = null,
+                MinNoticeDaysForMedium = null,
+                MinNoticeDaysForLong = null,
+                AutoFallbackToUnpaid = false,
+                AllowRetroactive = true,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+            new()
+            {
+                Code = "MATERNITY",
+                Name = "Thai sản",
+                Description = "Do quỹ BHXH chi trả — nghỉ thai sản 6 tháng theo Luật BHXH. Cho phép nộp trễ.",
+                IsPaid = false,
+                PaidRate = null,
+                MaxDaysPerRequest = 180m,
+                MaxDaysPerYear = 180m,
+                AllowEmployeeSelection = true,
+                ApplyScope = "AllEmployees",
+                RequireDocument = true,
+                DeductsBalance = true,
+                MinNoticeDaysForShort = null,
+                MinNoticeDaysForMedium = null,
+                MinNoticeDaysForLong = null,
+                AutoFallbackToUnpaid = false,
+                AllowRetroactive = true,
+                IsActive = true,
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            },
+        };
+
+        var toAdd = seeds.Where(s => !existing.Contains(s.Code)).ToList();
+        if (toAdd.Count == 0)
+        {
+            _logger.LogDebug("All default LeaveType(s) already present; skipping insert.");
+            return;
+        }
+
+        await _context.LeaveTypes.AddRangeAsync(toAdd, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded {Count} default LeaveType(s): {Codes}.",
+            toAdd.Count, string.Join(", ", toAdd.Select(s => s.Code)));
+    }
+
+
     // Dọn account + dữ liệu demo theo công ty IT cũ (ngoài scope module sản xuất) khỏi DB đã seed trước đó.
     // Giữ lại: admin, ai-service, hr, accountant, director + toàn bộ nhân sự sản xuất.
     // Bọc try/catch: lỗi dọn KHÔNG được chặn khởi động app (worst case: data cũ còn, log cảnh báo).
@@ -1209,5 +1489,46 @@ public sealed partial class DatabaseSeeder
                 "Cleanup demo IT (ngoài scope) thất bại — bỏ qua, không chặn khởi động. " +
                 "Có thể account demo đang bị dữ liệu khác tham chiếu; dọn thủ công nếu cần.");
         }
+    }
+
+    private async Task SeedAiServiceAccountAsync(CancellationToken cancellationToken)
+    {
+        const string username = "ai-service";
+        var exists = await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Username == username, cancellationToken);
+
+        if (exists)
+        {
+            _logger.LogDebug("AI service account already exists; skipping seed.");
+            return;
+        }
+
+        var section = _configuration.GetSection("AiServiceAccount");
+        var password = section["Password"];
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            _logger.LogWarning("AiServiceAccount:Password is not configured; skipping AI service account seed.");
+            return;
+        }
+
+        var aiUser = new User
+        {
+            EmployeeCode = "AI-SVC-001",
+            FullName = "AI Attendance Service",
+            RoleId = SystemRoles.AiServiceId,
+            Username = username,
+            PasswordHash = _passwordHasher.Hash(password),
+            Email = "ai-service@mingo.local",
+            Dob = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            PhoneNo = "0000000000",
+            Status = 1,
+            PasswordChangedAt = DateTime.UtcNow,
+        };
+
+        await _context.Users.AddAsync(aiUser, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded AI service account '{Username}'.", username);
     }
 }

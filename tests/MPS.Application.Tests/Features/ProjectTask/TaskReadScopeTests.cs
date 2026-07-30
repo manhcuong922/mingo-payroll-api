@@ -80,4 +80,88 @@ public sealed class TaskReadScopeTests
                 Node(300, isContainer: true), tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
             .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>();
     }
+
+    // ===== Công nhân (Task.Read.Assigned) xem task của đồng nghiệp trong đơn mình cùng làm =====
+
+    private const int WorkerUserId = 55;
+    private const int JoinedProjectId = 71;
+    private const int OtherProjectId = 72;
+
+    /// <summary>Task của NGƯỜI KHÁC (Assignees rỗng với worker) trong 1 đơn cụ thể.</summary>
+    private static ProjectTaskEntity TeammateTask(int id, int projectId, bool isConfidential = false) => new()
+    {
+        Id = id,
+        ProjectId = projectId,
+        DepartmentId = DeptId,
+        Status = TaskItemStatus.InProgress,
+        ProgressType = ProgressType.Quantity,
+        IsConfidential = isConfidential,
+        CreatedByUserId = ManagerUserId,
+    };
+
+    private static (Mock<IProjectTaskRepository> Tasks, Mock<IDepartmentManagerAuthorizer> Authorizer, Mock<ICurrentUserService> CurrentUser)
+        WorkerContext()
+    {
+        var tasks = new Mock<IProjectTaskRepository>();
+        var authorizer = new Mock<IDepartmentManagerAuthorizer>();
+        var currentUser = new Mock<ICurrentUserService>();
+
+        currentUser.SetupGet(c => c.UserId).Returns(WorkerUserId);
+        currentUser.Setup(c => c.HasPermission(Permissions.TaskReadAssigned)).Returns(true);
+        authorizer.Setup(a => a.IsManagerOfAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        tasks.Setup(t => t.HasAssignedTaskInProjectAsync(WorkerUserId, JoinedProjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        tasks.Setup(t => t.HasAssignedTaskInProjectAsync(WorkerUserId, OtherProjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        return (tasks, authorizer, currentUser);
+    }
+
+    [Fact]
+    public async Task EnsureCanReadTaskAsync_Worker_AllowedOnTeammateTaskInJoinedProject()
+    {
+        var (tasks, authorizer, currentUser) = WorkerContext();
+
+        await FluentActions
+            .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
+                TeammateTask(400, JoinedProjectId), tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+            .Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task EnsureCanReadTaskAsync_Worker_ForbiddenOnProjectNotJoined()
+    {
+        var (tasks, authorizer, currentUser) = WorkerContext();
+
+        await FluentActions
+            .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
+                TeammateTask(401, OtherProjectId), tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+            .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>();
+    }
+
+    [Fact]
+    public async Task EnsureCanReadTaskAsync_Worker_StillForbiddenOnConfidentialTeammateTask()
+    {
+        var (tasks, authorizer, currentUser) = WorkerContext();
+
+        await FluentActions
+            .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
+                TeammateTask(402, JoinedProjectId, isConfidential: true),
+                tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+            .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>(
+                "task nhạy cảm chỉ dành cho assignee/người tạo/Task.Read.Confidential");
+    }
+
+    [Fact]
+    public async Task EnsureCanReadTaskAsync_Worker_ForbiddenOnInternalTaskWithoutProject()
+    {
+        var (tasks, authorizer, currentUser) = WorkerContext();
+        var internalTask = TeammateTask(403, JoinedProjectId);
+        internalTask.ProjectId = null;   // việc nội bộ, không thuộc đơn nào
+
+        await FluentActions
+            .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
+                internalTask, tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+            .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>();
+    }
 }

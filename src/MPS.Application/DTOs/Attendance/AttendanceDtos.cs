@@ -42,7 +42,18 @@ public sealed record AttendanceRuleDto(
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<int>? UsedByShiftTemplateIds = null);
+    IReadOnlyList<int>? UsedByShiftTemplateIds = null,
+    IReadOnlyList<AttendanceRuleVersionDto>? VersionHistory = null);
+
+public sealed record AttendanceRuleVersionDto(
+    int Id,
+    DateOnly EffectiveFrom,
+    DateOnly? EffectiveTo,
+    decimal WorkRateNormal,
+    decimal WorkRateWeeklyRest,
+    decimal WorkRateHoliday,
+    DateTime CreatedAt,
+    int CreatedByUserId);
 
 public sealed record EmployeeShiftAssignmentDto(
     int Id,
@@ -53,7 +64,17 @@ public sealed record EmployeeShiftAssignmentDto(
     TimeOnly StartTime,
     TimeOnly EndTime,
     DateOnly WorkDate,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    /// <summary>
+    /// FK về ScheduleTemplate sinh ra assignment (null = manual/orphan).
+    /// Cho phép FE nhận biết assignment thuộc template nào để filter view theo phòng ban.
+    /// </summary>
+    int? ScheduleTemplateId,
+    /// <summary>
+    /// applyTarget của template (null khi <see cref="ScheduleTemplateId"/> null).
+    /// View "Tổng hợp theo phòng ban" chỉ include row có <c>Departments</c>.
+    /// </summary>
+    Domain.Enums.Attendance.ScheduleApplyTarget? ScheduleApplyTarget);
 
 public sealed record ShiftRosterLockedDateDto(
     int EmployeeInformationId,
@@ -97,7 +118,10 @@ public sealed record ScheduleTemplateDto(
     IReadOnlyList<int> ShiftTemplateIds,
     IReadOnlyList<ScheduleTemplateShiftDto> Shifts,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    ScheduleApplyTarget? ApplyTarget,
+    IReadOnlyList<int> TargetDepartmentIds,
+    bool IncludeRestDaysAndHolidays);
 
 public sealed record ScheduleTemplateApplyConflictDto(
     int EmployeeInformationId,
@@ -119,12 +143,58 @@ public sealed record PublicHolidayDto(
     DateOnly HolidayDate,
     DateOnly HolidayEndDate,
     string? Description,
-    string ApplyScope,
-    string? TargetDepartmentIds,
-    string? TargetEmployeeIds,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
+
+/// <summary>
+/// Kết quả parse file Excel import PublicHoliday (không xét DB).
+/// </summary>
+public sealed record PublicHolidayImportParseResult(
+    IReadOnlyList<PublicHolidayImportParsedRow> Rows,
+    IReadOnlyList<PublicHolidayImportRowError> GlobalErrors);
+
+public sealed record PublicHolidayImportParsedRow(
+    int RowIndex,
+    string? Name,
+    DateOnly? HolidayDate,
+    DateOnly? HolidayEndDate,
+    string? Description,
+    IReadOnlyList<PublicHolidayImportRowError> RowErrors);
+
+public sealed record PublicHolidayImportRowError(int? RowIndex, string Code, string Message);
+
+/// <summary>
+/// DTO trả về cho FE khi preview import: gồm các row hợp lệ + các row có lỗi (parse/validate/overlap).
+/// </summary>
+public sealed record PublicHolidayImportPreviewDto(
+    IReadOnlyList<PublicHolidayImportPreviewRow> Rows,
+    IReadOnlyList<PublicHolidayImportRowError> GlobalErrors,
+    int ValidCount,
+    int InvalidCount);
+
+public sealed record PublicHolidayImportPreviewRow(
+    int RowIndex,
+    string? Name,
+    DateOnly? HolidayDate,
+    DateOnly? HolidayEndDate,
+    string? Description,
+    bool IsValid,
+    IReadOnlyList<PublicHolidayImportRowError> Errors);
+
+/// <summary>
+/// DTO client gửi lên khi confirm — mỗi row là 1 holiday sẽ được insert. BE re-validate.
+/// </summary>
+public sealed record PublicHolidayImportConfirmRow(
+    string Name,
+    DateOnly HolidayDate,
+    DateOnly? HolidayEndDate,
+    string? Description);
+
+public sealed record PublicHolidayImportConfirmResultDto(
+    int Created,
+    int Skipped,
+    IReadOnlyList<PublicHolidayImportRowError> SkippedReasons);
 
 public sealed record AttendanceRecordDto(
     int Id,
@@ -195,7 +265,11 @@ public sealed record EmployeeAttendanceSummaryDto(
 
     // Quy đổi × hệ số (WorkRateNormal/WeeklyRest/Holiday × hours + NightHours × 1.3).
     // Trả decimal giờ; FE chia StandardHours nếu muốn hiển thị "công".
-    decimal EquivalentHours);
+    decimal EquivalentHours,
+
+    // Giờ OT — subset của TotalHours, filter records có OvertimeRequestId != null.
+    // Dùng cho sort "OT nhiều nhất" trên bảng chấm công tháng.
+    decimal OtHours);
 
 public sealed record AttendanceSettingDto(
     int Id,
@@ -204,6 +278,16 @@ public sealed record AttendanceSettingDto(
     int LockAfterDays,
     bool AllowAdminOverride,
     bool RequireOverrideReason,
+    int? LateEarlyMaxOccurrencesPerMonth,
+    int? LateEarlyMaxMinutesPerOccurrence,
+    int? LateEarlyBackdateDaysAllowed,
+    decimal? WfhMaxDaysPerMonth,
+    int? WfhMinNoticeDays,
+    decimal? WfhMaxDaysPerRequest,
+    int? WfhWorkPlanMinLength,
+    int? LateGraceMinutes,
+    int? EarlyLeaveGraceMinutes,
+    int? HalfDayThresholdMinutes,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
@@ -235,24 +319,19 @@ public sealed record OvertimeRequestDto(
     int? ReviewedByUserId,
     DateTime? ReviewedAt,
     DateTime CreatedAt,
-    // Batch workflow — nullable cho legacy records
+    // v3 workflow — nullable cho legacy records
     int? ProjectId,
     string? ProjectTitle,
     OvertimeApproverRoute? ApproverRoute,
-    Guid? BatchId);
-
-public sealed record PmProjectDto(
-    int Id,
-    string Title,
-    int? DepartmentId,
-    string? DepartmentName,
-    string Status);
-
-public sealed record EligibleEmployeeForOvertimeDto(
-    int Id,
-    string FullName,
-    string? EmployeeCode,
-    string? PositionName);
+    Guid? BatchId,
+    // v3 audit tầng 1 — PM (tổ trưởng đơn) review
+    int? PmReviewedByUserId,
+    DateTime? PmReviewedAt,
+    string? PmReviewNote,
+    // v3 audit tầng 2 — Approver (HR hoặc DM) decide
+    int? ApproverReviewedByUserId,
+    DateTime? ApproverReviewedAt,
+    string? ApproverReviewNote);
 
 public sealed record LeaveTypeDto(
     int Id,
@@ -271,6 +350,11 @@ public sealed record LeaveTypeDto(
     string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
+    int? MinNoticeDaysForShort,
+    int? MinNoticeDaysForMedium,
+    int? MinNoticeDaysForLong,
+    bool AutoFallbackToUnpaid,
+    bool AllowRetroactive,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
@@ -286,12 +370,57 @@ public sealed record LeaveRequestDto(
     DateOnly EndDate,
     decimal TotalDays,
     bool IsPaid,
+    OvertimeApproverRoute? ApproverRoute,
     LeaveRequestStatus Status,
     string? Reason,
-    string? SupportingDocumentUrl,
+    bool IsRetroactive,
+    string? MedicalCertificateObjectKey,
+    string? InsuranceCertNumber,
     string? ReviewNote,
     int? ReviewedByUserId,
     DateTime? ReviewedAt,
+    DateTime? CancelledAt,
+    int? CancelledByUserId,
+    string? CancelReason,
+    DateTime CreatedAt);
+
+public sealed record WfhRequestDto(
+    int Id,
+    int EmployeeInformationId,
+    string EmployeeFullName,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    decimal TotalDays,
+    string WorkPlan,
+    OvertimeApproverRoute? ApproverRoute,
+    WfhRequestStatus Status,
+    string? Reason,
+    string? ReviewNote,
+    int? ReviewedByUserId,
+    DateTime? ReviewedAt,
+    DateTime? CancelledAt,
+    int? CancelledByUserId,
+    string? CancelReason,
+    DateTime CreatedAt);
+
+public sealed record LateEarlyRequestDto(
+    int Id,
+    int EmployeeInformationId,
+    string EmployeeFullName,
+    DateOnly WorkDate,
+    LateEarlyKind Kind,
+    short Minutes,
+    bool IsUnplanned,
+    bool DeductFromLeaveBalance,
+    OvertimeApproverRoute? ApproverRoute,
+    LateEarlyRequestStatus Status,
+    string? Reason,
+    string? ReviewNote,
+    int? ReviewedByUserId,
+    DateTime? ReviewedAt,
+    DateTime? CancelledAt,
+    int? CancelledByUserId,
+    string? CancelReason,
     DateTime CreatedAt);
 
 public sealed record LeaveBalanceDto(

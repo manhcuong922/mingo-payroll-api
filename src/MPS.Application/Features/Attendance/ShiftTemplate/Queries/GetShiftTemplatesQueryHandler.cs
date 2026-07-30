@@ -8,10 +8,14 @@ namespace MPS.Application.Features.Attendance.ShiftTemplate.Queries;
 public class GetShiftTemplatesQueryHandler : IRequestHandler<GetShiftTemplatesQuery, PagedResult<ShiftTemplateDto>>
 {
     private readonly IShiftTemplateRepository _repository;
+    private readonly IAttendanceRuleVersionRepository _versionRepository;
 
-    public GetShiftTemplatesQueryHandler(IShiftTemplateRepository repository)
+    public GetShiftTemplatesQueryHandler(
+        IShiftTemplateRepository repository,
+        IAttendanceRuleVersionRepository versionRepository)
     {
         _repository = repository;
+        _versionRepository = versionRepository;
     }
 
     public async Task<PagedResult<ShiftTemplateDto>> Handle(GetShiftTemplatesQuery request, CancellationToken cancellationToken)
@@ -21,7 +25,15 @@ public class GetShiftTemplatesQueryHandler : IRequestHandler<GetShiftTemplatesQu
 
         var (items, total) = await _repository.GetPagedAsync(request.IsActive, page, size, cancellationToken);
 
-        var dtos = items.Select(ShiftTemplateMapper.ToDto).ToList();
+        var ruleIds = items.Select(i => i.AppliedAttendanceRuleId).Distinct().ToList();
+        var openVersions = await _versionRepository.GetOpenByRuleIdsAsync(ruleIds, cancellationToken);
+
+        var dtos = items.Select(i =>
+        {
+            openVersions.TryGetValue(i.AppliedAttendanceRuleId, out var v);
+            return ShiftTemplateMapper.ToDto(i, v);
+        }).ToList();
+
         return new PagedResult<ShiftTemplateDto>(dtos, total, page, size);
     }
 }

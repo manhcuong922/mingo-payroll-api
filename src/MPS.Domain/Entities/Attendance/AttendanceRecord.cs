@@ -26,6 +26,13 @@ public class AttendanceRecord
     public int? OvertimeRequestId { get; set; }
     public OvertimeRequest? OvertimeRequest { get; set; }
 
+    /// <summary>
+    /// Case 2 — LIÊN KẾT tới đơn đi muộn/về sớm đã trừ giờ vào bản ghi CA CHÍNH này. Marker (không FK
+    /// cứng) để: (1) truy vết ai làm giảm giờ công của ngày, (2) idempotent — không trừ hai lần cùng
+    /// một đơn nếu duyệt/áp lại. NULL khi bản ghi chưa bị đơn đi muộn/về sớm nào tác động.
+    /// </summary>
+    public int? LateEarlyRequestId { get; set; }
+
     public DateTime? CheckInAt { get; set; }
     public DateTime? CheckOutAt { get; set; }
 

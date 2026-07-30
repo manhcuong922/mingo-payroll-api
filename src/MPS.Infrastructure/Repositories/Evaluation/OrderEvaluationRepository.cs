@@ -37,21 +37,29 @@ public class OrderEvaluationRepository : IOrderEvaluationRepository
 
     public Task<OrderEvaluation?> GetByIdForUpdateAsync(int id, CancellationToken ct) =>
         _context.OrderEvaluations
+            .Include(x => x.Project)   // #63: cần Project.ResponsibleUserId (tổ trưởng ĐANG phụ trách) để phân quyền sửa
             .Include(x => x.Subjects).ThenInclude(s => s.Scores)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<OrderEvaluation>> GetForEvaluatorAsync(
-        int evaluatorUserId, EvaluationStatus? status, CancellationToken ct)
+        int? evaluatorUserId, EvaluationStatus? status, int? departmentId, CancellationToken ct)
     {
         var query = _context.OrderEvaluations
             .AsNoTracking()
             .Include(x => x.Project)
             .Include(x => x.Subjects).ThenInclude(s => s.Employee)
-            .Where(x => x.EvaluatorUserId == evaluatorUserId)
             .AsQueryable();
+
+        // null = quyền ReadAll → không giới hạn theo người chấm.
+        if (evaluatorUserId.HasValue)
+            query = query.Where(x => x.EvaluatorUserId == evaluatorUserId.Value);
 
         if (status.HasValue)
             query = query.Where(x => x.Status == status.Value);
+
+        // Lọc theo phòng ban của ĐƠN (Project.DepartmentId).
+        if (departmentId.HasValue)
+            query = query.Where(x => x.Project!.DepartmentId == departmentId.Value);
 
         return await query
             .OrderByDescending(x => x.PeriodYear)

@@ -33,6 +33,15 @@ public class ScheduleTemplateEntityConfiguration : IEntityTypeConfiguration<Sche
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(e => e.Notes).HasMaxLength(500);
 
+        builder.Property(e => e.IncludeRestDaysAndHolidays)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(e => e.ApplyTarget)
+            .HasConversion<int?>();
+
+        builder.Property(e => e.TargetDepartmentIds).HasMaxLength(1000);
+
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt);
 

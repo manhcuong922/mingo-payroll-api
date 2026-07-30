@@ -128,6 +128,16 @@ public interface IContractRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lọc trong danh sách userId, trả về những user đang có HĐ hiệu lực tại <paramref name="atUtc"/>
+    /// (Status=Active và atUtc nằm trong [EffectiveFrom, EffectiveTo]). Dùng cho guard "không giao việc
+    /// cho người không còn quan hệ lao động" — xem TaskAssigneeGuard.
+    /// </summary>
+    Task<IReadOnlyList<int>> GetUserIdsWithActiveContractAsync(
+        IReadOnlyCollection<int> userIds,
+        DateTime atUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Load HĐ kèm toàn bộ dữ liệu cần thiết để sinh DOCX: EI, EmployerParty, Position,
     /// SalaryGrade, ContractAllowances + AllowanceType, Template + TemplateFile.
     /// </summary>
@@ -147,8 +157,12 @@ public interface IContractRepository
     /// <see cref="AutoConvertExpiredDefiniteAsync"/> bắt (đã có HĐ con — quan hệ
     /// <c>ParentContractId</c>) → set Status=Expired, UpdatedAt=nowUtc.
     /// </summary>
-    /// <returns>Số HĐ đã expire.</returns>
-    Task<int> ExpireOverdueContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default);
+    /// <returns>
+    /// <c>ExpiredCount</c>: số HĐ đã expire.
+    /// <c>AffectedEmployeeInformationIds</c>: danh sách distinct EmployeeInformationId của các HĐ vừa expire — dùng để downstream deactivate user account nếu NLĐ không còn HĐ Active nào.
+    /// </returns>
+    Task<(int ExpiredCount, IReadOnlyList<int> AffectedEmployeeInformationIds)> ExpireOverdueContractsAsync(
+        DateTime nowUtc, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Set <c>ArchivedAt = nowUtc</c> cho:

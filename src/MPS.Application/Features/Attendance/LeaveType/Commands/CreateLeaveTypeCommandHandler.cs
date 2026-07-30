@@ -60,6 +60,11 @@ public class CreateLeaveTypeCommandHandler : IRequestHandler<CreateLeaveTypeComm
             TargetEmployeeIds = request.TargetEmployeeIds,
             RequireDocument = request.RequireDocument,
             DeductsBalance = request.DeductsBalance || request.MaxDaysPerYear.HasValue,
+            MinNoticeDaysForShort = request.MinNoticeDaysForShort,
+            MinNoticeDaysForMedium = request.MinNoticeDaysForMedium,
+            MinNoticeDaysForLong = request.MinNoticeDaysForLong,
+            AutoFallbackToUnpaid = request.AutoFallbackToUnpaid,
+            AllowRetroactive = request.AllowRetroactive,
             IsActive = request.IsActive,
             CreatedAt = _clock.UtcNow,
             CreatedByUserId = userId

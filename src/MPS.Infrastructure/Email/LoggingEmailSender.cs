@@ -5,7 +5,7 @@ namespace MPS.Infrastructure.Email;
 
 /// Dev/test email sender that logs the message instead of sending.
 /// Swap with SmtpEmailSender / SendGridEmailSender in production via DI.
-public sealed class LoggingEmailSender : IEmailSender
+public sealed class LoggingEmailSender : IRealEmailSender
 {
     private readonly ILogger<LoggingEmailSender> _logger;
 
@@ -43,26 +43,26 @@ public sealed class LoggingEmailSender : IEmailSender
         string toEmail,
         string fullName,
         ContractActivationEmailPayload payload,
-        Stream pdfStream,
+        string storageBucket,
+        string storageObjectKey,
         string pdfFileName,
         CancellationToken cancellationToken = default)
     {
-        var attachmentSize = pdfStream.CanSeek ? pdfStream.Length : -1L;
         if (payload.Username is not null)
         {
             _logger.LogWarning(
                 "[DEV EMAIL] Contract activation for {FullName} <{Email}>. Contract={ContractNo} From={From:d} To={To:d} " +
-                "Username={Username} Password={Password} PdfFile={PdfFile} PdfSize={PdfSize}.",
+                "Username={Username} Password={Password} PdfFile={PdfFile} PdfKey={Bucket}/{ObjectKey}.",
                 fullName, toEmail, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
-                payload.Username, payload.PlainPassword, pdfFileName, attachmentSize);
+                payload.Username, payload.PlainPassword, pdfFileName, storageBucket, storageObjectKey);
         }
         else
         {
             _logger.LogWarning(
                 "[DEV EMAIL] Contract activation for {FullName} <{Email}>. Contract={ContractNo} From={From:d} To={To:d} " +
-                "(no credentials, account already exists). PdfFile={PdfFile} PdfSize={PdfSize}.",
+                "(no credentials, account already exists). PdfFile={PdfFile} PdfKey={Bucket}/{ObjectKey}.",
                 fullName, toEmail, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
-                pdfFileName, attachmentSize);
+                pdfFileName, storageBucket, storageObjectKey);
         }
         return Task.CompletedTask;
     }

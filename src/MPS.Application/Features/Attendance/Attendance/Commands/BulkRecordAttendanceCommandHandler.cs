@@ -1,12 +1,14 @@
 using MediatR;
 using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using AttendanceRecordEntity = MPS.Domain.Entities.Attendance.AttendanceRecord;
+using AttendanceSettingEntity = MPS.Domain.Entities.Attendance.AttendanceSetting;
 
 namespace MPS.Application.Features.Attendance.Attendance.Commands;
 
@@ -14,12 +16,15 @@ namespace MPS.Application.Features.Attendance.Attendance.Commands;
 /// FT-11 bulk upsert — roster ngày: ghi nhận chấm công nhiều NV cùng lúc.
 /// Mỗi row độc lập theo grain (emp, date, shift). Multi-shift: cùng 1 NV có thể
 /// xuất hiện trong batch nhiều lần với ShiftTemplateId khác nhau.
+/// Status nullable — null → resolver suy từ giờ chấm + shift + setting.
 /// </summary>
 public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAttendanceCommand, BulkRecordAttendanceResult>
 {
     private readonly IAttendanceRecordRepository _repository;
     private readonly IShiftTemplateRepository _shiftRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IAttendanceSettingRepository _settingRepository;
+    private readonly IAttendanceStatusResolver _statusResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
@@ -30,6 +35,8 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         IAttendanceRecordRepository repository,
         IShiftTemplateRepository shiftRepository,
         IEmployeeInformationRepository employeeRepository,
+        IAttendanceSettingRepository settingRepository,
+        IAttendanceStatusResolver statusResolver,
         ICurrentUserService currentUser,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
@@ -39,6 +46,8 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         _repository = repository;
         _shiftRepository = shiftRepository;
         _employeeRepository = employeeRepository;
+        _settingRepository = settingRepository;
+        _statusResolver = statusResolver;
         _currentUser = currentUser;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
@@ -52,6 +61,13 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
             ?? throw new ForbiddenAccessException("Authenticated user context is required.");
 
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
+
+        // Preload setting 1 lần cho toàn batch — resolver stateless nên share safe.
+        AttendanceSettingEntity? setting = null;
+        if (request.Records.Any(r => !r.Status.HasValue))
+        {
+            setting = await _settingRepository.GetOrCreateDefaultAsync(_clock.UtcNow, cancellationToken);
+        }
 
         var created = 0;
         var updated = 0;
@@ -85,14 +101,19 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                 var existing = await _repository.GetByKeyAsync(
                     row.EmployeeInformationId, request.WorkDate, row.ShiftTemplateId, cancellationToken);
 
+                // Resolve status: HR truyền cụ thể → giữ; null → resolver suy.
+                var resolvedStatus = row.Status ?? _statusResolver.Resolve(
+                    rowCheckInAt, rowCheckOutAt, shift, request.WorkDate, setting);
+
                 var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
                     _splitter,
-                    row.Status,
+                    resolvedStatus,
                     rowCheckInAt,
                     rowCheckOutAt,
                     laborLaw.NightStartTime,
                     laborLaw.NightEndTime,
-                    shift);
+                    shift,
+                    request.WorkDate);
 
                 if (existing is null)
                 {
@@ -109,7 +130,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                         CheckOutAt = rowCheckOutAt,
                         DayHours = dayHours,
                         NightHours = nightHours,
-                        Status = row.Status,
+                        Status = resolvedStatus,
                         Notes = row.Notes,
                         CreatedAt = _clock.UtcNow,
                         CreatedByUserId = userId
@@ -124,7 +145,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                     existing.CheckOutAt = rowCheckOutAt;
                     existing.DayHours = dayHours;
                     existing.NightHours = nightHours;
-                    existing.Status = row.Status;
+                    existing.Status = resolvedStatus;
                     existing.Notes = row.Notes;
                     if (!string.IsNullOrWhiteSpace(row.OverrideReason))
                         existing.OverrideReason = row.OverrideReason;

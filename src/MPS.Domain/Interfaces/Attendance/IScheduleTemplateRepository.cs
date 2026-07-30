@@ -36,4 +36,14 @@ public interface IScheduleTemplateRepository
             DateOnly toDate,
             int? excludeTemplateId,
             CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Trả về các template active mode Departments có <c>TargetDepartmentIds</c> chứa
+    /// <paramref name="departmentId"/> và <c>EffectiveTo >= onOrAfter</c>. Dùng bởi
+    /// AutoApplyScheduleOnDepartmentChangeHandler.
+    /// </summary>
+    Task<IReadOnlyList<ScheduleTemplate>> GetActiveByDepartmentIdAsync(
+        int departmentId,
+        DateOnly onOrAfter,
+        CancellationToken cancellationToken = default);
 }

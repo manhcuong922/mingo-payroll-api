@@ -14,7 +14,7 @@ public class DepartmentRepository : IDepartmentRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<Department>> GetAllAsync(bool includeInactive, CancellationToken ct)
+    public async Task<IReadOnlyList<Department>> GetAllAsync(bool includeInactive, string? keyword, CancellationToken ct)
     {
         var query = _context.Departments
             .AsNoTracking()
@@ -24,6 +24,15 @@ public class DepartmentRepository : IDepartmentRepository
 
         if (!includeInactive)
             query = query.Where(d => d.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            // COLLATE Latin1_General_CI_AI: case + accent insensitive (nhất quán với GetPagedAsync).
+            query = query.Where(d =>
+                EF.Functions.Like(EF.Functions.Collate(d.Name, "Latin1_General_CI_AI"), $"%{kw}%")
+                || EF.Functions.Like(EF.Functions.Collate(d.Code, "Latin1_General_CI_AI"), $"%{kw}%"));
+        }
 
         return await query.OrderBy(d => d.Name).ToListAsync(ct);
     }

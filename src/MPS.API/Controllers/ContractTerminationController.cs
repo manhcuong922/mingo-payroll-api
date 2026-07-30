@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MPS.API.RateLimiting;
 using MPS.API.Authorization;
 using MPS.API.Requests.ContractTermination;
 using MPS.Application.Features.ContractTermination.Commands;
@@ -28,7 +29,7 @@ public class ContractTerminationController : ControllerBase
     /// </summary>
     [HttpPost("notice")]
     [HasPermission(Permissions.ContractFileUploadAll)]
-    [EnableRateLimiting("contract-upload")]
+    [EnableRateLimiting(RateLimitPolicies.ContractUpload)]
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> UploadNotice(
         int contractId,
@@ -60,7 +61,7 @@ public class ContractTerminationController : ControllerBase
         [FromBody] CreateContractTerminationRequest request,
         CancellationToken cancellationToken)
     {
-        var id = await _mediator.Send(new CreateContractTerminationCommand(
+        var result = await _mediator.Send(new CreateContractTerminationCommand(
             ContractId: contractId,
             ReasonRefId: request.ReasonRefId,
             TerminationParty: request.TerminationParty,
@@ -72,7 +73,8 @@ public class ContractTerminationController : ControllerBase
             LegalBasis: request.LegalBasis,
             Notes: request.Notes), cancellationToken);
 
-        return Ok(new { id });
+        // openTasks = cảnh báo bàn giao (#28); rỗng nghĩa là NV không còn công đoạn dở.
+        return Ok(new { id = result.Id, openTasks = result.OpenTasks });
     }
 
     /// <summary>GET /api/contracts/{contractId}/termination — 1-1.</summary>

@@ -7,34 +7,16 @@ namespace MPS.Infrastructure.Persistence;
 public sealed partial class DatabaseSeeder
 {
     /// <summary>
-    /// Seed bộ tiêu chí đánh giá mặc định (<see cref="EvaluationCriteriaSeedData"/>) vào catalog
-    /// <c>TypePerformanceMetric</c> + <c>PerformanceMetric</c> (+ M2M <c>TargetRoles</c>) để module
-    /// chấm điểm tháng chạy được ngay. Idempotent: bỏ qua nếu catalog đã có tiêu chí (admin tự cấu hình).
+    /// Seed bộ tiêu chí đánh giá mặc định (<see cref="EvaluationCriteriaSeedData"/>) — RUBRIC CHUNG
+    /// toàn công ty — vào catalog <c>TypePerformanceMetric</c> + <c>PerformanceMetric</c> để module
+    /// chấm điểm chạy được ngay. Idempotent: bỏ qua nếu catalog đã có tiêu chí (admin tự cấu hình).
+    /// Rubric dùng chung mọi vai trò nên KHÔNG gán <c>TargetRoles</c> (không còn lọc theo role).
     /// </summary>
     private async Task SeedDefaultEvaluationCriteriaAsync(CancellationToken ct)
     {
         if (await _context.TypePerformanceMetrics.AsNoTracking().AnyAsync(ct))
         {
             _logger.LogDebug("Evaluation criteria (TypePerformanceMetric) already present; skipping.");
-            return;
-        }
-
-        // Các role được tham chiếu trong seed — load tracked để attach vào M2M TargetRoles.
-        var roleIds = EvaluationCriteriaSeedData.Groups
-            .SelectMany(g => g.Metrics)
-            .SelectMany(m => m.TargetRoleIds)
-            .Distinct()
-            .ToList();
-
-        var rolesById = await _context.Roles
-            .Where(r => roleIds.Contains(r.Id))
-            .ToDictionaryAsync(r => r.Id, ct);
-
-        var missing = roleIds.Where(id => !rolesById.ContainsKey(id)).ToList();
-        if (missing.Count > 0)
-        {
-            _logger.LogWarning(
-                "Không seed tiêu chí đánh giá: thiếu role {RoleIds} trong DB.", string.Join(", ", missing));
             return;
         }
 
@@ -49,7 +31,6 @@ public sealed partial class DatabaseSeeder
                         Name = m.Name,
                         Weight = m.Weight,
                         Description = m.Description,
-                        TargetRoles = m.TargetRoleIds.Select(id => rolesById[id]).ToList(),
                     })
                     .ToList(),
             })
@@ -60,7 +41,7 @@ public sealed partial class DatabaseSeeder
 
         var metricCount = groups.Sum(g => g.PerformanceMetrics.Count);
         _logger.LogInformation(
-            "Seeded {Groups} nhóm tiêu chí + {Metrics} tiêu chí đánh giá mặc định (module chấm điểm tháng).",
+            "Seeded {Groups} nhóm tiêu chí + {Metrics} tiêu chí đánh giá mặc định (rubric chung toàn công ty).",
             groups.Count, metricCount);
     }
 }

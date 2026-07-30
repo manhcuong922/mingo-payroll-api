@@ -9,14 +9,14 @@ public sealed record RecordAttendanceRequest(
     int? OvertimeRequestId,
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
-    AttendanceStatus Status,
+    AttendanceStatus? Status,
     string? Notes,
     string? OverrideReason);
 
 public sealed record UpdateAttendanceRequest(
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
-    AttendanceStatus Status,
+    AttendanceStatus? Status,
     string? Notes,
     string? OverrideReason);
 
@@ -25,7 +25,7 @@ public sealed record BulkRecordAttendanceRowRequest(
     int ShiftTemplateId,
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
-    AttendanceStatus Status,
+    AttendanceStatus? Status,
     string? Notes,
     string? OverrideReason);
 
@@ -38,4 +38,14 @@ public sealed record UpdateAttendanceSettingRequest(
     TimeOnly DailyEditCutoffTime,
     int LockAfterDays,
     bool AllowAdminOverride,
-    bool RequireOverrideReason);
+    bool RequireOverrideReason,
+    int? LateEarlyMaxOccurrencesPerMonth,
+    int? LateEarlyMaxMinutesPerOccurrence,
+    int? LateEarlyBackdateDaysAllowed,
+    decimal? WfhMaxDaysPerMonth,
+    int? WfhMinNoticeDays,
+    decimal? WfhMaxDaysPerRequest,
+    int? WfhWorkPlanMinLength,
+    int? LateGraceMinutes,
+    int? EarlyLeaveGraceMinutes,
+    int? HalfDayThresholdMinutes);

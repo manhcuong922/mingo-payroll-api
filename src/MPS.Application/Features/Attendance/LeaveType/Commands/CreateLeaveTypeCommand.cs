@@ -19,4 +19,9 @@ public sealed record CreateLeaveTypeCommand(
     string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
+    int? MinNoticeDaysForShort,
+    int? MinNoticeDaysForMedium,
+    int? MinNoticeDaysForLong,
+    bool AutoFallbackToUnpaid,
+    bool AllowRetroactive,
     bool IsActive = true) : IRequest<int>, ILeaveTypeCommand;

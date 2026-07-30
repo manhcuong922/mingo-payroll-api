@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
@@ -9,16 +10,17 @@ using MPS.Domain.Interfaces.Attendance;
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 
 /// <summary>
-/// PM sửa đơn OT của chính mình khi còn Pending. Guards:
+/// NV tự sửa đơn OT của chính mình khi còn Pending (chưa PM review). Guards:
 ///  - Chỉ CreatedByUserId = current user.
-///  - Chỉ status = Pending.
-/// Recompute OtHours + day/night split, re-run cap check giống lúc create batch.
+///  - Chỉ status = Pending (không sửa được sau khi PM đã Forward/Reject).
+/// Recompute OtHours + day/night split, re-run cap check.
 /// </summary>
 public class UpdatePendingOvertimeRequestCommandHandler
     : IRequestHandler<UpdatePendingOvertimeRequestCommand, bool>
 {
     private readonly IOvertimeRequestRepository _repository;
     private readonly OvertimeCapChecker _capChecker;
+    private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
@@ -27,6 +29,7 @@ public class UpdatePendingOvertimeRequestCommandHandler
     public UpdatePendingOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
         OvertimeCapChecker capChecker,
+        AttendanceRequestDayConflictChecker dayConflictChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
@@ -34,6 +37,7 @@ public class UpdatePendingOvertimeRequestCommandHandler
     {
         _repository = repository;
         _capChecker = capChecker;
+        _dayConflictChecker = dayConflictChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
@@ -58,11 +62,14 @@ public class UpdatePendingOvertimeRequestCommandHandler
         if (request.OtStartTime == request.OtEndTime)
             throw new DomainValidationException("Giờ bắt đầu và kết thúc OT không được trùng.");
 
+        // Case 4 — chặn dời OT sang ngày quá xa trong tương lai (đồng bộ với lúc tạo đơn).
+        OvertimeWorkDateGuard.EnsureNotTooFarInFuture(request.WorkDate, _clock.UtcNow);
+
         var otHours = CalculateHours(request.OtStartTime, request.OtEndTime);
 
-        // Guard trùng OT: exclude chính đơn đang sửa để không tự conflict với mình.
-        var existingSameDay = await _repository.GetActiveOnDateForEmployeeAsync(
-            existing.EmployeeInformationId, request.WorkDate, excludeId: existing.Id, cancellationToken);
+        // Guard trùng OT — #41: quét D±1 (bắt OT vắt nửa đêm); exclude chính đơn đang sửa.
+        var existingSameDay = await _repository.GetActiveInRangeForEmployeeAsync(
+            existing.EmployeeInformationId, request.WorkDate.AddDays(-1), request.WorkDate.AddDays(1), excludeId: existing.Id, cancellationToken);
         var conflict = existingSameDay.FirstOrDefault(e => OvertimeTimeOverlap.Overlaps(
             request.WorkDate, request.OtStartTime, request.OtEndTime,
             e.WorkDate, e.OtStartTime, e.OtEndTime));
@@ -72,10 +79,21 @@ public class UpdatePendingOvertimeRequestCommandHandler
                 $"NV đã có đơn OT #{conflict.Id} ({conflict.OtStartTime:HH\\:mm}–{conflict.OtEndTime:HH\\:mm}, {conflict.Status}) giao thoa khung giờ mới.");
         }
 
-        // Cap check dùng monthly/yearly Approved (chưa tính đơn Pending này) → an toàn recompute.
+        // Cross-check chống trùng ngày với đơn Leave/WFH/LateEarly đang active.
+        await _dayConflictChecker.EnsureNoConflictAsync(
+            existing.EmployeeInformationId,
+            request.WorkDate,
+            request.WorkDate,
+            AttendanceRequestKind.Overtime,
+            excludeRequestId: existing.Id,
+            cancellationToken);
+
+        // Cap check tính cumulative Pending + PendingApprover + Approved; exclude chính đơn
+        // đang sửa để tránh double-count giờ cũ.
         await _capChecker.CheckAsync(
             existing.EmployeeInformationId, request.WorkDate,
-            request.OtStartTime, request.OtEndTime, otHours, cancellationToken);
+            request.OtStartTime, request.OtEndTime, otHours, cancellationToken,
+            excludeRequestId: existing.Id);
 
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
         var breakdown = _splitter.Split(new WorkHourSplitInput(
@@ -96,7 +114,7 @@ public class UpdatePendingOvertimeRequestCommandHandler
         // WorkDate có thể đổi — refresh snapshot LaborLaw version cho đúng ngày mới
         existing.LaborLawConstantsVersionId = laborLaw.VersionId;
         existing.Reason = request.Reason;
-        existing.ApproverRoute = request.ApproverRoute;
+        // ApproverRoute do PM chọn khi Forward — NV không được đổi.
         existing.UpdatedAt = now;
         existing.UpdatedByUserId = userId;
 

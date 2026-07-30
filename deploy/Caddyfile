@@ -1,4 +1,4 @@
-# Caddy tự xin & gia hạn chứng chỉ Let's Encrypt cho 2 subdomain.
+# Caddy tự xin & gia hạn chứng chỉ Let's Encrypt cho các subdomain.
 # Các biến {$...} lấy từ environment của container caddy (xem docker-compose.prod.yml).
 
 {
@@ -15,4 +15,12 @@
 {$API_DOMAIN} {
 	encode gzip zstd
 	reverse_proxy api:8080
+}
+
+# MinIO — phục vụ presigned URL cho trình duyệt (ảnh khuôn mặt, file hợp đồng).
+# Caddy giữ nguyên Host header khi forward → chữ ký SigV4 (ký theo Minio__ExternalEndpoint
+# = giá trị {$S3_DOMAIN}) khớp với Host mà MinIO nhận được.
+{$S3_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy minio:9000
 }

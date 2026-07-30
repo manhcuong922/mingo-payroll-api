@@ -31,6 +31,13 @@ public class LeaveTypeEntityConfiguration : IEntityTypeConfiguration<LeaveType>
         builder.Property(e => e.TargetEmployeeIds).HasMaxLength(1000);
         builder.Property(e => e.RequireDocument).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.DeductsBalance).IsRequired().HasDefaultValue(false);
+
+        builder.Property(e => e.MinNoticeDaysForShort);
+        builder.Property(e => e.MinNoticeDaysForMedium);
+        builder.Property(e => e.MinNoticeDaysForLong);
+        builder.Property(e => e.AutoFallbackToUnpaid).IsRequired().HasDefaultValue(false);
+        builder.Property(e => e.AllowRetroactive).IsRequired().HasDefaultValue(false);
+
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
 
         builder.Property(e => e.CreatedAt).IsRequired();

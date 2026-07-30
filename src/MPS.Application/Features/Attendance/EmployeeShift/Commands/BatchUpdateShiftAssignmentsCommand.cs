@@ -31,7 +31,13 @@ public enum BatchShiftItemStatus
     /// <summary>Ngày rơi vào WeeklyRestDay của NV (Thứ 7 + Chủ nhật) — bỏ qua khi chưa acknowledge.</summary>
     SkippedWeeklyRestDay = 10,
     /// <summary>Ngày rơi vào PublicHoliday áp dụng cho NV — bỏ qua khi chưa acknowledge.</summary>
-    SkippedPublicHoliday = 11
+    SkippedPublicHoliday = 11,
+    /// <summary>
+    /// (emp, date) đã có ≥1 ca bị AttendanceRecord khoá — Add bị bỏ qua để tránh vượt cap
+    /// 8h/ngày khi tổng giờ (ca đã chấm + ca mới) vượt luật. HR muốn thêm ca thứ 2 phải
+    /// xử lý thủ công sau khi giải quyết attendance của ca cũ.
+    /// </summary>
+    SkippedAttendanceExists = 12
 }
 
 public sealed record BatchShiftOperation(

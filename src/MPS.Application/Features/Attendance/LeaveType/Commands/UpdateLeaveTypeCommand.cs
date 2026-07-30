@@ -20,4 +20,9 @@ public sealed record UpdateLeaveTypeCommand(
     string? TargetEmployeeIds,
     bool RequireDocument,
     bool DeductsBalance,
+    int? MinNoticeDaysForShort,
+    int? MinNoticeDaysForMedium,
+    int? MinNoticeDaysForLong,
+    bool AutoFallbackToUnpaid,
+    bool AllowRetroactive,
     bool IsActive) : IRequest<bool>, ILeaveTypeCommand;

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MPS.API.RateLimiting;
 using MPS.API.Authorization;
 using MPS.API.Requests.Contract;
 using MPS.Application.Features.Contract.Commands;
@@ -201,6 +202,18 @@ public class ContractController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// [D12] — Lịch sử mức lương theo mốc hiệu lực (lần ký gốc + các phụ lục đổi lương đã kích hoạt).
+    /// Đây là căn cứ để đối chiếu "kỳ lương tháng X trả theo mức nào".
+    /// </summary>
+    [HttpGet("{id:int}/salary-snapshots")]
+    [HasAnyPermission(Permissions.ContractReadAll, Permissions.ContractReadSelf)]
+    public async Task<IActionResult> GetSalarySnapshots(int id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetContractSalarySnapshotsQuery(id), cancellationToken);
+        return Ok(result);
+    }
+
     // --- Files (download via presigned URL) ---
 
     [HttpGet("{id:int}/files")]
@@ -225,7 +238,7 @@ public class ContractController : ControllerBase
 
     [HttpPost("{id:int}/activate")]
     [HasPermission(Permissions.ContractActivateAll)]
-    [EnableRateLimiting("contract-upload")]
+    [EnableRateLimiting(RateLimitPolicies.ContractUpload)]
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> Activate(
         int id,
@@ -253,7 +266,7 @@ public class ContractController : ControllerBase
 
     [HttpPost("{id:int}/files/replace")]
     [HasPermission(Permissions.ContractActivateAll)]
-    [EnableRateLimiting("contract-upload")]
+    [EnableRateLimiting(RateLimitPolicies.ContractUpload)]
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> ReplaceFile(
         int id,

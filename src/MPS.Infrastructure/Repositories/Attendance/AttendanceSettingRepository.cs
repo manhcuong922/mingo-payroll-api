@@ -58,6 +58,16 @@ public class AttendanceSettingRepository : IAttendanceSettingRepository
         tracked.LockAfterDays = entity.LockAfterDays;
         tracked.AllowAdminOverride = entity.AllowAdminOverride;
         tracked.RequireOverrideReason = entity.RequireOverrideReason;
+        tracked.LateEarlyMaxOccurrencesPerMonth = entity.LateEarlyMaxOccurrencesPerMonth;
+        tracked.LateEarlyMaxMinutesPerOccurrence = entity.LateEarlyMaxMinutesPerOccurrence;
+        tracked.LateEarlyBackdateDaysAllowed = entity.LateEarlyBackdateDaysAllowed;
+        tracked.WfhMaxDaysPerMonth = entity.WfhMaxDaysPerMonth;
+        tracked.WfhMinNoticeDays = entity.WfhMinNoticeDays;
+        tracked.WfhMaxDaysPerRequest = entity.WfhMaxDaysPerRequest;
+        tracked.WfhWorkPlanMinLength = entity.WfhWorkPlanMinLength;
+        tracked.LateGraceMinutes = entity.LateGraceMinutes;
+        tracked.EarlyLeaveGraceMinutes = entity.EarlyLeaveGraceMinutes;
+        tracked.HalfDayThresholdMinutes = entity.HalfDayThresholdMinutes;
         tracked.UpdatedAt = entity.UpdatedAt;
         tracked.UpdatedByUserId = entity.UpdatedByUserId;
 

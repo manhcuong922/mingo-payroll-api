@@ -25,6 +25,19 @@ public class ScheduleTemplate
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// User's persisted choice cho popup "Phân ca vào ngày nghỉ / lễ?" khi Save.
+    /// true = "Có, vẫn phân" (BatchUpdate không skip WeeklyRestDay/PublicHoliday).
+    /// false (default) = "Bỏ qua" (BatchUpdate skip). FE preview đọc field này để biết
+    /// có tô hồng T7/CN/lễ trên calendar hay không.
+    /// </summary>
+    public bool IncludeRestDaysAndHolidays { get; set; }
+
+    public ScheduleApplyTarget? ApplyTarget { get; set; }
+
+    /// <summary>CSV of DepartmentId ints. Only used when <c>ApplyTarget = Departments</c>; NULL when Employees mode or legacy record.</summary>
+    public string? TargetDepartmentIds { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public User CreatedByUser { get; set; } = null!;

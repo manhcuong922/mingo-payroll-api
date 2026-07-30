@@ -8,26 +8,34 @@ using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.ContractTermination.Commands;
 
-public class CreateContractTerminationCommandHandler : IRequestHandler<CreateContractTerminationCommand, int>
+public class CreateContractTerminationCommandHandler
+    : IRequestHandler<CreateContractTerminationCommand, CreateContractTerminationResult>
 {
     private readonly IContractTerminationRepository _terminations;
     private readonly IContractRepository _contracts;
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
+    private readonly IEmployeeInformationRepository _employees;
+    private readonly IProjectTaskRepository _tasks;
 
     public CreateContractTerminationCommandHandler(
         IContractTerminationRepository terminations,
         IContractRepository contracts,
         IContractLookupReader lookup,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IEmployeeInformationRepository employees,
+        IProjectTaskRepository tasks)
     {
         _terminations = terminations;
         _contracts = contracts;
         _lookup = lookup;
         _currentUser = currentUser;
+        _employees = employees;
+        _tasks = tasks;
     }
 
-    public async Task<int> Handle(CreateContractTerminationCommand request, CancellationToken cancellationToken)
+    public async Task<CreateContractTerminationResult> Handle(
+        CreateContractTerminationCommand request, CancellationToken cancellationToken)
     {
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Authenticated user context is required to terminate a contract.");
@@ -100,6 +108,27 @@ public class CreateContractTerminationCommandHandler : IRequestHandler<CreateCon
             CreatedAt = DateTime.UtcNow,
         };
 
-        return await _terminations.AddAndMarkContractTerminatedAsync(entity, cancellationToken);
+        var id = await _terminations.AddAndMarkContractTerminatedAsync(entity, cancellationToken);
+
+        return new CreateContractTerminationResult(
+            id,
+            await CollectOpenTaskWarningsAsync(contract.EmployeeInformationId, cancellationToken));
+    }
+
+    /// <summary>
+    /// #28 — NV nghỉ việc mà vẫn đứng tên công đoạn chưa xong thì không ai chịu trách nhiệm thật.
+    /// Trả kèm response để HR/tổ trưởng biết phải bàn giao. Lỗi phụ ở đây KHÔNG được làm hỏng
+    /// việc chấm dứt HĐ (đã commit) nên nuốt gọn và trả danh sách rỗng.
+    /// </summary>
+    private async Task<IReadOnlyList<OpenTaskWarning>> CollectOpenTaskWarningsAsync(
+        int employeeInformationId, CancellationToken cancellationToken)
+    {
+        var employee = await _employees.GetByIdAsync(employeeInformationId, cancellationToken);
+        if (employee?.UserId is not int userId) return Array.Empty<OpenTaskWarning>();
+
+        var openTasks = await _tasks.GetOpenAssignedTasksByUserAsync(userId, cancellationToken);
+        return openTasks
+            .Select(t => new OpenTaskWarning(t.Id, t.Title, t.Status.ToString(), t.ProjectId))
+            .ToList();
     }
 }

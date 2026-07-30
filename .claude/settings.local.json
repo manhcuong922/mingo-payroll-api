@@ -18,7 +18,9 @@
       "Bash(docker port *)",
       "Bash(docker exec *)",
       "Bash(docker cp *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(grep -viE \"\\\\.cs$|/bin/|/obj/\")",
+      "Bash(sqlcmd *)"
     ]
   }
 }

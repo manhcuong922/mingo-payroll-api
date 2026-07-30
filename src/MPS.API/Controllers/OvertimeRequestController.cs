@@ -10,6 +10,10 @@ using MPS.Domain.Enums.Attendance;
 
 namespace MPS.API.Controllers;
 
+/// <summary>
+/// OT workflow v3: NV tự đăng ký → PM (tổ trưởng đơn) review → HR/DM approve.
+/// Xem docs/plans/overtime-request-workflow-plan.md.
+/// </summary>
 [ApiController]
 [Route("api/overtime-requests")]
 [Authorize]
@@ -22,6 +26,10 @@ public class OvertimeRequestController : ControllerBase
         _mediator = mediator;
     }
 
+    // =========================================================================
+    // Read endpoints
+    // =========================================================================
+
     [HttpGet]
     [HasPermission(Permissions.OvertimeRequestReadAll)]
     public async Task<IActionResult> GetAll(
@@ -31,10 +39,12 @@ public class OvertimeRequestController : ControllerBase
         [FromQuery] DateOnly? toDate,
         [FromQuery] int page = 1,
         [FromQuery] int size = 20,
+        [FromQuery] bool myScope = false,
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetOvertimeRequestsQuery(
-            employeeInformationId, status, fromDate, toDate, page, size), cancellationToken);
+            employeeInformationId, status, fromDate, toDate, page, size,
+            MyScope: myScope), cancellationToken);
         return Ok(result);
     }
 
@@ -51,11 +61,11 @@ public class OvertimeRequestController : ControllerBase
     }
 
     /// <summary>
-    /// PM xem OT do chính PM đã gửi. Không cần ReadAll — reuse permission CreateBatchDepartment
-    /// vì ai giao được OT thì phải xem được đơn của mình gửi.
+    /// PM xem OT các NV đã submit trong đơn mà PM là tổ trưởng — reuse permission
+    /// Review.Project. Legacy endpoint tên `created-by-me` giữ để FE không vỡ.
     /// </summary>
     [HttpGet("created-by-me")]
-    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    [HasPermission(Permissions.OvertimeRequestReviewProject)]
     public async Task<IActionResult> GetCreatedByMe(
         [FromQuery] OtRequestStatus? status,
         [FromQuery] DateOnly? fromDate,
@@ -81,54 +91,85 @@ public class OvertimeRequestController : ControllerBase
     }
 
     /// <summary>
-    /// PM tạo batch OT request cho N nhân viên cùng project. Partial success —
-    /// 1 NV fail (vượt trần OT hoặc scope không match) sẽ bỏ NV đó, các NV còn
-    /// lại vẫn tạo. Kết quả chi tiết ở response.
+    /// PM/HR/DM xem list task NV (người tạo request) được assign trong đơn của request.
+    /// Dùng ở detail panel để làm context khi review/duyệt.
     /// </summary>
-    [HttpPost("batch")]
-    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
-    public async Task<IActionResult> CreateBatch(
-        [FromBody] CreateBatchOvertimeRequest request,
-        CancellationToken cancellationToken)
+    [HttpGet("{id:int}/nv-tasks")]
+    [HasAnyPermission(
+        Permissions.OvertimeRequestReviewProject,
+        Permissions.OvertimeRequestApproveHr,
+        Permissions.OvertimeRequestApproveDepartment,
+        Permissions.OvertimeRequestReadAll)]
+    public async Task<IActionResult> GetNvTasks(int id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new CreateBatchOvertimeRequestCommand(
-            request.ProjectId,
-            request.WorkDate,
-            request.OtStartTime,
-            request.OtEndTime,
-            request.EmployeeInformationIds,
-            request.ApproverRoute,
-            request.Reason), cancellationToken);
-        return Ok(result);
-    }
-
-    /// <summary>List Project thuộc Department của PM — populate dropdown ở form batch.</summary>
-    [HttpGet("pm-projects")]
-    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
-    public async Task<IActionResult> GetPmProjects(CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(new GetPmProjectsQuery(), cancellationToken);
-        return Ok(result);
-    }
-
-    /// <summary>List NV thuộc Department của Project — populate picker ở form batch.</summary>
-    [HttpGet("eligible-employees")]
-    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
-    public async Task<IActionResult> GetEligibleEmployees(
-        [FromQuery] int projectId,
-        CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(
-            new GetEligibleEmployeesForOvertimeQuery(projectId), cancellationToken);
+        var result = await _mediator.Send(new GetOvertimeRequestNvTasksQuery(id), cancellationToken);
         return Ok(result);
     }
 
     /// <summary>
-    /// PM huỷ đơn OT của chính mình khi còn Pending. Handler enforce CreatedByUserId=current
-    /// nên endpoint chỉ cần permission tạo batch (PM đã có sẵn).
+    /// Form NV: auto-derive đơn từ task NV đang Status=InProgress. Trả 0 hoặc 1
+    /// đơn (theo luật '1 task open'); mỗi đơn kèm task list InProgress + PM name.
     /// </summary>
+    [HttpGet("my-active-orders")]
+    [HasPermission(Permissions.OvertimeRequestCreateSelf)]
+    public async Task<IActionResult> GetMyActiveOrders(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetMyActiveOrdersForOtQuery(), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Giới hạn OT hiện hành (active LaborLawConstants) để form NV hiển thị hint động
+    /// (Xh/ngày, Yh/tháng, Zh/năm...). Chỉ expose 4 con số OT + legal reference; không
+    /// đụng vào phần lương/BHXH của LaborLaw, nên dùng lại permission CreateSelf.
+    /// </summary>
+    [HttpGet("limits")]
+    [HasPermission(Permissions.OvertimeRequestCreateSelf)]
+    public async Task<IActionResult> GetLimits(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetOvertimeLimitsQuery(), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// NV xem tổng giờ OT hôm nay + tháng hiện tại (Approved vs Pending) + cap tương ứng.
+    /// Route giữ tên `me/summary/yearly` để FE khỏi vỡ; nội dung đã đơn giản hoá (không còn
+    /// breakdown theo năm — chỉ current day + current month).
+    /// </summary>
+    [HttpGet("me/summary/yearly")]
+    [HasPermission(Permissions.OvertimeRequestReadSelf)]
+    public async Task<IActionResult> GetMyYearlySummary(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetMyOvertimeYearlySummaryQuery(), cancellationToken);
+        return Ok(result);
+    }
+
+    // =========================================================================
+    // NV self-service — Create / Update / Cancel
+    // =========================================================================
+
+    /// <summary>
+    /// NV tự đăng ký OT. Body: projectId (đơn NV đang có task InProgress) + slot + workDate.
+    /// Handler validate: đơn Active + có ResponsibleUserId + NV có task InProgress.
+    /// </summary>
+    [HttpPost]
+    [HasPermission(Permissions.OvertimeRequestCreateSelf)]
+    public async Task<IActionResult> Create(
+        [FromBody] CreateOvertimeRequestRequest request,
+        CancellationToken cancellationToken)
+    {
+        var id = await _mediator.Send(new CreateOvertimeRequestCommand(
+            request.ProjectId,
+            request.WorkDate,
+            request.OtStartTime,
+            request.OtEndTime,
+            request.Reason), cancellationToken);
+        return Ok(new { id });
+    }
+
+    /// <summary>NV tự huỷ đơn OT của mình khi còn Pending (chưa PM review).</summary>
     [HttpPut("{id:int}/cancel")]
-    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    [HasPermission(Permissions.OvertimeRequestCreateSelf)]
     public async Task<IActionResult> Cancel(int id, CancellationToken cancellationToken)
     {
         var ok = await _mediator.Send(new CancelOvertimeRequestCommand(id), cancellationToken);
@@ -136,26 +177,75 @@ public class OvertimeRequestController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// PM sửa đơn OT của chính mình khi còn Pending. Đổi được workDate/otStart/otEnd/reason/approverRoute.
-    /// Không đổi được nhân viên hay project (huỷ + tạo mới nếu cần).
-    /// </summary>
+    /// <summary>NV sửa đơn OT của mình khi còn Pending. Đổi workDate/slot/reason.</summary>
     [HttpPut("{id:int}")]
-    [HasPermission(Permissions.OvertimeRequestCreateBatchDepartment)]
+    [HasPermission(Permissions.OvertimeRequestCreateSelf)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdatePendingOvertimeRequest request,
         CancellationToken cancellationToken)
     {
         var ok = await _mediator.Send(new UpdatePendingOvertimeRequestCommand(
-            id, request.WorkDate, request.OtStartTime, request.OtEndTime,
-            request.ApproverRoute, request.Reason), cancellationToken);
+            id, request.WorkDate, request.OtStartTime, request.OtEndTime, request.Reason),
+            cancellationToken);
         if (!ok) return NotFound();
         return NoContent();
     }
 
+    /// <summary>
+    /// Case 6 — Tổ trưởng (Project.ResponsibleUserId) đăng ký OT HỘ cho NV trong đơn mình phụ trách.
+    /// Đơn vào thẳng PendingApprover (bỏ PM-review), ApproverRoute chọn ngay. Reuse permission
+    /// ReviewProject của tổ trưởng.
+    /// </summary>
+    [HttpPost("on-behalf")]
+    [HasPermission(Permissions.OvertimeRequestReviewProject)]
+    public async Task<IActionResult> CreateOnBehalf(
+        [FromBody] CreateOvertimeOnBehalfBody body,
+        CancellationToken cancellationToken)
+    {
+        var id = await _mediator.Send(new CreateOvertimeOnBehalfCommand(
+            body.ProjectId,
+            body.EmployeeInformationId,
+            body.WorkDate,
+            body.OtStartTime,
+            body.OtEndTime,
+            body.ApproverRoute,
+            body.Reason), cancellationToken);
+        return Ok(new { id });
+    }
+
+    // =========================================================================
+    // PM tầng 1: Review (Forward / Reject)
+    // =========================================================================
+
+    /// <summary>
+    /// PM (tổ trưởng đơn) review request. Forward = chuyển tiếp cho HR hoặc DM
+    /// (kèm ApproverRoute); Reject = đóng request. Guard: currentUser =
+    /// Project.ResponsibleUserId.
+    /// </summary>
+    [HttpPut("{id:int}/pm-review")]
+    [HasPermission(Permissions.OvertimeRequestReviewProject)]
+    public async Task<IActionResult> PmReview(
+        int id,
+        [FromBody] PmReviewOvertimeRequestBody body,
+        CancellationToken cancellationToken)
+    {
+        var ok = await _mediator.Send(new PmReviewOvertimeRequestCommand(
+            id, body.Decision, body.ApproverRoute, body.Note), cancellationToken);
+        if (!ok) return NotFound();
+        return NoContent();
+    }
+
+    // =========================================================================
+    // Approver tầng 2: Approve / Reject (HR hoặc DM tuỳ ApproverRoute)
+    // =========================================================================
+
+    /// <summary>
+    /// HR hoặc DM duyệt cuối. Handler gate role theo `ApproverRoute` của request.
+    /// Endpoint yêu cầu 1 trong 2 permission Approve.Hr | Approve.Department.
+    /// </summary>
     [HttpPut("{id:int}/approve")]
-    [HasPermission(Permissions.OvertimeRequestApproveAll)]
+    [HasAnyPermission(Permissions.OvertimeRequestApproveHr, Permissions.OvertimeRequestApproveDepartment)]
     public async Task<IActionResult> Approve(
         int id,
         [FromBody] ReviewOvertimeRequest request,
@@ -167,7 +257,7 @@ public class OvertimeRequestController : ControllerBase
     }
 
     [HttpPut("{id:int}/reject")]
-    [HasPermission(Permissions.OvertimeRequestApproveAll)]
+    [HasAnyPermission(Permissions.OvertimeRequestApproveHr, Permissions.OvertimeRequestApproveDepartment)]
     public async Task<IActionResult> Reject(
         int id,
         [FromBody] ReviewOvertimeRequest request,

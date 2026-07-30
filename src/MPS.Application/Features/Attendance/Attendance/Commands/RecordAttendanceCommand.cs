@@ -16,6 +16,6 @@ public sealed record RecordAttendanceCommand(
     int? OvertimeRequestId,
     DateTime? CheckInAt,
     DateTime? CheckOutAt,
-    AttendanceStatus Status,
+    AttendanceStatus? Status,
     string? Notes,
     string? OverrideReason = null) : IRequest<int>;

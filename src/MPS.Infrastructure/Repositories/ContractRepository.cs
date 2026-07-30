@@ -255,6 +255,8 @@ public class ContractRepository : IContractRepository
             throw new DomainValidationException(
                 $"Cannot activate contract {contractId}: status is {tracked.Status}, only Draft can be activated.");
 
+        await EnsureNoOverlappingActiveContractAsync(tracked, cancellationToken);
+
         // Freeze snapshot + activate
         tracked.SalaryAmountSnapshot = snapshotAmount;
         tracked.SalaryCurrencySnapshot = snapshotCurrency;
@@ -273,6 +275,43 @@ public class ContractRepository : IContractRepository
         await _context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return file.Id;
+    }
+
+    /// <summary>
+    /// Một người lao động chỉ được có MỘT hợp đồng hiệu lực tại một thời điểm (Đ.20 BLLĐ 2019 —
+    /// hợp đồng sau chỉ bắt đầu khi hợp đồng trước đã kết thúc).
+    ///
+    /// ⚠️ Thiếu guard này thì hai HĐ Active chồng khoảng ngày cùng tồn tại (đo 2026-07-22:
+    /// 2027-01-01→2027-12-31 và 2027-06-01→2028-05-31 của cùng một người đều lên Active) và
+    /// bảng lương lấy mức lương/phụ cấp theo hợp đồng nào là KHÔNG XÁC ĐỊNH — sai tiền lương
+    /// mà không có dấu hiệu nào để phát hiện.
+    ///
+    /// HĐ chưa có ngày kết thúc (không xác định thời hạn) coi như kéo dài vô hạn.
+    /// </summary>
+    private async Task EnsureNoOverlappingActiveContractAsync(
+        Contract candidate,
+        CancellationToken cancellationToken)
+    {
+        var others = await _context.Contracts
+            .AsNoTracking()
+            .Where(c => c.EmployeeInformationId == candidate.EmployeeInformationId
+                && c.Id != candidate.Id
+                && c.Status == ContractStatus.Active
+                && c.ArchivedAt == null)
+            .Select(c => new { c.Id, c.ContractNo, c.EffectiveFrom, c.EffectiveTo })
+            .ToListAsync(cancellationToken);
+
+        var overlapped = others.FirstOrDefault(o =>
+            candidate.EffectiveFrom <= (o.EffectiveTo ?? DateTime.MaxValue)
+            && o.EffectiveFrom <= (candidate.EffectiveTo ?? DateTime.MaxValue));
+
+        if (overlapped is null) return;
+
+        throw new DomainValidationException(
+            $"CONTRACT_OVERLAP: Nhân viên đã có hợp đồng đang hiệu lực '{overlapped.ContractNo}' "
+            + $"({overlapped.EffectiveFrom:dd/MM/yyyy}–{(overlapped.EffectiveTo.HasValue ? overlapped.EffectiveTo.Value.ToString("dd/MM/yyyy") : "không thời hạn")}) "
+            + "chồng khoảng thời gian với hợp đồng này. Mỗi thời điểm chỉ được một hợp đồng hiệu lực — "
+            + "hãy chấm dứt hợp đồng cũ trước, hoặc chỉnh lại ngày hiệu lực.");
     }
 
     public Task<ContractFile?> GetCurrentFileAsync(
@@ -401,6 +440,27 @@ public class ContractRepository : IContractRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<int>> GetUserIdsWithActiveContractAsync(
+        IReadOnlyCollection<int> userIds,
+        DateTime atUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+            return Array.Empty<int>();
+
+        var ids = userIds.Distinct().ToArray();
+        return await _context.Contracts
+            .AsNoTracking()
+            .Where(c => c.Status == ContractStatus.Active
+                     && c.EffectiveFrom <= atUtc
+                     && (c.EffectiveTo == null || c.EffectiveTo >= atUtc)
+                     && c.EmployeeInformation.UserId != null
+                     && ids.Contains(c.EmployeeInformation.UserId!.Value))
+            .Select(c => c.EmployeeInformation.UserId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<Domain.Entities.Contract?> GetForDocumentGenerationAsync(int id, CancellationToken cancellationToken = default) =>
         _context.Contracts
             .AsNoTracking()
@@ -436,20 +496,49 @@ public class ContractRepository : IContractRepository
                 && c.ConvertedFromDefiniteFlag == false)
             .ToListAsync(cancellationToken);
 
+        if (candidates.Count == 0) return 0;
+
+        // #57: KHÔNG nới HĐ ra vô hạn nếu NV đã ký HĐ khác tiếp quản sau khi HĐ này hết hạn —
+        // nếu không sẽ sinh 2 HĐ Active chồng khoảng hiệu lực (đi vòng qua guard CONTRACT_OVERLAP,
+        // vốn chỉ chặn ở ActivateAsync). Đúng tinh thần Đ.20 k.2: đã ký HĐ mới thì không gia hạn ngầm
+        // ⇒ HĐ hết hạn này chỉ đơn thuần Expired, không auto-convert.
+        var employeeIds = candidates.Select(c => c.EmployeeInformationId).Distinct().ToList();
+        var candidateIds = candidates.Select(c => c.Id).ToHashSet();
+        var otherActive = await _context.Contracts.AsNoTracking()
+            .Where(c => employeeIds.Contains(c.EmployeeInformationId)
+                && c.Status == ContractStatus.Active
+                && c.ArchivedAt == null
+                && !candidateIds.Contains(c.Id))
+            .Select(c => new { c.EmployeeInformationId, c.EffectiveTo })
+            .ToListAsync(cancellationToken);
+
         foreach (var contract in candidates)
         {
-            contract.ContractCategory = ContractCategory.Indefinite;
-            contract.EffectiveTo = null;
-            contract.ConvertedFromDefiniteFlag = true;
+            var effectiveTo = contract.EffectiveTo!.Value;
+            var hasSuccessor = otherActive.Any(o =>
+                o.EmployeeInformationId == contract.EmployeeInformationId
+                && (o.EffectiveTo == null || o.EffectiveTo.Value > effectiveTo));
+
+            if (hasSuccessor)
+            {
+                // NV đã có HĐ Active khác phủ khoảng sau EffectiveTo ⇒ HĐ này hết hạn thật.
+                contract.Status = ContractStatus.Expired;
+            }
+            else
+            {
+                contract.ContractCategory = ContractCategory.Indefinite;
+                contract.EffectiveTo = null;
+                contract.ConvertedFromDefiniteFlag = true;
+            }
             contract.UpdatedAt = nowUtc;
         }
 
-        if (candidates.Count > 0)
-            await _context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
         return candidates.Count;
     }
 
-    public async Task<int> ExpireOverdueContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    public async Task<(int ExpiredCount, IReadOnlyList<int> AffectedEmployeeInformationIds)> ExpireOverdueContractsAsync(
+        DateTime nowUtc, CancellationToken cancellationToken = default)
     {
         // 2 nhóm HĐ với logic expire khác nhau theo ContractKindMetadata.AllowsAutoConvert:
         //  A) AllowsAutoConvert = true (hiện chỉ LaborFullTime): giữ "vùng đệm 30 ngày" theo
@@ -464,7 +553,7 @@ public class ContractRepository : IContractRepository
                 && c.EffectiveTo.Value < nowUtc)
             .ToListAsync(cancellationToken);
 
-        if (candidates.Count == 0) return 0;
+        if (candidates.Count == 0) return (0, Array.Empty<int>());
 
         var autoConvertKinds = ContractKindMetadata.All
             .Where(m => m.AllowsAutoConvert)
@@ -504,7 +593,12 @@ public class ContractRepository : IContractRepository
 
         if (toExpire.Count > 0)
             await _context.SaveChangesAsync(cancellationToken);
-        return toExpire.Count;
+
+        var affectedEmployeeIds = toExpire
+            .Select(c => c.EmployeeInformationId)
+            .Distinct()
+            .ToList();
+        return (toExpire.Count, affectedEmployeeIds);
     }
 
     public async Task<int> ArchiveOldContractsAsync(DateTime nowUtc, CancellationToken cancellationToken = default)

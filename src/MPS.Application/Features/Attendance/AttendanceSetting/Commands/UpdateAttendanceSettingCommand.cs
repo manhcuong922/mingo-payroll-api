@@ -8,4 +8,14 @@ public sealed record UpdateAttendanceSettingCommand(
     TimeOnly DailyEditCutoffTime,
     int LockAfterDays,
     bool AllowAdminOverride,
-    bool RequireOverrideReason) : IRequest<AttendanceSettingDto>;
+    bool RequireOverrideReason,
+    int? LateEarlyMaxOccurrencesPerMonth,
+    int? LateEarlyMaxMinutesPerOccurrence,
+    int? LateEarlyBackdateDaysAllowed,
+    decimal? WfhMaxDaysPerMonth,
+    int? WfhMinNoticeDays,
+    decimal? WfhMaxDaysPerRequest,
+    int? WfhWorkPlanMinLength,
+    int? LateGraceMinutes,
+    int? EarlyLeaveGraceMinutes,
+    int? HalfDayThresholdMinutes) : IRequest<AttendanceSettingDto>;
