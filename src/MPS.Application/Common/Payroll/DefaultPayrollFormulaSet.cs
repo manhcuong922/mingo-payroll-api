@@ -51,8 +51,15 @@ public static class DefaultPayrollFormulaSet
             return node;
         }
 
+        // [D20] — NLĐ làm không đủ công chuẩn (vào/nghỉ giữa tháng...) thì các khoản gắn với "nguyên
+        // tháng" phải chia theo công thực tế/công chuẩn. Dùng CHUNG 1 công thức cho Cơm (GD) và cả
+        // khối BH (GF): value / CongChuan × CongTinhCom (CongTinhCom = tổng công thực tế mọi loại
+        // hình — chính thức + thử việc + học việc, xem PayrollDataCollector.congCom).
+        FormulaNode ProrateByCong(FormulaNode value) =>
+            N.Mul(N.Div(value, N.Col(Cc.CongChuan)), N.Col(Cc.CongTinhCom));
+
         FormulaNode Bh(string rateField, string capField) =>
-            N.Func(Fn.InsuranceWithCap, N.Col(Cc.MucLuong), N.Field(rateField), N.Field(capField));
+            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), N.Field(capField));
 
         const string GA = "Nhân viên";
         const string GB = "Ngày công";
@@ -93,11 +100,12 @@ public static class DefaultPayrollFormulaSet
 
         // ===== Khối D — phụ cấp không tính lương T13 =====
         Add(Cc.XangXe, "Xăng xe", GD, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceXangXe, money: true);
-        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) ghi trong HĐ của NV — nguyên tháng, KHÔNG nhân số công.
+        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) ghi trong HĐ của NV, CHIA theo công thực tế/công chuẩn
+        // [D20] — làm nửa tháng thì hưởng nửa suất cơm, không phải nguyên suất.
         // Không có phụ cấp MEAL trong HĐ → 0. Cờ BH "xx" = không tính cơm (đặc tả §3-Khối D).
         Add(Cc.Com, "Cơm", GD, ColumnDataType.Money, ColumnValueSource.Formula,
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagBh), N.Literal(InsuranceFlags.NoMealFlatTax)),
-                N.Const(0m), N.Field(Fk.ContractAllowanceCom)), money: true);
+                N.Const(0m), ProrateByCong(N.Field(Fk.ContractAllowanceCom))), money: true);
         Add(Cc.CongTac, "Hỗ trợ công tác", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // #64/[D15] — cột "Khác" nhận mặc định TỔNG phụ cấp HĐ mã lạ (ngoài 4 mã cứng) để tiền không
         // biến mất; vẫn là Input nên kế toán chỉnh tay được (thưởng cưới/sinh...) đè lên mặc định.
@@ -148,7 +156,7 @@ public static class DefaultPayrollFormulaSet
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, Bh(Fk.BhtnNldRate, Fk.BhtnCap)));
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
-                N.Func(Fn.InsuranceWithCap, N.Col(Cc.MucLuong), N.Field(Fk.KpcdRate), N.Const(0m))));
+                N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
