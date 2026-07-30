@@ -9,4 +9,5 @@ public sealed record AllowanceTypeCreateCommand(
     decimal? DefaultAmount,
     bool IsBhxhBase,
     bool IsTaxable,
+    bool ExcludeFromProration,
     bool IsActive) : IRequest<int>;

@@ -204,11 +204,15 @@ public sealed class PayrollExcelBookBuilderTests
         var phuCapCom = Column(book, PayrollFieldKeys.ContractAllowanceCom);
         var congChuan = Column(book, PayrollColumnCodes.CongChuan);
         var congTinhCom = Column(book, PayrollColumnCodes.CongTinhCom);
+        // PRORATE-02 — phần cơm khai NGOẠI LỆ cộng nguyên, không qua bước chia theo công.
+        var comNgoaiLe = Column(book, PayrollFieldKeys.ContractAllowanceComNgoaiLe);
 
         // Cột tiền không khai báo làm tròn vẫn được engine làm tròn về đồng nguyên → phải có ROUND(,0).
         // [D20/PRORATE-01] Cơm chia theo công thực tế/công chuẩn thay vì nguyên suất.
         Cell(book, 0, PayrollColumnCodes.Com).Formula.Should()
-            .Be($"ROUND(IF(EXACT({flag.Letter}13,\"xx\"),0,(IFERROR({phuCapCom.Letter}13/{congChuan.Letter}13,0)*{congTinhCom.Letter}13)),0)");
+            .Be($"ROUND(IF(EXACT({flag.Letter}13,\"xx\"),0,"
+                + $"((IFERROR({phuCapCom.Letter}13/{congChuan.Letter}13,0)*{congTinhCom.Letter}13)"
+                + $"+{comNgoaiLe.Letter}13)),0)");
     }
 
     [Fact]

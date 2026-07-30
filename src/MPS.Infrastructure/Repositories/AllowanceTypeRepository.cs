@@ -77,6 +77,7 @@ public class AllowanceTypeRepository : IAllowanceTypeRepository
         existing.DefaultAmount = entity.DefaultAmount;
         existing.IsBhxhBase = entity.IsBhxhBase;
         existing.IsTaxable = entity.IsTaxable;
+        existing.ExcludeFromProration = entity.ExcludeFromProration;
         existing.IsActive = entity.IsActive;
         existing.UpdatedAt = DateTime.UtcNow;
 

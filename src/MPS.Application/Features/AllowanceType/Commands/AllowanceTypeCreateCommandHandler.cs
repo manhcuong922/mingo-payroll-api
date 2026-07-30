@@ -22,6 +22,7 @@ public class AllowanceTypeCreateCommandHandler : IRequestHandler<AllowanceTypeCr
             DefaultAmount = request.DefaultAmount,
             IsBhxhBase = request.IsBhxhBase,
             IsTaxable = request.IsTaxable,
+            ExcludeFromProration = request.ExcludeFromProration,
             IsActive = request.IsActive,
         };
         return await _repository.AddAsync(entity, cancellationToken);
