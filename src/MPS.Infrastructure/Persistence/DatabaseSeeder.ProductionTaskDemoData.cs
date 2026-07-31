@@ -115,6 +115,15 @@ public sealed partial class DatabaseSeeder
 
     // Gán mỗi vị trí lá (RequiredPositionId) cho 1 công nhân đúng chức danh trong xưởng (round-robin nếu
     // nhiều lá cùng chức danh, vd 2 thợ cắt). Node container/gate không gán. Trả về số lá đã gán.
+    //
+    // ⚠️ MỖI CHỨC DANH GIỮ LẠI 1 NGƯỜI DỰ PHÒNG (khi tổ có ≥2 người cùng chức danh). Trước đây đơn A
+    // gán HẾT pool: xưởng 1 có đúng 2 thợ cắt và quy trình mẫu có đúng 2 lá thợ cắt ⇒ cả hai người
+    // đều giữ task `Todo` ngay từ lúc dựng DB. `TaskAssigneeGuard` (#24, không giao việc chồng) vì
+    // thế chặn MỌI phép gán thợ cắt tiếp theo ⇒ nhóm case "đổi người thực hiện" (PROD-T03,
+    // PROD-T03-audit) không bao giờ dựng nổi dữ liệu và phải tự skip. Đây là **khoảng trống của
+    // seed**, không phải lỗi guard: một xưởng thật luôn còn người chưa được phân công.
+    // Quy tắc: mỗi chức danh gán tối đa `pool.Count - 1` lá, nhưng ít nhất 1 lá (để chức danh chỉ
+    // có 1 người vẫn có dữ liệu demo). Lá vượt hạn mức để trống — đúng nghĩa "công đoạn chưa phân công".
     private int AssignWorkersToLeaves(IReadOnlyList<ProjectTask> tasks, ProdShop shop)
     {
         var workersByPosition = shop.Workers
@@ -131,7 +140,8 @@ public sealed partial class DatabaseSeeder
             if (!workersByPosition.TryGetValue(posId, out var pool) || pool.Count == 0) continue;
 
             var i = cursor.TryGetValue(posId, out var c) ? c : 0;
-            var userId = pool[i % pool.Count];
+            if (i >= Math.Max(1, pool.Count - 1)) continue;   // đã dùng hết hạn mức → để lá trống
+            var userId = pool[i];
             cursor[posId] = i + 1;
 
             leaf.Assignees.Add(new TaskAssignee { UserId = userId, AssignedAt = now });
