@@ -13,11 +13,13 @@ namespace MPS.Application.Features.Payroll.Common;
 /// nhiều kỳ vẫn đúng tổng."</i></para>
 ///
 /// <para><b>Vì sao cần lớp này.</b> <see cref="PayrollAdjustmentApplier"/> đã chặn âm cho nhánh
-/// TRUY THU, nhưng thực nhận còn có thể âm vì lý do khác: BHXH/BHYT/BHTN và phí công đoàn tính
-/// trên <c>MUC_LUONG</c> <b>nguyên</b> (quyết định `[D20]` giữ nguyên, cố ý không chia theo ngày
-/// công), trong khi cột Thu nhập lại chia cho công chuẩn. Nhân viên làm ít ngày ⇒ thu nhập nhỏ mà
-/// khoản trừ giữ nguyên ⇒ thực nhận âm. Đo thật: công chuẩn 999 ⇒ 34/34 dòng lương âm.
-/// Vì `[D20]` cố ý không đụng nguyên nhân, phải xử lý ở đầu ra bằng sàn 0 + chuyển dư.</para>
+/// TRUY THU, nhưng thực nhận còn có thể âm vì lý do khác — bất kỳ khoản trừ Input nào (cấn trừ tạm
+/// ứng, chi khác...) hoặc thuế TNCN đủ lớn so với thu nhập kỳ đó đều có thể kéo công thức
+/// <c>Cc.ThucNhan</c> xuống âm, vì công thức không tự kẹp 0. (Trước 2026-07-29, BHXH/BHYT/BHTN +
+/// phí công đoàn tính trên <c>MUC_LUONG</c> nguyên trong khi Thu nhập chia theo công chuẩn cũng là
+/// một nguồn gây âm — `[D20]`/PRORATE-03 đã sửa để BH chia theo công thực tế như Thu nhập, nhưng lớp
+/// sàn 0 này vẫn cần cho MỌI nguồn âm khác, không riêng gì BH.) Xử lý ở đầu ra bằng sàn 0 + chuyển
+/// dư là cách tổng quát, không cần biết trước nguyên nhân cụ thể.</para>
 ///
 /// <para><b>Cách làm.</b> Kẹp ô THỰC NHẬN về 0 và ghi phần thiếu thành một khoản truy thu
 /// <b>chưa áp</b> gắn với chính kỳ này. Kỳ lương kế tiếp sẽ tự gom nó qua

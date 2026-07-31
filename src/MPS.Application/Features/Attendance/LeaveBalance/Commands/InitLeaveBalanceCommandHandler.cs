@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.LeaveBalance.Common;
 using MPS.Application.Features.Attendance.LeaveType.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -9,20 +10,17 @@ using LeaveBalanceEntity = MPS.Domain.Entities.Attendance.LeaveBalance;
 namespace MPS.Application.Features.Attendance.LeaveBalance.Commands;
 
 /// <summary>
-/// BR-15 — Điều 113 + 114 áp dụng cho mã ANNUAL:
-///   BaseDays = 12
-///   SeniorityBonusDays = yearsOfService / 5 (integer division)
-///   TotalDays = BaseDays + SeniorityBonusDays
+/// Cấp quỹ phép TAY cho một NV. Mã ANNUAL đi qua đúng công thức dùng chung
+/// <see cref="Common.AnnualLeaveEntitlement"/> (Đ.113 + Đ.114 BLLĐ, Đ.66 NĐ 145/2020: quota chia
+/// theo số tháng làm việc) ⇒ cấp tay và job đầu năm không bao giờ ra số khác nhau.
 ///
-/// yearsOfService = floor((Jan-01 of target year - employee.JoinDate).TotalDays / 365)
-///   JoinDate = MIN(Contract.EffectiveFrom) trong các HĐ không Cancelled.
+/// Với các mã theo dõi quỹ năm khác ANNUAL: lấy hạn mức năm khai trên chính loại nghỉ đó, không
+/// chia theo tháng (SICK/MATERNITY là mức trần BHXH).
 ///
-/// Với các mã DeductsBalance khác ANNUAL: BaseDays = 0; HR có thể adjust sau.
 /// Upsert: nếu balance đã tồn tại ⇒ update Base/Seniority/Total, giữ nguyên UsedDays.
 /// </summary>
 public class InitLeaveBalanceCommandHandler : IRequestHandler<InitLeaveBalanceCommand, int>
 {
-    private const decimal BaseAnnualDays = 12m;
     private const string AnnualCode = "ANNUAL";
 
     private readonly ILeaveBalanceRepository _repository;
@@ -62,14 +60,13 @@ public class InitLeaveBalanceCommandHandler : IRequestHandler<InitLeaveBalanceCo
         decimal bonusDays;
         if (isAnnual)
         {
-            var joinDate = await _lookup.GetEmployeeJoinDateAsync(request.EmployeeInformationId, cancellationToken)
+            var window = await _lookup.GetEmployeeServiceWindowAsync(request.EmployeeInformationId, cancellationToken)
                 ?? throw new DomainValidationException(
                     $"Cannot init annual leave balance: employee {request.EmployeeInformationId} has no non-cancelled contract to derive a join date from.");
 
-            var anchor = new DateTime(request.Year, 1, 1);
-            var yearsOfService = anchor < joinDate ? 0 : (int)((anchor - joinDate).TotalDays / 365);
-            baseDays = BaseAnnualDays;
-            bonusDays = (decimal)(yearsOfService / 5);
+            var grant = AnnualLeaveEntitlement.ForAnnual(window.JoinDate, window.ServiceEnd, request.Year);
+            baseDays = grant.BaseDays;
+            bonusDays = grant.SeniorityBonusDays;
         }
         else
         {

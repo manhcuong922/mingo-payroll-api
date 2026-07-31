@@ -87,15 +87,16 @@ public sealed class PayrollCalculatorSmokeTests
         // Act
         calculator.ComputeAll(plan, ctx, row);
 
-        // Assert — đối chiếu số tính tay
+        // Assert — đối chiếu số tính tay. [D20] Công tính cơm (20) < công chuẩn (23) → Cơm + BH đều
+        // chia theo công thực tế thay vì nguyên suất/nguyên MUC_LUONG.
         Cell(row, PayrollColumnCodes.PhuCapLuong).Should().Be(20_000_000m);
-        Cell(row, PayrollColumnCodes.Com).Should().Be(800_000m);
-        Cell(row, PayrollColumnCodes.ThuNhap).Should().Be(40_800_000m);
-        Cell(row, PayrollColumnCodes.TongThuNhap).Should().Be(40_800_000m);
-        Cell(row, PayrollColumnCodes.CongBhNld).Should().Be(2_100_000m);
-        Cell(row, PayrollColumnCodes.Tntt).Should().Be(16_270_000m);
-        Cell(row, PayrollColumnCodes.ThueTncn).Should().Be(1_127_000m);
-        Cell(row, PayrollColumnCodes.ThucNhan).Should().Be(37_573_000m);
+        Cell(row, PayrollColumnCodes.Com).Should().Be(695_652m);
+        Cell(row, PayrollColumnCodes.ThuNhap).Should().Be(40_695_652m);
+        Cell(row, PayrollColumnCodes.TongThuNhap).Should().Be(40_695_652m);
+        Cell(row, PayrollColumnCodes.CongBhNld).Should().Be(1_826_087m);
+        Cell(row, PayrollColumnCodes.Tntt).Should().Be(16_473_913m);
+        Cell(row, PayrollColumnCodes.ThueTncn).Should().Be(1_147_391.30m);
+        Cell(row, PayrollColumnCodes.ThucNhan).Should().Be(37_722_000m);
     }
 
     [Fact]
@@ -107,12 +108,15 @@ public sealed class PayrollCalculatorSmokeTests
         var columns = DefaultPayrollFormulaSet.BuildColumns();
         var plan = PayrollColumnPlan.Build(columns, graph);
 
-        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) trong HĐ, nguyên tháng — KHÔNG nhân số công.
+        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) trong HĐ, chia theo công thực tế/công chuẩn [D20].
+        // Công chuẩn = công tính cơm (10/10) ⇒ tỉ lệ 1, giữ nguyên 730.000 để test tập trung vào
+        // hình dạng cây explanation, không phải vào số học chia công.
         var inputs = new PayrollEmployeeInputs
         {
             EmployeeInformationId = 1,
             Numbers =
             {
+                [PayrollFieldKeys.CongChuan] = 10m,
                 [PayrollFieldKeys.CongTinhCom] = 10m,
                 [PayrollFieldKeys.ContractAllowanceCom] = 730_000m,
             },

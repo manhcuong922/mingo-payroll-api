@@ -7,4 +7,6 @@ public sealed record CreateAllowanceTypeRequest(
     decimal? DefaultAmount,
     bool IsBhxhBase = false,
     bool IsTaxable = true,
+    // PRORATE-02 — mặc định false: phụ cấp chia theo ngày công như `[D20]`; bật để trả nguyên khoản.
+    bool ExcludeFromProration = false,
     bool IsActive = true);
