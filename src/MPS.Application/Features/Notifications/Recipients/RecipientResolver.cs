@@ -32,6 +32,9 @@ public sealed class RecipientResolver : IRecipientResolver
 
             if (spec.DepartmentIds.Count > 0)
                 foreach (var id in await _directory.GetUserIdsByDepartmentsAsync(spec.DepartmentIds, ct)) result.Add(id);
+
+            if (spec.PermissionCodes.Count > 0)
+                foreach (var id in await _directory.GetUserIdsByPermissionsAsync(spec.PermissionCodes, ct)) result.Add(id);
         }
 
         foreach (var excluded in spec.ExcludeUserIds) result.Remove(excluded);

@@ -1,21 +1,25 @@
+using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Payroll;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Infrastructure.BackgroundJobs;
 
 /// <summary>
-/// Daily tick: quét mọi nghĩa vụ BHXH/TNCN đang <see cref="PaymentObligationStatus.Pending"/> hoặc
-/// <see cref="PaymentObligationStatus.PartiallyPaid"/> có <c>Deadline &lt; hôm nay (UTC)</c> và
-/// chuyển sang <see cref="PaymentObligationStatus.Overdue"/>. Không đụng obligation Completed.
-/// Không tính tiền phạt — chỉ đổi cờ để UI cảnh báo.
+/// Daily tick:
+///   1. Mark Overdue: mọi nghĩa vụ Pending/PartiallyPaid có <c>Deadline &lt; hôm nay</c> chuyển sang Overdue.
+///   2. Phase 4 §N9 — publish TB "sắp đến hạn" cho T-7/T-3/T-1 và "đã quá hạn" hằng ngày.
+///
+/// Publish là best-effort — fail không rollback việc mark Overdue. Không tính tiền phạt.
 /// </summary>
 public sealed class BhxhTaxDeadlineJob : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
+    private static readonly int[] SoonThresholds = { 7, 3, 1 }; // §N9
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -60,29 +64,85 @@ public sealed class BhxhTaxDeadlineJob : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var clock = scope.ServiceProvider.GetRequiredService<IClock>();
             var repo = scope.ServiceProvider.GetRequiredService<IPaymentObligationRepository>();
+            var publisher = scope.ServiceProvider.GetRequiredService<IPublisher>();
 
             var today = clock.UtcNow.Date;
-            var overdueCandidates = await repo.ListPendingOrPartiallyPaidWithDeadlineBeforeAsync(today, cancellationToken);
-            if (overdueCandidates.Count == 0)
+
+            // Gộp 1 query: mọi obligation chưa Completed có deadline trong khoảng (-∞, today+8)
+            // → đủ dữ liệu cho cả nhánh Overdue (deadline < today) và Soon (deadline trong 1..7 ngày tới).
+            var candidates = await repo.ListPendingOrPartiallyPaidWithDeadlineBeforeAsync(
+                today.AddDays(SoonThresholds[0] + 1), cancellationToken);
+            if (candidates.Count == 0)
             {
-                _logger.LogDebug("BhxhTaxDeadlineJob: no pending obligation past deadline.");
+                _logger.LogDebug("BhxhTaxDeadlineJob: no obligation in the deadline window.");
                 return 0;
             }
 
-            foreach (var obligation in overdueCandidates)
+            var overdueMarked = 0;
+            foreach (var obligation in candidates)
             {
-                obligation.Status = PaymentObligationStatus.Overdue;
-                obligation.UpdatedAt = clock.UtcNow;
+                var deadlineDate = obligation.Deadline.Date;
+
+                if (deadlineDate < today)
+                {
+                    if (obligation.Status != PaymentObligationStatus.Overdue)
+                    {
+                        obligation.Status = PaymentObligationStatus.Overdue;
+                        obligation.UpdatedAt = clock.UtcNow;
+                        overdueMarked++;
+                    }
+                    await PublishOverdueAsync(publisher, obligation, today, cancellationToken);
+                }
+                else
+                {
+                    var daysRemaining = (deadlineDate - today).Days;
+                    if (SoonThresholds.Contains(daysRemaining))
+                        await PublishSoonAsync(publisher, obligation, daysRemaining, cancellationToken);
+                }
             }
 
-            await repo.SaveChangesAsync(cancellationToken);
+            if (overdueMarked > 0)
+                await repo.SaveChangesAsync(cancellationToken);
+
             _logger.LogInformation(
-                "BhxhTaxDeadlineJob: đánh cờ Overdue cho {Count} nghĩa vụ.", overdueCandidates.Count);
-            return overdueCandidates.Count;
+                "BhxhTaxDeadlineJob: scanned {Count}, marked Overdue {OverdueMarked}.",
+                candidates.Count, overdueMarked);
+            return candidates.Count;
         }
         finally
         {
             _gate.Release();
         }
     }
+
+    private static Task PublishSoonAsync(
+        IPublisher publisher,
+        MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation obligation,
+        int daysRemaining,
+        CancellationToken ct) =>
+        publisher.Publish(new BhxhTaxDeadlineSoonNotification(
+            ObligationId: obligation.Id,
+            ObligationLabel: LabelOf(obligation),
+            DueDate: obligation.Deadline,
+            DaysRemaining: daysRemaining,
+            Amount: obligation.AmountDue,
+            Currency: "VND"), ct);
+
+    private static Task PublishOverdueAsync(
+        IPublisher publisher,
+        MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation obligation,
+        DateTime today,
+        CancellationToken ct) =>
+        publisher.Publish(new BhxhTaxOverdueNotification(
+            ObligationId: obligation.Id,
+            ObligationLabel: LabelOf(obligation),
+            DueDate: obligation.Deadline,
+            DaysOverdue: (today - obligation.Deadline.Date).Days,
+            Amount: obligation.AmountDue,
+            Currency: "VND"), ct);
+
+    private static string LabelOf(MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation o) =>
+        o.ObligationType == PaymentObligationType.Bhxh
+            ? $"BHXH kỳ {o.PayrollPeriod?.PeriodMonth:D2}/{o.PayrollPeriod?.PeriodYear}"
+            : $"TNCN kỳ {o.PayrollPeriod?.PeriodMonth:D2}/{o.PayrollPeriod?.PeriodYear}";
 }

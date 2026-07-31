@@ -45,6 +45,8 @@ public static class NotificationModuleRegistration
         // Danh bạ người nhận (đọc AppDbContext) + resolver + notifier điều phối.
         services.AddScoped<INotificationRecipientDirectory, NotificationRecipientDirectory>();
         services.AddScoped<IRecipientResolver, RecipientResolver>();
+        // Phase 1 kênh email: resolver tra User.Email / EmployeeInformation.Email theo prefersPersonal.
+        services.AddScoped<IUserEmailResolver, UserEmailResolver>();
         services.AddScoped<INotifier, Notifier>();
 
         // Auto-scan MỌI template trong assembly Application → thêm 1 file template là tự chạy,

@@ -1,8 +1,10 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 
@@ -14,17 +16,20 @@ public class RejectWfhRequestCommandHandler : IRequestHandler<RejectWfhRequestCo
     private readonly ApproverDepartmentGuard _departmentGuard;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPublisher _publisher;
 
     public RejectWfhRequestCommandHandler(
         IWfhRequestRepository repository,
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPublisher publisher)
     {
         _repository = repository;
         _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(RejectWfhRequestCommand request, CancellationToken cancellationToken)
@@ -59,6 +64,21 @@ public class RejectWfhRequestCommandHandler : IRequestHandler<RejectWfhRequestCo
         existing.UpdatedAt = now;
         existing.UpdatedByUserId = userId;
 
-        return await _repository.UpdateAsync(existing, cancellationToken);
+        var updated = await _repository.UpdateAsync(existing, cancellationToken);
+
+        if (updated)
+        {
+            await _publisher.Publish(new AttendanceRequestDecidedNotification(
+                Kind: AttendanceRequestKind.Wfh,
+                RequestId: existing.Id,
+                Decision: AttendanceRequestDecision.Rejected,
+                DecidedByUserId: userId,
+                SubmittedByUserId: existing.CreatedByUserId,
+                RequesterUserId: existing.CreatedByUserId,
+                Summary: $"WFH {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}",
+                Reason: request.ReviewNote), cancellationToken);
+        }
+
+        return updated;
     }
 }

@@ -1,7 +1,10 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Attendance.Common;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -21,19 +24,25 @@ public class CreateAttendanceAdjustmentCommandHandler : IRequestHandler<CreateAt
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPublisher _publisher;
+    private readonly IAttendanceApproverResolver _approverResolver;
 
     public CreateAttendanceAdjustmentCommandHandler(
         IAttendanceAdjustmentRepository repository,
         IAttendanceRecordRepository recordRepository,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPublisher publisher,
+        IAttendanceApproverResolver approverResolver)
     {
         _repository = repository;
         _recordRepository = recordRepository;
         _lookup = lookup;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
+        _approverResolver = approverResolver;
     }
 
     public async Task<int> Handle(CreateAttendanceAdjustmentCommand request, CancellationToken cancellationToken)
@@ -73,6 +82,22 @@ public class CreateAttendanceAdjustmentCommandHandler : IRequestHandler<CreateAt
             CreatedByUserId = userId
         };
 
-        return await _repository.AddAsync(entity, cancellationToken);
+        var requestId = await _repository.AddAsync(entity, cancellationToken);
+
+        // Adjustment: mọi user có AttendanceAdjustment.Approve.All (không có route riêng theo dept).
+        var approvers = await _approverResolver.ResolveForSubmitAsync(
+            AttendanceRequestKind.Adjustment, approverRoute: null, employeeId,
+            tierOneApproverUserId: null, excludeUserId: userId, cancellationToken);
+
+        await _publisher.Publish(new AttendanceRequestSubmittedNotification(
+            Kind: AttendanceRequestKind.Adjustment,
+            RequestId: requestId,
+            SubmittedByUserId: userId,
+            RequesterUserId: userId,
+            ApproverUserIds: approvers,
+            Summary: $"Chỉnh công cho AttendanceRecord #{request.AttendanceRecordId}"),
+            cancellationToken);
+
+        return requestId;
     }
 }

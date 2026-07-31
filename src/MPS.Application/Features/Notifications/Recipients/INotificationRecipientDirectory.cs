@@ -20,4 +20,11 @@ public interface INotificationRecipientDirectory
 
     /// <summary>Toàn bộ user id đang hoạt động (broadcast).</summary>
     Task<IReadOnlyCollection<int>> GetAllActiveUserIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// User id đang hoạt động có (bất kỳ) permission code nào trong tập. Union — 1 code khớp là đủ.
+    /// Dùng cho recipient theo permission (Phase 1 mở kênh email + fan-out nghiệp vụ).
+    /// </summary>
+    Task<IReadOnlyCollection<int>> GetUserIdsByPermissionsAsync(
+        IReadOnlyCollection<string> permissionCodes, CancellationToken ct = default);
 }

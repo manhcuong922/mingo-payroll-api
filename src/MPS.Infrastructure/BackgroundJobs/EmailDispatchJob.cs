@@ -140,7 +140,9 @@ public sealed class EmailDispatchJob : BackgroundService
         {
             EmailOutboxType.PasswordReset => SendPasswordResetAsync(message, sender, protector, cancellationToken),
             EmailOutboxType.AccountCredentials => SendAccountCredentialsAsync(message, sender, protector, cancellationToken),
+            EmailOutboxType.FirstLoginInvitation => SendFirstLoginInvitationAsync(message, sender, protector, cancellationToken),
             EmailOutboxType.ContractActivation => SendContractActivationAsync(message, sender, protector, cancellationToken),
+            EmailOutboxType.GenericNotification => SendGenericNotificationAsync(message, sender, protector, cancellationToken),
             _ => throw new InvalidOperationException($"Unknown EmailOutboxType {message.Type} for message {message.Id}."),
         };
 
@@ -151,19 +153,37 @@ public sealed class EmailDispatchJob : BackgroundService
         return sender.SendPasswordResetAsync(message.ToEmail, p.ResetToken, p.ExpiresAt, cancellationToken);
     }
 
+    // AccountCredentials deprecated (plan §2 N8) — private helper chỉ để tiêu thụ nốt outbox cũ.
+    // Không đặt [Obsolete] trên helper để switch expression không nhả warning cho code lành mạnh.
     private static Task SendAccountCredentialsAsync(
         EmailOutboxMessage message, IRealEmailSender sender, IOutboxPayloadProtector protector, CancellationToken cancellationToken)
     {
         var p = Deserialize<AccountCredentialsPayload>(message, protector);
+#pragma warning disable CS0618 // gọi API deprecated là ý đồ — worker vẫn phải xử lý outbox cũ.
         return sender.SendAccountCredentialsAsync(message.ToEmail, p.FullName, p.Username, p.PlainPassword, cancellationToken);
+#pragma warning restore CS0618
+    }
+
+    private static Task SendFirstLoginInvitationAsync(
+        EmailOutboxMessage message, IRealEmailSender sender, IOutboxPayloadProtector protector, CancellationToken cancellationToken)
+    {
+        var p = Deserialize<FirstLoginInvitationPayload>(message, protector);
+        return sender.SendFirstLoginInvitationAsync(
+            message.ToEmail, p.FullName, p.Username, p.InvitationUrl, p.ExpiresAt, cancellationToken);
+    }
+
+    private static Task SendGenericNotificationAsync(
+        EmailOutboxMessage message, IRealEmailSender sender, IOutboxPayloadProtector protector, CancellationToken cancellationToken)
+    {
+        var p = Deserialize<GenericNotificationPayload>(message, protector);
+        return sender.SendGenericNotificationAsync(message.ToEmail, p.Subject, p.TextBody, p.HtmlBody, cancellationToken);
     }
 
     private static Task SendContractActivationAsync(
         EmailOutboxMessage message, IRealEmailSender sender, IOutboxPayloadProtector protector, CancellationToken cancellationToken)
     {
         var p = Deserialize<ContractActivationPayload>(message, protector);
-        var payload = new ContractActivationEmailPayload(
-            p.ContractNo, p.EffectiveFrom, p.EffectiveTo, p.Username, p.PlainPassword, p.LoginUrl);
+        var payload = new ContractActivationEmailPayload(p.ContractNo, p.EffectiveFrom, p.EffectiveTo);
         return sender.SendContractActivationAsync(
             message.ToEmail, p.FullName, payload,
             message.StorageBucket ?? throw new InvalidOperationException($"Message {message.Id} missing StorageBucket."),

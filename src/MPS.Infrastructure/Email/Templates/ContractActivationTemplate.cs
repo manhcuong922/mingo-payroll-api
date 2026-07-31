@@ -3,6 +3,11 @@ using System.Net;
 
 namespace MPS.Infrastructure.Email.Templates;
 
+/// <summary>
+/// Mail HĐ đã kích hoạt: CHỈ thông tin HĐ + PDF đính kèm (plan §2 N7).
+/// Credentials TÁCH RIÊNG qua <see cref="FirstLoginInvitationTemplate"/> — mail HĐ là tài liệu
+/// tham chiếu dài hạn, không nên nhét password / credentials cùng.
+/// </summary>
 internal static class ContractActivationTemplate
 {
     public const string Subject = "[Mingo Payroll] Hợp đồng lao động đã được kích hoạt";
@@ -11,10 +16,7 @@ internal static class ContractActivationTemplate
         string fullName,
         string contractNo,
         DateTime effectiveFrom,
-        DateTime? effectiveTo,
-        string? username,
-        string? plainPassword,
-        string? loginUrl)
+        DateTime? effectiveTo)
     {
         var safeName = WebUtility.HtmlEncode(fullName);
         var safeContractNo = WebUtility.HtmlEncode(contractNo);
@@ -22,46 +24,6 @@ internal static class ContractActivationTemplate
         var safeTo = effectiveTo.HasValue
             ? effectiveTo.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
             : "Không thời hạn";
-        var safeLoginUrl = string.IsNullOrWhiteSpace(loginUrl) ? null : WebUtility.HtmlEncode(loginUrl);
-
-        var credentialsBlock = (username is null || plainPassword is null)
-            ? string.Empty
-            : $$"""
-              <p style="margin:0 0 8px;">Tài khoản đăng nhập hệ thống Mingo Payroll của bạn:</p>
-              <table role="presentation" cellpadding="0" cellspacing="0"
-                     style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;
-                            width:100%;margin:8px 0 16px;">
-                <tr>
-                  <td style="padding:14px 18px;border-bottom:1px solid #e5e7eb;">
-                    <div style="color:#6b7280;font-size:12px;">Username</div>
-                    <div style="font-family:Consolas,'Courier New',monospace;font-size:15px;
-                                color:#111827;margin-top:4px;">{{WebUtility.HtmlEncode(username)}}</div>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 18px;">
-                    <div style="color:#6b7280;font-size:12px;">Mật khẩu</div>
-                    <div style="font-family:Consolas,'Courier New',monospace;font-size:15px;
-                                color:#111827;margin-top:4px;">{{WebUtility.HtmlEncode(plainPassword)}}</div>
-                  </td>
-                </tr>
-              </table>
-              """;
-
-        var ctaBlock = safeLoginUrl is null
-            ? string.Empty
-            : $$"""
-              <tr>
-                <td align="center" style="padding:8px 0 8px;">
-                  <a href="{{safeLoginUrl}}"
-                     style="background:#1e3a8a;color:#ffffff;text-decoration:none;
-                            padding:12px 28px;border-radius:6px;font-weight:600;
-                            display:inline-block;font-family:Arial,sans-serif;">
-                    Đăng nhập ngay
-                  </a>
-                </td>
-              </tr>
-              """;
 
         return $$"""
             <!DOCTYPE html>
@@ -113,12 +75,14 @@ internal static class ContractActivationTemplate
                               </td>
                             </tr>
                           </table>
-                          {{credentialsBlock}}
-                          {{ctaBlock}}
+                          <p style="margin:16px 0 6px;color:#374151;">
+                            Nếu đây là lần đầu bạn nhận tài khoản Mingo Payroll, một email <em>riêng biệt</em>
+                            có link đặt mật khẩu sẽ được gửi tới bạn. Nếu chưa nhận, vui lòng kiểm tra hộp thư
+                            hoặc dùng "Quên mật khẩu" ở trang đăng nhập.
+                          </p>
                           <p style="margin:24px 0 6px;color:#b91c1c;font-weight:600;">⚠ Lưu ý</p>
                           <ul style="margin:0;padding-left:18px;color:#374151;">
                             <li>Vui lòng lưu lại file PDF hợp đồng đính kèm để tham chiếu sau này.</li>
-                            <li>Nếu email có thông tin đăng nhập, vui lòng đổi mật khẩu ngay sau lần đăng nhập đầu tiên.</li>
                             <li>Email này được gửi tự động, vui lòng không trả lời trực tiếp.</li>
                           </ul>
                         </td>
@@ -142,10 +106,7 @@ internal static class ContractActivationTemplate
         string fullName,
         string contractNo,
         DateTime effectiveFrom,
-        DateTime? effectiveTo,
-        string? username,
-        string? plainPassword,
-        string? loginUrl)
+        DateTime? effectiveTo)
     {
         var effectiveToText = effectiveTo.HasValue
             ? effectiveTo.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
@@ -161,33 +122,16 @@ internal static class ContractActivationTemplate
             $"  Số hợp đồng: {contractNo}",
             $"  Hiệu lực từ: {effectiveFrom:dd/MM/yyyy}",
             $"  Hiệu lực đến: {effectiveToText}",
+            string.Empty,
+            "Nếu đây là lần đầu bạn nhận tài khoản Mingo Payroll, một email riêng có link đặt mật khẩu sẽ được gửi tới bạn.",
+            "Nếu chưa nhận, vui lòng kiểm tra hộp thư hoặc dùng \"Quên mật khẩu\" ở trang đăng nhập.",
+            string.Empty,
+            "Lưu ý:",
+            " - Vui lòng lưu lại file PDF hợp đồng đính kèm để tham chiếu sau này.",
+            " - Email này được gửi tự động, vui lòng không trả lời trực tiếp.",
+            string.Empty,
+            "— Mingo Payroll",
         };
-
-        if (username is not null && plainPassword is not null)
-        {
-            lines.Add(string.Empty);
-            lines.Add("Tài khoản đăng nhập hệ thống Mingo Payroll:");
-            lines.Add($"  Username: {username}");
-            lines.Add($"  Mật khẩu: {plainPassword}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(loginUrl))
-        {
-            lines.Add(string.Empty);
-            lines.Add($"Đăng nhập tại: {loginUrl}");
-        }
-
-        lines.Add(string.Empty);
-        lines.Add("Lưu ý:");
-        lines.Add(" - Vui lòng lưu lại file PDF hợp đồng đính kèm để tham chiếu sau này.");
-        if (username is not null)
-        {
-            lines.Add(" - Đổi mật khẩu ngay sau lần đăng nhập đầu tiên.");
-        }
-        lines.Add(" - Email này được gửi tự động, vui lòng không trả lời trực tiếp.");
-        lines.Add(string.Empty);
-        lines.Add("— Mingo Payroll");
-
         return string.Join(Environment.NewLine, lines);
     }
 }

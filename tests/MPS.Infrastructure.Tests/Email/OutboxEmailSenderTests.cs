@@ -49,6 +49,9 @@ public sealed class OutboxEmailSenderTests
         row.StorageObjectKey.Should().BeNull();
     }
 
+    /// <summary>Backward-compat test: dữ liệu outbox cũ (trước plan §2 N8) vẫn phải ghi đúng.
+    /// Caller mới KHÔNG được dùng API deprecated này — dùng SendFirstLoginInvitationAsync.</summary>
+#pragma warning disable CS0618
     [Fact]
     public async Task SendAccountCredentialsAsync_WritesPendingRow_WithCredentialsInPayload()
     {
@@ -61,6 +64,28 @@ public sealed class OutboxEmailSenderTests
         row.Type.Should().Be(EmailOutboxType.AccountCredentials);
         row.PayloadJson.Should().Contain("nva").And.Contain("Secr3t!");
     }
+#pragma warning restore CS0618
+
+    [Fact]
+    public async Task SendFirstLoginInvitationAsync_WritesPendingRow_WithInvitationUrlInPayload()
+    {
+        await using var db = NewContext();
+        var clock = new FakeClock();
+        var sender = new OutboxEmailSender(new EmailOutboxRepository(db), clock, new NoOpOutboxPayloadProtector());
+
+        var expiresAt = clock.UtcNow.AddHours(72);
+        await sender.SendFirstLoginInvitationAsync(
+            "newbie@mingo.local", "Nguyen Van A", "nva",
+            "https://mps.local/first-login?token=abc",
+            expiresAt);
+
+        var row = await db.EmailOutboxMessages.SingleAsync();
+        row.Type.Should().Be(EmailOutboxType.FirstLoginInvitation);
+        row.ToEmail.Should().Be("newbie@mingo.local");
+        row.PayloadJson.Should().Contain("nva")
+            .And.Contain("first-login")
+            .And.Contain("abc"); // token nằm trong invitation URL
+    }
 
     [Fact]
     public async Task SendContractActivationAsync_WritesPendingRow_WithStorageKeyAndPayload()
@@ -70,10 +95,7 @@ public sealed class OutboxEmailSenderTests
         var payload = new ContractActivationEmailPayload(
             ContractNo: "HD-2026-001",
             EffectiveFrom: new DateTime(2026, 7, 1),
-            EffectiveTo: null,
-            Username: "nva",
-            PlainPassword: "Secr3t!",
-            LoginUrl: null);
+            EffectiveTo: null);
 
         await sender.SendContractActivationAsync(
             "user@mingo.local", "Nguyen Van A", payload,

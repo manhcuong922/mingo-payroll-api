@@ -1,9 +1,11 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.LeaveRequest.Common;
 using MPS.Application.Features.Attendance.LeaveType.Common;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -31,6 +33,8 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly MedicalCertificateUploader _certificateUploader;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPublisher _publisher;
+    private readonly IAttendanceApproverResolver _approverResolver;
 
     public CreateLeaveRequestCommandHandler(
         ILeaveRequestRepository repository,
@@ -44,7 +48,9 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         AttendanceRequestDayConflictChecker dayConflictChecker,
         MedicalCertificateUploader certificateUploader,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPublisher publisher,
+        IAttendanceApproverResolver approverResolver)
     {
         _repository = repository;
         _leaveTypeRepository = leaveTypeRepository;
@@ -58,6 +64,8 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _certificateUploader = certificateUploader;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
+        _approverResolver = approverResolver;
     }
 
     public async Task<CreateLeaveRequestResult> Handle(CreateLeaveRequestCommand request, CancellationToken cancellationToken)
@@ -228,6 +236,8 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             {
                 var entity = NewRequest(finalType, request.StartDate, request.EndDate, totalDays);
                 var id = await _repository.AddAsync(entity, cancellationToken);
+                await PublishSubmittedAsync(id, userId, employeeId, resolvedRoute,
+                    finalType.Code, request.StartDate, request.EndDate, totalDays, cancellationToken);
                 return new CreateLeaveRequestResult(id, finalType.Id, finalType.Code, switched, switchMessage);
             }
 
@@ -250,6 +260,10 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             // Ghi cùng một lượt: không được phép còn lại một nửa (xem AddRangeAsync).
             var ids = await _repository.AddRangeAsync(new[] { paidPart, unpaidPart }, cancellationToken);
 
+            // Chỉ publish 1 event cho đơn CÓ LƯƠNG — người duyệt xử lý đơn split như 1 đơn logic.
+            await PublishSubmittedAsync(ids[0], userId, employeeId, resolvedRoute,
+                leaveType.Code, request.StartDate, request.EndDate, totalDays, cancellationToken);
+
             return new CreateLeaveRequestResult(
                 ids[0], leaveType.Id, leaveType.Code, switched, switchMessage,
                 UnpaidId: ids[1], PaidDays: paidSplitDays, UnpaidDays: unpaidDays);
@@ -259,6 +273,28 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             await _certificateUploader.TryDeleteAsync(medicalCertObjectKey, CancellationToken.None);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Phase 3 §N2 — publish event submit đơn nghỉ. Approver resolve theo <c>ApproverRoute</c> đã set:
+    /// HR/Director → user role tương ứng; DM → DM cùng phòng ban với NV. Người submit bị loại (BR-10).
+    /// </summary>
+    private async Task PublishSubmittedAsync(
+        int requestId, int submitterUserId, int employeeId, OvertimeApproverRoute resolvedRoute,
+        string leaveTypeCode, DateOnly startDate, DateOnly endDate, decimal totalDays, CancellationToken ct)
+    {
+        var approvers = await _approverResolver.ResolveForSubmitAsync(
+            AttendanceRequestKind.Leave, resolvedRoute, employeeId,
+            tierOneApproverUserId: null, excludeUserId: submitterUserId, ct);
+
+        await _publisher.Publish(new AttendanceRequestSubmittedNotification(
+            Kind: AttendanceRequestKind.Leave,
+            RequestId: requestId,
+            SubmittedByUserId: submitterUserId,
+            RequesterUserId: submitterUserId, // Leave self-service: submit = requester
+            ApproverUserIds: approvers,
+            Summary: $"{totalDays} ngày phép '{leaveTypeCode}' từ {startDate:dd/MM/yyyy} tới {endDate:dd/MM/yyyy}"),
+            ct);
     }
 
     /// <summary>

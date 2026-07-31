@@ -72,6 +72,39 @@ public sealed class LockPayrollPeriodCommandHandler : IRequestHandler<LockPayrol
         await _mediator.Publish(
             new PayrollPeriodLockedNotification(period.Id, period.PeriodYear, period.PeriodMonth, userId, now),
             ct);
+
+        // Phase 4 §N11 — payslip cá nhân sẵn sàng ngay khi khoá kỳ. Fan-out theo NV có row trong kỳ.
+        await FanOutPayslipReadyAsync(period, ct);
+    }
+
+    /// <summary>
+    /// Publish 1 <see cref="PayslipReadyNotification"/> cho từng NV có payslip trong kỳ.
+    /// Enumerate qua row Employee (bỏ Total). NetPay bỏ qua ở đây (0) — template chỉ nhắc NV vào xem
+    /// chứ không hiển thị số tiền trong TB (tránh lộ lương qua chuông/mail).
+    /// </summary>
+    private async Task FanOutPayslipReadyAsync(
+        MPS.Domain.Entities.Payroll.PayrollPeriod period, CancellationToken ct)
+    {
+        var employeeUserIds = period.Rows?
+            .Where(r => r.RowType == PayrollRowType.Employee
+                        && r.EmployeeInformationId.HasValue
+                        && r.EmployeeInformation?.UserId != null)
+            .Select(r => r.EmployeeInformation!.UserId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (employeeUserIds is null || employeeUserIds.Count == 0) return;
+
+        foreach (var userId in employeeUserIds)
+        {
+            await _mediator.Publish(new PayslipReadyNotification(
+                PeriodId: period.Id,
+                PeriodYear: period.PeriodYear,
+                PeriodMonth: period.PeriodMonth,
+                EmployeeUserId: userId,
+                NetPay: 0m,           // template không hiển thị số tiền — tránh lộ lương qua TB.
+                Currency: "VND"), ct);
+        }
     }
 }
 

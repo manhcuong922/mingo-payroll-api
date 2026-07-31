@@ -9,42 +9,30 @@ using Xunit;
 
 namespace MPS.Application.Tests.Features.User;
 
+/// <summary>
+/// Plan §2 N8 (Hướng B): sau khi provisioner tạo tài khoản, handler chỉ cần gọi
+/// <see cref="IFirstLoginInvitationService"/> — service tự lo tạo token + gửi mail.
+/// Handler KHÔNG còn gửi credentials thô, KHÔNG còn đọc email của EI.
+/// </summary>
 public sealed class UserCreateCommandHandlerTests
 {
     private readonly Mock<IEmployeeAccountProvisioner> _provisioner = new();
-    private readonly Mock<IEmployeeInformationRepository> _eiRepo = new();
-    private readonly Mock<IEmailSender> _emailSender = new();
+    private readonly Mock<IFirstLoginInvitationService> _firstLoginInvitation = new();
 
     private UserCreateCommandHandler CreateSut() =>
-        new(_provisioner.Object, _eiRepo.Object, _emailSender.Object);
-
-    private static MPS.Domain.Entities.EmployeeInformation BuildEi(
-        int id,
-        string email = "a@example.com",
-        string fullName = "Vũ Đình Thắng") =>
-        new()
-        {
-            Id = id,
-            FullName = fullName,
-            Dob = new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            Gender = Gender.Male,
-            CitizenId = "012345678901",
-            PermanentAddress = "Ha Noi",
-            Email = email,
-            PositionId = 1,
-        };
+        new(_provisioner.Object, _firstLoginInvitation.Object);
 
     [Fact]
-    public async Task Handle_HappyPath_DelegatesToProvisioner_AndSendsCredentialsEmail()
+    public async Task Handle_HappyPath_DelegatesToProvisioner_AndIssuesFirstLoginInvitation()
     {
         const int eiId = 10;
         var credentials = new EmployeeAccountCredentials(
-            UserId: 99, EmployeeCode: "BA260001", Username: "thangvdBA260001", PlainPassword: "Aa1xyzzz");
+            UserId: 99, EmployeeCode: "BA260001", Username: "thangvdBA260001");
 
         _provisioner.Setup(p => p.ProvisionAsync(eiId, 2, It.IsAny<CancellationToken>()))
                     .ReturnsAsync(credentials);
-        _eiRepo.Setup(r => r.GetByIdAsync(eiId, It.IsAny<CancellationToken>()))
-               .ReturnsAsync(BuildEi(eiId));
+        _firstLoginInvitation.Setup(s => s.IssueAsync(99, It.IsAny<CancellationToken>()))
+                             .ReturnsAsync(DateTime.UtcNow.AddHours(72));
 
         var result = await CreateSut().Handle(new UserCreateCommand(eiId, RoleId: 2), CancellationToken.None);
 
@@ -52,13 +40,14 @@ public sealed class UserCreateCommandHandlerTests
         result.EmployeeCode.Should().Be("BA260001");
         result.Username.Should().Be("thangvdBA260001");
 
-        _emailSender.Verify(s => s.SendAccountCredentialsAsync(
-            "a@example.com", "Vũ Đình Thắng", "thangvdBA260001", "Aa1xyzzz", It.IsAny<CancellationToken>()),
-            Times.Once);
+        _firstLoginInvitation.Verify(
+            s => s.IssueAsync(99, It.IsAny<CancellationToken>()),
+            Times.Once,
+            "phải gửi mail mời đặt password lần đầu cho user vừa tạo");
     }
 
     [Fact]
-    public async Task Handle_PropagatesProvisionerException()
+    public async Task Handle_PropagatesProvisionerException_AndDoesNotIssueInvitation()
     {
         const int eiId = 999;
         _provisioner.Setup(p => p.ProvisionAsync(eiId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -67,6 +56,6 @@ public sealed class UserCreateCommandHandlerTests
         var act = () => CreateSut().Handle(new UserCreateCommand(eiId, RoleId: 2), CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainValidationException>().WithMessage("*EMPLOYEE_INFO_NOT_FOUND*");
-        _emailSender.VerifyNoOtherCalls();
+        _firstLoginInvitation.VerifyNoOtherCalls();
     }
 }

@@ -1,7 +1,10 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Employee;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Employee;
@@ -16,19 +19,25 @@ public class CreateDependentRegistrationRequestCommandHandler : IRequestHandler<
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPublisher _publisher;
+    private readonly IAttendanceApproverResolver _approverResolver;
 
     public CreateDependentRegistrationRequestCommandHandler(
         IDependentRegistrationRequestRepository repository,
         IEmployeeDependentRepository dependentRepository,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPublisher publisher,
+        IAttendanceApproverResolver approverResolver)
     {
         _repository = repository;
         _dependentRepository = dependentRepository;
         _lookup = lookup;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
+        _approverResolver = approverResolver;
     }
 
     public async Task<int> Handle(CreateDependentRegistrationRequestCommand request, CancellationToken cancellationToken)
@@ -71,7 +80,23 @@ public class CreateDependentRegistrationRequestCommandHandler : IRequestHandler<
             CreatedByUserId = userId
         };
 
-        return await _repository.AddAsync(entity, cancellationToken);
+        var requestId = await _repository.AddAsync(entity, cancellationToken);
+
+        // Dependent: chỉ HR/SystemAdmin duyệt — resolver dùng permission DependentRequest.Approve.All.
+        var approvers = await _approverResolver.ResolveForSubmitAsync(
+            AttendanceRequestKind.Dependent, approverRoute: null, employeeId,
+            tierOneApproverUserId: null, excludeUserId: userId, cancellationToken);
+
+        await _publisher.Publish(new AttendanceRequestSubmittedNotification(
+            Kind: AttendanceRequestKind.Dependent,
+            RequestId: requestId,
+            SubmittedByUserId: userId,
+            RequesterUserId: userId,
+            ApproverUserIds: approvers,
+            Summary: $"Đơn NPT ({request.RequestType}): {entity.FullName}"),
+            cancellationToken);
+
+        return requestId;
     }
 
     private static void EnsureRegisterPayload(CreateDependentRegistrationRequestCommand request)

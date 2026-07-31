@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MPS.Application.Common.Models.Compliance;
 using MPS.Application.Features.Notifications.Recipients;
+using MPS.Domain.Constants;
 using MPS.Domain.Entities.Compliance;
 using MPS.Domain.Enums.Notifications;
 
@@ -59,7 +60,25 @@ public sealed class ComplianceChangedTemplate : NotificationTemplate<ComplianceV
             severity: NotificationSeverity.Warning,
             metadataJson: metadataJson);
 
-        // Toàn bộ nhân sự đang hoạt động.
-        return Single(RecipientSpec.Everyone(), content);
+        // Phase 5 §N1 — thay vì Everyone (spam toàn công ty), chỉ gửi cho HR/Kế toán/Compliance/quản lý
+        // (user có ít nhất 1 trong các permission read/update compliance HOẶC đọc payroll).
+        var recipients = RecipientSpec.Permissions(
+            Permissions.LaborLawConstantsReadAll,
+            Permissions.LaborLawConstantsUpdateAll,
+            Permissions.PitRegulationReadAll,
+            Permissions.PitRegulationUpdateAll,
+            Permissions.SocialInsuranceRateReadAll,
+            Permissions.SocialInsuranceRateUpdateAll,
+            Permissions.MinimumWageReadAll,
+            Permissions.MinimumWageUpdateAll,
+            Permissions.AllowanceExemptThresholdReadAll,
+            Permissions.AllowanceExemptThresholdUpdateAll,
+            Permissions.PayrollReadAll);
+
+        var email = new EmailContent(
+            Subject: $"[Mingo Payroll] Cập nhật quy định: {name}",
+            TextBody: message);
+
+        return SingleWithEmail(recipients, content, email);
     }
 }

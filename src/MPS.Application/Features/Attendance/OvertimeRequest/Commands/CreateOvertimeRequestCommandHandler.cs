@@ -1,9 +1,11 @@
 ﻿using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces;
@@ -39,6 +41,8 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
     private readonly IComplianceLookupService _complianceLookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPublisher _publisher;
+    private readonly IAttendanceApproverResolver _approverResolver;
 
     public CreateOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
@@ -52,7 +56,9 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPublisher publisher,
+        IAttendanceApproverResolver approverResolver)
     {
         _repository = repository;
         _projectRepository = projectRepository;
@@ -66,6 +72,8 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         _complianceLookup = complianceLookup;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
+        _approverResolver = approverResolver;
     }
 
     public async Task<int> Handle(CreateOvertimeRequestCommand request, CancellationToken cancellationToken)
@@ -166,7 +174,25 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             CreatedByUserId = userId,
         };
 
-        return await _repository.AddAsync(entity, cancellationToken);
+        var requestId = await _repository.AddAsync(entity, cancellationToken);
+
+        // Phase 3 §N2 — tier 1: PM đơn (Project.ResponsibleUserId) review trước. Tier 2 (HR/DM/Director)
+        // sẽ nhận TB riêng khi PM Forward — không phát ở đây.
+        var approvers = await _approverResolver.ResolveForSubmitAsync(
+            AttendanceRequestKind.Overtime, approverRoute: null, employeeId,
+            tierOneApproverUserId: project.ResponsibleUserId,
+            excludeUserId: userId, cancellationToken);
+
+        await _publisher.Publish(new AttendanceRequestSubmittedNotification(
+            Kind: AttendanceRequestKind.Overtime,
+            RequestId: requestId,
+            SubmittedByUserId: userId,
+            RequesterUserId: userId,
+            ApproverUserIds: approvers,
+            Summary: $"OT {otHours:0.##}h ngày {request.WorkDate:dd/MM/yyyy} ({request.OtStartTime:HH\\:mm}-{request.OtEndTime:HH\\:mm})"),
+            cancellationToken);
+
+        return requestId;
     }
 
     private static decimal CalculateHours(TimeOnly start, TimeOnly end)
