@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using MPS.Application.Features.Attendance.LeaveBalance.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Contract;
 
@@ -17,21 +18,15 @@ namespace MPS.Infrastructure.Persistence;
 /// <c>LEAVE_BALANCE_MISSING</c> (lỗi #34), và mọi luồng nghỉ phép đều phải tự khởi tạo quỹ trước
 /// khi làm được việc gì — tức hệ thống mới dựng lên là đã ở trạng thái không dùng được.</para>
 ///
-/// <para>Quy tắc cấp giữ ĐÚNG như <c>InitLeaveBalanceCommandHandler</c> để hai đường không lệch
-/// nhau: phép năm = 12 ngày + 1 ngày mỗi 5 năm thâm niên (Đ.113); loại khác lấy hạn mức năm khai
-/// trên chính loại nghỉ đó.</para>
+/// <para>Quy tắc cấp gọi thẳng <see cref="AnnualLeaveEntitlement"/> — cùng công thức với hook kích
+/// hoạt HĐ, đường cấp tay và <c>AnnualLeaveGrantJob</c>: phép năm = (12 ngày + 1 ngày mỗi 5 năm
+/// thâm niên) / 12 × số tháng làm việc; loại khác lấy hạn mức năm khai trên chính loại nghỉ đó.</para>
 ///
 /// <para>Idempotent theo khoá (nhân viên, năm, loại nghỉ) — chạy lại không nhân đôi, và KHÔNG đụng
 /// tới <c>UsedDays</c> của bản ghi đã có.</para>
 /// </summary>
 public sealed partial class DatabaseSeeder
 {
-    /// <summary>Đ.113 — số ngày phép năm cơ bản.</summary>
-    private const decimal BaseAnnualLeaveDays = 12m;
-
-    /// <summary>Đ.114 — cứ đủ 5 năm thâm niên được thêm 1 ngày.</summary>
-    private const int SeniorityBonusEveryYears = 5;
-
     private const string AnnualLeaveCode = "ANNUAL";
 
     private async Task SeedLeaveBalancesAsync(CancellationToken ct)
@@ -49,14 +44,21 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        // Nhân viên có HĐ chưa huỷ → suy ra ngày vào làm (mốc sớm nhất) để tính thâm niên.
-        var joinDateByEmployee = await _context.Contracts
+        // Nhân viên có HĐ chưa huỷ → khoảng phục vụ (ngày vào làm sớm nhất … ngày hết hạn muộn nhất,
+        // null = HĐ không xác định thời hạn) để tính thâm niên + số tháng làm việc.
+        var serviceWindows = await _context.Contracts
             .AsNoTracking()
             .Where(c => c.Status != ContractStatus.Cancelled)
             .GroupBy(c => c.EmployeeInformationId)
-            .Select(g => new { EmployeeInformationId = g.Key, JoinDate = g.Min(c => c.EffectiveFrom) })
-            .ToDictionaryAsync(x => x.EmployeeInformationId, x => x.JoinDate, ct);
-        if (joinDateByEmployee.Count == 0)
+            .Select(g => new
+            {
+                EmployeeInformationId = g.Key,
+                JoinDate = g.Min(c => c.EffectiveFrom),
+                ServiceEnd = g.Max(c => c.EffectiveTo),
+                OpenEnded = g.Any(c => c.EffectiveTo == null),
+            })
+            .ToListAsync(ct);
+        if (serviceWindows.Count == 0)
         {
             _logger.LogDebug("Chưa có hợp đồng nào; bỏ qua seed quỹ phép.");
             return;
@@ -78,22 +80,24 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var anchor = new DateTime(year, 1, 1);
         var now = DateTime.UtcNow;
         var added = 0;
 
-        foreach (var (employeeId, joinDate) in joinDateByEmployee)
+        foreach (var window in serviceWindows)
         {
             foreach (var leaveType in leaveTypes)
             {
-                if (existingKeys.Contains((employeeId, leaveType.Id))) continue;
+                if (existingKeys.Contains((window.EmployeeInformationId, leaveType.Id))) continue;
 
                 decimal baseDays, bonusDays;
                 if (string.Equals(leaveType.Code, AnnualLeaveCode, StringComparison.OrdinalIgnoreCase))
                 {
-                    var yearsOfService = anchor < joinDate ? 0 : (int)((anchor - joinDate).TotalDays / 365);
-                    baseDays = BaseAnnualLeaveDays;
-                    bonusDays = yearsOfService / SeniorityBonusEveryYears;
+                    // Cùng một công thức với hook kích hoạt HĐ, cấp tay và job đầu năm — nếu seeder
+                    // tự tính riêng thì DB mẫu sẽ lệch mã nguồn (đúng cái bẫy đã gây #64).
+                    var grant = AnnualLeaveEntitlement.ForAnnual(
+                        window.JoinDate, window.OpenEnded ? null : window.ServiceEnd, year);
+                    baseDays = grant.BaseDays;
+                    bonusDays = grant.SeniorityBonusDays;
                 }
                 else
                 {
@@ -105,7 +109,7 @@ public sealed partial class DatabaseSeeder
 
                 _context.LeaveBalances.Add(new LeaveBalance
                 {
-                    EmployeeInformationId = employeeId,
+                    EmployeeInformationId = window.EmployeeInformationId,
                     Year = year,
                     LeaveTypeId = leaveType.Id,
                     BaseDays = baseDays,
@@ -128,6 +132,6 @@ public sealed partial class DatabaseSeeder
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation(
             "Seeded {Count} bản ghi quỹ phép năm {Year} cho {Employees} nhân viên.",
-            added, year, joinDateByEmployee.Count);
+            added, year, serviceWindows.Count);
     }
 }

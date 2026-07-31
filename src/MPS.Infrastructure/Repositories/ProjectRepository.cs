@@ -22,6 +22,7 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .AsQueryable();
 
         if (!includeCancelled)
@@ -38,7 +39,13 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
+
+    // Có tracking (khác GetByIdAsync) để interceptor audit so được giá trị trước–sau. Xem ghi chú
+    // ở IProjectRepository.GetByIdForUpdateAsync.
+    public Task<Project?> GetByIdForUpdateAsync(int id, CancellationToken ct) =>
+        _context.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public Task<Project?> GetByIdWithTasksAsync(int id, CancellationToken ct) =>
         _context.Projects
@@ -46,6 +53,7 @@ public class ProjectRepository : IProjectRepository
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
             .Include(p => p.CompletedBy)
+            .Include(p => p.ResponsibleUser)
             .Include(p => p.Tasks).ThenInclude(t => t.Assignees).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
@@ -56,6 +64,7 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .Where(p => p.DepartmentId == departmentId)
             .AsQueryable();
 
@@ -76,6 +85,7 @@ public class ProjectRepository : IProjectRepository
             .AsNoTracking()
             .Include(p => p.Department)
             .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
             .AsQueryable();
 
         if (departmentId.HasValue)

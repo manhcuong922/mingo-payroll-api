@@ -29,7 +29,10 @@ public class ProjectSetResponsibleCommandHandler : IRequestHandler<ProjectSetRes
 
     public async Task<bool> Handle(ProjectSetResponsibleCommand request, CancellationToken ct)
     {
-        var project = await _projects.GetByIdAsync(request.ProjectId, ct)
+        // Bản TRACKED — chuyển quyền phụ trách đơn cũng là chuyển quyền chấm điểm ([D25]/#63) nên
+        // BẮT BUỘC để lại vết audit. Bản AsNoTracking làm interceptor thấy "không có gì đổi" và
+        // bỏ qua, không ghi audit nào (cùng lỗi #20 đã sửa cho Task).
+        var project = await _projects.GetByIdForUpdateAsync(request.ProjectId, ct)
             ?? throw new NotFoundException($"Không tìm thấy đơn #{request.ProjectId}.");
 
         await ProjectScopeGuard.EnsureCanWriteAsync(project.DepartmentId, _currentUser, _authorizer, ct);

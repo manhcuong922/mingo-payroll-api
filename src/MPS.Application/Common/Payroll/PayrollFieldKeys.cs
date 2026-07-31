@@ -25,6 +25,15 @@ public static class PayrollFieldKeys
     // #64/[D15] — tổng các phụ cấp HĐ có mã KHÁC 4 mã cứng (HOUSING/PHONE/FUEL/MEAL) để không mất tiền.
     public const string ContractAllowanceKhac = "contract.allowanceKhac";
 
+    // ===== PRORATE-02 — phụ cấp khai NGOẠI LỆ (`AllowanceType.ExcludeFromProration`) =====
+    /// <summary>
+    /// Tổng phụ cấp ngoại lệ (trừ cơm): bị TRỪ khỏi nền chia theo công rồi CỘNG NGUYÊN trở lại,
+    /// nên cột gốc vẫn hiện đủ số hợp đồng mà tiền không bị chia theo ngày công.
+    /// </summary>
+    public const string ContractAllowanceNgoaiLe = "contract.allowanceNgoaiLe";
+    /// <summary>Phần tiền cơm khai ngoại lệ — cộng thẳng vào cột COM, không qua bước chia theo công.</summary>
+    public const string ContractAllowanceComNgoaiLe = "contract.allowanceComNgoaiLe";
+
     // ===== Chấm công =====
     public const string CongChuan = "period.congChuan";
     public const string CongTinhCom = "attendance.congTinhCom";

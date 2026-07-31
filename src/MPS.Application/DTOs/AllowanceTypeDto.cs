@@ -8,6 +8,7 @@ public sealed record AllowanceTypeDto(
     decimal? DefaultAmount,
     bool IsBhxhBase,
     bool IsTaxable,
+    bool ExcludeFromProration,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

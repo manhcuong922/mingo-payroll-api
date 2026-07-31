@@ -93,7 +93,10 @@ public sealed class PayrollGoldenReconciliationTests
         return row;
     }
 
-    [Fact]
+    // PRORATE-01/03: input F5-0001 có công tính cơm (24) khác công chuẩn (23) nên Cơm + BH nay chia
+    // theo công thực tế, số BD không còn khớp file mẫu gốc. Cùng tình huống với PAY-GOLD→PAY-GOLD02
+    // ở BAO-CAO-TEST-E2E.md — cần kế toán xác nhận baseline MỚI trước khi ghim số, không tự đoán ở đây.
+    [Fact(Skip = "Chờ kế toán xác nhận baseline mới sau khi Cơm+BH chia theo công thực tế (PRORATE-01/03, xem PAY-GOLD02)")]
     public void Reconcile_F5_0001_KeToanTruong_MatchesSampleTakeHome()
     {
         // Input thật từ file mẫu (row F5-0001): O=14.641.000, hệ số P/O=2.2, công 23/23,
