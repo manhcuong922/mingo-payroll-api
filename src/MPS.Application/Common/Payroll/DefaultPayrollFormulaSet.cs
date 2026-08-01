@@ -51,8 +51,15 @@ public static class DefaultPayrollFormulaSet
             return node;
         }
 
+        // [D20] — NLĐ làm không đủ công chuẩn (vào/nghỉ giữa tháng...) thì các khoản gắn với "nguyên
+        // tháng" phải chia theo công thực tế/công chuẩn. Dùng CHUNG 1 công thức cho Cơm (GD) và cả
+        // khối BH (GF): value / CongChuan × CongTinhCom (CongTinhCom = tổng công thực tế mọi loại
+        // hình — chính thức + thử việc + học việc, xem PayrollDataCollector.congCom).
+        FormulaNode ProrateByCong(FormulaNode value) =>
+            N.Mul(N.Div(value, N.Col(Cc.CongChuan)), N.Col(Cc.CongTinhCom));
+
         FormulaNode Bh(string rateField, string capField) =>
-            N.Func(Fn.InsuranceWithCap, N.Col(Cc.MucLuong), N.Field(rateField), N.Field(capField));
+            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), N.Field(capField));
 
         const string GA = "Nhân viên";
         const string GB = "Ngày công";
@@ -93,24 +100,39 @@ public static class DefaultPayrollFormulaSet
 
         // ===== Khối D — phụ cấp không tính lương T13 =====
         Add(Cc.XangXe, "Xăng xe", GD, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceXangXe, money: true);
-        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) ghi trong HĐ của NV — nguyên tháng, KHÔNG nhân số công.
+        // Cơm = tiền "Phụ cấp ăn ca" (MEAL) ghi trong HĐ của NV, CHIA theo công thực tế/công chuẩn
+        // [D20] — làm nửa tháng thì hưởng nửa suất cơm, không phải nguyên suất.
+        // PRORATE-02: nếu loại phụ cấp cơm được khai NGOẠI LỆ thì phần đó cộng NGUYÊN (không chia) —
+        // vẫn đổ về chính cột này để suất cơm miễn thuế `MIN(COM, ngưỡng)` tính trên tổng.
         // Không có phụ cấp MEAL trong HĐ → 0. Cờ BH "xx" = không tính cơm (đặc tả §3-Khối D).
         Add(Cc.Com, "Cơm", GD, ColumnDataType.Money, ColumnValueSource.Formula,
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagBh), N.Literal(InsuranceFlags.NoMealFlatTax)),
-                N.Const(0m), N.Field(Fk.ContractAllowanceCom)), money: true);
+                N.Const(0m),
+                N.Add(ProrateByCong(N.Field(Fk.ContractAllowanceCom)),
+                    N.Field(Fk.ContractAllowanceComNgoaiLe))), money: true);
         Add(Cc.CongTac, "Hỗ trợ công tác", GD, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // #64/[D15] — cột "Khác" nhận mặc định TỔNG phụ cấp HĐ mã lạ (ngoài 4 mã cứng) để tiền không
         // biến mất; vẫn là Input nên kế toán chỉnh tay được (thưởng cưới/sinh...) đè lên mặc định.
         Add(Cc.Khac, "Khác (phụ cấp mã lạ / cưới, sinh...)", GD, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceKhac, money: true);
 
         // ===== Khối E — thu nhập chịu thuế =====
+        // PRORATE-02 — quy tắc chuẩn hoá: MỌI phụ cấp chia theo ngày công, TRỪ khoản khai ngoại lệ.
+        //  • Cột "Khác" (`KHAC`, phụ cấp mã tự do — #64/[D15]) nay nằm TRONG nền chia theo công; trước
+        //    đây nó được cộng nguyên ở nhóm `phuCapNgoai`, tức mã tự do vô tình đứng ngoài `[D20]`.
+        //  • `ContractAllowanceNgoaiLe` (tổng khoản khai ngoại lệ, trừ cơm) bị TRỪ khỏi nền rồi CỘNG
+        //    NGUYÊN vào `phuCapNgoai` ⇒ trả đủ bất kể ngày công, mà cột gốc vẫn hiện số hợp đồng.
+        //  • `CONGTAC` (hỗ trợ công tác) giữ nguyên ở `phuCapNgoai`: đây là khoản chi theo chuyến, không
+        //    do `AllowanceType` cấu hình nên không thuộc phạm vi cờ ngoại lệ.
         Add(Cc.ThuNhap, "Thu nhập", GE, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.IncomeProration,
-                N.Func(Fn.Sum, N.Col(Cc.MucLuong), N.Col(Cc.PhuCapLuong), N.Col(Cc.TroCapThuViec),
-                    N.Col(Cc.HocViec), N.Col(Cc.ThueNha), N.Col(Cc.DienThoai), N.Col(Cc.XangXe)),
+                N.Sub(
+                    N.Func(Fn.Sum, N.Col(Cc.MucLuong), N.Col(Cc.PhuCapLuong), N.Col(Cc.TroCapThuViec),
+                        N.Col(Cc.HocViec), N.Col(Cc.ThueNha), N.Col(Cc.DienThoai), N.Col(Cc.XangXe),
+                        N.Col(Cc.Khac)),
+                    N.Field(Fk.ContractAllowanceNgoaiLe)),
                 N.Col(Cc.PhuCapLuong), N.Col(Cc.TroCapThuViec), N.Col(Cc.HocViec),
                 N.Col(Cc.CongChuan), N.Col(Cc.CongTinhLuong), N.Col(Cc.CongThuViec), N.Col(Cc.CongHocViec),
-                N.Func(Fn.Sum, N.Col(Cc.Com), N.Col(Cc.CongTac), N.Col(Cc.Khac))));
+                N.Func(Fn.Sum, N.Col(Cc.Com), N.Col(Cc.CongTac), N.Field(Fk.ContractAllowanceNgoaiLe))));
         Add(Cc.LuongNgayPhep, "Lương ngày phép", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.TangCa, "Tăng ca", GE, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.OtTangCa, money: true);
         Add(Cc.HoaHong, "Hoa hồng", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
@@ -148,7 +170,7 @@ public static class DefaultPayrollFormulaSet
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, Bh(Fk.BhtnNldRate, Fk.BhtnCap)));
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
-                N.Func(Fn.InsuranceWithCap, N.Col(Cc.MucLuong), N.Field(Fk.KpcdRate), N.Const(0m))));
+                N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,

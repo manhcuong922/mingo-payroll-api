@@ -82,6 +82,16 @@ public sealed class ComplianceActivationJob : BackgroundService
             totalActivated += await ActivateForTypeAsync<Domain.Entities.Compliance.LaborLawConstantsVersion>(
                 db, clock, publisher, today, "LaborLawConstantsVersion", cancellationToken);
 
+            // Phase 5 §N9-style — cảnh báo pending sẽ active trong T-7 / T-1.
+            await PublishPendingSoonAsync<Domain.Entities.Compliance.SocialInsuranceRateVersion>(
+                db, publisher, today, "SocialInsuranceRateVersion", "Tỷ lệ BHXH", cancellationToken);
+            await PublishPendingSoonAsync<Domain.Entities.Compliance.PitRegulationVersion>(
+                db, publisher, today, "PitRegulationVersion", "Thuế TNCN", cancellationToken);
+            await PublishPendingSoonAsync<Domain.Entities.Compliance.MinimumWageVersion>(
+                db, publisher, today, "MinimumWageVersion", "Lương tối thiểu vùng", cancellationToken);
+            await PublishPendingSoonAsync<Domain.Entities.Compliance.LaborLawConstantsVersion>(
+                db, publisher, today, "LaborLawConstantsVersion", "Hằng số luật lao động", cancellationToken);
+
             if (totalActivated > 0)
                 _logger.LogInformation("ComplianceActivationJob: activated {Total} version(s) total.", totalActivated);
             else
@@ -133,5 +143,33 @@ public sealed class ComplianceActivationJob : BackgroundService
             typeName, toActivate.Id, toActivate.ValidFrom);
 
         return 1;
+    }
+
+    private static readonly int[] SoonThresholds = { 7, 1 };
+
+    /// <summary>
+    /// Publish <c>CompliancePendingSoonNotification</c> khi pending còn đúng 7 hoặc 1 ngày tới ValidFrom.
+    /// Idempotency: publish theo ngày — cùng ngày quét lại vẫn phát (bridge best-effort, không gây hại).
+    /// </summary>
+    private static async Task PublishPendingSoonAsync<TVersion>(
+        AppDbContext db, IPublisher publisher, DateOnly today, string typeName, string displayName, CancellationToken ct)
+        where TVersion : class, IComplianceVersion
+    {
+        foreach (var days in SoonThresholds)
+        {
+            var target = today.AddDays(days);
+            var pending = await db.Set<TVersion>()
+                .Where(x => !x.IsActive && !x.IsArchived && x.ValidFrom == target)
+                .ToListAsync(ct);
+
+            foreach (var v in pending)
+            {
+                await publisher.Publish(new Application.Common.Models.Compliance.CompliancePendingSoonNotification(
+                    ComplianceType: typeName,
+                    DisplayName: displayName,
+                    EffectiveFrom: v.ValidFrom.ToDateTime(TimeOnly.MinValue),
+                    DaysRemaining: days), ct);
+            }
+        }
     }
 }

@@ -87,4 +87,8 @@ public enum AttendanceRequestKind
     Wfh = 2,
     LateEarly = 3,
     Overtime = 4,
+    // Phase 3 notification: extend để dùng chung cho template Submit/Decision. Day-conflict logic
+    // không check các loại dưới (chỉ 4 loại trên có "chiếm ngày công") — enum thêm chỉ phục vụ TB.
+    Adjustment = 5,
+    Dependent = 6,
 }

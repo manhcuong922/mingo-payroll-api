@@ -1,9 +1,11 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Application.Features.Attendance.WfhRequest.Common;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 using MPS.Domain.Interfaces.Payroll;
@@ -19,6 +21,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly IPublisher _publisher;
 
     public ApproveWfhRequestCommandHandler(
         IWfhRequestRepository repository,
@@ -27,7 +30,8 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         ApproverDepartmentGuard departmentGuard,
         ICurrentUserService currentUser,
         IClock clock,
-        IPayrollSourceChangeHandler payrollChange)
+        IPayrollSourceChangeHandler payrollChange,
+        IPublisher publisher)
     {
         _repository = repository;
         _quotaChecker = quotaChecker;
@@ -36,6 +40,7 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
         _currentUser = currentUser;
         _clock = clock;
         _payrollChange = payrollChange;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(ApproveWfhRequestCommand request, CancellationToken cancellationToken)
@@ -84,6 +89,19 @@ public class ApproveWfhRequestCommandHandler : IRequestHandler<ApproveWfhRequest
                 MonthsInRange(existing.StartDate, existing.EndDate),
                 new[] { existing.EmployeeInformationId },
                 $"Duyệt WFH {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}", cancellationToken);
+
+        if (applied)
+        {
+            await _publisher.Publish(new AttendanceRequestDecidedNotification(
+                Kind: AttendanceRequestKind.Wfh,
+                RequestId: existing.Id,
+                Decision: AttendanceRequestDecision.Approved,
+                DecidedByUserId: userId,
+                SubmittedByUserId: existing.CreatedByUserId,
+                RequesterUserId: existing.CreatedByUserId,
+                Summary: $"WFH {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}",
+                Reason: request.ReviewNote), cancellationToken);
+        }
 
         return applied;
     }

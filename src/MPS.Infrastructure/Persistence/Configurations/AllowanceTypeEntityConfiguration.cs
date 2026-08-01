@@ -21,6 +21,8 @@ public class AllowanceTypeEntityConfiguration : IEntityTypeConfiguration<Allowan
         builder.Property(e => e.DefaultAmount).HasColumnType("decimal(18,2)");
         builder.Property(e => e.IsBhxhBase).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.IsTaxable).IsRequired().HasDefaultValue(true);
+        // PRORATE-02 — default false: dữ liệu cũ giữ nguyên hành vi chia theo ngày công của `[D20]`.
+        builder.Property(e => e.ExcludeFromProration).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt);

@@ -22,6 +22,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     private readonly ICurrentUserService _currentUser;
     private readonly IEmployeeInformationRepository _eiRepository;
     private readonly IEmployeeAccountProvisioner _accountProvisioner;
+    private readonly IFirstLoginInvitationService _firstLoginInvitation;
     private readonly IEmailSender _emailSender;
     private readonly IPayrollSourceChangeHandler _payrollChange;
     private readonly ILeaveBalanceInitializer _leaveBalanceInitializer;
@@ -34,6 +35,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         ICurrentUserService currentUser,
         IEmployeeInformationRepository eiRepository,
         IEmployeeAccountProvisioner accountProvisioner,
+        IFirstLoginInvitationService firstLoginInvitation,
         IEmailSender emailSender,
         IPayrollSourceChangeHandler payrollChange,
         ILeaveBalanceInitializer leaveBalanceInitializer,
@@ -45,6 +47,7 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         _currentUser = currentUser;
         _eiRepository = eiRepository;
         _accountProvisioner = accountProvisioner;
+        _firstLoginInvitation = firstLoginInvitation;
         _emailSender = emailSender;
         _payrollChange = payrollChange;
         _leaveBalanceInitializer = leaveBalanceInitializer;
@@ -164,10 +167,13 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     {
         try
         {
-            // [D22]: cấp quỹ phép NĂM HIỆN TẠI (năm kích hoạt), không phải năm hiệu lực HĐ — HĐ có thể
-            // ký trước cho tương lai. Job 01/01 (chưa làm) lo các năm sau.
+            // [D22]: cấp quỹ phép cho năm NV thực sự bắt đầu được hưởng — năm hiện tại nếu HĐ đã có
+            // hiệu lực, hoặc năm hiệu lực nếu HĐ ký trước cho tương lai. Cấp cho năm hiện tại một HĐ
+            // của năm sau sẽ ra 0 ngày (công thức chia theo số tháng làm việc), tức NV mới coi như
+            // không được cấp gì. Các năm tiếp theo do AnnualLeaveGrantJob (01/01) lo.
+            var grantYear = Math.Max(DateTime.UtcNow.Year, contract.EffectiveFrom.Year);
             await _leaveBalanceInitializer.EnsureAnnualBalanceAsync(
-                contract.EmployeeInformationId, DateTime.UtcNow.Year, userId, ct);
+                contract.EmployeeInformationId, grantYear, userId, ct);
         }
         catch (Exception ex)
         {
@@ -195,6 +201,11 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         }
     }
 
+    /// <summary>
+    /// Sau khi kích hoạt HĐ, gửi tối đa 2 mail (plan §2 N7): (1) mail HĐ đính kèm PDF —
+    /// LUÔN gửi khi có email; (2) mail mời đặt password lần đầu — CHỈ khi vừa provision tài khoản mới.
+    /// Password thô KHÔNG còn nằm cùng mail HĐ nữa. Cả 2 đều best-effort — fail không rollback kích hoạt.
+    /// </summary>
     private async Task TrySendActivationEmailAsync(
         Domain.Entities.Contract contract,
         StoredFileMetadata metadata,
@@ -220,16 +231,14 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
                 return;
             }
 
-            string? username = null;
-            string? plainPassword = null;
+            int? newUserId = null;
             if (!ei.UserId.HasValue)
             {
                 try
                 {
                     var credentials = await _accountProvisioner.ProvisionAsync(
                         ei.Id, SystemRoles.EmployeeId, cancellationToken);
-                    username = credentials.Username;
-                    plainPassword = credentials.PlainPassword;
+                    newUserId = credentials.UserId;
                 }
                 catch (Exception ex)
                 {
@@ -240,22 +249,37 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
                 }
             }
 
-            // Không tải PDF ở đây nữa: chỉ chuyển vị trí MinIO. Bên gửi thật (worker) sẽ tự tải
-            // khi thực sự gửi — giữ request path nhẹ và message-friendly cho outbox.
+            // Mail #1: HĐ + PDF (không kèm credentials).
             var payload = new ContractActivationEmailPayload(
                 ContractNo: contract.ContractNo,
                 EffectiveFrom: contract.EffectiveFrom,
-                EffectiveTo: contract.EffectiveTo,
-                Username: username,
-                PlainPassword: plainPassword,
-                LoginUrl: null);
+                EffectiveTo: contract.EffectiveTo);
 
             await _emailSender.SendContractActivationAsync(
                 ei.Email!, ei.FullName, payload, metadata.Bucket, metadata.ObjectKey, pdfFileName, cancellationToken);
 
             _logger.LogInformation(
-                "Contract activation email sent for contract {ContractId} to {Email} (credentials included: {HasCredentials}).",
-                contract.Id, ei.Email, username is not null);
+                "Contract activation email sent for contract {ContractId} to {Email}.",
+                contract.Id, ei.Email);
+
+            // Mail #2: mời đặt password lần đầu — chỉ khi vừa cấp tài khoản mới ở trên.
+            if (newUserId.HasValue)
+            {
+                try
+                {
+                    await _firstLoginInvitation.IssueAsync(newUserId.Value, cancellationToken);
+                    _logger.LogInformation(
+                        "First-login invitation email queued for new user {UserId} (contract {ContractId}).",
+                        newUserId.Value, contract.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Failed to issue first-login invitation for new user {UserId} (contract {ContractId}); " +
+                        "admin can resend via POST /api/users/{UserId}/resend-first-login.",
+                        newUserId.Value, contract.Id, newUserId.Value);
+                }
+            }
         }
         catch (Exception ex)
         {

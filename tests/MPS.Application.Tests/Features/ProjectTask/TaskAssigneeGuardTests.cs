@@ -1,4 +1,5 @@
 using FluentAssertions;
+using MediatR;
 using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.ProjectTask.Commands;
@@ -29,6 +30,7 @@ public sealed class TaskAssigneeGuardTests
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
     private readonly Mock<IContractRepository> _contracts = new();
+    private readonly Mock<IPublisher> _publisher = new();
 
     public TaskAssigneeGuardTests()
     {
@@ -60,7 +62,7 @@ public sealed class TaskAssigneeGuardTests
 
     private TaskCreateCommandHandler CreateSut() =>
         new(_tasks.Object, _projects.Object, _departments.Object, _authorizer.Object, _currentUser.Object,
-            _contracts.Object);
+            _contracts.Object, _publisher.Object);
 
     private static TaskCreateCommand Command(params int[] assignees) =>
         new(

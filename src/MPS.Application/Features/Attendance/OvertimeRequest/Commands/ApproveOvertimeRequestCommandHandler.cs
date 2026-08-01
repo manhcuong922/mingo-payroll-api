@@ -1,8 +1,11 @@
 ﻿using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Payroll;
@@ -35,6 +38,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly IPublisher _publisher;
 
     public ApproveOvertimeRequestCommandHandler(
         IOvertimeRequestRepository repository,
@@ -47,7 +51,8 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         IComplianceLookupService complianceLookup,
         ICurrentUserService currentUser,
         IClock clock,
-        IPayrollSourceChangeHandler payrollChange)
+        IPayrollSourceChangeHandler payrollChange,
+        IPublisher publisher)
     {
         _repository = repository;
         _projectRepository = projectRepository;
@@ -60,6 +65,7 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         _currentUser = currentUser;
         _clock = clock;
         _payrollChange = payrollChange;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(ApproveOvertimeRequestCommand request, CancellationToken cancellationToken)
@@ -144,6 +150,17 @@ public class ApproveOvertimeRequestCommandHandler : IRequestHandler<ApproveOvert
         await _payrollChange.OnSourceChangedAsync(
             existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
             $"Duyệt OT ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
+
+        // Phase 3 §N2 — báo về người submit.
+        await _publisher.Publish(new AttendanceRequestDecidedNotification(
+            Kind: AttendanceRequestKind.Overtime,
+            RequestId: existing.Id,
+            Decision: AttendanceRequestDecision.Approved,
+            DecidedByUserId: userId,
+            SubmittedByUserId: existing.CreatedByUserId,
+            RequesterUserId: existing.CreatedByUserId,
+            Summary: $"OT {existing.OtHours:0.##}h ngày {existing.WorkDate:dd/MM/yyyy}",
+            Reason: request.ReviewNote), cancellationToken);
 
         return true;
     }

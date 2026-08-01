@@ -1,23 +1,24 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
-using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.User.Commands;
 
+/// <summary>
+/// HR tạo tài khoản mới cho NV: provisioner tạo <c>User</c> (hash 1 password random không dùng)
+/// rồi <see cref="IFirstLoginInvitationService"/> gửi link đặt password lần đầu qua email.
+/// KHÔNG còn gửi password thô (plan §2 N8 — Hướng B).
+/// </summary>
 public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, UserCreateResult>
 {
     private readonly IEmployeeAccountProvisioner _provisioner;
-    private readonly IEmployeeInformationRepository _eiRepository;
-    private readonly IEmailSender _emailSender;
+    private readonly IFirstLoginInvitationService _firstLoginInvitation;
 
     public UserCreateCommandHandler(
         IEmployeeAccountProvisioner provisioner,
-        IEmployeeInformationRepository eiRepository,
-        IEmailSender emailSender)
+        IFirstLoginInvitationService firstLoginInvitation)
     {
         _provisioner = provisioner;
-        _eiRepository = eiRepository;
-        _emailSender = emailSender;
+        _firstLoginInvitation = firstLoginInvitation;
     }
 
     public async Task<UserCreateResult> Handle(UserCreateCommand request, CancellationToken cancellationToken)
@@ -25,14 +26,7 @@ public class UserCreateCommandHandler : IRequestHandler<UserCreateCommand, UserC
         var credentials = await _provisioner.ProvisionAsync(
             request.EmployeeInformationId, request.RoleId, cancellationToken);
 
-        var ei = await _eiRepository.GetByIdAsync(request.EmployeeInformationId, cancellationToken);
-
-        await _emailSender.SendAccountCredentialsAsync(
-            ei!.Email!,
-            ei.FullName,
-            credentials.Username,
-            credentials.PlainPassword,
-            cancellationToken);
+        await _firstLoginInvitation.IssueAsync(credentials.UserId, cancellationToken);
 
         return new UserCreateResult(credentials.UserId, credentials.EmployeeCode, credentials.Username);
     }

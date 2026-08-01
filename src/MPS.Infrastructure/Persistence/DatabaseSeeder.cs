@@ -76,6 +76,10 @@ public sealed partial class DatabaseSeeder
         // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
         // xem DatabaseSeeder.PayrollDemoData.cs.
         await SeedPayrollAsync(cancellationToken);
+        // Nhánh NGOẠI LỆ không dựng được qua API nhưng lớp chặn vẫn phải sống (đơn sản xuất thiếu tổ
+        // trưởng · hồ sơ đã ký HĐ nhưng chưa có tài khoản). Chạy CUỐI để không ảnh hưởng kỳ lương demo
+        // ở trên — xem DatabaseSeeder.LegacyEdgeCaseData.cs.
+        await SeedLegacyEdgeCaseDataAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)

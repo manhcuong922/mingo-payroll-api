@@ -1,4 +1,5 @@
 ﻿using FluentAssertions;
+using MediatR;
 using Moq;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.ProjectTask.Commands;
@@ -18,13 +19,14 @@ public sealed class TaskCreateCommandHandlerTests
     private readonly Mock<IDepartmentManagerAuthorizer> _authorizer = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
     private readonly Mock<IContractRepository> _contracts = new();
+    private readonly Mock<IPublisher> _publisher = new();
 
     private const int ManagerUserId = 7;
     private const int DeptId = 3;
 
     private TaskCreateCommandHandler CreateSut() =>
         new(_tasks.Object, _projects.Object, _departments.Object, _authorizer.Object, _currentUser.Object,
-            _contracts.Object);
+            _contracts.Object, _publisher.Object);
 
     private const int StageId = 5;
 

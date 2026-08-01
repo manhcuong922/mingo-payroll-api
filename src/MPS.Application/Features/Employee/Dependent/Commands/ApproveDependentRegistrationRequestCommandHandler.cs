@@ -1,7 +1,10 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Constants;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Employee;
 using MPS.Domain.Interfaces.Payroll;
@@ -15,19 +18,22 @@ public class ApproveDependentRegistrationRequestCommandHandler : IRequestHandler
     private readonly IClock _clock;
     private readonly IPayrollStaleMarker _payrollStale;
     private readonly ILogger<ApproveDependentRegistrationRequestCommandHandler> _logger;
+    private readonly IPublisher _publisher;
 
     public ApproveDependentRegistrationRequestCommandHandler(
         IDependentRegistrationRequestRepository repository,
         ICurrentUserService currentUser,
         IClock clock,
         IPayrollStaleMarker payrollStale,
-        ILogger<ApproveDependentRegistrationRequestCommandHandler> logger)
+        ILogger<ApproveDependentRegistrationRequestCommandHandler> logger,
+        IPublisher publisher)
     {
         _repository = repository;
         _currentUser = currentUser;
         _clock = clock;
         _payrollStale = payrollStale;
         _logger = logger;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(ApproveDependentRegistrationRequestCommand request, CancellationToken cancellationToken)
@@ -43,7 +49,23 @@ public class ApproveDependentRegistrationRequestCommandHandler : IRequestHandler
             request.Id, userId, request.ReviewNote, _clock.UtcNow, cancellationToken);
 
         if (applied)
+        {
             await TryMarkPayrollStaleAsync(request.Id, cancellationToken);
+
+            var req = await _repository.GetByIdAsync(request.Id, cancellationToken);
+            if (req is not null)
+            {
+                await _publisher.Publish(new AttendanceRequestDecidedNotification(
+                    Kind: AttendanceRequestKind.Dependent,
+                    RequestId: req.Id,
+                    Decision: AttendanceRequestDecision.Approved,
+                    DecidedByUserId: userId,
+                    SubmittedByUserId: req.CreatedByUserId,
+                    RequesterUserId: req.CreatedByUserId,
+                    Summary: $"Đơn NPT ({req.RequestType}): {req.FullName}",
+                    Reason: request.ReviewNote), cancellationToken);
+            }
+        }
 
         return applied;
     }

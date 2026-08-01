@@ -24,14 +24,39 @@ public abstract class NotificationTemplate<TPayload> : INotificationTemplate
 
     // ----- Helpers -----
 
-    /// <summary>Tạo 1 plan item.</summary>
+    /// <summary>Tạo 1 plan item (chỉ in-app, không email).</summary>
     protected static NotificationPlanItem Plan(RecipientSpec recipients, NotificationContent content)
         => new(recipients, content);
+
+    /// <summary>Tạo 1 plan item kèm email (in-app + email).</summary>
+    protected static NotificationPlanItem PlanWithEmail(
+        RecipientSpec recipients,
+        NotificationContent content,
+        EmailContent email,
+        bool prefersPersonalEmail = false)
+        => new(recipients, content, email, NotificationDeliveryMode.Default, prefersPersonalEmail);
+
+    /// <summary>Plan item CHỈ gửi email (bỏ in-app) — dùng cho N3: người nhận không login được nữa.</summary>
+    protected static NotificationPlanItem PlanEmailOnly(
+        RecipientSpec recipients,
+        NotificationContent content,
+        EmailContent email,
+        bool prefersPersonalEmail = true)
+        => new(recipients, content, email, NotificationDeliveryMode.EmailOnly, prefersPersonalEmail);
 
     /// <summary>Bọc 1 plan item thành kết quả (trường hợp phổ biến nhất: 1 nhóm nhận 1 nội dung).</summary>
     protected static Task<IReadOnlyList<NotificationPlanItem>> Single(
         RecipientSpec recipients, NotificationContent content)
         => Task.FromResult<IReadOnlyList<NotificationPlanItem>>(new[] { Plan(recipients, content) });
+
+    /// <summary>Bọc 1 plan item KÈM EMAIL thành kết quả.</summary>
+    protected static Task<IReadOnlyList<NotificationPlanItem>> SingleWithEmail(
+        RecipientSpec recipients,
+        NotificationContent content,
+        EmailContent email,
+        bool prefersPersonalEmail = false)
+        => Task.FromResult<IReadOnlyList<NotificationPlanItem>>(
+            new[] { PlanWithEmail(recipients, content, email, prefersPersonalEmail) });
 
     /// <summary>Gói nhiều plan item thành kết quả.</summary>
     protected static Task<IReadOnlyList<NotificationPlanItem>> Many(params NotificationPlanItem[] items)

@@ -33,4 +33,46 @@ public enum NotificationType
 
     /// <summary>Tạo bảng lương → nhân viên nhận.</summary>
     PayrollCreated = 8,
+
+    // ===== Phase 3 — Đơn từ / Chấm công =====
+    /// <summary>Đơn được nộp mới, cần người duyệt xem (Leave/OT/LateEarly/WFH/Adjustment/Dependent).</summary>
+    AttendanceRequestSubmitted = 20,
+    /// <summary>Đơn đã duyệt / từ chối, báo về người submit.</summary>
+    AttendanceRequestDecided = 21,
+    /// <summary>Cảnh báo quên chấm / thiếu công cuối ngày.</summary>
+    AttendanceMissing = 22,
+    /// <summary>Quỹ phép cá nhân sắp hết (≤ 2 ngày còn lại — plan §N10).</summary>
+    LeaveBalanceLow = 23,
+
+    // ===== Phase 4 — Payroll / BHXH / Thuế =====
+    /// <summary>Kỳ lương đã khoá — kế toán, HR biết.</summary>
+    PayrollPeriodLocked = 30,
+    /// <summary>Payslip cá nhân sẵn sàng xem — gửi ngay sau khi khoá kỳ (plan §N11).</summary>
+    PayslipReady = 31,
+    /// <summary>BHXH / thuế sắp đến hạn (T-7, T-3, T-1 — plan §N9).</summary>
+    BhxhTaxDeadlineSoon = 32,
+    /// <summary>BHXH / thuế đã quá hạn (gửi hằng ngày cho tới khi thanh toán — plan §N9).</summary>
+    BhxhTaxOverdue = 33,
+
+    // ===== Phase 5 — Compliance =====
+    /// <summary>Bản pending sắp tự active (T-7 / T-1).</summary>
+    CompliancePendingSoon = 40,
+    /// <summary>Auto-Update phát hiện văn bản pháp luật mới.</summary>
+    LegalDocumentDetected = 41,
+    /// <summary>Đề xuất Auto-Update chờ duyệt.</summary>
+    ProposalPendingReview = 42,
+
+    // ===== Phase 6 — Evaluation / Employee =====
+    /// <summary>Field nhạy cảm của NV vừa bị chỉnh (CCCD/STK/TaxNo/SocialNo/Dependents).</summary>
+    EmployeeSensitiveEdited = 50,
+    /// <summary>NV đổi phòng ban / vị trí.</summary>
+    EmployeeDepartmentChanged = 51,
+    /// <summary>NV đổi bậc lương (SalaryGrade).</summary>
+    SalaryGradeChanged = 52,
+    /// <summary>Đánh giá tháng công bố cho NV.</summary>
+    MonthlyEvaluationPublished = 53,
+    /// <summary>OrderEvaluation mới tạo sau khi Project completed.</summary>
+    OrderEvaluationCreated = 54,
+    /// <summary>User được @mention trong Comment.</summary>
+    CommentMention = 55,
 }

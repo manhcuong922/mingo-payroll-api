@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Project;
 using MPS.Application.Services;
 using MPS.Domain.Common;
@@ -20,19 +22,25 @@ public class CommentCreateCommandHandler : IRequestHandler<CommentCreateCommand,
     private readonly IProjectTaskRepository _tasks;
     private readonly IDepartmentManagerAuthorizer _authorizer;
     private readonly ICurrentUserService _currentUser;
+    private readonly IUserRepository _users;
+    private readonly IPublisher _publisher;
 
     public CommentCreateCommandHandler(
         ICommentRepository comments,
         IProjectRepository projects,
         IProjectTaskRepository tasks,
         IDepartmentManagerAuthorizer authorizer,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IUserRepository users,
+        IPublisher publisher)
     {
         _comments = comments;
         _projects = projects;
         _tasks = tasks;
         _authorizer = authorizer;
         _currentUser = currentUser;
+        _users = users;
+        _publisher = publisher;
     }
 
     public async Task<int> Handle(CommentCreateCommand request, CancellationToken ct)
@@ -53,7 +61,41 @@ public class CommentCreateCommandHandler : IRequestHandler<CommentCreateCommand,
             AuthorUserId = userId,
             CreatedAt = VietnamClock.Now,
         };
-        return await _comments.AddAsync(comment, ct);
+        var commentId = await _comments.AddAsync(comment, ct);
+
+        // Phase 6 — @mention: parse các username từ content, publish CommentMention cho từng user (loại tác giả).
+        await PublishMentionsAsync(commentId, comment, userId, request, ct);
+
+        return commentId;
+    }
+
+    private static readonly Regex MentionPattern = new(@"@([a-zA-Z0-9_\.]{2,50})", RegexOptions.Compiled);
+
+    private async Task PublishMentionsAsync(
+        int commentId, CommentEntity comment, int authorUserId, CommentCreateCommand request, CancellationToken ct)
+    {
+        var matches = MentionPattern.Matches(comment.Content);
+        if (matches.Count == 0) return;
+
+        var mentioned = new HashSet<int>();
+        foreach (Match m in matches)
+        {
+            var username = m.Groups[1].Value;
+            var user = await _users.GetByUsernameAsync(username, ct);
+            if (user is null || user.Id == authorUserId) continue;
+            if (!mentioned.Add(user.Id)) continue;
+
+            var link = request.OwnerType == CommentOwnerType.Project
+                ? $"/projects/{request.OwnerId}#comment-{commentId}"
+                : $"/tasks/{request.OwnerId}#comment-{commentId}";
+
+            await _publisher.Publish(new CommentMentionNotification(
+                CommentId: commentId,
+                MentionedUserId: user.Id,
+                MentionedByUserId: authorUserId,
+                CommentSnippet: comment.Content,
+                LinkUrl: link), ct);
+        }
     }
 
     private async Task EnsureCanWriteAsync(CommentCreateCommand request, int userId, CancellationToken ct)

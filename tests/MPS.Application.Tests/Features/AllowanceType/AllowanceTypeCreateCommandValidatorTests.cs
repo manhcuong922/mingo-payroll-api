@@ -97,5 +97,6 @@ public sealed class AllowanceTypeCreateCommandValidatorTests
         DefaultAmount: 730_000m,
         IsBhxhBase: false,
         IsTaxable: false,
+        ExcludeFromProration: false,
         IsActive: true);
 }

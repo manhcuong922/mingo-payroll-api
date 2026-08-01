@@ -21,7 +21,8 @@ public class ApproveMonthlyEvaluationHandlerTests
     private static readonly string RowVersion = Convert.ToBase64String(new byte[8]);
 
     private ApproveMonthlyEvaluationCommandHandler Sut() =>
-        new(_repo.Object, _currentUser.Object, _lookup.Object, new NoopPayrollSourceChangeHandler());
+        new(_repo.Object, _currentUser.Object, _lookup.Object, new NoopPayrollSourceChangeHandler(),
+            Mock.Of<MediatR.IPublisher>());
 
     private void ReturnBoard(MPS.Domain.Entities.Evaluation.MonthlyEvaluation board)
     {

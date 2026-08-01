@@ -57,4 +57,22 @@ public sealed class NotificationRecipientDirectory : INotificationRecipientDirec
             .Select(u => u.Id)
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlyCollection<int>> GetUserIdsByPermissionsAsync(
+        IReadOnlyCollection<string> permissionCodes, CancellationToken ct = default)
+    {
+        if (permissionCodes.Count == 0) return Array.Empty<int>();
+
+        // Users → Role → RolePermissions → Permission.Code. Distinct để 1 user không lặp
+        // khi role của họ có nhiều permission cùng match.
+        return await _db.Users
+            .AsNoTracking()
+            .Where(u => u.Status == ActiveStatus
+                && _db.Set<MPS.Domain.Entities.RolePermission>()
+                    .Any(rp => rp.RoleId == u.RoleId
+                        && permissionCodes.Contains(rp.Permission.Code)))
+            .Select(u => u.Id)
+            .Distinct()
+            .ToListAsync(ct);
+    }
 }

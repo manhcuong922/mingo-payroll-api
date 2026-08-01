@@ -44,6 +44,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     private static readonly HashSet<string> HardcodedAllowanceCodes =
         new(StringComparer.OrdinalIgnoreCase) { "HOUSING", "PHONE", "FUEL", "MEAL" };
 
+    /// <summary>
+    /// PRORATE-02 — cơm phải tách riêng khỏi khối "ngoại lệ" chung: tiền cơm luôn ở lại cột
+    /// <c>COM</c> (dù khai ngoại lệ hay không) để giữ suất miễn thuế cơm <c>MIN(COM, ngưỡng)</c>.
+    /// </summary>
+    private const string MealCode = "MEAL";
+
     public async Task<PayrollCollectionResult> CollectAsync(PayrollCollectionRequest req, CancellationToken ct)
     {
         var periodStart = new DateOnly(req.Year, req.Month, 1);
@@ -226,6 +232,23 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                     .Where(a => !HardcodedAllowanceCodes.Contains(a.AllowanceType.Code))
                     .Sum(a => a.Amount) ?? 0m;
 
+            // PRORATE-02 — tổng phụ cấp khai NGOẠI LỆ (`AllowanceType.ExcludeFromProration`), TRỪ cơm.
+            // Số này được trừ khỏi nền chia theo công rồi cộng nguyên trở lại ở cột Thu nhập, nên cột
+            // gốc (Thuê nhà / Điện thoại / Xăng xe / Khác) vẫn hiện đủ số tiền ghi trong hợp đồng.
+            decimal AllowanceExcludedFromProration() =>
+                activeContract?.ContractAllowances
+                    .Where(a => a.AllowanceType.ExcludeFromProration
+                        && !string.Equals(a.AllowanceType.Code, MealCode, StringComparison.OrdinalIgnoreCase))
+                    .Sum(a => a.Amount) ?? 0m;
+
+            // Cơm tách 2 phần: phần thường (chia theo công) và phần khai ngoại lệ (cộng nguyên) —
+            // cả hai cùng đổ về cột COM nên suất cơm miễn thuế vẫn tính trên tổng.
+            decimal MealBy(bool excluded) =>
+                activeContract?.ContractAllowances
+                    .Where(a => string.Equals(a.AllowanceType.Code, MealCode, StringComparison.OrdinalIgnoreCase)
+                        && a.AllowanceType.ExcludeFromProration == excluded)
+                    .Sum(a => a.Amount) ?? 0m;
+
             var inputs = new PayrollEmployeeInputs { EmployeeInformationId = e.Id };
             var n = inputs.Numbers; var t = inputs.Texts;
 
@@ -242,8 +265,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractAllowanceThueNha] = AllowanceByCode("HOUSING");
             n[ContractAllowanceDienThoai] = AllowanceByCode("PHONE");
             n[ContractAllowanceXangXe] = AllowanceByCode("FUEL");
-            n[ContractAllowanceCom] = AllowanceByCode("MEAL");
+            n[ContractAllowanceCom] = MealBy(excluded: false);
+            n[ContractAllowanceComNgoaiLe] = MealBy(excluded: true);
             n[ContractAllowanceKhac] = AllowanceOther();
+            n[ContractAllowanceNgoaiLe] = AllowanceExcludedFromProration();
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
             n[CongThuViec] = congThuViec;

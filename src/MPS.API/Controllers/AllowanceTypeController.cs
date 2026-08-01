@@ -67,6 +67,7 @@ public class AllowanceTypeController : ControllerBase
             request.DefaultAmount,
             request.IsBhxhBase,
             request.IsTaxable,
+            request.ExcludeFromProration,
             request.IsActive), cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
@@ -86,6 +87,7 @@ public class AllowanceTypeController : ControllerBase
             request.DefaultAmount,
             request.IsBhxhBase,
             request.IsTaxable,
+            request.ExcludeFromProration,
             request.IsActive), cancellationToken);
         if (!updated) return NotFound();
         return NoContent();

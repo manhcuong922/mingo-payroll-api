@@ -1,5 +1,6 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Evaluation;
 using MPS.Application.Features.Evaluation.Common;
 using MPS.Domain.Common;
 using MPS.Domain.Enums.Evaluation;
@@ -16,17 +17,20 @@ public class ApproveMonthlyEvaluationCommandHandler : IRequestHandler<ApproveMon
     private readonly ICurrentUserService _currentUser;
     private readonly IContractLookupReader _lookup;
     private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly IPublisher _publisher;
 
     public ApproveMonthlyEvaluationCommandHandler(
         IMonthlyEvaluationRepository repo,
         ICurrentUserService currentUser,
         IContractLookupReader lookup,
-        IPayrollSourceChangeHandler payrollChange)
+        IPayrollSourceChangeHandler payrollChange,
+        IPublisher publisher)
     {
         _repo = repo;
         _currentUser = currentUser;
         _lookup = lookup;
         _payrollChange = payrollChange;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(ApproveMonthlyEvaluationCommand request, CancellationToken ct)
@@ -68,6 +72,15 @@ public class ApproveMonthlyEvaluationCommandHandler : IRequestHandler<ApproveMon
             new[] { (evaluation.PeriodYear, evaluation.PeriodMonth) },
             empIds,
             $"Duyệt đánh giá tháng {evaluation.PeriodMonth:D2}/{evaluation.PeriodYear}", ct);
+
+        // Phase 6 — báo NV được đánh giá.
+        await _publisher.Publish(new MonthlyEvaluationPublishedNotification(
+            MonthlyEvaluationId: evaluation.Id,
+            EmployeeInformationId: empIds.FirstOrDefault(),
+            EmployeeUserId: evaluation.EmployeeUserId,
+            Year: evaluation.PeriodYear,
+            Month: evaluation.PeriodMonth,
+            FinalScore: evaluation.FinalScore ?? 0m), ct);
 
         return true;
     }

@@ -1,7 +1,9 @@
 ﻿using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -21,6 +23,8 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPublisher _publisher;
+    private readonly IAttendanceApproverResolver _approverResolver;
 
     public CreateLateEarlyRequestCommandHandler(
         ILateEarlyRequestRepository repository,
@@ -30,7 +34,9 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
         AttendanceRequestDayConflictChecker dayConflictChecker,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPublisher publisher,
+        IAttendanceApproverResolver approverResolver)
     {
         _repository = repository;
         _shiftAssignmentRepository = shiftAssignmentRepository;
@@ -40,6 +46,8 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
         _lookup = lookup;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
+        _approverResolver = approverResolver;
     }
 
     public async Task<int> Handle(CreateLateEarlyRequestCommand request, CancellationToken cancellationToken)
@@ -99,6 +107,21 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
             CreatedByUserId = userId
         };
 
-        return await _repository.AddAsync(entity, cancellationToken);
+        var requestId = await _repository.AddAsync(entity, cancellationToken);
+
+        var approvers = await _approverResolver.ResolveForSubmitAsync(
+            AttendanceRequestKind.LateEarly, resolvedRoute, employeeId,
+            tierOneApproverUserId: null, excludeUserId: userId, cancellationToken);
+
+        await _publisher.Publish(new AttendanceRequestSubmittedNotification(
+            Kind: AttendanceRequestKind.LateEarly,
+            RequestId: requestId,
+            SubmittedByUserId: userId,
+            RequesterUserId: userId,
+            ApproverUserIds: approvers,
+            Summary: $"{request.Kind} {request.Minutes} phút ngày {request.WorkDate:dd/MM/yyyy}"),
+            cancellationToken);
+
+        return requestId;
     }
 }

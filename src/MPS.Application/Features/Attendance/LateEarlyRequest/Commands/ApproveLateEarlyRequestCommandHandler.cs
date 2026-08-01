@@ -1,9 +1,11 @@
 ﻿using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 using MPS.Domain.Interfaces.Payroll;
@@ -21,6 +23,7 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
     private readonly LateEarlyLeaveDeduction _leaveDeduction;
     private readonly LateEarlyAttendanceDock _attendanceDock;
     private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly IPublisher _publisher;
 
     public ApproveLateEarlyRequestCommandHandler(
         ILateEarlyRequestRepository repository,
@@ -31,7 +34,8 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
         IClock clock,
         LateEarlyLeaveDeduction leaveDeduction,
         LateEarlyAttendanceDock attendanceDock,
-        IPayrollSourceChangeHandler payrollChange)
+        IPayrollSourceChangeHandler payrollChange,
+        IPublisher publisher)
     {
         _leaveDeduction = leaveDeduction;
         _attendanceDock = attendanceDock;
@@ -42,6 +46,7 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
         _departmentGuard = departmentGuard;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
     }
 
     public async Task<ApproveLateEarlyRequestResult> Handle(ApproveLateEarlyRequestCommand request, CancellationToken cancellationToken)
@@ -119,6 +124,16 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
         await _payrollChange.OnSourceChangedAsync(
             existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
             $"Duyệt đi muộn/về sớm ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
+
+        await _publisher.Publish(new AttendanceRequestDecidedNotification(
+            Kind: AttendanceRequestKind.LateEarly,
+            RequestId: existing.Id,
+            Decision: AttendanceRequestDecision.Approved,
+            DecidedByUserId: userId,
+            SubmittedByUserId: existing.CreatedByUserId,
+            RequesterUserId: existing.CreatedByUserId,
+            Summary: $"{existing.Kind} {existing.Minutes} phút ngày {existing.WorkDate:dd/MM/yyyy}",
+            Reason: request.ReviewNote), cancellationToken);
 
         return new ApproveLateEarlyRequestResult(true, limit.MustDeductFromLeaveBalance, null);
     }
