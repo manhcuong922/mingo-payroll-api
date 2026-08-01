@@ -97,7 +97,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
         var key = $"compliance:SocialInsuranceRateVersion:at:{payDate:yyyyMMdd}";
         return await _cache.GetOrCreateAsync(key, async entry =>
         {
-            entry.SlidingExpiration = CacheDuration;
+            ConfigureEntry(entry, "SocialInsuranceRateVersion");
             var v = await _socialInsurance.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No SocialInsuranceRateVersion active at {payDate:yyyy-MM-dd}.");
             return MapSocialInsurance(v);
@@ -109,7 +109,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
         var key = $"compliance:PitRegulationVersion:at:{payDate:yyyyMMdd}";
         return await _cache.GetOrCreateAsync(key, async entry =>
         {
-            entry.SlidingExpiration = CacheDuration;
+            ConfigureEntry(entry, "PitRegulationVersion");
             var v = await _pit.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No PitRegulationVersion active at {payDate:yyyy-MM-dd}.");
             return MapPit(v);
@@ -121,7 +121,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
         var key = $"compliance:MinimumWageVersion:at:{payDate:yyyyMMdd}";
         return await _cache.GetOrCreateAsync(key, async entry =>
         {
-            entry.SlidingExpiration = CacheDuration;
+            ConfigureEntry(entry, "MinimumWageVersion");
             var v = await _minWage.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No MinimumWageVersion active at {payDate:yyyy-MM-dd}.");
             return MapMinimumWage(v);
@@ -133,7 +133,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
         var key = $"compliance:AllowanceExemptThresholdVersion:at:{payDate:yyyyMMdd}:{allowanceTypeId}";
         return await _cache.GetOrCreateAsync(key, async entry =>
         {
-            entry.SlidingExpiration = CacheDuration;
+            ConfigureEntry(entry, "AllowanceExemptThresholdVersion");
             var v = await _allowanceThreshold.GetActiveAtForAllowanceTypeAsync(allowanceTypeId, payDate, ct);
             return v is null ? null : MapAllowanceThreshold(v);
         });
@@ -144,16 +144,30 @@ public sealed class ComplianceLookupService : IComplianceLookupService
         var key = $"compliance:LaborLawConstantsVersion:at:{payDate:yyyyMMdd}";
         return await _cache.GetOrCreateAsync(key, async entry =>
         {
-            entry.SlidingExpiration = CacheDuration;
+            ConfigureEntry(entry, "LaborLawConstantsVersion");
             var v = await _laborLaw.GetActiveAtAsync(payDate, ct)
                 ?? throw new InvalidOperationException($"No LaborLawConstantsVersion active at {payDate:yyyy-MM-dd}.");
             return MapLaborLaw(v);
         }) ?? throw new InvalidOperationException(CacheNullError);
     }
 
+    /// <summary>
+    /// ⭐ A3 — mọi entry compliance PHẢI đi qua đây. Hai phần:
+    ///
+    /// <para>(1) <b>Expiration token</b> gắn theo loại văn bản: sửa/kích hoạt phiên bản mới sẽ bắn
+    /// <c>ComplianceVersionChangedNotification</c> ⇒ <see cref="ComplianceCacheInvalidator"/> huỷ
+    /// token ⇒ entry bị xoá ngay. Trước đây 5 hàm <c>Get*AtAsync</c> — chính là họ hàm
+    /// <c>PayrollDataCollector</c> dùng — tự đặt <c>SlidingExpiration</c> mà KHÔNG gắn token, nên kế
+    /// toán sửa biểu thuế/tỷ lệ BHXH xong bảng lương vẫn ra số cũ, không lỗi, không cảnh báo.</para>
+    ///
+    /// <para>(2) <b>Absolute expiration</b> thay cho sliding: <c>SlidingExpiration</c> nghĩa là
+    /// "15 phút KHÔNG AI ĐỤNG mới hết hạn" — trên hệ thống có người dùng liên tục thì entry không
+    /// bao giờ tự hết hạn, phải khởi động lại server. Absolute đảm bảo trần tuổi tối đa của số liệu
+    /// kể cả khi cơ chế token vì lý do nào đó không bắn.</para>
+    /// </summary>
     private void ConfigureEntry(ICacheEntry entry, string complianceType)
     {
-        entry.SlidingExpiration = CacheDuration;
+        entry.AbsoluteExpirationRelativeToNow = CacheDuration;
         var token = ComplianceCacheInvalidator.GetToken(complianceType);
         entry.AddExpirationToken(new Microsoft.Extensions.Primitives.CancellationChangeToken(token));
     }

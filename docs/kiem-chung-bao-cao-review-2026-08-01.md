@@ -8,7 +8,8 @@
 > | --- | --- | --- |
 > | A1 | ✅ đã sửa | `payroll-ot-double-count-a1.spec.ts` |
 > | A2 | ✅ đã sửa | `payroll-saturday-rest-day-a2.spec.ts` |
-> | A3, A4, A6, A7, B2, B3, C1, C2, C3, D3 | ⏳ chưa sửa | |
+> | A3 | ✅ đã sửa | ⚠️ không có e2e — xem §6 |
+> | A4, A6, A7, B2, B3, C1, C2, C3, D3 | ⏳ chưa sửa | |
 > | A5, B1 | 🔒 PO chốt GIỮ — xem §4 | |
 
 Tài liệu ghi lại kết quả **kiểm chứng bằng test** cho báo cáo review (nhóm A–E). Mỗi lỗi được
@@ -235,6 +236,31 @@ lại đọc quyết định này.
      **Bù: nhập tay qua màn hình khoản điều chỉnh** (`CreatePayrollPeriodAdjustment`).
 - Test ghim: `PayrollStaleSourceCoverageTests` — 7 case "ngoài phạm vi" + 3 case "trong phạm vi"
   (nhánh duyệt đơn) để biên giới quyết định có hai phía rõ ràng.
+
+## 6. A3 — vì sao không có test e2e
+
+Mọi lỗi khác đều đi kèm một e2e đã được kiểm chứng là **bắt được lỗi** (chạy trên code cũ phải đỏ).
+Riêng A3 không làm được, và đây là lý do — ghi lại để lần sau không ai mất công dò lại:
+
+1. **Endpoint duy nhất chạm tới `Get*AtAsync` là tạo/tính lại kỳ lương.** `GET /compliance/
+   allowance-exempt-thresholds/active-at` (và các `active-at` khác) đi **thẳng repository**, không
+   qua `ComplianceLookupService` ⇒ không đụng bộ đệm. Một spec dựa vào endpoint này đã được viết,
+   phát hiện **xanh cả khi revert bản sửa**, và đã bị xoá thay vì commit test rỗng nghĩa.
+2. **Phạm vi hiệu lực theo ngày che mất phép đo.** Văn bản ban hành *hôm nay* chỉ có hiệu lực từ
+   hôm nay, trong khi mọi kỳ lương dựng được trên môi trường này đều có `payDate` ở **quá khứ**
+   (kỳ Draft hiện có: 04/2026) ⇒ `...AtAsync(payDate)` trả bản cũ là **đúng luật**, không phải lỗi.
+3. **Không dựng được kỳ có `payDate ≥ hôm nay`.** Tháng 07/2026 chỉ có 2 NV có chấm công và **0**
+   bảng đánh giá được duyệt, trong khi 33 NV có hợp đồng phủ tháng ⇒ cổng readiness chặn.
+
+**Thay thế:** `ComplianceLookupCacheInvalidationTests` là integration test thật — dùng
+`ComplianceLookupService` thật, `MemoryCache` thật và `ComplianceCacheInvalidator` thật, chỉ thiếu
+tầng HTTP. Nó có **test đối chứng** (`GetActivePitAsync`) đang xanh, chứng minh cơ chế invalidate
+chạy đúng và lỗi cô lập đúng ở 5 hàm `...AtAsync`. Đã kiểm chứng: đỏ trước khi sửa, xanh sau khi sửa.
+
+**Muốn có e2e cho A3 về sau** cần một trong hai: (a) seed đủ dữ liệu một tháng có `payDate ≥ hôm
+nay` để tạo kỳ lương thật, hoặc (b) cho các endpoint `active-at` dùng chung
+`ComplianceLookupService` thay vì gọi thẳng repository — cách (b) còn sửa luôn được sự bất nhất
+hiện tại giữa hai đường đọc cùng một số liệu.
 
 ## 5. Ghi chú môi trường
 
