@@ -9,7 +9,11 @@
 > | A1 | ✅ đã sửa | `payroll-ot-double-count-a1.spec.ts` |
 > | A2 | ✅ đã sửa | `payroll-saturday-rest-day-a2.spec.ts` |
 > | A3 | ✅ đã sửa | ⚠️ không có e2e — xem §6 |
-> | A4, A6, A7, B2, B3, C1, C2, C3, D3 | ⏳ chưa sửa | |
+> | B3 | ✅ đã sửa | `payroll-payslip-notification-b3.spec.ts` |
+> | B2 | ✅ đã sửa | `leave-cancel-keeps-attendance-b2.spec.ts` |
+> | A7 (phần bảo hiểm) | ✅ đã sửa | ⚠️ chưa có e2e — xem §7 |
+> | A7 (phần KPCĐ) | ⛔ cần thêm trường hợp đồng — xem §7 | |
+> | A4, A6, C1, C2, C3, D3 | ⏳ chưa sửa | |
 > | A5, B1 | 🔒 PO chốt GIỮ — xem §4 | |
 
 Tài liệu ghi lại kết quả **kiểm chứng bằng test** cho báo cáo review (nhóm A–E). Mỗi lỗi được
@@ -261,6 +265,56 @@ chạy đúng và lỗi cô lập đúng ở 5 hàm `...AtAsync`. Đã kiểm ch
 nay` để tạo kỳ lương thật, hoặc (b) cho các endpoint `active-at` dùng chung
 `ComplianceLookupService` thay vì gọi thẳng repository — cách (b) còn sửa luôn được sự bất nhất
 hiện tại giữa hai đường đọc cùng một số liệu.
+
+## 7. A7 — đã sửa phần bảo hiểm, phần KPCĐ cần quyết định
+
+### 7.1 Đã sửa: mỗi cột bảo hiểm tôn trọng công tắc riêng của hợp đồng
+
+Cờ `FLAGBH` là enum thô chỉ biểu diễn được 3/8 tổ hợp bật/tắt của ba loại bảo hiểm. Thay vì phình
+cờ lên 8 giá trị (làm cột cờ và công thức `SkipIfFlag` rối thêm), bản sửa **tách hai tầng**:
+
+| Tầng | Nguồn | Vai trò |
+| --- | --- | --- |
+| Công tắc hợp đồng | `Contract.{Social,Health,Unemployment}InsuranceFlag` | sự thật ghi trong HĐ, áp cho **từng loại** độc lập |
+| Cờ `FLAGBH` | suy từ HĐ, kế toán đè tay được | ngoại lệ **theo kỳ** (thai sản, ốm dài ngày) — giữ nguyên `[D23]` |
+
+Cờ vẫn cắt được cả khối kể cả khi HĐ bật công tắc; ngược lại HĐ tắt công tắc nào thì loại đó bằng 0
+dù cờ là "đóng đầy đủ".
+
+⚠️ **Bẫy tương thích ngược đã tránh được.** Ba trường mới mang ngữ nghĩa **"MIỄN" (1 = miễn)**, không
+phải "có đóng". Lý do: `PayrollEmployeeInputs.ToFields` điền `0` cho mọi khoá thiếu, mà snapshot
+input của các kỳ lương **tạo trước** bản sửa không có ba khoá đó. Với ngữ nghĩa "có đóng", thiếu
+khoá ⇒ 0 ⇒ hệ số nhân 0 ⇒ **xoá sạch bảo hiểm** khi kế toán sửa một ô trên kỳ cũ. Bản nháp đầu tiên
+đúng là dùng ngữ nghĩa "có đóng" và đã làm vỡ `PayrollGoldenReconciliationTests` +
+`PayrollCalculatorSmokeTests` — hai test đó bắt được đúng cái bẫy này.
+
+Phủ bằng **17 test**: 11 test tầng Application chạy **bảng công thức mặc định thật** qua
+`PayrollCalculator` thật (đủ cả 8 tổ hợp, case đè tay bằng cờ, và case snapshot cũ thiếu khoá), cộng
+6 test tầng Infrastructure trên `DbContext` thật chốt việc `PayrollDataCollector` đọc đúng 3 cờ HĐ.
+
+⚠️ **Chưa có e2e.** Không phải bỏ qua — cái giá quá lớn so với giá trị thêm vào:
+- Toàn bộ 43 hợp đồng trong DB đều là "đóng đủ" ⇒ **không có dữ liệu sẵn để quan sát**, e2e buộc
+  phải tự dựng hợp đồng lệch cờ.
+- Muốn thấy số tiền BH thì hợp đồng phải nằm trong một kỳ lương tính được ⇒ phải qua **cổng
+  readiness cho CẢ công ty**: HĐ đã ký + chấm công + **bảng đánh giá tháng Approved** (công nhân
+  phải đi đường đơn sản xuất → hoàn tất → gộp tháng → duyệt). Đây là fixture ~300s theo đúng
+  precedent `pit-tax-flags.spec.ts` / `payroll-prorate-b01.spec.ts`.
+- Hợp đồng **đã Active không huỷ/xoá được** qua API ⇒ mỗi lượt chạy để lại một hợp đồng rác vĩnh
+  viễn trong readiness — đúng nợ §6.2 điểm 2 mà đợt này vừa phải dọn 44 bản ghi.
+
+Phần e2e còn thiếu là *nối dây* (HĐ → collector → công thức), mà cả hai đầu dây đã được chốt bằng
+test chạy trên thành phần thật. Nếu PO muốn có e2e, việc cần làm là dựng fixture readiness dùng
+chung cho cả nhóm payroll — nên làm **một lần** cho mọi spec thay vì riêng cho A7.
+
+### 7.2 Chưa sửa: không có cách khai "miễn phí công đoàn"
+
+Cờ `NoUnion` (`"x"`) đã tồn tại trong `InsuranceFlags` và **được công thức KPCĐ dùng**, nhưng
+`ResolveInsuranceFlag` không bao giờ sinh ra nó — vì `Contract` **không có trường nào** để khai
+"không đóng phí công đoàn". Hệ quả: hệ thống **luôn thu KPCĐ**.
+
+Sửa được thì phải thêm cột vào `Contract` + migration + form UI + luồng validate theo
+`RuleDriven`/`UserChoice` — đó là **thêm tính năng**, không phải sửa lỗi. Cần PO chốt trước.
+Test `A7_NoUnionFlag_IsUnreachable` giữ nguyên trạng thái ĐỎ để ghim khoảng trống này.
 
 ## 5. Ghi chú môi trường
 

@@ -18,6 +18,22 @@ public static class PayrollFieldKeys
     public const string ContractMucLuong = "contract.mucLuong";
     public const string ContractInsuranceFlag = "contract.insuranceFlag"; // text
     public const string ContractTaxFlag = "contract.taxFlag";             // text
+
+    // ⭐ A7 — ba công tắc bảo hiểm ĐỘC LẬP của hợp đồng.
+    //
+    // Cờ `ContractInsuranceFlag` là enum thô chỉ biểu diễn được 3/8 tổ hợp bật/tắt, nên các tổ hợp
+    // còn lại (vd có BHXH nhưng KHÔNG BHYT) bị gom nhầm vào "đóng đầy đủ" ⇒ vẫn trừ BHYT trái hợp
+    // đồng. Ba trường này để mỗi cột BH tôn trọng đúng công tắc của chính nó; cờ vẫn giữ vai trò
+    // ĐÈ TAY cho ngoại lệ theo kỳ (thai sản, ốm dài ngày) theo [D23].
+    //
+    // ⚠️ Ngữ nghĩa cố ý là "KHÔNG đóng" (1 = miễn, 0 = đóng), KHÔNG phải "có đóng".
+    // Lý do: `PayrollEmployeeInputs.ToFields` điền 0 cho mọi khoá thiếu, mà snapshot input của các
+    // kỳ lương TẠO TRƯỚC bản sửa này không có 3 khoá đó. Nếu dùng ngữ nghĩa "có đóng" thì thiếu
+    // khoá ⇒ 0 ⇒ hệ số nhân 0 ⇒ **xoá sạch bảo hiểm** khi kế toán sửa một ô trên kỳ cũ.
+    // Với ngữ nghĩa "miễn", thiếu khoá ⇒ 0 ⇒ không miễn ⇒ giữ nguyên số cũ.
+    public const string ContractNoSocialInsurance = "contract.noSocialInsurance";
+    public const string ContractNoHealthInsurance = "contract.noHealthInsurance";
+    public const string ContractNoUnemploymentInsurance = "contract.noUnemploymentInsurance";
     public const string ContractAllowanceThueNha = "contract.allowanceThueNha";
     public const string ContractAllowanceDienThoai = "contract.allowanceDienThoai";
     public const string ContractAllowanceXangXe = "contract.allowanceXangXe";

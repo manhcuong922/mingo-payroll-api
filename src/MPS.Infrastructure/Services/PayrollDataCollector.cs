@@ -272,6 +272,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             t[ContractInsuranceFlag] = ResolveInsuranceFlag(activeContract);
             t[ContractTaxFlag] = ResolveTaxFlag(activeContract);
 
+            // ⭐ A7 — ba công tắc BH của HĐ, ghi dạng "MIỄN" (1 = miễn) để mỗi cột BH tôn trọng đúng
+            // công tắc của mình. Không có HĐ hiệu lực ⇒ 0 (không miễn), giữ mặc định "đóng đủ".
+            n[ContractNoSocialInsurance] = activeContract is not null && !activeContract.SocialInsuranceFlag ? 1m : 0m;
+            n[ContractNoHealthInsurance] = activeContract is not null && !activeContract.HealthInsuranceFlag ? 1m : 0m;
+            n[ContractNoUnemploymentInsurance] = activeContract is not null && !activeContract.UnemploymentInsuranceFlag ? 1m : 0m;
+
             n[ContractMucLuong] = mucLuong;
             n[ContractAllowanceThueNha] = AllowanceByCode("HOUSING");
             n[ContractAllowanceDienThoai] = AllowanceByCode("PHONE");
