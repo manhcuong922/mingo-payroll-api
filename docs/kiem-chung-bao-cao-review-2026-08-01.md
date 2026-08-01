@@ -13,7 +13,11 @@
 > | B2 | ✅ đã sửa | `leave-cancel-keeps-attendance-b2.spec.ts` |
 > | A7 (phần bảo hiểm) | ✅ đã sửa | ⚠️ chưa có e2e — xem §7 |
 > | A7 (phần KPCĐ) | ⛔ cần thêm trường hợp đồng — xem §7 | |
-> | A4, A6, C1, C2, C3, D3 | ⏳ chưa sửa | |
+> | A6 | ✅ đã sửa | `payroll-insurance-flag-validation-a6.spec.ts` |
+> | C3 + D3 | ✅ đã sửa | `payroll-employee-code-and-health-cap.spec.ts` |
+> | C1 | ✅ đã sửa | `privileged-session-c1.spec.ts` |
+> | C2 | ✅ đã sửa (PO chọn hướng (c)) | `activation-provisions-account-c2.spec.ts` |
+> | A4 | ⛔ chưa có nguồn dữ liệu — cần PO chốt | |
 > | A5, B1 | 🔒 PO chốt GIỮ — xem §4 | |
 
 Tài liệu ghi lại kết quả **kiểm chứng bằng test** cho báo cáo review (nhóm A–E). Mỗi lỗi được

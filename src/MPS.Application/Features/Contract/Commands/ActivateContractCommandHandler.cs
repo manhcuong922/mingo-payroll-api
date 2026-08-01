@@ -69,6 +69,20 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
             throw new DomainValidationException(
                 $"Cannot activate contract {request.ContractId}: status is {contract.Status}, only Draft can be activated.");
 
+        // ⭐ C2 — cổng chặn TRƯỚC khi kích hoạt: NV chưa có tài khoản thì bắt buộc phải có email.
+        //
+        // Kích hoạt HĐ là lúc hệ thống cấp tài khoản đăng nhập cho NV — thứ NV cần để chấm công,
+        // xin nghỉ và xem phiếu lương. Nhưng `EmployeeAccountProvisioner` bắt buộc email (cột
+        // `User.Email` không cho phép null), nên NV chưa khai email sẽ KHÔNG BAO GIỜ có tài khoản.
+        //
+        // Trước đây việc cấp tài khoản nằm bên trong hàm gửi mail — hàm đó thoát ngay khi thiếu
+        // email, và cả khối bọc trong bẫy lỗi chỉ-ghi-log ⇒ HR thấy kích hoạt thành công và không
+        // biết gì. Nay báo lỗi rõ ràng và giữ HĐ ở trạng thái Draft để HR bổ sung email rồi làm lại.
+        //
+        // Phải chặn ở ĐÂY, trước khi upload PDF và trước `ActivateDraftAsync`: sau khi kích hoạt đã
+        // commit thì không còn quay lại được, ném lỗi lúc đó chỉ tạo ra trạng thái nửa vời.
+        await EnsureEmployeeCanBeGrantedAccountAsync(contract, cancellationToken);
+
         // PDF gate
         await PdfStreamValidator.ValidateAsync(
             request.PdfStream, request.FileSizeBytes, request.ContentType, cancellationToken: cancellationToken);
@@ -150,7 +164,15 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
 
         // Post-activation side effects (best-effort). Activation has already committed —
         // any failure here is logged but does NOT roll back the contract.
-        await TrySendActivationEmailAsync(contract, metadata, request.FileName, cancellationToken);
+
+        // ⭐ C2 — cấp tài khoản là việc ĐỘC LẬP với gửi mail, nên đứng riêng và chạy TRƯỚC.
+        // Trước đây logic này nằm BÊN TRONG `TrySendActivationEmailAsync`, mà hàm đó `return` ngay
+        // khi `ei.Email` rỗng ⇒ công nhân xưởng chưa khai email thì KHÔNG BAO GIỜ có tài khoản, tức
+        // không đăng nhập được để chấm công, xin nghỉ hay xem phiếu lương. Cả khối lại bọc trong bẫy
+        // lỗi chỉ-ghi-log nên HR thấy kích hoạt thành công và không biết gì.
+        var newUserId = await TryProvisionAccountAsync(contract, cancellationToken);
+
+        await TrySendActivationEmailAsync(contract, metadata, request.FileName, newUserId, cancellationToken);
 
         // #61/[D27] — kích hoạt HĐ thêm một dòng NGƯỜI vào bảng lương từ tháng EffectiveFrom trở về
         // sau ⇒ mark stale mọi kỳ Draft từ tháng đó (giống ký phụ lục). Best-effort như email.
@@ -206,10 +228,69 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
     /// LUÔN gửi khi có email; (2) mail mời đặt password lần đầu — CHỈ khi vừa provision tài khoản mới.
     /// Password thô KHÔNG còn nằm cùng mail HĐ nữa. Cả 2 đều best-effort — fail không rollback kích hoạt.
     /// </summary>
+    /// <summary>
+    /// C2 — NV chưa có tài khoản thì bắt buộc phải có email trước khi kích hoạt hợp đồng.
+    /// Ném <see cref="DomainValidationException"/> (⇒ 400) để HR thấy ngay và HĐ ở nguyên Draft.
+    /// NV ĐÃ có tài khoản thì không cần email — không có gì để cấp nữa.
+    /// </summary>
+    private async Task EnsureEmployeeCanBeGrantedAccountAsync(
+        Domain.Entities.Contract contract, CancellationToken cancellationToken)
+    {
+        var ei = await _eiRepository.GetByIdAsync(contract.EmployeeInformationId, cancellationToken);
+        if (ei is null || ei.UserId.HasValue) return;
+
+        if (string.IsNullOrWhiteSpace(ei.Email))
+            throw new DomainValidationException(
+                $"EMPLOYEE_EMAIL_REQUIRED: Nhân viên '{ei.FullName}' chưa khai email nên không cấp được " +
+                "tài khoản đăng nhập khi kích hoạt hợp đồng. Vui lòng bổ sung email vào hồ sơ nhân " +
+                "viên rồi kích hoạt lại. Hợp đồng vẫn đang ở trạng thái Nháp.");
+    }
+
+    /// <summary>
+    /// C2 — Cấp tài khoản đăng nhập cho NV nếu chưa có. Tách khỏi hàm gửi mail vì đây là hai việc
+    /// khác nhau: tài khoản là thứ NV cần để chấm công, xin nghỉ và xem phiếu lương, còn mail chỉ là
+    /// thông báo. Điều kiện email đã được cổng chặn ở đầu <c>Handle</c> bảo đảm.
+    /// </summary>
+    /// <returns>UserId vừa cấp, hoặc <c>null</c> khi NV đã có tài khoản / cấp thất bại.</returns>
+    private async Task<int?> TryProvisionAccountAsync(
+        Domain.Entities.Contract contract, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var ei = await _eiRepository.GetByIdAsync(contract.EmployeeInformationId, cancellationToken);
+            if (ei is null)
+            {
+                _logger.LogWarning(
+                    "Skip account provisioning for contract {ContractId}: EmployeeInformation {EmployeeInformationId} not found.",
+                    contract.Id, contract.EmployeeInformationId);
+                return null;
+            }
+
+            if (ei.UserId.HasValue) return null;
+
+            var credentials = await _accountProvisioner.ProvisionAsync(
+                ei.Id, SystemRoles.EmployeeId, cancellationToken);
+
+            _logger.LogInformation(
+                "Provisioned account {UserId} for EmployeeInformation {EmployeeInformationId} on contract {ContractId} activation.",
+                credentials.UserId, ei.Id, contract.Id);
+            return credentials.UserId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Auto-provision account failed for EmployeeInformation {EmployeeInformationId} during contract {ContractId} activation. " +
+                "Admin có thể cấp lại qua POST /api/users.",
+                contract.EmployeeInformationId, contract.Id);
+            return null;
+        }
+    }
+
     private async Task TrySendActivationEmailAsync(
         Domain.Entities.Contract contract,
         StoredFileMetadata metadata,
         string pdfFileName,
+        int? newUserId,
         CancellationToken cancellationToken)
     {
         try
@@ -225,28 +306,12 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
 
             if (string.IsNullOrWhiteSpace(ei.Email))
             {
+                // Không có email thì bỏ qua GỬI MAIL là đúng — nhưng tài khoản đã được cấp ở bước
+                // riêng phía trên, nên NV vẫn đăng nhập được.
                 _logger.LogWarning(
                     "Skip activation email for contract {ContractId}: EmployeeInformation {EmployeeInformationId} has no email.",
                     contract.Id, ei.Id);
                 return;
-            }
-
-            int? newUserId = null;
-            if (!ei.UserId.HasValue)
-            {
-                try
-                {
-                    var credentials = await _accountProvisioner.ProvisionAsync(
-                        ei.Id, SystemRoles.EmployeeId, cancellationToken);
-                    newUserId = credentials.UserId;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex,
-                        "Auto-provision account failed for EmployeeInformation {EmployeeInformationId} during contract {ContractId} activation. " +
-                        "Sending contract PDF only; admin can retry via POST /api/users.",
-                        ei.Id, contract.Id);
-                }
             }
 
             // Mail #1: HĐ + PDF (không kèm credentials).
