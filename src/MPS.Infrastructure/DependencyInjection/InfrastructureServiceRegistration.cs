@@ -240,6 +240,11 @@ public static class InfrastructureServiceRegistration
             .Bind(configuration.GetSection(FptAiOcrOptions.SectionName));
         services.AddHttpClient<ICitizenIdOcrService, FptAiCitizenIdOcrService>();
 
+        // AI attendance service — báo reload embeddings sau khi face registration thay đổi
+        services.AddOptions<AiServiceOptions>()
+            .Bind(configuration.GetSection(AiServiceOptions.SectionName));
+        services.AddHttpClient<IFaceRecognitionSyncService, FaceRecognitionSyncService>();
+
         // Startup seeding
         services.AddScoped<MPS.Infrastructure.Services.PayrollDemoPeriodGenerator>();
         services.AddScoped<DatabaseSeeder>();
