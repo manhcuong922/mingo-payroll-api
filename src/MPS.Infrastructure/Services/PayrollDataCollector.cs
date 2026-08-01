@@ -113,8 +113,19 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 g => g.Key,
                 g => g.OrderByDescending(a => a.EffectiveFrom).First().SalaryAmountSnapshot!.Value);
 
+        // ⭐ A1 — chỉ lấy bản ghi chấm công CA CHÍNH (`OvertimeRequestId == null`).
+        // HR chấm công 2 lần cho ngày có tăng ca (một cho ca chính, một cho ca OT) đúng như hệ thống
+        // thiết kế — `AttendanceRecord` có invariant exactly-one-of (ShiftTemplateId, OvertimeRequestId).
+        // Trước đây vòng lặp bên dưới nuốt cả hai loại nên bản ghi ca OT bị tính 3 lần thừa:
+        //   (1) `DayWeight` cộng thêm 1 ngày công khống ⇒ phồng CongTinhCom/CongChinhThuc, kéo theo
+        //       thu nhập phân bổ theo công, tiền cơm và nền đóng BHXH;
+        //   (2) `dayHours/nightHours` nuốt giờ OT ⇒ trả hai lần (đã trả qua cột Tăng ca);
+        //   (3) `workSegments` sinh phụ trội loại-ngày lần nữa ⇒ OT ngày nghỉ/lễ được ~300% thay vì 200%.
+        // Tiền OT vẫn trả đủ qua `ComputeOvertimePayAsync` (đọc từ `OvertimeRequests` đã duyệt).
+        // Cùng quy ước với `GetAttendanceSummaryQueryHandler.ComputeEquivalentHours` — nơi đã tách 2 nhánh.
         var attByEmp = (await _db.AttendanceRecords.AsNoTracking()
-            .Where(a => empIds.Contains(a.EmployeeInformationId) && a.WorkDate >= periodStart && a.WorkDate <= periodEnd)
+            .Where(a => empIds.Contains(a.EmployeeInformationId) && a.WorkDate >= periodStart && a.WorkDate <= periodEnd
+                && a.OvertimeRequestId == null)
             .ToListAsync(ct)).GroupBy(a => a.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
 
         var otByEmp = (await _db.OvertimeRequests.AsNoTracking()
