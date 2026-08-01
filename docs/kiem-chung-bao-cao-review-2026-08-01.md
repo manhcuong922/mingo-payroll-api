@@ -7,7 +7,8 @@
 > | Lỗi | Trạng thái | E2E |
 > | --- | --- | --- |
 > | A1 | ✅ đã sửa | `payroll-ot-double-count-a1.spec.ts` |
-> | A2, A3, A4, A6, A7, B2, B3, C1, C2, C3, D3 | ⏳ chưa sửa | |
+> | A2 | ✅ đã sửa | `payroll-saturday-rest-day-a2.spec.ts` |
+> | A3, A4, A6, A7, B2, B3, C1, C2, C3, D3 | ⏳ chưa sửa | |
 > | A5, B1 | 🔒 PO chốt GIỮ — xem §4 | |
 
 Tài liệu ghi lại kết quả **kiểm chứng bằng test** cho báo cáo review (nhóm A–E). Mỗi lỗi được

@@ -7,8 +7,14 @@ namespace MPS.Infrastructure.Services;
 
 /// <summary>
 /// BR-23 — Resolve DayType theo thứ tự ưu tiên:
-/// (1) PublicHoliday → (2) PaidLeaveDay (LeaveRequest Approved + IsPaid) → (3) WeeklyRestDay (Thứ 7 + Chủ nhật cố định) → (4) Normal.
+/// (1) PublicHoliday → (2) PaidLeaveDay (LeaveRequest Approved + IsPaid) → (3) WeeklyRestDay → (4) Normal.
 /// Ngày lễ áp dụng cho toàn bộ nhân viên (không còn scope).
+///
+/// <para>⭐ A2 — ngày nghỉ tuần suy từ <b>bảng phân ca</b> (<c>EmployeeShiftAssignment</c>), không
+/// hardcode T7+CN. Điều 111 BLLĐ chỉ yêu cầu tối thiểu 1 ngày nghỉ/tuần và để doanh nghiệp ấn định
+/// theo lịch phân ca của từng người; công ty làm T2–T7 (rất phổ biến ở xưởng sản xuất) thì Thứ Bảy
+/// là ngày làm việc bình thường. Hardcode làm mọi Thứ Bảy được trả phụ trội "làm ngày nghỉ tuần"
+/// 100% và OT Thứ Bảy ăn 200% thay vì 150%.</para>
 /// </summary>
 public class DayTypeResolver : IDayTypeResolver
 {
@@ -40,10 +46,12 @@ public class DayTypeResolver : IDayTypeResolver
         if (hasPaidLeave)
             return AttendanceEnums.DayType.PaidLeaveDay;
 
-        if (IsWeekend(workDate))
-            return AttendanceEnums.DayType.WeeklyRestDay;
+        // Cửa sổ dò lịch phân ca = TUẦN chứa ngày cần tra (T2→CN) — đủ để biết tuần đó NV có được
+        // xếp lịch hay không mà không phải quét cả tháng.
+        var (weekStart, weekEnd) = WeekOf(workDate);
+        var assigned = await LoadAssignedDaysAsync(employeeInformationId, weekStart, weekEnd, cancellationToken);
 
-        return AttendanceEnums.DayType.Normal;
+        return ResolveRestDay(workDate, assigned);
     }
 
     public async Task<IReadOnlyDictionary<DateOnly, AttendanceEnums.DayType>> ResolveRangeAsync(
@@ -87,6 +95,9 @@ public class DayTypeResolver : IDayTypeResolver
                 paidLeaveDays.Add(d);
         }
 
+        // A2 — dò lịch phân ca trên TOÀN khoảng hỏi (kỳ lương = cả tháng ⇒ thừa dữ liệu để kết luận).
+        var assigned = await LoadAssignedDaysAsync(employeeInformationId, fromDate, toDate, cancellationToken);
+
         var result = new Dictionary<DateOnly, AttendanceEnums.DayType>();
         for (var d = fromDate; d <= toDate; d = d.AddDays(1))
         {
@@ -94,12 +105,45 @@ public class DayTypeResolver : IDayTypeResolver
                 result[d] = AttendanceEnums.DayType.PublicHoliday;
             else if (paidLeaveDays.Contains(d))
                 result[d] = AttendanceEnums.DayType.PaidLeaveDay;
-            else if (IsWeekend(d))
-                result[d] = AttendanceEnums.DayType.WeeklyRestDay;
             else
-                result[d] = AttendanceEnums.DayType.Normal;
+                result[d] = ResolveRestDay(d, assigned);
         }
         return result;
+    }
+
+    private async Task<HashSet<DateOnly>> LoadAssignedDaysAsync(
+        int employeeInformationId, DateOnly fromDate, DateOnly toDate, CancellationToken cancellationToken) =>
+        (await _context.EmployeeShiftAssignments.AsNoTracking()
+            .Where(a => a.EmployeeInformationId == employeeInformationId
+                       && a.WorkDate >= fromDate && a.WorkDate <= toDate)
+            .Select(a => a.WorkDate)
+            .Distinct()
+            .ToListAsync(cancellationToken))
+        .ToHashSet();
+
+    /// <summary>
+    /// A2 — ngày nghỉ tuần là ngày NV <b>không được xếp ca</b>.
+    ///
+    /// <para>Khi khoảng dò KHÔNG có bản phân ca nào (<paramref name="assignedDays"/> rỗng) thì giữ
+    /// quy ước cũ T7+CN. Nếu không, dữ liệu lịch sử chưa số hoá lịch phân ca sẽ biến MỌI ngày thành
+    /// "ngày nghỉ tuần" và được trả phụ trội 100% — sai còn nặng hơn lỗi đang sửa.</para>
+    /// </summary>
+    private static AttendanceEnums.DayType ResolveRestDay(DateOnly date, IReadOnlySet<DateOnly> assignedDays)
+    {
+        if (assignedDays.Count == 0)
+            return IsWeekend(date) ? AttendanceEnums.DayType.WeeklyRestDay : AttendanceEnums.DayType.Normal;
+
+        return assignedDays.Contains(date)
+            ? AttendanceEnums.DayType.Normal
+            : AttendanceEnums.DayType.WeeklyRestDay;
+    }
+
+    /// <summary>Tuần chứa <paramref name="date"/>, quy ước Việt Nam: Thứ Hai → Chủ nhật.</summary>
+    private static (DateOnly Start, DateOnly End) WeekOf(DateOnly date)
+    {
+        var offset = ((int)date.DayOfWeek + 6) % 7; // CN=0 → 6; T2=1 → 0; ...
+        var start = date.AddDays(-offset);
+        return (start, start.AddDays(6));
     }
 
     private static bool IsWeekend(DateOnly date) =>
