@@ -49,6 +49,12 @@ public class CreateAttendanceAdjustmentCommandHandler : IRequestHandler<CreateAt
         if (record.EmployeeInformationId != employeeId)
             throw new ForbiddenAccessException("You can only request adjustments for your own attendance records.");
 
+        // Ngày đã có đơn nghỉ phép được duyệt (auto-sinh record OnLeave) → chặn xin điều chỉnh
+        // chấm công vì sẽ chồng chéo với đơn nghỉ. NV muốn thay đổi thì phải huỷ đơn nghỉ trước.
+        if (record.Status == AttendanceStatus.OnLeave)
+            throw new DomainValidationException(
+                "Không thể xin điều chỉnh chấm công cho ngày đã có đơn nghỉ phép. Huỷ đơn nghỉ trước nếu muốn xin chấm công.");
+
         // BR-12
         var pending = await _repository.GetPendingByRecordIdAsync(request.AttendanceRecordId, cancellationToken);
         if (pending is not null)
