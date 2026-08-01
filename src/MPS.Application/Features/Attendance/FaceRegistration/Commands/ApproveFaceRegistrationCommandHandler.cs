@@ -14,17 +14,20 @@ public class ApproveFaceRegistrationCommandHandler
     private readonly IFileStorageService _storage;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IFaceRecognitionSyncService _faceSync;
 
     public ApproveFaceRegistrationCommandHandler(
         IFaceRegistrationRepository repository,
         IFileStorageService storage,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IFaceRecognitionSyncService faceSync)
     {
         _repository = repository;
         _storage = storage;
         _currentUser = currentUser;
         _clock = clock;
+        _faceSync = faceSync;
     }
 
     public async Task<FaceRegistrationDto> Handle(
@@ -46,6 +49,8 @@ public class ApproveFaceRegistrationCommandHandler
         entity.ReviewedByUserId = userId;
 
         await _repository.UpdateAsync(entity, cancellationToken);
+
+        await _faceSync.NotifyFaceRegistrationChangedAsync(cancellationToken);
 
         var photoUrl = await _storage.GeneratePresignedDownloadUrlAsync(
             entity.PhotoObjectKey, TimeSpan.FromMinutes(15), cancellationToken: cancellationToken);
