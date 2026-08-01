@@ -58,7 +58,12 @@ public sealed class LockPayrollPeriodCommandHandler : IRequestHandler<LockPayrol
     public async Task Handle(LockPayrollPeriodCommand request, CancellationToken ct)
     {
         var userId = _currentUser.UserId ?? throw new ForbiddenAccessException();
-        var period = await _periods.GetByIdAsync(request.PeriodId, asNoTracking: false, ct)
+
+        // ⭐ B3 — phải dùng GetFullAsync: `GetByIdAsync` KHÔNG Include gì cả, nên `period.Rows` rỗng
+        // ⇒ FanOutPayslipReadyAsync bên dưới luôn duyệt tập rỗng và không NV nào nhận được thông báo
+        // "phiếu lương đã có" (cả in-app lẫn email). Lỗi im lặng hoàn toàn: kế toán thấy thao tác
+        // khoá kỳ trả về thành công bình thường, không log lỗi nào.
+        var period = await _periods.GetFullAsync(request.PeriodId, asNoTracking: false, ct)
             ?? throw new NotFoundException($"Không tìm thấy kỳ lương #{request.PeriodId}.");
         if (period.Status != PayrollPeriodStatus.Finalized)
             throw new ConflictException("Chỉ khoá được kỳ đã Chốt.");
