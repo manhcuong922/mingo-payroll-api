@@ -60,7 +60,10 @@ internal static class PayrollCollectorFixture
     {
         var db = NewContext();
 
-        db.Users.Add(new User { Id = UserId, Username = "nv001", PasswordHash = "x", EmployeeCode = employeeCode });
+        // `employeeCode = null` ⇒ NV CHƯA được cấp tài khoản: không tạo `User` nào cả.
+        // (Không thể tạo `User` với `EmployeeCode = null` — cột này bắt buộc.)
+        if (employeeCode is not null)
+            db.Users.Add(new User { Id = UserId, Username = "nv001", PasswordHash = "x", EmployeeCode = employeeCode });
         db.Positions.Add(new Position { Id = PositionId, Name = "Công nhân" });
         db.EmployeeInformations.Add(new EmployeeInformation
         {

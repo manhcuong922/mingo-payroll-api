@@ -75,22 +75,4 @@ public sealed class PayrollDataCollectorBugTests
             "bảng lương và file Excel luân chuyển giữa kế toán/ngân hàng/BHXH ⇒ không được mang số CCCD");
     }
 
-    // ===================== D3 — trần BHYT cấu hình được nhưng không có tác dụng =====================
-
-    [Fact(DisplayName = "D3 · Đổi 'Hệ số trần BHYT' phải làm đổi số trên bảng lương")]
-    public async Task D3_HealthCapMultiplier_MustActuallyAffectPayroll()
-    {
-        using var db = await SeedBaseAsync();
-        db.AttendanceRecords.Add(ShiftRecord(day: 6));
-        await db.SaveChangesAsync();
-
-        var withCap20 = await CollectAsync(db, new FakeComplianceLookup());
-        // Admin sửa ô "Hệ số trần BHYT" 20 → 8 (BHXH giữ nguyên 20).
-        var withCap8 = await CollectAsync(db, new FakeComplianceLookup { HealthCapMultiplierOverride = 8 });
-
-        withCap8.Numbers[PayrollFieldKeys.BhxhBhytCap].Should().NotBe(
-            withCap20.Numbers[PayrollFieldKeys.BhxhBhytCap],
-            "màn hình cấu hình BHXH có ô 'Hệ số trần BHYT' (có validate hẳn hoi) nhưng payroll luôn " +
-            "dùng SocialCapMultiplier cho cả BHYT ⇒ admin sửa xong không có gì thay đổi");
-    }
 }

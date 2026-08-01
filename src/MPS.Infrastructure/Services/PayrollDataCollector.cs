@@ -76,6 +76,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var bhtnNldRate = si.EmployeeUnemploymentPercent / 100m;
         var kpcdRate = si.EmployerUnionFundPercent / 100m;
         var bhxhBhytCap = si.ReferenceAmount * si.SocialCapMultiplier;
+        // ⭐ D3 — trần BHYT có hệ số RIÊNG trên màn hình cấu hình BHXH (`HealthCapMultiplier`), trước
+        // đây không đường nào dùng tới nên admin sửa ô đó không có gì thay đổi.
+        var bhytCap = si.ReferenceAmount * si.HealthCapMultiplier;
         var regionMinWage = minWage.GetAppliedAmount();
         var bhtnCap = regionMinWage * si.UnemploymentCapMultiplier;
         var mealExempt = mealThreshold?.MonthlyExemptAmount ?? 0m;
@@ -263,7 +266,11 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             var inputs = new PayrollEmployeeInputs { EmployeeInformationId = e.Id };
             var n = inputs.Numbers; var t = inputs.Texts;
 
-            t[EmployeeCode] = e.User?.EmployeeCode ?? e.CitizenId;
+            // ⭐ C3 — KHÔNG bao giờ rơi về số CCCD làm mã nhân viên. Bảng lương và file Excel xuất ra
+            // được luân chuyển giữa kế toán, ngân hàng và cơ quan bảo hiểm ⇒ mang số căn cước vào đó
+            // là rò rỉ dữ liệu cá nhân không cần thiết. NV chưa có tài khoản thì để trống — readiness
+            // đã có cổng cảnh báo hồ sơ thiếu, và ô trống nói đúng sự thật "chưa được cấp mã".
+            t[EmployeeCode] = e.User?.EmployeeCode ?? string.Empty;
             t[EmployeeFullName] = e.FullName;
             t[EmployeePosition] = e.Position?.Name ?? string.Empty;
             t[EmployeeBankAccount] = e.BankNumber ?? string.Empty;
@@ -317,6 +324,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[BhtnNldRate] = bhtnNldRate;
             n[KpcdRate] = kpcdRate;
             n[BhxhBhytCap] = bhxhBhytCap;
+            n[BhytCap] = bhytCap;
             n[BhtnCap] = bhtnCap;
             n[PersonalDeduction] = pit.PersonalDeductionAmount;
             n[DependentDeduction] = pit.DependentDeductionAmount;
@@ -327,7 +335,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
         var refs = new List<PayrollComplianceRef>
         {
-            Ref(ComplianceVersionType.SocialInsurance, si.VersionId, si.ValidFrom, si.LegalReference, "Trần đóng BHXH/BHYT", bhxhBhytCap),
+            Ref(ComplianceVersionType.SocialInsurance, si.VersionId, si.ValidFrom, si.LegalReference, "Trần đóng BHXH", bhxhBhytCap),
             Ref(ComplianceVersionType.Pit, pit.VersionId, pit.ValidFrom, pit.LegalReference, "Giảm trừ bản thân", pit.PersonalDeductionAmount),
             Ref(ComplianceVersionType.MinimumWage, minWage.VersionId, minWage.ValidFrom, minWage.LegalReference, "Lương tối thiểu vùng áp dụng", regionMinWage),
             Ref(ComplianceVersionType.LaborLawConstants, labor.VersionId, labor.ValidFrom, labor.LegalReference, "Công chuẩn/tháng (luật)", labor.StandardWorkingDaysPerMonth),

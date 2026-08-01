@@ -59,7 +59,20 @@ public static class DefaultPayrollFormulaSet
             N.Mul(N.Div(value, N.Col(Cc.CongChuan)), N.Col(Cc.CongTinhCom));
 
         FormulaNode Bh(string rateField, string capField) =>
-            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), N.Field(capField));
+            BhWithCap(rateField, N.Field(capField));
+
+        FormulaNode BhWithCap(string rateField, FormulaNode capNode) =>
+            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), capNode);
+
+        // ⭐ D3 — BHYT có trần RIÊNG (hệ số trần BHYT trên màn hình cấu hình BHXH), trước đây bị bỏ
+        // qua và dùng chung trần BHXH nên admin sửa ô đó không có tác dụng gì.
+        // Fallback về trần BHXH khi trường mới = 0: snapshot input của kỳ tạo TRƯỚC bản sửa không có
+        // khoá này, mà `InsuranceWithCap` coi cap = 0 là "KHÔNG áp trần" ⇒ không fallback thì kỳ cũ
+        // sẽ trả THỪA cho người lương cao.
+        var bhytCap = N.If(
+            N.Cmp(">", N.Field(Fk.BhytCap), N.Const(0m)),
+            N.Field(Fk.BhytCap),
+            N.Field(Fk.BhxhBhytCap));
 
         const string GA = "Nhân viên";
         const string GB = "Ngày công";
@@ -182,10 +195,10 @@ public static class DefaultPayrollFormulaSet
                 UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhNldRate, Fk.BhxhBhytCap))));
         Add(Cc.DnBhyt, "BHYT – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBh,
-                UnlessExempt(Fk.ContractNoHealthInsurance, Bh(Fk.BhytDnRate, Fk.BhxhBhytCap))));
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytDnRate, bhytCap))));
         Add(Cc.NldBhyt, "BHYT – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBh,
-                UnlessExempt(Fk.ContractNoHealthInsurance, Bh(Fk.BhytNldRate, Fk.BhxhBhytCap))));
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytNldRate, bhytCap))));
         Add(Cc.DnBhtn, "BHTN – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
                 UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnDnRate, Fk.BhtnCap))));

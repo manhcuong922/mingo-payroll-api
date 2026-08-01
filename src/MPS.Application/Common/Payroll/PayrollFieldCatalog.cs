@@ -75,7 +75,8 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(KpcdRate, "Tỷ lệ KPCĐ – DN", "Compliance", ColumnDataType.Percent),
 
         // Compliance — trần + giảm trừ
-        new(BhxhBhytCap, "Trần đóng BHXH/BHYT", "Compliance", ColumnDataType.Money),
+        new(BhxhBhytCap, "Trần đóng BHXH", "Compliance", ColumnDataType.Money),
+        new(BhytCap, "Trần đóng BHYT", "Compliance", ColumnDataType.Money),
         new(BhtnCap, "Trần đóng BHTN", "Compliance", ColumnDataType.Money),
         new(PersonalDeduction, "Giảm trừ bản thân", "Compliance", ColumnDataType.Money),
         new(DependentDeduction, "Giảm trừ mỗi người phụ thuộc", "Compliance", ColumnDataType.Money),

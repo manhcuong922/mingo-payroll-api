@@ -99,6 +99,14 @@ public static class PayrollFieldKeys
 
     // ===== Compliance — trần + giảm trừ + ngưỡng =====
     public const string BhxhBhytCap = "compliance.bhxhBhytCap";
+
+    // ⭐ D3 — trần đóng BHYT RIÊNG (= mức tham chiếu × HealthCapMultiplier). Màn hình cấu hình BHXH
+    // có ô "Hệ số trần BHYT", có validate hẳn hoi, nhưng payroll luôn dùng trần của BHXH cho cả
+    // BHYT ⇒ admin sửa ô đó không có gì thay đổi.
+    // ⚠️ Snapshot input của kỳ tạo TRƯỚC bản sửa không có khoá này ⇒ `ToFields` điền 0, mà
+    // `InsuranceWithCap` coi cap = 0 là "không áp trần" ⇒ sẽ trả THỪA cho người lương cao.
+    // Vì vậy công thức BHYT fallback về `BhxhBhytCap` khi trường này = 0.
+    public const string BhytCap = "compliance.bhytCap";
     public const string BhtnCap = "compliance.bhtnCap";
     public const string PersonalDeduction = "compliance.personalDeduction";
     public const string DependentDeduction = "compliance.dependentDeduction";
