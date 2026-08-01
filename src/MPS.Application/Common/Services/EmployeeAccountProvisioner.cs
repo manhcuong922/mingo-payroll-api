@@ -53,7 +53,9 @@ public sealed class EmployeeAccountProvisioner : IEmployeeAccountProvisioner
 
         var employeeCode = await GenerateUniqueEmployeeCodeAsync(positionCode!, cancellationToken);
         var username = await GenerateUniqueUsernameAsync(ei.FullName, employeeCode, cancellationToken);
-        var plainPassword = RandomPasswordGenerator.Generate(DefaultPasswordLength);
+        // Random password chỉ hash vào DB — KHÔNG trả về / gửi mail. User sẽ overwrite qua link mời
+        // (IFirstLoginInvitationService). Tránh state "password rỗng" hợp lệ trong DB.
+        var throwawayPassword = RandomPasswordGenerator.Generate(DefaultPasswordLength);
 
         var entity = new Domain.Entities.User
         {
@@ -61,7 +63,7 @@ public sealed class EmployeeAccountProvisioner : IEmployeeAccountProvisioner
             FullName = ei.FullName,
             RoleId = roleId,
             Username = username,
-            PasswordHash = _passwordHasher.Hash(plainPassword),
+            PasswordHash = _passwordHasher.Hash(throwawayPassword),
             Email = ei.Email!,
             Dob = ei.Dob,
             PhoneNo = ei.PhoneNo ?? string.Empty,
@@ -71,7 +73,7 @@ public sealed class EmployeeAccountProvisioner : IEmployeeAccountProvisioner
 
         var userId = await _userRepository.AddWithEmployeeInfoLinkAsync(entity, ei.Id, cancellationToken);
 
-        return new EmployeeAccountCredentials(userId, employeeCode, username, plainPassword);
+        return new EmployeeAccountCredentials(userId, employeeCode, username);
     }
 
     private async Task<string> GenerateUniqueEmployeeCodeAsync(string positionCode, CancellationToken cancellationToken)

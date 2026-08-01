@@ -1,9 +1,11 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.LeaveRequest.Common;
 using MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 using MPS.Domain.Interfaces.Payroll;
@@ -22,6 +24,7 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly IPublisher _publisher;
 
     public ApproveLeaveRequestCommandHandler(
         ILeaveRequestRepository repository,
@@ -30,7 +33,8 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         MedicalCertificateUploader certificateUploader,
         ICurrentUserService currentUser,
         IClock clock,
-        IPayrollSourceChangeHandler payrollChange)
+        IPayrollSourceChangeHandler payrollChange,
+        IPublisher publisher)
     {
         _repository = repository;
         _editLockChecker = editLockChecker;
@@ -39,6 +43,7 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
         _currentUser = currentUser;
         _clock = clock;
         _payrollChange = payrollChange;
+        _publisher = publisher;
     }
 
     public async Task<bool> Handle(ApproveLeaveRequestCommand request, CancellationToken cancellationToken)
@@ -144,6 +149,20 @@ public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveReq
                 MonthsInRange(existing.StartDate, existing.EndDate),
                 new[] { existing.EmployeeInformationId },
                 $"Duyệt nghỉ phép {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}", cancellationToken);
+
+        if (applied)
+        {
+            // Phase 3 §N2 — báo về người submit (Leave self-service ⇒ submit = requester).
+            await _publisher.Publish(new AttendanceRequestDecidedNotification(
+                Kind: AttendanceRequestKind.Leave,
+                RequestId: request.Id,
+                Decision: AttendanceRequestDecision.Approved,
+                DecidedByUserId: userId,
+                SubmittedByUserId: existing.CreatedByUserId,
+                RequesterUserId: existing.CreatedByUserId,
+                Summary: $"Đơn nghỉ {existing.StartDate:dd/MM/yyyy}–{existing.EndDate:dd/MM/yyyy}",
+                Reason: request.ReviewNote), cancellationToken);
+        }
 
         return applied;
     }

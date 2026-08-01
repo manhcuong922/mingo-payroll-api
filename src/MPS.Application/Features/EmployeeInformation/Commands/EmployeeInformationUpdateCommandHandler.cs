@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models.Attendance;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Domain.Constants;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -119,6 +120,30 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
                     ChangedByUserId: _currentUserService.UserId ?? 0,
                     ChangedAtUtc: DateTime.UtcNow),
                 cancellationToken);
+        }
+
+        // Phase 6 §N12 — cảnh báo sửa field nhạy cảm (CCCD/STK/TaxNo/SocialNo).
+        // DependentsNo không kiểm ở đây vì không cho khai tay qua endpoint này (#40).
+        if (updated)
+        {
+            var changed = new List<string>();
+            if (!string.Equals(existing.CitizenId, entity.CitizenId, StringComparison.Ordinal))
+                changed.Add("CCCD");
+            if (!string.Equals(existing.BankNumber, entity.BankNumber, StringComparison.Ordinal))
+                changed.Add("Số tài khoản");
+            if (!string.Equals(existing.TaxNo, entity.TaxNo, StringComparison.Ordinal))
+                changed.Add("Mã số thuế");
+            if (!string.Equals(existing.SocialNo, entity.SocialNo, StringComparison.Ordinal))
+                changed.Add("Số sổ BHXH");
+
+            if (changed.Count > 0)
+            {
+                await _mediator.Publish(new EmployeeSensitiveEditedNotification(
+                    EmployeeInformationId: request.Id,
+                    EmployeeUserId: existing.UserId,
+                    ChangedByUserId: _currentUserService.UserId ?? 0,
+                    ChangedFields: changed), cancellationToken);
+            }
         }
 
         return updated;

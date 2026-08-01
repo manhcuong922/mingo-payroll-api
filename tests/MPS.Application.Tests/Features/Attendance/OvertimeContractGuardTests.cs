@@ -39,7 +39,9 @@ public sealed class OvertimeContractGuardTests
 
     private CreateOvertimeRequestCommandHandler CreateSut() => new(
         _otRepo.Object, _projects.Object, Mock.Of<IProjectTaskRepository>(), _employees.Object,
-        _lookup.Object, _contracts.Object, null!, null!, null!, null!, _currentUser.Object, _clock);
+        _lookup.Object, _contracts.Object, null!, null!, null!, null!, _currentUser.Object, _clock,
+        Mock.Of<MediatR.IPublisher>(),
+        Mock.Of<MPS.Application.Features.Attendance.Common.IAttendanceApproverResolver>());
 
     private void SetupEmployeeResolves()
     {
@@ -82,7 +84,7 @@ public sealed class OvertimeContractGuardTests
     private ApproveOvertimeRequestCommandHandler ApproveSut() => new(
         _otRepo.Object, Mock.Of<IProjectRepository>(), Mock.Of<IEmployeeInformationRepository>(),
         Mock.Of<IContractLookupReader>(), _contracts.Object, null!, null!, null!,
-        _currentUser.Object, Mock.Of<IClock>(), null!);
+        _currentUser.Object, Mock.Of<IClock>(), null!, Mock.Of<MediatR.IPublisher>());
 
     private static OvertimeRequestEntity PendingApproverOt() => new()
     {

@@ -62,7 +62,10 @@ public sealed class Notifier : INotifier
                             Title: item.Content.Title,
                             Message: item.Content.Message,
                             LinkUrl: item.Content.LinkUrl,
-                            MetadataJson: item.Content.MetadataJson));
+                            MetadataJson: item.Content.MetadataJson,
+                            Email: item.Email,
+                            DeliveryMode: item.DeliveryMode,
+                            PrefersPersonalEmail: item.PrefersPersonalEmail));
                     }
                 }
             }

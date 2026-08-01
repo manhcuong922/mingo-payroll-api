@@ -112,4 +112,14 @@ public class UserController : ControllerBase
         if (!deleted) return NotFound();
         return NoContent();
     }
+
+    // Plan §2 N8 (Hướng B) — gửi lại link đặt mật khẩu lần đầu cho user vừa tạo mà chưa set
+    // password (VD user không tìm thấy mail cũ / link 72h đã hết hạn). Service tự invalidate token cũ.
+    [HttpPost("{id:int}/resend-first-login")]
+    [HasPermission(Permissions.UserCreateAll)]
+    public async Task<IActionResult> ResendFirstLogin(int id, CancellationToken cancellationToken)
+    {
+        var expiresAt = await _mediator.Send(new ResendFirstLoginInvitationCommand(id), cancellationToken);
+        return Ok(new { userId = id, expiresAt });
+    }
 }

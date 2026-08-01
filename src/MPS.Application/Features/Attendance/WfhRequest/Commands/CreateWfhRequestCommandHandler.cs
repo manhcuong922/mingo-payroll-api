@@ -1,8 +1,10 @@
 ﻿using MediatR;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.WfhRequest.Common;
 using MPS.Domain.Enums.Attendance;
+using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -25,6 +27,8 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IPublisher _publisher;
+    private readonly IAttendanceApproverResolver _approverResolver;
 
     public CreateWfhRequestCommandHandler(
         IWfhRequestRepository repository,
@@ -35,7 +39,9 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         AttendanceRequestDayConflictChecker dayConflictChecker,
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
-        IClock clock)
+        IClock clock,
+        IPublisher publisher,
+        IAttendanceApproverResolver approverResolver)
     {
         _repository = repository;
         _shiftAssignmentRepository = shiftAssignmentRepository;
@@ -46,6 +52,8 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         _lookup = lookup;
         _currentUser = currentUser;
         _clock = clock;
+        _publisher = publisher;
+        _approverResolver = approverResolver;
     }
 
     public async Task<int> Handle(CreateWfhRequestCommand request, CancellationToken cancellationToken)
@@ -115,7 +123,22 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
             CreatedByUserId = userId
         };
 
-        return await _repository.AddAsync(entity, cancellationToken);
+        var requestId = await _repository.AddAsync(entity, cancellationToken);
+
+        var approvers = await _approverResolver.ResolveForSubmitAsync(
+            AttendanceRequestKind.Wfh, resolvedRoute, employeeId,
+            tierOneApproverUserId: null, excludeUserId: userId, cancellationToken);
+
+        await _publisher.Publish(new AttendanceRequestSubmittedNotification(
+            Kind: AttendanceRequestKind.Wfh,
+            RequestId: requestId,
+            SubmittedByUserId: userId,
+            RequesterUserId: userId,
+            ApproverUserIds: approvers,
+            Summary: $"WFH {totalDays:0.#} ngày từ {request.StartDate:dd/MM/yyyy} tới {request.EndDate:dd/MM/yyyy}"),
+            cancellationToken);
+
+        return requestId;
     }
 
     private async Task<decimal> CountWorkDaysWithShiftAsync(

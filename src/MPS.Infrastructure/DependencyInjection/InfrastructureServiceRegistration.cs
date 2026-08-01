@@ -50,6 +50,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<MPS.Application.Services.IDepartmentManagerAuthorizer,
             MPS.Application.Services.DepartmentManagerAuthorizer>();
         services.AddScoped<MPS.Application.Features.Attendance.Common.ApproverDepartmentGuard>();
+        services.AddScoped<MPS.Application.Features.Attendance.Common.IAttendanceApproverResolver,
+            MPS.Application.Features.Attendance.Common.AttendanceApproverResolver>();
 
         // Task/Production module
         services.AddScoped<IProcessTemplateRepository, ProcessTemplateRepository>();
@@ -233,6 +235,10 @@ public static class InfrastructureServiceRegistration
 
         // Cross-cutting application services
         services.AddScoped<IEmployeeAccountProvisioner, EmployeeAccountProvisioner>();
+
+        // Plan §2 N8 (Hướng B) — link đặt mật khẩu lần đầu thay cho gửi password thô.
+        services.Configure<FirstLoginOptions>(configuration.GetSection(FirstLoginOptions.SectionName));
+        services.AddScoped<IFirstLoginInvitationService, FirstLoginInvitationService>();
 
         // Document rendering (DOCX merge)
         services.AddScoped<IDocumentRenderingService, DocxMergeService>();

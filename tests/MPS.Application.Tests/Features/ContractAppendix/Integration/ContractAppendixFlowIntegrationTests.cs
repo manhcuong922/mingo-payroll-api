@@ -291,6 +291,7 @@ public sealed class ContractAppendixFlowIntegrationTests
             repo, lookup, storage, currentUser,
             Mock.Of<IEmployeeInformationRepository>(),
             Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IFirstLoginInvitationService>(),
             Mock.Of<IEmailSender>(),
             new NoopPayrollSourceChangeHandler(),
             new NoopLeaveBalanceInitializer(),

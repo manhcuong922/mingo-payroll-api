@@ -39,6 +39,7 @@ public sealed class SmtpEmailSender : IRealEmailSender
         return SendAsync(toEmail, subject, htmlBody: null, plainBody: plain, attachment: null, cancellationToken);
     }
 
+    [Obsolete("Dùng SendFirstLoginInvitationAsync cho tài khoản mới. Xem plan §2 N8.")]
     public Task SendAccountCredentialsAsync(
         string toEmail,
         string fullName,
@@ -52,6 +53,28 @@ public sealed class SmtpEmailSender : IRealEmailSender
         return SendAsync(toEmail, AccountCredentialsTemplate.Subject, html, plain, attachment: null, cancellationToken);
     }
 
+    public Task SendFirstLoginInvitationAsync(
+        string toEmail,
+        string fullName,
+        string username,
+        string invitationUrl,
+        DateTime expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        var html = FirstLoginInvitationTemplate.BuildHtml(fullName, username, invitationUrl, expiresAt);
+        var plain = FirstLoginInvitationTemplate.BuildPlainText(fullName, username, invitationUrl, expiresAt);
+
+        return SendAsync(toEmail, FirstLoginInvitationTemplate.Subject, html, plain, attachment: null, cancellationToken);
+    }
+
+    public Task SendGenericNotificationAsync(
+        string toEmail,
+        string subject,
+        string textBody,
+        string? htmlBody,
+        CancellationToken cancellationToken = default) =>
+        SendAsync(toEmail, subject, htmlBody, textBody, attachment: null, cancellationToken);
+
     public async Task SendContractActivationAsync(
         string toEmail,
         string fullName,
@@ -61,13 +84,10 @@ public sealed class SmtpEmailSender : IRealEmailSender
         string pdfFileName,
         CancellationToken cancellationToken = default)
     {
-        var loginUrl = payload.LoginUrl ?? _options.LoginUrl;
         var html = ContractActivationTemplate.BuildHtml(
-            fullName, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
-            payload.Username, payload.PlainPassword, loginUrl);
+            fullName, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo);
         var plain = ContractActivationTemplate.BuildPlainText(
-            fullName, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo,
-            payload.Username, payload.PlainPassword, loginUrl);
+            fullName, payload.ContractNo, payload.EffectiveFrom, payload.EffectiveTo);
 
         // Tải PDF từ MinIO ngay lúc gửi (thay vì nhận stream). Giữ trong request/worker thread ngắn gọn.
         var download = await _storage.DownloadAsync(storageObjectKey, storageBucket, cancellationToken);
