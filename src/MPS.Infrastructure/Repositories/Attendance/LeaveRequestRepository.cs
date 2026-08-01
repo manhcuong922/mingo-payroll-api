@@ -381,6 +381,17 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         {
             if (existingByKey.TryGetValue((assignment.WorkDate, assignment.ShiftTemplateId), out var existing))
             {
+                // ⭐ B2 — KHÔNG ghi đè bản ghi đã có bằng chứng đi làm thật.
+                //
+                // Trước đây mọi bản ghi đều bị ghi đè thành OnLeave/0h, còn `RevertApprovedLeaveAsync`
+                // lúc huỷ đơn thì `RemoveRange` chính bản ghi đó ⇒ ngày đó TRỐNG HOÀN TOÀN, NLĐ mất
+                // trắng 1 ngày công. Chấm công là ghi nhận SỰ THẬT đã xảy ra: duyệt một đơn nghỉ
+                // không được phép xoá bằng chứng người ta đã đến làm.
+                //
+                // Nhờ bỏ qua ở đây, nhánh huỷ đơn chỉ còn xoá đúng những bản ghi do CHÍNH nó tạo ra
+                // (lọc theo `autoNote`), nên huỷ đơn luôn trả ngày về đúng nguyên trạng.
+                if (HasRealAttendance(existing)) continue;
+
                 existing.Status = AttendanceStatus.OnLeave;
                 existing.DayHours = 0m;
                 existing.NightHours = 0m;
@@ -416,6 +427,15 @@ public class LeaveRequestRepository : ILeaveRequestRepository
         await tx.CommitAsync(cancellationToken);
         return true;
     }
+
+    /// <summary>
+    /// B2 — bản ghi có bằng chứng NLĐ thật sự đã đi làm: có giờ chấm vào/ra, hoặc đã có giờ công.
+    /// Bản ghi chỉ đánh dấu vắng/nghỉ (Absent, giờ = 0, chưa chấm vào) thì không có gì để mất nên
+    /// vẫn cho chuyển thành ngày nghỉ có lương như trước.
+    /// </summary>
+    private static bool HasRealAttendance(AttendanceRecord record) =>
+        record.CheckInAt is not null || record.CheckOutAt is not null
+        || record.DayHours > 0m || record.NightHours > 0m;
 
     private static decimal CountWorkingDays(DateOnly start, DateOnly end)
     {
