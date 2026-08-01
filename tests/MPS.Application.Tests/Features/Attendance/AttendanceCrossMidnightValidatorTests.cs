@@ -23,7 +23,7 @@ public sealed class AttendanceCrossMidnightValidatorTests
             WorkDate,
             NightCheckInAt,
             NextMorningCheckOutAt,
-            new DateTime(2026, 7, 1, 5, 0, 0, DateTimeKind.Utc));
+            new DateOnly(2026, 7, 1));
 
         error.Should().BeNull();
     }
@@ -35,7 +35,7 @@ public sealed class AttendanceCrossMidnightValidatorTests
             WorkDate,
             NightCheckInAt,
             NextMorningCheckOutAt,
-            new DateTime(2026, 7, 1, 7, 0, 0, DateTimeKind.Utc));
+            new DateOnly(2026, 7, 1));
 
         error.Should().BeNull();
     }

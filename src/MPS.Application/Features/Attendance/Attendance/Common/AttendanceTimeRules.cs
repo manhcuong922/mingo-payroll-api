@@ -7,25 +7,25 @@ namespace MPS.Application.Features.Attendance.Attendance.Common;
 /// </summary>
 public static class AttendanceTimeRules
 {
-    /// <summary>WorkDate không được vượt quá ngày hiện tại (UTC).</summary>
-    public static bool IsWorkDateInFuture(DateOnly workDate, DateTime nowUtc) =>
-        workDate > DateOnly.FromDateTime(nowUtc);
+    /// <summary>WorkDate không được vượt quá <paramref name="today"/> (thường là ngày hiện tại theo giờ VN).</summary>
+    public static bool IsWorkDateInFuture(DateOnly workDate, DateOnly today) =>
+        workDate > today;
 
     public static bool HasValidObservedRange(DateTime? checkInAt, DateTime? checkOutAt) =>
         checkInAt is null || checkOutAt is null || checkOutAt > checkInAt;
 
     /// <summary>
-    /// Trả về error message nếu WorkDate vượt quá now.
+    /// Trả về error message nếu WorkDate vượt quá <paramref name="today"/>.
     /// Trả về null nếu hợp lệ.
     /// </summary>
     public static string? ValidateNotInFuture(
         DateOnly workDate,
         DateTime? checkInAt,
         DateTime? checkOutAt,
-        DateTime nowUtc)
+        DateOnly today)
     {
-        if (IsWorkDateInFuture(workDate, nowUtc))
-            return $"WorkDate {workDate:yyyy-MM-dd} is in the future; attendance can only be recorded for past or current day.";
+        if (IsWorkDateInFuture(workDate, today))
+            return $"Ngày chấm công {workDate:dd/MM/yyyy} là ngày trong tương lai; chỉ được chấm công cho hôm nay hoặc trước đó.";
 
         return null;
     }

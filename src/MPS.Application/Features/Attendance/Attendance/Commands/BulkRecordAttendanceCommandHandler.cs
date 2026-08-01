@@ -87,7 +87,8 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                     throw new DomainValidationException("CheckOutAt must be later than CheckInAt.");
 
                 var futureError = AttendanceTimeRules.ValidateNotInFuture(
-                    request.WorkDate, rowCheckInAt, rowCheckOutAt, _clock.UtcNow);
+                    request.WorkDate, rowCheckInAt, rowCheckOutAt,
+                    DateOnly.FromDateTime(MPS.Domain.Common.VietnamClock.Now));
                 if (futureError is not null)
                     throw new DomainValidationException(futureError);
 

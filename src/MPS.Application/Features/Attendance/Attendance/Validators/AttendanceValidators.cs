@@ -22,7 +22,7 @@ public class RecordAttendanceCommandValidator : AbstractValidator<RecordAttendan
                 cmd.WorkDate,
                 cmd.CheckInAt,
                 cmd.CheckOutAt,
-                clock.UtcNow);
+                DateOnly.FromDateTime(MPS.Domain.Common.VietnamClock.Now));
             if (error is not null)
                 ctx.AddFailure(nameof(cmd.WorkDate), error);
         });
@@ -46,7 +46,7 @@ public class UpdateAttendanceCommandValidator : AbstractValidator<UpdateAttendan
                 cmd.WorkDate,
                 cmd.CheckInAt,
                 cmd.CheckOutAt,
-                clock.UtcNow);
+                DateOnly.FromDateTime(MPS.Domain.Common.VietnamClock.Now));
             if (error is not null)
                 ctx.AddFailure(nameof(cmd.WorkDate), error);
         });
@@ -60,8 +60,8 @@ public class BulkRecordAttendanceCommandValidator : AbstractValidator<BulkRecord
         RuleFor(x => x.Records).NotEmpty();
 
         // WorkDate ở batch level — fail nhanh trước khi loop từng row.
-        RuleFor(x => x.WorkDate).Must(d => !AttendanceTimeRules.IsWorkDateInFuture(d, clock.UtcNow))
-            .WithMessage(d => $"WorkDate {d.WorkDate:yyyy-MM-dd} is in the future; attendance can only be recorded for past or current day.");
+        RuleFor(x => x.WorkDate).Must(d => !AttendanceTimeRules.IsWorkDateInFuture(d, DateOnly.FromDateTime(MPS.Domain.Common.VietnamClock.Now)))
+            .WithMessage(d => $"Ngày chấm công {d.WorkDate:dd/MM/yyyy} là ngày trong tương lai; chỉ được chấm công cho hôm nay hoặc trước đó.");
 
         // Per-item: ShiftTemplateId bắt buộc + CheckIn/CheckOut order.
         // Future-time của từng record check trong handler để fail per-row (không fail toàn batch).
