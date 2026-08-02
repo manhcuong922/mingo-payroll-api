@@ -1,5 +1,6 @@
 using FluentValidation;
 using MPS.Application.Features.EmployeeInformation.Commands;
+using MPS.Domain.Constants;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.EmployeeInformation.Validators;
@@ -20,7 +21,8 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
         RuleFor(x => x.CitizenId)
             .NotEmpty().WithMessage("CitizenId is required.")
             // #42 — đối xứng với Create: CCCD phải đúng 12 chữ số (xem chú thích ở Create validator).
-            .Matches(@"^\d{12}$").WithMessage("CitizenId phải đúng 12 chữ số.")
+            .Matches(VietnamIdentifierFormats.CitizenIdPattern)
+            .WithMessage(VietnamIdentifierFormats.CitizenIdMessage)
             // #1 — đối xứng với Create: chặn trùng CCCD ở tầng ứng dụng (400) thay vì để DB nổ 500.
             .MustAsync(async (cmd, citizenId, ct) =>
                 string.IsNullOrWhiteSpace(citizenId) || !await repository.CitizenIdExistsAsync(citizenId.Trim(), cmd.Id, ct))
@@ -28,6 +30,12 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
 
         RuleFor(x => x.PermanentAddress)
             .NotEmpty().WithMessage("PermanentAddress is required.");
+
+        // Đối xứng với nhánh CREATE — xem chú thích ở đó.
+        RuleFor(x => x.PhoneNo)
+            .Matches(VietnamIdentifierFormats.PhoneNumberPattern)
+            .WithMessage(VietnamIdentifierFormats.PhoneNumberMessage)
+            .When(x => !string.IsNullOrWhiteSpace(x.PhoneNo));
 
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("Email is required.")
@@ -57,7 +65,10 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
 
             RuleFor(x => x.GuardianPhoneNo)
                 .NotEmpty().WithMessage("GuardianPhoneNo is required when guardian info is provided.")
-                .MaximumLength(20);
+                .MaximumLength(20)
+                .Matches(VietnamIdentifierFormats.PhoneNumberPattern)
+                .WithMessage(VietnamIdentifierFormats.PhoneNumberMessage)
+                .When(x => !string.IsNullOrWhiteSpace(x.GuardianPhoneNo));
         });
 
         RuleFor(x => x.UserId)
