@@ -108,15 +108,22 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
 
         var updated = await _repository.UpdateAsync(entity, cancellationToken);
 
-        // Publish notification khi dept thực sự đổi — handler AutoApplySchedule tự động
-        // gỡ ca dept cũ và apply ca dept mới. Không publish nếu update thất bại hoặc dept không đổi.
-        if (updated && existing.DepartmentId != request.DepartmentId)
+        // Publish notification khi dept THỰC SỰ đổi — handler AutoApplySchedule tự động gỡ ca dept
+        // cũ và apply ca dept mới.
+        //
+        // ⚠️ Phải so với `mergedDepartmentId` (giá trị THẬT vừa ghi), KHÔNG phải `request.DepartmentId`
+        // thô. Trước đây so với giá trị thô nên mỗi lần FE sửa hồ sơ mà không gửi `departmentId`
+        // (null = "giữ nguyên") thì điều kiện `9 != null` thành true ⇒ bắn sự kiện đổi xưởng GIẢ
+        // "9 → null" ⇒ AutoApplySchedule GỠ SẠCH ca của nhân viên đó từ ngày mai, chỉ vì HR sửa số
+        // điện thoại. Cùng lý do, `mergedDepartmentId` còn phản ánh việc handler tự chuẩn hoá dept
+        // về null cho role quản trị (#47) — sự kiện nay khớp đúng những gì đã lưu.
+        if (updated && existing.DepartmentId != mergedDepartmentId)
         {
             await _mediator.Publish(
                 new EmployeeDepartmentChangedNotification(
                     EmployeeInformationId: request.Id,
                     OldDepartmentId: existing.DepartmentId,
-                    NewDepartmentId: request.DepartmentId,
+                    NewDepartmentId: mergedDepartmentId,
                     ChangedByUserId: _currentUserService.UserId ?? 0,
                     ChangedAtUtc: DateTime.UtcNow),
                 cancellationToken);

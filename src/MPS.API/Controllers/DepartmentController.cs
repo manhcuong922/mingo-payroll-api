@@ -77,6 +77,25 @@ public class DepartmentController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Gỡ nhân viên khỏi xưởng. Phải là endpoint riêng vì
+    /// <c>PUT /api/EmployeeInformation/{id}</c> dùng ngữ nghĩa MERGE — ở đó
+    /// <c>departmentId: null</c> nghĩa là "không gửi, giữ nguyên" nên không diễn đạt được
+    /// hành động gỡ (xem <see cref="DepartmentRemoveEmployeeCommand"/>).
+    /// </summary>
+    [HttpDelete("{id:int}/employees/{employeeInformationId:int}")]
+    [HasPermission(Permissions.EmployeeInformationUpdateAll)]
+    public async Task<IActionResult> RemoveEmployee(
+        int id,
+        int employeeInformationId,
+        CancellationToken cancellationToken)
+    {
+        var removed = await _mediator.Send(
+            new DepartmentRemoveEmployeeCommand(id, employeeInformationId), cancellationToken);
+        if (!removed) return NotFound();
+        return NoContent();
+    }
+
     [HttpPost]
     [HasPermission(Permissions.DepartmentCreateAll)]
     public async Task<IActionResult> Create(

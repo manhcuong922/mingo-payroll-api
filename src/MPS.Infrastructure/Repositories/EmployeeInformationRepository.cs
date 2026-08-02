@@ -210,6 +210,16 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         return entity.Id;
     }
 
+    public async Task<bool> SetDepartmentAsync(int id, int? departmentId, CancellationToken cancellationToken = default)
+    {
+        var existing = await _context.EmployeeInformations.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        if (existing is null) return false;
+
+        existing.DepartmentId = departmentId;
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> UpdateAsync(EmployeeInformation entity, CancellationToken cancellationToken = default)
     {
         var existing = await _context.EmployeeInformations.FirstOrDefaultAsync(e => e.Id == entity.Id, cancellationToken);

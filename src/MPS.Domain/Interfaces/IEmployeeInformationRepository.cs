@@ -53,6 +53,16 @@ public interface IEmployeeInformationRepository
     Task<bool> CitizenIdExistsAsync(string citizenId, int? excludeId = null, CancellationToken cancellationToken = default);
     Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Đổi RIÊNG xưởng của một hồ sơ (kể cả gỡ về <c>null</c>), không đụng field nào khác.
+    ///
+    /// <para>Cần thiết vì endpoint sửa hồ sơ dùng ngữ nghĩa MERGE — ở đó <c>DepartmentId = null</c>
+    /// nghĩa là "không gửi, giữ nguyên", nên không có cách nào diễn đạt "gỡ khỏi xưởng".</para>
+    ///
+    /// <para>Trả <c>false</c> nếu không tìm thấy hồ sơ.</para>
+    /// </summary>
+    Task<bool> SetDepartmentAsync(int id, int? departmentId, CancellationToken cancellationToken = default);
+
     Task<int> AddAsync(EmployeeInformation entity, CancellationToken cancellationToken = default);
     Task<bool> UpdateAsync(EmployeeInformation entity, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
