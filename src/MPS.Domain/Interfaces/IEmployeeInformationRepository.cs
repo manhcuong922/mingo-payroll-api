@@ -34,6 +34,12 @@ public interface IEmployeeInformationRepository
 
     Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Tài khoản còn hoạt động (<c>User.Status == 1</c>). Khác <see cref="HasActiveUserAsync"/> ở
+    /// chỗ tra theo <c>userId</c> — dùng cho nhánh TẠO hồ sơ, khi chưa có EmployeeInformation.Id.
+    /// </summary>
+    Task<bool> IsUserActiveAsync(int userId, CancellationToken cancellationToken = default);
+
     // RoleId của một User (null nếu user không tồn tại). Dùng để chặn gán role quản trị cấp công ty vào xưởng.
     Task<int?> GetUserRoleIdAsync(int userId, CancellationToken cancellationToken = default);
 

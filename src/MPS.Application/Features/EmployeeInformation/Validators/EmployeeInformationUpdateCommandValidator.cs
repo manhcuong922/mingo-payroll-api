@@ -81,6 +81,21 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
         // tin xưởng cho các hồ sơ này thay vì chặn" ⇒ handler tự chuẩn hoá DepartmentId về null cho
         // role quản trị. Nhánh CREATE vẫn giữ rule chặn (assign xưởng cho admin → 400, EI-DEPT-ROLE01).
 
+        // Đối xứng với nhánh CREATE: tài khoản đã ngừng hoạt động thì không xếp vào xưởng được.
+        // Ở đây phải tra UserId của hồ sơ ĐANG CÓ, vì endpoint sửa hồ sơ không cho đổi liên kết
+        // tài khoản (handler luôn giữ `existing.UserId`) nên UserId gửi lên không đáng tin.
+        // Chỉ xét khi request THỰC SỰ gán xưởng — `null` ở đây nghĩa là "không gửi, giữ nguyên".
+        RuleFor(x => x)
+            .MustAsync(async (cmd, ct) =>
+            {
+                if (cmd.DepartmentId is null) return true;
+                var existing = await repository.GetByIdAsync(cmd.Id, ct);
+                if (existing?.UserId is not int userId) return true;
+                return await repository.IsUserActiveAsync(userId, ct);
+            })
+            .WithMessage("Không thể xếp vào xưởng: tài khoản của nhân viên đã ngừng hoạt động.")
+            .OverridePropertyName("DepartmentId");
+
         RuleFor(x => x.DependentsNo)
             .GreaterThanOrEqualTo(0).WithMessage("DependentsNo must be 0 or greater.");
     }

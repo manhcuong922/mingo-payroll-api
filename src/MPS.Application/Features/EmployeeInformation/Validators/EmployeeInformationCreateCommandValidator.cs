@@ -82,6 +82,20 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
             })
             .WithMessage("Only production roles (workshop manager or employee) can belong to a department. Company-level admin roles are not allowed.");
 
+        // Tài khoản đã NGỪNG HOẠT ĐỘNG thì không được đưa vào xưởng. Xưởng là đơn vị điều hành
+        // sản xuất: thành viên xưởng được phân ca, gán việc, tính vào sĩ số và vào bảng đánh giá.
+        // Người đã bị vô hiệu hoá tài khoản (nghỉ việc, đình chỉ) mà vẫn nằm trong xưởng sẽ làm
+        // sai toàn bộ các con số đó. Luồng phân ca đã chặn NV không có tài khoản active
+        // (EnsureAssignableEmployeesHaveActiveUsersAsync) — chỗ này bịt nốt cửa vào.
+        RuleFor(x => x)
+            .MustAsync(async (cmd, ct) =>
+            {
+                if (cmd.DepartmentId is null || cmd.UserId is null) return true;
+                return await repository.IsUserActiveAsync(cmd.UserId.Value, ct);
+            })
+            .WithMessage("Không thể xếp vào xưởng: tài khoản của nhân viên đã ngừng hoạt động.")
+            .OverridePropertyName("DepartmentId");
+
         RuleFor(x => x.DependentsNo)
             .GreaterThanOrEqualTo(0).WithMessage("DependentsNo must be 0 or greater.");
     }
