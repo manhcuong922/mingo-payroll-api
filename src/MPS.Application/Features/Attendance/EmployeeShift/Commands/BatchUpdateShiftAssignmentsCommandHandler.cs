@@ -229,10 +229,22 @@ public class BatchUpdateShiftAssignmentsCommandHandler
         {
             var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
             var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
-            if (!request.AcknowledgeWeeklyOvertimeWarnings
-                && (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0))
+
+            // ⭐ Cap 8h/NGÀY là CHẶN CỨNG, không cho xác nhận vượt (Điều 105 k.1 BLLĐ 2019).
+            // Trước đây `AcknowledgeWeeklyOvertimeWarnings` bỏ qua CẢ cap ngày lẫn cap tuần, nên chỉ
+            // cần bấm "vẫn phân" ở popup là lưu được 16h/ngày như giờ làm việc BÌNH THƯỜNG. Giờ dôi ra
+            // ngoài 8h phải đi qua ĐƠN TĂNG CA (có giới hạn 12h/ngày + hệ số trả lương riêng), không
+            // được biến thành ca chính — nếu không, giờ đó vừa không tính lương OT vừa không bị chặn.
+            if (dailyWarnings.Count > 0)
             {
-                throw new RegularHoursCapExceededException(dailyWarnings, weeklyWarnings);
+                throw new RegularHoursCapExceededException(dailyWarnings, Array.Empty<WeeklyCapWarning>());
+            }
+
+            // Cap 48h/tuần vẫn giữ warn-then-confirm: tuần 48h có thể hợp lệ khi bố trí lại ngày nghỉ,
+            // nên để người phân ca xác nhận thay vì chặn.
+            if (!request.AcknowledgeWeeklyOvertimeWarnings && weeklyWarnings.Count > 0)
+            {
+                throw new RegularHoursCapExceededException(Array.Empty<DailyCapWarning>(), weeklyWarnings);
             }
         }
 

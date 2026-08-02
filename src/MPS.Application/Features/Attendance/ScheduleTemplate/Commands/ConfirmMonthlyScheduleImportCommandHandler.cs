@@ -161,10 +161,17 @@ public sealed class ConfirmMonthlyScheduleImportCommandHandler
         {
             var dailyWarnings = await _capChecker.CheckDailyAssignmentsAsync(deltas, cancellationToken);
             var weeklyWarnings = await _capChecker.CheckAssignmentsAsync(deltas, cancellationToken);
-            if (!request.AcknowledgeWeeklyOvertimeWarnings
-                && (dailyWarnings.Count > 0 || weeklyWarnings.Count > 0))
+
+            // ⭐ Cap 8h/ngày chặn cứng — xem chú thích ở BatchUpdateShiftAssignmentsCommandHandler.
+            // Import lịch tháng cũng phải theo cùng một luật, nếu không đây là đường vòng để lách.
+            if (dailyWarnings.Count > 0)
             {
-                throw new RegularHoursCapExceededException(dailyWarnings, weeklyWarnings);
+                throw new RegularHoursCapExceededException(dailyWarnings, Array.Empty<WeeklyCapWarning>());
+            }
+
+            if (!request.AcknowledgeWeeklyOvertimeWarnings && weeklyWarnings.Count > 0)
+            {
+                throw new RegularHoursCapExceededException(Array.Empty<DailyCapWarning>(), weeklyWarnings);
             }
         }
 

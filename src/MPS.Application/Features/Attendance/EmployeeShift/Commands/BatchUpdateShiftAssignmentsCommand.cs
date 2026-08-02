@@ -63,8 +63,11 @@ public sealed record BatchUpdateShiftAssignmentsResult(
 
 /// <summary>
 /// Batch phân ca với cap §9 Điều 105 BLLĐ.
-/// Vượt 8h/ngày hoặc 48h/tuần thì handler chặn cứng; flag acknowledge chỉ giữ
-/// lại để tương thích request cũ và không còn bypass cap phân ca.
+///
+/// <para><see cref="AcknowledgeWeeklyOvertimeWarnings"/> — CHỈ áp cho cap 48h/TUẦN (warn-then-confirm:
+/// tuần vượt 48h vẫn có thể hợp lệ khi bố trí lại ngày nghỉ nên để người phân ca xác nhận). Cap
+/// 8h/NGÀY thì CHẶN CỨNG, cờ này không bỏ qua được: giờ dôi ra ngoài 8h phải đi qua ĐƠN TĂNG CA để
+/// có trần 12h/ngày và hệ số trả lương OT, không được biến thành ca chính.</para>
 ///
 /// <see cref="IncludeRestDaysAndHolidays"/> — mặc định false: auto-skip các op Add rơi vào
 /// WeeklyRestDay của NV hoặc PublicHoliday. Trả về status
