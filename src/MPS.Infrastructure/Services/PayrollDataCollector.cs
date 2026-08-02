@@ -76,6 +76,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var bhtnNldRate = si.EmployeeUnemploymentPercent / 100m;
         var kpcdRate = si.EmployerUnionFundPercent / 100m;
         var bhxhBhytCap = si.ReferenceAmount * si.SocialCapMultiplier;
+        // ⭐ D3 — trần BHYT có hệ số RIÊNG trên màn hình cấu hình BHXH (`HealthCapMultiplier`), trước
+        // đây không đường nào dùng tới nên admin sửa ô đó không có gì thay đổi.
+        var bhytCap = si.ReferenceAmount * si.HealthCapMultiplier;
         var regionMinWage = minWage.GetAppliedAmount();
         var bhtnCap = regionMinWage * si.UnemploymentCapMultiplier;
         var mealExempt = mealThreshold?.MonthlyExemptAmount ?? 0m;
@@ -113,8 +116,19 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 g => g.Key,
                 g => g.OrderByDescending(a => a.EffectiveFrom).First().SalaryAmountSnapshot!.Value);
 
+        // ⭐ A1 — chỉ lấy bản ghi chấm công CA CHÍNH (`OvertimeRequestId == null`).
+        // HR chấm công 2 lần cho ngày có tăng ca (một cho ca chính, một cho ca OT) đúng như hệ thống
+        // thiết kế — `AttendanceRecord` có invariant exactly-one-of (ShiftTemplateId, OvertimeRequestId).
+        // Trước đây vòng lặp bên dưới nuốt cả hai loại nên bản ghi ca OT bị tính 3 lần thừa:
+        //   (1) `DayWeight` cộng thêm 1 ngày công khống ⇒ phồng CongTinhCom/CongChinhThuc, kéo theo
+        //       thu nhập phân bổ theo công, tiền cơm và nền đóng BHXH;
+        //   (2) `dayHours/nightHours` nuốt giờ OT ⇒ trả hai lần (đã trả qua cột Tăng ca);
+        //   (3) `workSegments` sinh phụ trội loại-ngày lần nữa ⇒ OT ngày nghỉ/lễ được ~300% thay vì 200%.
+        // Tiền OT vẫn trả đủ qua `ComputeOvertimePayAsync` (đọc từ `OvertimeRequests` đã duyệt).
+        // Cùng quy ước với `GetAttendanceSummaryQueryHandler.ComputeEquivalentHours` — nơi đã tách 2 nhánh.
         var attByEmp = (await _db.AttendanceRecords.AsNoTracking()
-            .Where(a => empIds.Contains(a.EmployeeInformationId) && a.WorkDate >= periodStart && a.WorkDate <= periodEnd)
+            .Where(a => empIds.Contains(a.EmployeeInformationId) && a.WorkDate >= periodStart && a.WorkDate <= periodEnd
+                && a.OvertimeRequestId == null)
             .ToListAsync(ct)).GroupBy(a => a.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
 
         var otByEmp = (await _db.OvertimeRequests.AsNoTracking()
@@ -252,7 +266,11 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             var inputs = new PayrollEmployeeInputs { EmployeeInformationId = e.Id };
             var n = inputs.Numbers; var t = inputs.Texts;
 
-            t[EmployeeCode] = e.User?.EmployeeCode ?? e.CitizenId;
+            // ⭐ C3 — KHÔNG bao giờ rơi về số CCCD làm mã nhân viên. Bảng lương và file Excel xuất ra
+            // được luân chuyển giữa kế toán, ngân hàng và cơ quan bảo hiểm ⇒ mang số căn cước vào đó
+            // là rò rỉ dữ liệu cá nhân không cần thiết. NV chưa có tài khoản thì để trống — readiness
+            // đã có cổng cảnh báo hồ sơ thiếu, và ô trống nói đúng sự thật "chưa được cấp mã".
+            t[EmployeeCode] = e.User?.EmployeeCode ?? string.Empty;
             t[EmployeeFullName] = e.FullName;
             t[EmployeePosition] = e.Position?.Name ?? string.Empty;
             t[EmployeeBankAccount] = e.BankNumber ?? string.Empty;
@@ -260,6 +278,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             t[PeriodMonthLabel] = monthLabel;
             t[ContractInsuranceFlag] = ResolveInsuranceFlag(activeContract);
             t[ContractTaxFlag] = ResolveTaxFlag(activeContract);
+
+            // ⭐ A7 — ba công tắc BH của HĐ, ghi dạng "MIỄN" (1 = miễn) để mỗi cột BH tôn trọng đúng
+            // công tắc của mình. Không có HĐ hiệu lực ⇒ 0 (không miễn), giữ mặc định "đóng đủ".
+            n[ContractNoSocialInsurance] = activeContract is not null && !activeContract.SocialInsuranceFlag ? 1m : 0m;
+            n[ContractNoHealthInsurance] = activeContract is not null && !activeContract.HealthInsuranceFlag ? 1m : 0m;
+            n[ContractNoUnemploymentInsurance] = activeContract is not null && !activeContract.UnemploymentInsuranceFlag ? 1m : 0m;
 
             n[ContractMucLuong] = mucLuong;
             n[ContractAllowanceThueNha] = AllowanceByCode("HOUSING");
@@ -300,6 +324,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[BhtnNldRate] = bhtnNldRate;
             n[KpcdRate] = kpcdRate;
             n[BhxhBhytCap] = bhxhBhytCap;
+            n[BhytCap] = bhytCap;
             n[BhtnCap] = bhtnCap;
             n[PersonalDeduction] = pit.PersonalDeductionAmount;
             n[DependentDeduction] = pit.DependentDeductionAmount;
@@ -310,7 +335,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
         var refs = new List<PayrollComplianceRef>
         {
-            Ref(ComplianceVersionType.SocialInsurance, si.VersionId, si.ValidFrom, si.LegalReference, "Trần đóng BHXH/BHYT", bhxhBhytCap),
+            Ref(ComplianceVersionType.SocialInsurance, si.VersionId, si.ValidFrom, si.LegalReference, "Trần đóng BHXH", bhxhBhytCap),
             Ref(ComplianceVersionType.Pit, pit.VersionId, pit.ValidFrom, pit.LegalReference, "Giảm trừ bản thân", pit.PersonalDeductionAmount),
             Ref(ComplianceVersionType.MinimumWage, minWage.VersionId, minWage.ValidFrom, minWage.LegalReference, "Lương tối thiểu vùng áp dụng", regionMinWage),
             Ref(ComplianceVersionType.LaborLawConstants, labor.VersionId, labor.ValidFrom, labor.LegalReference, "Công chuẩn/tháng (luật)", labor.StandardWorkingDaysPerMonth),

@@ -80,6 +80,13 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
             new PayrollCollectionRequest(
                 period.PeriodYear, period.PeriodMonth, period.PayDate, period.StandardWorkingDays, readyIds), ct);
 
+        // ⭐ Tính lại kỳ ⇒ snapshot văn bản pháp lý phải mô tả ĐÚNG bộ luật vừa dùng.
+        // Trước đây `ComplianceRefs` chỉ được ghi lúc TẠO kỳ rồi giữ nguyên mãi, trong khi mỗi lần
+        // tính lại collector đọc lại compliance mới ⇒ số trên bảng đổi nhưng snapshot vẫn dẫn chiếu
+        // phiên bản cũ. Kế toán đối chiếu "số này căn cứ văn bản nào" sẽ được trả lời sai.
+        period.ComplianceRefs.Clear();
+        foreach (var r in collection.ComplianceRefs) period.ComplianceRefs.Add(r);
+
         var defs = PayrollColumnSnapshotMapper.Deserialize(period.FormulaSnapshotJson);
         var plan = PayrollColumnPlan.Build(defs, _graph);
 

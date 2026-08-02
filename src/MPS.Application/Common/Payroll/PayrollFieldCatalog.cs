@@ -21,6 +21,9 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(ContractMucLuong, "Mức lương hợp đồng", "Hợp đồng", ColumnDataType.Money),
         new(ContractInsuranceFlag, "Cờ bảo hiểm (mặc định HĐ)", "Hợp đồng", ColumnDataType.Text),
         new(ContractTaxFlag, "Cờ thuế (mặc định HĐ)", "Hợp đồng", ColumnDataType.Text),
+        new(ContractNoSocialInsurance, "HĐ miễn BHXH (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
+        new(ContractNoHealthInsurance, "HĐ miễn BHYT (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
+        new(ContractNoUnemploymentInsurance, "HĐ miễn BHTN (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
         new(ContractAllowanceThueNha, "Phụ cấp thuê nhà (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceDienThoai, "Phụ cấp điện thoại (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceXangXe, "Phụ cấp xăng xe (HĐ)", "Hợp đồng", ColumnDataType.Money),
@@ -72,7 +75,8 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(KpcdRate, "Tỷ lệ KPCĐ – DN", "Compliance", ColumnDataType.Percent),
 
         // Compliance — trần + giảm trừ
-        new(BhxhBhytCap, "Trần đóng BHXH/BHYT", "Compliance", ColumnDataType.Money),
+        new(BhxhBhytCap, "Trần đóng BHXH", "Compliance", ColumnDataType.Money),
+        new(BhytCap, "Trần đóng BHYT", "Compliance", ColumnDataType.Money),
         new(BhtnCap, "Trần đóng BHTN", "Compliance", ColumnDataType.Money),
         new(PersonalDeduction, "Giảm trừ bản thân", "Compliance", ColumnDataType.Money),
         new(DependentDeduction, "Giảm trừ mỗi người phụ thuộc", "Compliance", ColumnDataType.Money),

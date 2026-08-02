@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Payroll;
@@ -63,6 +63,15 @@ public sealed class EditPayrollCellCommandHandler : IRequestHandler<EditPayrollC
         if (!col.IsEditable && !isInsuranceFlag)
             throw new ConflictException($"Cột '{col.Label}' không cho phép sửa tay.");
 
+        // ⭐ A6 — cột cờ BH chỉ nhận đúng tập giá trị hợp lệ.
+        //
+        // Trước đây ô này nhận CHUỖI BẤT KỲ (chỉ `Trim()` rồi lưu), trong khi công thức bảo hiểm so
+        // cờ bằng `StringComparison.Ordinal` (`FormulaEvaluator.Compare`). Hệ quả: kế toán gõ "ts"
+        // thay vì "TS" cho NV nghỉ thai sản thì chuỗi đó KHÔNG khớp cờ nào, mọi nhánh `SkipIfFlag`
+        // rơi vào "otherwise" ⇒ vẫn trừ đủ BHXH/BHYT/BHTN của người đang nghỉ thai sản.
+        // Không lỗi, không cảnh báo, số trông hợp lý.
+        if (isInsuranceFlag) EnsureValidInsuranceFlag(request.OverrideText);
+
         var row = period.Rows.FirstOrDefault(r => r.Id == request.RowId && r.RowType == PayrollRowType.Employee)
             ?? throw new NotFoundException($"Không tìm thấy dòng #{request.RowId}.");
 
@@ -87,6 +96,26 @@ public sealed class EditPayrollCellCommandHandler : IRequestHandler<EditPayrollC
         period.UpdatedAt = DateTime.UtcNow;
         period.UpdatedByUserId = userId;
         await _periods.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// A6 — chặn cờ bảo hiểm không thuộc tập hợp lệ. Chuỗi rỗng là hợp lệ: đó là thao tác GỠ ghim,
+    /// đưa ô về giá trị máy suy từ hợp đồng.
+    ///
+    /// <para>So sánh phân biệt hoa/thường có chủ đích: công thức bảo hiểm cũng so
+    /// <c>Ordinal</c>, nên nhận "ts" rồi tự sửa thành "TS" sẽ che mất việc kế toán gõ sai — lần sau
+    /// gõ sai kiểu khác vẫn lọt. Báo lỗi kèm danh sách giá trị hợp lệ để sửa được ngay.</para>
+    /// </summary>
+    private static void EnsureValidInsuranceFlag(string? overrideText)
+    {
+        if (string.IsNullOrWhiteSpace(overrideText)) return;
+
+        var value = overrideText.Trim();
+        if (InsuranceFlags.All.Contains(value, StringComparer.Ordinal)) return;
+
+        throw new DomainValidationException(
+            $"Cờ bảo hiểm '{value}' không hợp lệ. Giá trị cho phép (phân biệt hoa/thường): " +
+            $"{string.Join(", ", InsuranceFlags.All)}.");
     }
 
     /// <summary>

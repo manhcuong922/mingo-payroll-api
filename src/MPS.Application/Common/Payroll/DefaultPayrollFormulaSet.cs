@@ -59,7 +59,20 @@ public static class DefaultPayrollFormulaSet
             N.Mul(N.Div(value, N.Col(Cc.CongChuan)), N.Col(Cc.CongTinhCom));
 
         FormulaNode Bh(string rateField, string capField) =>
-            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), N.Field(capField));
+            BhWithCap(rateField, N.Field(capField));
+
+        FormulaNode BhWithCap(string rateField, FormulaNode capNode) =>
+            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), capNode);
+
+        // ⭐ D3 — BHYT có trần RIÊNG (hệ số trần BHYT trên màn hình cấu hình BHXH), trước đây bị bỏ
+        // qua và dùng chung trần BHXH nên admin sửa ô đó không có tác dụng gì.
+        // Fallback về trần BHXH khi trường mới = 0: snapshot input của kỳ tạo TRƯỚC bản sửa không có
+        // khoá này, mà `InsuranceWithCap` coi cap = 0 là "KHÔNG áp trần" ⇒ không fallback thì kỳ cũ
+        // sẽ trả THỪA cho người lương cao.
+        var bhytCap = N.If(
+            N.Cmp(">", N.Field(Fk.BhytCap), N.Const(0m)),
+            N.Field(Fk.BhytCap),
+            N.Field(Fk.BhxhBhytCap));
 
         const string GA = "Nhân viên";
         const string GB = "Ngày công";
@@ -156,18 +169,42 @@ public static class DefaultPayrollFormulaSet
         var noBhOrHealthOnly = new[] { InsuranceFlags.NoInsurance, InsuranceFlags.Maternity, InsuranceFlags.HealthOnly };
         var noUnion = new[] { InsuranceFlags.NoUnion, InsuranceFlags.NoInsurance, InsuranceFlags.Maternity };
 
+        // ⭐ A7 — mỗi cột BH nhân thêm CÔNG TẮC RIÊNG của hợp đồng (1/0).
+        //
+        // Cờ `FLAGBH` là enum thô chỉ biểu diễn được 3/8 tổ hợp bật/tắt của 3 loại bảo hiểm, nên
+        // 5 tổ hợp còn lại bị gom nhầm vào "đóng đầy đủ" — điển hình: HĐ ghi *có BHXH, KHÔNG BHYT,
+        // KHÔNG BHTN* vẫn bị trừ đủ BHYT lẫn BHTN, trái hợp đồng.
+        //
+        // Hai tầng tách bạch, cố ý giữ cả hai:
+        //   • công tắc HĐ  — sự thật ghi trong hợp đồng, áp cho từng loại bảo hiểm độc lập;
+        //   • cờ `FLAGBH`  — kênh ĐÈ TAY cho ngoại lệ theo kỳ (thai sản "TS", ốm dài ngày) [D23].
+        // Cờ vẫn cắt được cả khối kể cả khi HĐ bật công tắc; ngược lại HĐ tắt công tắc nào thì
+        // loại đó bằng 0 dù cờ là "đóng đầy đủ".
+        //
+        // Trường có ngữ nghĩa "MIỄN" (1 = miễn) chứ không phải "có đóng", để kỳ lương TẠO TRƯỚC bản
+        // sửa này — snapshot input không có 3 khoá đó, `ToFields` điền 0 — vẫn ra đúng số cũ thay vì
+        // bị xoá sạch bảo hiểm. Xem ghi chú ở `PayrollFieldKeys`.
+        FormulaNode UnlessExempt(string exemptField, FormulaNode value) =>
+            N.Mul(value, N.Sub(N.Const(1m), N.Field(exemptField)));
+
         Add(Cc.DnBhxh, "BHXH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, Bh(Fk.BhxhDnRate, Fk.BhxhBhytCap)));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
+                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhDnRate, Fk.BhxhBhytCap))));
         Add(Cc.NldBhxh, "BHXH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, Bh(Fk.BhxhNldRate, Fk.BhxhBhytCap)));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
+                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhNldRate, Fk.BhxhBhytCap))));
         Add(Cc.DnBhyt, "BHYT – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBh, Bh(Fk.BhytDnRate, Fk.BhxhBhytCap)));
+            formula: SkipIfFlag(Cc.FlagBh, noBh,
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytDnRate, bhytCap))));
         Add(Cc.NldBhyt, "BHYT – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBh, Bh(Fk.BhytNldRate, Fk.BhxhBhytCap)));
+            formula: SkipIfFlag(Cc.FlagBh, noBh,
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytNldRate, bhytCap))));
         Add(Cc.DnBhtn, "BHTN – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, Bh(Fk.BhtnDnRate, Fk.BhtnCap)));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
+                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnDnRate, Fk.BhtnCap))));
         Add(Cc.NldBhtn, "BHTN – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, Bh(Fk.BhtnNldRate, Fk.BhtnCap)));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
+                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnNldRate, Fk.BhtnCap))));
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
                 N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m))));

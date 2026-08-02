@@ -38,9 +38,24 @@ public sealed class JwtTokenService : IJwtTokenService
         ArgumentNullException.ThrowIfNull(user);
 
         var issuedAt = DateTime.UtcNow;
-        var expiresAt = user.Username == "ai-service"
-            ? issuedAt.AddYears(10)
-            : issuedAt.AddMinutes(_settings.AccessTokenMinutes);
+
+        // ⭐ C1 — MỌI tài khoản dùng chung vòng đời phiên đã cấu hình. Không đặc cách cho ai.
+        //
+        // Trước đây tài khoản có `Username == "ai-service"` được cấp phiên **10 năm**. Ba hệ quả:
+        //   • giảm quyền vai trò ⇒ vô tác dụng, phiên cũ vẫn mang nguyên bộ quyền đã đóng vào token;
+        //   • khoá tài khoản ⇒ phiên cũ vẫn dùng được;
+        //   • chuỗi token lộ ra (log, ảnh chụp màn hình, repo) ⇒ cách duy nhất để thu hồi là đổi
+        //     khoá ký của cả hệ thống, tức bắt TẤT CẢ mọi người đăng nhập lại.
+        //
+        // Nặng nhất: đặc quyền gắn vào **tên đăng nhập**, mà tên đăng nhập là trường SỬA ĐƯỢC
+        // (`UserUpdateCommand.Username`) ⇒ bất kỳ ai có quyền sửa người dùng chỉ cần đổi tên tài
+        // khoản của mình thành "ai-service" là tự cấp cho mình một phiên 10 năm.
+        //
+        // Tài khoản kỹ thuật dùng chung luồng refresh token như mọi tài khoản khác — nhờ đó thu hồi
+        // được bằng cách vô hiệu refresh token, không phải đổi khoá ký. Nếu về sau thật sự cần một
+        // credential sống lâu cho máy-với-máy thì phải là API key có danh sách thu hồi riêng, KHÔNG
+        // phải JWT tự chứng (không thu hồi được trước hạn).
+        var expiresAt = issuedAt.AddMinutes(_settings.AccessTokenMinutes);
         var jti = Guid.NewGuid().ToString("N");
 
         var claims = new List<Claim>
