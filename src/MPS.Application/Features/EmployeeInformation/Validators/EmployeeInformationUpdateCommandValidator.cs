@@ -37,6 +37,18 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
                 string.IsNullOrWhiteSpace(email) || !await repository.EmailExistsAsync(email!.Trim(), cmd.Id, ct))
             .WithMessage("Email is already used by another employee.");
 
+        // Đối xứng với nhánh CREATE — xem chú thích ở đó. `excludeId = cmd.Id` để hồ sơ tự lưu lại
+        // chính mã của mình không bị coi là trùng.
+        RuleFor(x => x.TaxNo)
+            .MustAsync(async (cmd, taxNo, ct) =>
+                string.IsNullOrWhiteSpace(taxNo) || !await repository.TaxNoExistsAsync(taxNo.Trim(), cmd.Id, ct))
+            .WithMessage("Mã số thuế đã được dùng cho nhân viên khác.");
+
+        RuleFor(x => x.SocialNo)
+            .MustAsync(async (cmd, socialNo, ct) =>
+                string.IsNullOrWhiteSpace(socialNo) || !await repository.SocialNoExistsAsync(socialNo.Trim(), cmd.Id, ct))
+            .WithMessage("Số sổ BHXH đã được dùng cho nhân viên khác.");
+
         When(x => !string.IsNullOrWhiteSpace(x.GuardianFullName) || !string.IsNullOrWhiteSpace(x.GuardianPhoneNo), () =>
         {
             RuleFor(x => x.GuardianFullName)

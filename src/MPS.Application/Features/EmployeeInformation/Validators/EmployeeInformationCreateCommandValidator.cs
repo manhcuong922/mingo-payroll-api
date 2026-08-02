@@ -38,6 +38,21 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
                 string.IsNullOrWhiteSpace(email) || !await repository.EmailExistsAsync(email!.Trim(), null, ct))
             .WithMessage("Email is already used by another employee.");
 
+        // MST / số sổ BHXH là ĐỊNH DANH DUY NHẤT của một cá nhân với cơ quan thuế và cơ quan BHXH
+        // (Điều 30 k.3 Luật QLT 2019; Điều 96 Luật BHXH 2014). Trước đây không có ràng buộc nào —
+        // cả unique index ở DB lẫn rule ở validator — nên khai trùng mã của người khác lưu được
+        // bình thường (đo thật: NV#2 nhận nguyên MST + số sổ của NV#29, trả 204). Hai người dùng
+        // chung một mã thì tờ khai thuế TNCN và quá trình đóng BHXH của cả hai đều sai.
+        RuleFor(x => x.TaxNo)
+            .MustAsync(async (taxNo, ct) =>
+                string.IsNullOrWhiteSpace(taxNo) || !await repository.TaxNoExistsAsync(taxNo.Trim(), null, ct))
+            .WithMessage("Mã số thuế đã được dùng cho nhân viên khác.");
+
+        RuleFor(x => x.SocialNo)
+            .MustAsync(async (socialNo, ct) =>
+                string.IsNullOrWhiteSpace(socialNo) || !await repository.SocialNoExistsAsync(socialNo.Trim(), null, ct))
+            .WithMessage("Số sổ BHXH đã được dùng cho nhân viên khác.");
+
         When(x => !string.IsNullOrWhiteSpace(x.GuardianFullName) || !string.IsNullOrWhiteSpace(x.GuardianPhoneNo), () =>
         {
             RuleFor(x => x.GuardianFullName)

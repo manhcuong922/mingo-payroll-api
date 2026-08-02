@@ -51,6 +51,20 @@ public interface IEmployeeInformationRepository
     /// trả 500 thay vì 400 kèm thông báo. Đối xứng với <see cref="EmailExistsAsync"/>.
     /// </summary>
     Task<bool> CitizenIdExistsAsync(string citizenId, int? excludeId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Mã số thuế đã thuộc về NV khác chưa. Mỗi cá nhân chỉ có MỘT MST dùng suốt đời
+    /// (Điều 30 k.3 Luật Quản lý thuế 2019) — hai người khai chung một mã thì tờ khai thuế TNCN
+    /// và quyết toán của cả hai đều sai.
+    /// </summary>
+    Task<bool> TaxNoExistsAsync(string taxNo, int? excludeId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Số sổ BHXH đã thuộc về NV khác chưa. Mỗi người lao động chỉ được cấp MỘT sổ với một số
+    /// duy nhất (Điều 96 Luật BHXH 2014) — trùng số làm quá trình đóng của hai người dồn vào
+    /// cùng một sổ.
+    /// </summary>
+    Task<bool> SocialNoExistsAsync(string socialNo, int? excludeId = null, CancellationToken cancellationToken = default);
     Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default);
 
     /// <summary>

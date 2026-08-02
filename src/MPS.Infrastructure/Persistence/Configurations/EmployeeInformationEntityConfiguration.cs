@@ -35,6 +35,19 @@ public class EmployeeInformationEntityConfiguration : IEntityTypeConfiguration<E
         // 1 CCCD = 1 EI row
         builder.HasIndex(e => e.CitizenId).IsUnique();
 
+        // 1 MST = 1 người (Điều 30 k.3 Luật QLT 2019), 1 sổ BHXH = 1 người (Điều 96 Luật BHXH 2014).
+        // Lọc bỏ NULL và chuỗi rỗng: hai trường này là tuỳ chọn, rất nhiều hồ sơ chưa khai — nếu
+        // index không lọc thì hồ sơ thứ hai chưa khai sẽ bị chặn oan.
+        // Đây là lớp cuối chống race (hai request cùng lúc qua được validator); tầng ứng dụng vẫn
+        // kiểm trước để trả 400 kèm thông báo thay vì để DB nổ 500.
+        builder.HasIndex(e => e.TaxNo)
+            .IsUnique()
+            .HasFilter("[TaxNo] IS NOT NULL AND [TaxNo] <> ''");
+
+        builder.HasIndex(e => e.SocialNo)
+            .IsUnique()
+            .HasFilter("[SocialNo] IS NOT NULL AND [SocialNo] <> ''");
+
         // Allow many rows with UserId=NULL, but when set UserId must be unique
         builder.HasIndex(e => e.UserId)
             .IsUnique()

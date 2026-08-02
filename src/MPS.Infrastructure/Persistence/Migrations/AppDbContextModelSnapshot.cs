@@ -3610,6 +3610,14 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PositionId");
 
+                    b.HasIndex("SocialNo")
+                        .IsUnique()
+                        .HasFilter("[SocialNo] IS NOT NULL AND [SocialNo] <> ''");
+
+                    b.HasIndex("TaxNo")
+                        .IsUnique()
+                        .HasFilter("[TaxNo] IS NOT NULL AND [TaxNo] <> ''");
+
                     b.HasIndex("UserId")
                         .IsUnique()
                         .HasFilter("[UserId] IS NOT NULL");
