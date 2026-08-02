@@ -192,6 +192,11 @@ public class GetAttendanceSummaryQueryHandler
             var dayType = dayMap.TryGetValue(r.WorkDate, out var dt) ? dt : DayType.Normal;
             AccrueDayType(bucket, dayType, weight);
 
+            // OnLeave nhưng ngày đó KHÔNG phải PaidLeaveDay ⇒ nghỉ không lương. Đếm riêng để FE
+            // phân biệt "phép có lương" (đã vào PaidLeaveDays) vs "phép không lương".
+            if (r.Status == AttendanceStatus.OnLeave && dayType != DayType.PaidLeaveDay)
+                bucket.UnpaidLeaveDays += weight;
+
             bucket.DayHours += r.DayHours;
             bucket.NightHours += r.NightHours;
 
@@ -220,6 +225,7 @@ public class GetAttendanceSummaryQueryHandler
             WeeklyRestDays: bucket.WeeklyRestDays,
             HolidayDays: bucket.HolidayDays,
             PaidLeaveDays: bucket.PaidLeaveDays,
+            UnpaidLeaveDays: bucket.UnpaidLeaveDays,
             DayHours: bucket.DayHours,
             NightHours: bucket.NightHours,
             TotalHours: bucket.DayHours + bucket.NightHours,
@@ -281,6 +287,7 @@ public class GetAttendanceSummaryQueryHandler
         public decimal WeeklyRestDays;
         public decimal HolidayDays;
         public decimal PaidLeaveDays;
+        public decimal UnpaidLeaveDays;
         public decimal DayHours;
         public decimal NightHours;
         public decimal EquivalentHours;

@@ -216,7 +216,10 @@ public sealed record AttendanceRecordDto(
     int? OvertimeRequestId = null,
     TimeOnly? OtStartTime = null,
     TimeOnly? OtEndTime = null,
-    string? OvertimeProjectTitle = null);
+    string? OvertimeProjectTitle = null,
+    // BR-23: chỉ true khi Status=OnLeave và ngày đó thuộc đơn nghỉ Approved + IsPaid.
+    // FE dùng để phân biệt "Nghỉ phép có lương" vs "Nghỉ phép không lương" trên bảng chấm công.
+    bool IsPaidLeave = false);
 
 /// <summary>
 /// OT Approved chưa được chấm công cho 1 ngày — FE hiển thị row riêng trong daily
@@ -257,6 +260,9 @@ public sealed record EmployeeAttendanceSummaryDto(
     decimal WeeklyRestDays,
     decimal HolidayDays,
     decimal PaidLeaveDays,
+    // Số ngày status=OnLeave nhưng KHÔNG thuộc đơn nghỉ có lương (nghỉ không lương).
+    // Tách riêng để bảng chấm công tháng phân biệt: paid = có trả công, unpaid = trọng số 0.
+    decimal UnpaidLeaveDays,
 
     // Giờ công (từ AttendanceRecord.DayHours/NightHours).
     decimal DayHours,
