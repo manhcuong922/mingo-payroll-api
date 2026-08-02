@@ -70,8 +70,28 @@ public sealed class ContractPreflightChecker
                     $"AllowanceTypeId(s) not found or inactive: {string.Join(", ", missing)}.");
         }
 
-        // Snapshot-derived: probation salary ≥ 85% snapshot
-        if (input.HasProbation && input.ProbationSalary is { } probationSalary)
+        // Snapshot-derived: probation salary ≥ 85% snapshot (Điều 26 BLLĐ 2019).
+        //
+        // ⭐ Áp cho CẢ HAI hình thức thử việc:
+        //   (1) thoả thuận thử việc ghi trong HĐLĐ  → `HasProbation = true`;
+        //   (2) HỢP ĐỒNG THỬ VIỆC riêng             → `Kind/ContractSubtype = Probation`.
+        //
+        // Trước đây rule chỉ xét (1), nên hợp đồng thử việc độc lập — hình thức phổ biến hơn — lọt
+        // hoàn toàn: không bắt buộc khai `ProbationSalary`, không kiểm 85%, và bảng lương thì trả
+        // nguyên 100% lương bậc. Với dạng (2), `ProbationSalary` nay là BẮT BUỘC: hợp đồng thử việc
+        // phải ghi rõ mức lương thử việc, và đó cũng là con số duy nhất để bảng lương biết trả bao nhiêu.
+        var isProbationContract = input.Kind == ContractKind.Probation
+            || input.ContractSubtype == ContractSubtype.Probation;
+
+        if (isProbationContract && input.ProbationSalary is null)
+        {
+            throw new DomainValidationException(
+                "Hợp đồng thử việc phải khai ProbationSalary (mức lương thử việc) — Điều 26 BLLĐ 2019. "
+                + $"Mức tối thiểu: {grade.BaseSalary * (LaborLawConstants.Probation.MinSalaryPercent / 100m):0.##} "
+                + $"({LaborLawConstants.Probation.MinSalaryPercent}% của {grade.BaseSalary:0.##}).");
+        }
+
+        if ((input.HasProbation || isProbationContract) && input.ProbationSalary is { } probationSalary)
         {
             var minRequired = grade.BaseSalary * (LaborLawConstants.Probation.MinSalaryPercent / 100m);
             if (probationSalary < minRequired)

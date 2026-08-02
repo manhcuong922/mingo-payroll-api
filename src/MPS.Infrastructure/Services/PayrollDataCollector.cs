@@ -214,7 +214,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 ? 0m
                 : salaryChangesByContract.TryGetValue(activeContract.Id, out var changed)
                     ? changed
-                    : activeContract.SalaryAmountSnapshot;
+                    : ResolveContractSalary(activeContract);
             var hourlyRate = req.StandardWorkingDays > 0 && labor.StandardWorkingHoursPerDay > 0
                 ? mucLuong / (req.StandardWorkingDays * labor.StandardWorkingHoursPerDay) : 0m;
 
@@ -452,6 +452,28 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var dayDt = day.ToDateTime(new TimeOnly(12, 0));
         return contracts.Any(c => c.EffectiveFrom <= dayDt && (c.EffectiveTo == null || c.EffectiveTo >= dayDt));
     }
+
+    /// <summary>
+    /// Mức lương thực trả của một hợp đồng.
+    ///
+    /// <para>Với HỢP ĐỒNG THỬ VIỆC, tiền lương trong thời gian thử việc do hai bên thoả thuận
+    /// nhưng ít nhất phải bằng 85% mức lương của công việc đó (Điều 26 BLLĐ 2019) — con số đó nằm
+    /// ở <c>ProbationSalary</c>. Trước đây collector luôn lấy <c>SalaryAmountSnapshot</c> (mức lương
+    /// của công việc, tức 100%) và <c>ProbationSalary</c> KHÔNG được đọc ở bất kỳ đâu trong luồng
+    /// tính lương, nên nhân viên thử việc được trả nguyên 100%: vừa sai thoả thuận trên hợp đồng,
+    /// vừa kéo theo sai nền đóng BHXH và thu nhập chịu thuế.</para>
+    ///
+    /// <para><c>ProbationSalary</c> null (dữ liệu cũ ký trước khi trường này bắt buộc) thì lùi về
+    /// mức lương công việc — thà trả đủ còn hơn trả 0.</para>
+    /// </summary>
+    private static decimal ResolveContractSalary(Contract contract) =>
+        IsProbationContract(contract)
+            ? contract.ProbationSalary ?? contract.SalaryAmountSnapshot
+            : contract.SalaryAmountSnapshot;
+
+    private static bool IsProbationContract(Contract contract) =>
+        contract.Kind == ContractEnums.ContractKind.Probation
+        || contract.ContractSubtype == ContractEnums.ContractSubtype.Probation;
 
     private static CongCategory ResolveCategory(List<Contract> contracts, DateOnly day, Contract? fallback)
     {
