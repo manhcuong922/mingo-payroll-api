@@ -1,5 +1,7 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Payroll;
 using MPS.Application.Features.Payroll.BhxhTaxPayment.Common;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
@@ -22,13 +24,21 @@ public sealed class ExcludeLineCommandHandler : IRequestHandler<ExcludeLineComma
     private readonly IPaymentObligationRepository _repo;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IMediator _mediator;
+    private readonly ILogger<ExcludeLineCommandHandler> _logger;
 
     public ExcludeLineCommandHandler(
-        IPaymentObligationRepository repo, ICurrentUserService currentUser, IClock clock)
+        IPaymentObligationRepository repo,
+        ICurrentUserService currentUser,
+        IClock clock,
+        IMediator mediator,
+        ILogger<ExcludeLineCommandHandler> logger)
     {
         _repo = repo;
         _currentUser = currentUser;
         _clock = clock;
+        _mediator = mediator;
+        _logger = logger;
     }
 
     public async Task Handle(ExcludeLineCommand request, CancellationToken ct)
@@ -57,5 +67,30 @@ public sealed class ExcludeLineCommandHandler : IRequestHandler<ExcludeLineComma
 
         await _repo.SaveChangesAsync(ct);
         await ParentStatusDeriver.RefreshAsync(_repo, line.PaymentObligation, userId, now, ct);
+
+        // v3.1 — thông báo NV chủ line. Publish lỗi không rollback nghiệp vụ chính.
+        try
+        {
+            var period = line.PaymentObligation.PayrollPeriod;
+            var notification = new BhxhTaxLineExcludedNotification(
+                LineId: line.Id,
+                ObligationId: line.PaymentObligationId,
+                ObligationType: line.PaymentObligation.ObligationType,
+                PeriodYear: period.PeriodYear,
+                PeriodMonth: period.PeriodMonth,
+                EmployeeInformationId: line.EmployeeInformationId,
+                EmployeeUserId: line.EmployeeInformation.UserId,
+                EmployeeCodeSnapshot: line.EmployeeCodeSnapshot,
+                EmployeeFullNameSnapshot: line.EmployeeFullNameSnapshot,
+                ExcludedReason: line.ExcludedReason ?? string.Empty,
+                ExcludedAt: line.ExcludedAt ?? now);
+            await _mediator.Publish(notification, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Publish BhxhTaxLineExcludedNotification thất bại — LineId={LineId}, ObligationId={ObligationId}",
+                line.Id, line.PaymentObligationId);
+        }
     }
 }

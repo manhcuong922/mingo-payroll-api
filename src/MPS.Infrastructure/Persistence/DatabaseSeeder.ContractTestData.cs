@@ -639,15 +639,15 @@ public sealed partial class DatabaseSeeder
             signedAt: today.AddYears(-1), signedPlace: "TP.HCM",
             createdAt: today.AddYears(-1).AddDays(-3));
 
-        // #15 CHILD của #14 (đã ký HĐ mới tiếp nối)
+        // #15 CHILD của #14 (đã ký HĐ mới tiếp nối) — hiệu lực 15/8/2024 – 15/8/2026
         var expireChild = NewTestContract("HDLD-EXPCAND-CHILD",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Active,
             eiTuan, partyId, hrUserId, posBe,
             "Thợ mộc Bậc 2 (HĐ mới sau khi #14 hết hạn)", "TP.HCM",
-            today.AddDays(-1), today.AddYears(1),
+            Utc(2024, 8, 15), Utc(2026, 8, 15),
             gradeIds["MOC-2"], 25_000_000m,
-            signedAt: today.AddDays(-1), signedPlace: "TP.HCM",
-            createdAt: today.AddDays(-5));
+            signedAt: Utc(2024, 8, 15), signedPlace: "TP.HCM",
+            createdAt: Utc(2024, 8, 10));
         expireChild.ParentContract = expireParent; // EF tự resolve ParentContractId khi save
 
         var contracts = new List<Contract>

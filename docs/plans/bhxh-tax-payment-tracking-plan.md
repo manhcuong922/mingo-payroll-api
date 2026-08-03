@@ -454,3 +454,86 @@ Tạo bằng `dotnet ef migrations add` dưới `src/MPS.Infrastructure/Persiste
 **Test files**: theo danh sách section verification.
 
 Tổng v3: **~18 file mới + 10 file sửa + 3 file xoá + 1 migration lớn**.
+
+---
+
+## v3.1 — Add-on: Thông báo NV khi ghi nhận nộp / bỏ qua
+
+### Context
+
+Sau khi HR/Accountant bấm `POST .../lines/{id}/record` (Paid) hoặc `.../exclude`, cần **thông báo in-app** về đúng nhân viên chủ line để họ biết khoản BHXH/TNCN tháng đó đã được xử lý. Revert **không** gửi (là undo).
+
+Hạ tầng notification (`INotifier`, template + bridge pattern, `RecipientSpec.Users(userId)`) đã có sẵn — chỉ cần bổ sung 2 loại thông báo mới. Ghi chú cũ "Không gửi thông báo (chưa có INotificationService)" ở section Infrastructure phía trên KHÔNG còn đúng với v3.1.
+
+### Quyết định (chốt với user)
+
+| Vấn đề | Quyết định |
+|---|---|
+| Trigger | 2 event tách biệt: khi Paid **và** khi Excluded |
+| Người nhận | Chỉ NV chủ line (không CC HR/Accountant) |
+| Kênh | Chỉ in-app (chuông) — không gửi email |
+| UserId null | Invariant: NV có HĐ đều có acc. Defensive: template trả `Nothing()` nếu vẫn null, không throw |
+| Revert | Không phát event (là undo) |
+
+### Domain
+
+- [src/MPS.Domain/Enums/Notifications/NotificationType.cs](../../src/MPS.Domain/Enums/Notifications/NotificationType.cs): thêm 2 giá trị Phase 4 tiếp theo — `BhxhTaxLinePaid = 34`, `BhxhTaxLineExcluded = 35`. KHÔNG đổi số cũ.
+
+### Application
+
+**Domain events** — thêm vào [PayrollEventNotifications.cs](../../src/MPS.Application/Common/Models/Payroll/PayrollEventNotifications.cs):
+
+- `BhxhTaxLinePaidNotification(LineId, ObligationId, ObligationType, PeriodYear, PeriodMonth, EmployeeInformationId, EmployeeUserId?, EmployeeCodeSnapshot, EmployeeFullNameSnapshot, PaidAmount, PaidDate) : INotification`
+- `BhxhTaxLineExcludedNotification(LineId, ObligationId, ObligationType, PeriodYear, PeriodMonth, EmployeeInformationId, EmployeeUserId?, EmployeeCodeSnapshot, EmployeeFullNameSnapshot, ExcludedReason, ExcludedAt) : INotification`
+
+**Bridges** — thêm 2 bridge mỏng vào [NotificationBridgeHandlers.cs](../../src/MPS.Application/Features/Notifications/EventHandlers/NotificationBridgeHandlers.cs) (song song `PayslipReadyBridge`).
+
+**Templates mới** trong `src/MPS.Application/Features/Notifications/Templates/Payroll/`:
+
+- `BhxhTaxLinePaidTemplate` — `Type = BhxhTaxLinePaid`; Category `System`, Severity `Info`; nếu `EmployeeUserId == null` → `Nothing()`.
+  - Title: `"Đã ghi nhận nộp {BHXH|TNCN} tháng MM/YYYY"`
+  - Message: `"Khoản đóng {BHXH|TNCN} tháng MM/YYYY của bạn đã được ghi nhận nộp {amount:N0} VNĐ vào ngày dd/MM/yyyy."`
+  - LinkUrl: `/payroll/periods/{PeriodId}/my-payslip` (dùng lại route đã có)
+  - Return `Single(RecipientSpec.Users(userId), content)`
+- `BhxhTaxLineExcludedTemplate` — tương tự nhưng Severity `Warning`, message `"...đã được đánh dấu bỏ qua. Lý do: {reason}."`
+
+**Handler sửa**:
+
+- [RecordLinePaymentCommand.cs](../../src/MPS.Application/Features/Payroll/BhxhTaxPayment/Commands/RecordLinePaymentCommand.cs): inject `IMediator`; sau `ParentStatusDeriver.RefreshAsync` → build + `Publish(BhxhTaxLinePaidNotification, ct)`. Wrap `try/catch` log Error để publish lỗi không fail nghiệp vụ.
+- [ExcludeLineCommand.cs](../../src/MPS.Application/Features/Payroll/BhxhTaxPayment/Commands/ExcludeLineCommand.cs): mirror pattern, publish `BhxhTaxLineExcludedNotification`.
+- [RevertLineCommand.cs](../../src/MPS.Application/Features/Payroll/BhxhTaxPayment/Commands/RevertLineCommand.cs): **không đụng**.
+
+**Repository sửa** — [PaymentObligationRepository.GetLineByIdAsync](../../src/MPS.Infrastructure/Repositories/Payroll/PaymentObligationRepository.cs): thêm `.Include(l => l.EmployeeInformation)` + `.ThenInclude(o => o.PayrollPeriod)` để handler đọc được `EmployeeInformation.UserId` và `PayrollPeriod.PeriodYear/PeriodMonth` mà không cần round-trip DB phụ.
+
+### Infrastructure
+
+Không migration mới. Enum lưu int, giá trị 34/35 không đụng row cũ. Template auto-scan qua [NotificationModuleRegistration.RegisterTemplates](../../src/MPS.Infrastructure/Notifications/NotificationModuleRegistration.cs) — thêm file template là tự chạy.
+
+### API
+
+Không đổi. Endpoint `POST .../lines/{id}/record` + `.../exclude` giữ nguyên contract; thông báo là side-effect nội bộ.
+
+### Test plan
+
+- `BhxhTaxLinePaidTemplateTests` — happy path VI, `EmployeeUserId = null → Nothing()`, nhánh BHXH vs TNCN, format `N0` + `dd/MM/yyyy`.
+- `BhxhTaxLineExcludedTemplateTests` — tương tự + Severity `Warning` + reason render đúng.
+- Bổ sung vào `RecordLinePaymentCommandHandlerTests`: mock `IMediator.Publish`, assert gọi đúng 1 lần với payload chính xác sau khi save thành công.
+- Bổ sung vào `ExcludeLineCommandHandlerTests`: tương tự.
+- Bổ sung vào `RevertLineCommandHandlerTests`: assert `IMediator.Publish` **không** được gọi.
+- Integration: lock period → record 1 line → `GET /api/notifications` bằng token NV đó → thấy 1 mục `BhxhTaxLinePaid`; exclude line khác → thấy thêm 1 mục `BhxhTaxLineExcluded`.
+
+### Files summary v3.1
+
+**Sửa (6)**:
+1. `NotificationType.cs` — 2 enum value mới (34, 35).
+2. `PayrollEventNotifications.cs` — 2 record mới.
+3. `NotificationBridgeHandlers.cs` — 2 bridge mới.
+4. `RecordLinePaymentCommand.cs` — inject `IMediator`, publish event.
+5. `ExcludeLineCommand.cs` — inject `IMediator`, publish event.
+6. `PaymentObligationRepository.GetLineByIdAsync` — include `EmployeeInformation` + `PayrollPeriod`.
+
+**Mới (2)**:
+- `Templates/Payroll/BhxhTaxLinePaidTemplate.cs`
+- `Templates/Payroll/BhxhTaxLineExcludedTemplate.cs`
+
+**Test mới/bổ sung**: theo test plan.

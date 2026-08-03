@@ -1,4 +1,5 @@
 using MediatR;
+using MPS.Domain.Enums.Payroll;
 
 namespace MPS.Application.Common.Models.Payroll;
 
@@ -37,3 +38,38 @@ public sealed record BhxhTaxOverdueNotification(
     int DaysOverdue,     // 1, 2, 3, …
     decimal Amount,
     string Currency) : INotification;
+
+/// <summary>
+/// v3.1 — HR/Accountant vừa ghi nhận đã nộp BHXH/TNCN của 1 NV (line-level). Báo cho chính NV đó.
+/// <see cref="EmployeeUserId"/> có thể null nếu NV chưa gắn tài khoản đăng nhập —
+/// template sẽ skip (return Nothing) trong trường hợp này.
+/// </summary>
+public sealed record BhxhTaxLinePaidNotification(
+    int LineId,
+    int ObligationId,
+    PaymentObligationType ObligationType,
+    int PeriodYear,
+    int PeriodMonth,
+    int EmployeeInformationId,
+    int? EmployeeUserId,
+    string EmployeeCodeSnapshot,
+    string EmployeeFullNameSnapshot,
+    decimal PaidAmount,
+    DateTime PaidDate) : INotification;
+
+/// <summary>
+/// v3.1 — HR/Accountant đánh dấu bỏ qua line BHXH/TNCN của 1 NV (VD nghỉ việc trước hạn, đóng nơi khác).
+/// Báo cho NV đó biết vì sao khoản của mình không được ghi nhận nộp.
+/// </summary>
+public sealed record BhxhTaxLineExcludedNotification(
+    int LineId,
+    int ObligationId,
+    PaymentObligationType ObligationType,
+    int PeriodYear,
+    int PeriodMonth,
+    int EmployeeInformationId,
+    int? EmployeeUserId,
+    string EmployeeCodeSnapshot,
+    string EmployeeFullNameSnapshot,
+    string ExcludedReason,
+    DateTime ExcludedAt) : INotification;

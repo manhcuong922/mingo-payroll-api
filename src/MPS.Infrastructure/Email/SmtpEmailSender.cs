@@ -132,7 +132,7 @@ public sealed class SmtpEmailSender : IRealEmailSender
         {
             var secureSocket = _options.UseStartTls
                 ? SecureSocketOptions.StartTls
-                : SecureSocketOptions.SslOnConnect;
+                : SecureSocketOptions.None;
 
             await client.ConnectAsync(_options.Host, _options.Port, secureSocket, cancellationToken);
             await client.AuthenticateAsync(_options.Username, _options.Password, cancellationToken);
