@@ -28,6 +28,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IEmployeeDayOffChecker _dayOffChecker;
+    private readonly IOvertimeRequestRepository _overtimeRepository;
     private readonly IClock _clock;
     private readonly ILogger<FaceCheckinCommandHandler> _logger;
     private readonly AttendanceCheckinSettings _checkinSettings;
@@ -42,6 +43,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         IEmployeeDayOffChecker dayOffChecker,
+        IOvertimeRequestRepository overtimeRepository,
         IClock clock,
         ILogger<FaceCheckinCommandHandler> logger,
         IOptions<AttendanceCheckinSettings> checkinSettings)
@@ -55,6 +57,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _dayOffChecker = dayOffChecker;
+        _overtimeRepository = overtimeRepository;
         _clock = clock;
         _logger = logger;
         _checkinSettings = checkinSettings.Value;
@@ -287,6 +290,12 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
 
         await _attendanceRepository.UpdateAsync(existing, cancellationToken);
 
+        // Quét tan ca muộn hơn giờ kết thúc ca chính → có thể là OT thực tế. Ghi nhận
+        // riêng vào 1 AttendanceRecord gắn OvertimeRequestId (đúng invariant exactly-one-of),
+        // cap theo khung giờ OT đã được duyệt — không tự ý mở rộng ngoài đơn.
+        await RecordActualOvertimeIfAnyAsync(
+            employeeInformationId, workDate, chosen.EndAt, localTime, updateUserId, cancellationToken);
+
         return new FaceCheckinResultDto(
             Success: true,
             CheckinType: FaceCheckinType.Checkout,
@@ -296,6 +305,79 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             CheckinTime: TimeOnly.FromDateTime(existing.CheckInAt.Value),
             CheckoutTime: TimeOnly.FromDateTime(localTime),
             CooldownSecondsRemaining: null);
+    }
+
+    /// <summary>
+    /// Ghi nhận giờ OT THỰC TẾ khi quét tan ca muộn hơn giờ kết thúc ca chính (<paramref name="shiftEndAt"/>).
+    /// Chỉ ghi nhận nếu có đơn OT <see cref="OtRequestStatus.Approved"/> đúng ngày; nếu không có đơn
+    /// nào (quên đăng ký / chưa duyệt kịp) thì bỏ qua im lặng — không tự suy diễn OT khi chưa được duyệt.
+    /// Khung giờ OT ghi nhận CAP theo giờ đã đăng ký trong đơn (không vượt <c>OtEndTime</c>) — nhân viên
+    /// không thể tự ý kéo dài OT ngoài phê duyệt chỉ bằng cách quét trễ hơn.
+    /// Idempotent theo <c>OvertimeRequestId</c>: quét lại (hiếm, vì Case 2 chặn khi đã AlreadyComplete)
+    /// sẽ update thay vì tạo trùng.
+    /// </summary>
+    private async Task RecordActualOvertimeIfAnyAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        DateTime shiftEndAt,
+        DateTime checkoutAt,
+        int userId,
+        CancellationToken cancellationToken)
+    {
+        if (checkoutAt <= shiftEndAt) return;
+
+        var activeOts = await _overtimeRepository.GetActiveOnDateForEmployeeAsync(
+            employeeInformationId, workDate, excludeId: null, cancellationToken);
+        var ot = activeOts.FirstOrDefault(o => o.Status == OtRequestStatus.Approved);
+        if (ot is null) return;
+
+        var otStartAt = workDate.ToDateTime(ot.OtStartTime);
+        var otEndAt = ot.OtEndTime <= ot.OtStartTime
+            ? workDate.AddDays(1).ToDateTime(ot.OtEndTime)
+            : workDate.ToDateTime(ot.OtEndTime);
+
+        var effectiveStart = shiftEndAt > otStartAt ? shiftEndAt : otStartAt;
+        var effectiveEnd = checkoutAt < otEndAt ? checkoutAt : otEndAt;
+        if (effectiveEnd <= effectiveStart) return;
+
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(workDate, cancellationToken);
+        var breakdown = _splitter.Split(new WorkHourDateTimeSplitInput(
+            CheckInAt: effectiveStart,
+            CheckOutAt: effectiveEnd,
+            BreakStart: null,
+            BreakEnd: null,
+            NightStart: laborLaw.NightStartTime,
+            NightEnd: laborLaw.NightEndTime));
+
+        var existingOtRecord = await _attendanceRepository.GetByOvertimeRequestIdAsync(ot.Id, cancellationToken);
+        if (existingOtRecord is not null)
+        {
+            existingOtRecord.CheckInAt = effectiveStart;
+            existingOtRecord.CheckOutAt = effectiveEnd;
+            existingOtRecord.DayHours = breakdown.DayHours;
+            existingOtRecord.NightHours = breakdown.NightHours;
+            existingOtRecord.UpdatedAt = _clock.UtcNow;
+            existingOtRecord.UpdatedByUserId = userId;
+            await _attendanceRepository.UpdateAsync(existingOtRecord, cancellationToken);
+            return;
+        }
+
+        var record = new AttendanceRecord
+        {
+            EmployeeInformationId = employeeInformationId,
+            WorkDate = workDate,
+            ShiftTemplateId = null,
+            OvertimeRequestId = ot.Id,
+            CheckInAt = effectiveStart,
+            CheckOutAt = effectiveEnd,
+            DayHours = breakdown.DayHours,
+            NightHours = breakdown.NightHours,
+            Status = AttendanceStatus.Present,
+            Notes = "Face recognition - ghi nhận OT tự động từ giờ tan ca thực tế",
+            CreatedAt = _clock.UtcNow,
+            CreatedByUserId = userId,
+        };
+        await _attendanceRepository.AddAsync(record, cancellationToken);
     }
 
     private static FaceCheckinResultDto Fail(string message) =>

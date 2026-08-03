@@ -136,6 +136,14 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 && o.Status == OtRequestStatus.Approved)
             .ToListAsync(ct)).GroupBy(o => o.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
 
+        // OT chỉ được trả lương khi có bằng chứng chấm công THẬT (quét mặt lúc tan ca hoặc HR nhập
+        // tay) — đơn chỉ duyệt suông không còn tự động ra tiền. Record ứng với 1 OvertimeRequestId
+        // là duy nhất (invariant unique index, xem AttendanceRecord.OvertimeRequestId).
+        var otAttendanceByOtId = (await _db.AttendanceRecords.AsNoTracking()
+            .Where(a => empIds.Contains(a.EmployeeInformationId) && a.WorkDate >= periodStart && a.WorkDate <= periodEnd
+                && a.OvertimeRequestId != null && a.CheckInAt != null && a.CheckOutAt != null)
+            .ToListAsync(ct)).ToDictionary(a => a.OvertimeRequestId!.Value, a => a);
+
         var depCountByEmp = (await _db.EmployeeDependents.AsNoTracking()
             .Where(d => empIds.Contains(d.EmployeeInformationId) && d.IsActive
                 && d.RegisteredFromDate <= periodEnd && (d.RegisteredToDate == null || d.RegisteredToDate >= periodStart))
@@ -222,7 +230,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // cuối tuần (200%) và lễ (300%) ⇒ ai tăng ca ngày lễ bị trả thiếu. Với ngày THƯỜNG, hệ số động
             // ra đúng 1.5 (ngày) / 2.0 (đêm) như cũ nên không đổi số cho các kỳ chỉ có OT ngày thường.
             var (tangCa, chenhLech) = await ComputeOvertimePayAsync(
-                e.Id, ots, hourlyRate, labor, dayTypeByDate, ct);
+                e.Id, ots, otAttendanceByOtId, hourlyRate, labor, dayTypeByDate, ct);
 
             // ⭐ BS-2 phần A: giờ THƯỜNG ngày nghỉ/lễ chỉ được trả 100% qua cột Thu nhập ⇒ trả phần
             // còn thiếu (200%/300%); cộng phụ cấp làm đêm 30% mà trước đây KHÔNG cột nào trả.
@@ -408,9 +416,16 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     //   tangCa    = tổng tiền OT               = hourlyRate × Σ(giờ × hệ_số_đầy_đủ)
     //   chenhLech = phần vượt 100% (miễn thuế) = hourlyRate × Σ(giờ × (hệ_số_đầy_đủ − 1))
     // Hệ số lấy từ OvertimeMultiplierCalculator (đã có sẵn nhưng chưa ai dùng), loại ngày từ DayTypeResolver.
+    //
+    // OT phải có CHẤM CÔNG THẬT mới được trả lương — đơn Approved suông không tự ra tiền nữa (trước đây
+    // duyệt xong là auto trả đủ theo giờ ĐĂNG KÝ, không cần ai xác nhận đã thực làm). Nguồn giờ giờ lấy
+    // từ AttendanceRecord.CheckInAt/CheckOutAt thật (ghi bởi face-checkin lúc tan ca hoặc HR nhập tay qua
+    // QuickAttendanceDialog), CAP trong khung đã đăng ký — không vượt OtStartTime/OtEndTime đã duyệt.
+    // Đơn Approved chưa có AttendanceRecord tương ứng → 0 giờ, không trả (chờ ai đó ghi nhận).
     private async Task<(decimal TangCa, decimal ChenhLech)> ComputeOvertimePayAsync(
         int employeeInformationId,
         IReadOnlyList<Domain.Entities.Attendance.OvertimeRequest> ots,
+        IReadOnlyDictionary<int, Domain.Entities.Attendance.AttendanceRecord> otAttendanceByOtId,
         decimal hourlyRate,
         MPS.Application.Common.Models.Compliance.LaborLawConstantsSnapshot labor,
         IReadOnlyDictionary<DateOnly, DayType> dayTypeByDate,
@@ -421,6 +436,11 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var segments = new List<OvertimePayCalculator.OvertimeSegment>(ots.Count);
         foreach (var ot in ots)
         {
+            if (!otAttendanceByOtId.TryGetValue(ot.Id, out var attendance)) continue;
+
+            var (actualStart, actualEnd) = ClampToApprovedWindow(ot, attendance);
+            if (actualEnd <= actualStart) continue;
+
             // Case 5 — resolve loại-ngày cho CẢ ngày đăng ký (D) và ngày kế (D+1): OT vắt nửa đêm sang
             // ngày lễ/nghỉ phải tính hệ số theo đúng ngày lịch của từng phần giờ.
             var dayTypeD = await ResolveDayTypeAsync(employeeInformationId, ot.WorkDate, dayTypeByDate, ct);
@@ -429,11 +449,35 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // Case 3 + 5 — dựng segment từ khung giờ THÔ (không dùng OtDayHours/OtNightHours đã gộp),
             // để tách theo ngày lịch và đặt cờ "đêm sau ngày OT" (Đ.98.3) chính xác.
             segments.AddRange(OvertimeSegmentBuilder.Build(
-                ot.OtStartTime, ot.OtEndTime, dayTypeD, dayTypeNext,
+                actualStart, actualEnd, dayTypeD, dayTypeNext,
                 labor.NightStartTime, labor.NightEndTime));
         }
 
         return OvertimePayCalculator.Accumulate(segments, hourlyRate, _otMultiplier, labor);
+    }
+
+    /// <summary>
+    /// Cap giờ chấm công thật về trong khung đã đăng ký (OtStartTime..OtEndTime) — nhân viên quét
+    /// trễ hơn giờ duyệt không được tính thêm; quét sớm hơn giờ duyệt (checkout OT trước dự kiến)
+    /// tự nhiên đã ít hơn nên không cần cap riêng cho đầu ra.
+    /// </summary>
+    private static (TimeOnly Start, TimeOnly End) ClampToApprovedWindow(
+        Domain.Entities.Attendance.OvertimeRequest ot,
+        Domain.Entities.Attendance.AttendanceRecord attendance)
+    {
+        var actualStart = TimeOnly.FromDateTime(attendance.CheckInAt!.Value);
+        var actualEnd = TimeOnly.FromDateTime(attendance.CheckOutAt!.Value);
+
+        // OT vắt nửa đêm (OtEndTime <= OtStartTime): so trực tiếp TimeOnly sẽ sai (23:00 > 01:00 dù
+        // đúng thứ tự thời gian) — coi actualEnd luôn hợp lệ, chỉ cap actualStart về không sớm hơn
+        // giờ đăng ký khi cùng ngày lịch (OtEndTime > OtStartTime).
+        if (ot.OtEndTime > ot.OtStartTime)
+        {
+            if (actualStart < ot.OtStartTime) actualStart = ot.OtStartTime;
+            if (actualEnd > ot.OtEndTime) actualEnd = ot.OtEndTime;
+        }
+
+        return (actualStart, actualEnd);
     }
 
     private async Task<DayType> ResolveDayTypeAsync(

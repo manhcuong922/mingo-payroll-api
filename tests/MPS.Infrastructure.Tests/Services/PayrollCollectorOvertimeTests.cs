@@ -26,7 +26,7 @@ public sealed class PayrollCollectorOvertimeTests
         db.OvertimeRequests.Add(ApprovedOt(1, day: 10, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         db.AttendanceRecords.AddRange(
             ShiftRecord(day: 10),                   // ca chính 8h
-            OtRecord(day: 10, otRequestId: 1));     // ca OT 4h — HR chấm riêng, ĐÚNG quy trình
+            OtRecord(day: 10, otRequestId: 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));     // ca OT 4h — HR chấm riêng, ĐÚNG quy trình
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db);
@@ -41,7 +41,9 @@ public sealed class PayrollCollectorOvertimeTests
     {
         using var db = await SeedBaseAsync();
         db.OvertimeRequests.Add(ApprovedOt(1, day: 10, new TimeOnly(18, 0), new TimeOnly(22, 0)));
-        db.AttendanceRecords.AddRange(ShiftRecord(day: 10), OtRecord(day: 10, otRequestId: 1));
+        db.AttendanceRecords.AddRange(
+            ShiftRecord(day: 10),
+            OtRecord(day: 10, otRequestId: 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db);
@@ -58,7 +60,7 @@ public sealed class PayrollCollectorOvertimeTests
         using var db = await SeedBaseAsync();
         // 12/07/2026 là Chủ nhật — NV KHÔNG làm ca chính, chỉ làm 4h OT theo đơn đã duyệt.
         db.OvertimeRequests.Add(ApprovedOt(1, day: 12, new TimeOnly(8, 0), new TimeOnly(12, 0)));
-        db.AttendanceRecords.Add(OtRecord(day: 12, otRequestId: 1));
+        db.AttendanceRecords.Add(OtRecord(day: 12, otRequestId: 1, new TimeOnly(8, 0), new TimeOnly(12, 0)));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db);
@@ -68,5 +70,46 @@ public sealed class PayrollCollectorOvertimeTests
             "sẽ cộng thêm một lần phụ trội 100% nữa ⇒ trả ~300%");
         inputs.Numbers[PayrollFieldKeys.PremiumDayType].Should().Be(0m,
             "không có giờ công THƯỜNG nào trong ngày này để phát sinh phụ trội loại-ngày");
+    }
+
+    [Fact(DisplayName = "OT chỉ Approved nhưng CHƯA có chấm công thật ⇒ không được trả lương")]
+    public async Task ApprovedOt_WithoutAttendanceRecord_IsNotPaid()
+    {
+        using var db = await SeedBaseAsync();
+        // Đơn đã duyệt nhưng chưa ai ghi nhận chấm công thật (chưa quét mặt, HR chưa nhập tay).
+        db.OvertimeRequests.Add(ApprovedOt(1, day: 10, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(ShiftRecord(day: 10));
+        await db.SaveChangesAsync();
+
+        var inputs = await CollectAsync(db);
+
+        inputs.Numbers[PayrollFieldKeys.OtTangCa].Should().Be(0m,
+            "duyệt đơn không còn tự động ra tiền — phải có bằng chứng chấm công thật mới được trả");
+    }
+
+    [Fact(DisplayName = "Chấm công thật trễ hơn giờ đã duyệt ⇒ chỉ trả tới đúng giờ đã duyệt (cap)")]
+    public async Task ActualCheckout_LaterThanApprovedEnd_IsCappedToApprovedWindow()
+    {
+        using var db = await SeedBaseAsync();
+        // Đơn duyệt 18h→22h (4 tiếng) nhưng quét tan ca thực tế lúc 22h30 (làm dư 30').
+        db.OvertimeRequests.Add(ApprovedOt(1, day: 10, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.AddRange(
+            ShiftRecord(day: 10),
+            OtRecord(day: 10, otRequestId: 1, new TimeOnly(18, 0), new TimeOnly(22, 30)));
+        await db.SaveChangesAsync();
+
+        var cappedInputs = await CollectAsync(db);
+
+        using var dbUncapped = await SeedBaseAsync();
+        // Cùng dữ liệu nhưng chấm công KHỚP đúng giờ đã duyệt (22h00) để so sánh số tiền.
+        dbUncapped.OvertimeRequests.Add(ApprovedOt(1, day: 10, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        dbUncapped.AttendanceRecords.AddRange(
+            ShiftRecord(day: 10),
+            OtRecord(day: 10, otRequestId: 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        await dbUncapped.SaveChangesAsync();
+        var exactInputs = await CollectAsync(dbUncapped);
+
+        cappedInputs.Numbers[PayrollFieldKeys.OtTangCa].Should().Be(exactInputs.Numbers[PayrollFieldKeys.OtTangCa],
+            "quét trễ hơn giờ đã duyệt không được trả thêm — tiền OT phải giống hệt trường hợp chấm đúng giờ duyệt");
     }
 }

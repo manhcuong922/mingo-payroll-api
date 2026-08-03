@@ -1,3 +1,4 @@
+using System.Linq;
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Models.Storage;
@@ -42,6 +43,15 @@ public class SubmitFaceRegistrationCommandHandler
 
         var employeeId = await _lookup.GetEmployeeInformationIdByUserIdAsync(userId, cancellationToken)
             ?? throw new NotFoundException($"No employee profile linked to user {userId}.");
+
+        // Chỉ chặn khi đăng ký gần nhất còn Pending/Approved — Rejected thì cho đăng ký lại.
+        // Danh sách đã sắp SubmittedAt desc (xem FaceRegistrationRepository.GetByEmployeeIdAsync).
+        var existing = await _repository.GetByEmployeeIdAsync(employeeId, cancellationToken);
+        var latest = existing.FirstOrDefault();
+        if (latest is not null && latest.Status != Domain.Enums.Attendance.FaceRegistrationStatus.Rejected)
+            throw new ConflictException(
+                $"Nhân viên {employeeId} đã có đăng ký khuôn mặt ở trạng thái {latest.Status}; " +
+                "không thể gửi thêm cho tới khi bị từ chối.");
 
         var photoBytes = Convert.FromBase64String(request.PhotoBase64);
         var registrationId = Guid.NewGuid();

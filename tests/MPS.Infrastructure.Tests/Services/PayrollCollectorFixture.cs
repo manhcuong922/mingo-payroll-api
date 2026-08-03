@@ -115,14 +115,22 @@ internal static class PayrollCollectorFixture
         CreatedByUserId = UserId,
     };
 
-    /// <summary>Bản ghi chấm công cho ca OT (<c>OvertimeRequestId</c> non-null, <c>ShiftTemplateId</c> null).</summary>
-    public static AttendanceRecord OtRecord(int day, int otRequestId, decimal dayHours = 4m, decimal nightHours = 0m) => new()
+    /// <summary>
+    /// Bản ghi chấm công cho ca OT (<c>OvertimeRequestId</c> non-null, <c>ShiftTemplateId</c> null).
+    /// <paramref name="checkIn"/>/<paramref name="checkOut"/> BẮT BUỘC — payroll giờ chỉ trả OT khi có
+    /// bằng chứng chấm công thật (quét mặt hoặc HR nhập tay), không còn tự trả theo đơn Approved suông.
+    /// </summary>
+    public static AttendanceRecord OtRecord(
+        int day, int otRequestId, TimeOnly checkIn, TimeOnly checkOut,
+        decimal dayHours = 4m, decimal nightHours = 0m) => new()
     {
         EmployeeInformationId = EmpId,
         WorkDate = D(day),
         ShiftTemplateId = null,
         OvertimeRequestId = otRequestId,
         Status = AttendanceStatus.Present,
+        CheckInAt = D(day).ToDateTime(checkIn),
+        CheckOutAt = D(day).ToDateTime(checkOut),
         DayHours = dayHours,
         NightHours = nightHours,
         CreatedByUserId = UserId,
