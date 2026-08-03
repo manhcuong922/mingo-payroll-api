@@ -1,6 +1,7 @@
 using MediatR;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.DTOs.Attendance;
+using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -13,15 +14,18 @@ public class GetMyAttendanceQueryHandler
     private readonly IAttendanceRecordRepository _repository;
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
+    private readonly IDayTypeResolver _dayTypeResolver;
 
     public GetMyAttendanceQueryHandler(
         IAttendanceRecordRepository repository,
         IContractLookupReader lookup,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IDayTypeResolver dayTypeResolver)
     {
         _repository = repository;
         _lookup = lookup;
         _currentUser = currentUser;
+        _dayTypeResolver = dayTypeResolver;
     }
 
     public async Task<IReadOnlyList<AttendanceRecordDto>> Handle(
@@ -36,6 +40,13 @@ public class GetMyAttendanceQueryHandler
 
         var items = await _repository.GetByEmployeeRangeAsync(
             employeeId, request.FromDate, request.ToDate, cancellationToken);
+
+        // BR-23: 1 NV ⇒ resolve range 1 lần để phân biệt ngày phép có lương / không lương.
+        var hasOnLeave = items.Any(r => r.Status == AttendanceStatus.OnLeave);
+        var dayMap = hasOnLeave
+            ? await _dayTypeResolver.ResolveRangeAsync(
+                employeeId, request.FromDate, request.ToDate, cancellationToken)
+            : null;
 
         return items.Select(r => new AttendanceRecordDto(
             r.Id,
@@ -56,6 +67,10 @@ public class GetMyAttendanceQueryHandler
             OvertimeRequestId: r.OvertimeRequestId,
             OtStartTime: r.OvertimeRequest?.OtStartTime,
             OtEndTime: r.OvertimeRequest?.OtEndTime,
-            OvertimeProjectTitle: r.OvertimeRequest?.Project?.Title)).ToList();
+            OvertimeProjectTitle: r.OvertimeRequest?.Project?.Title,
+            IsPaidLeave: r.Status == AttendanceStatus.OnLeave
+                && dayMap != null
+                && dayMap.TryGetValue(r.WorkDate, out var dt)
+                && dt == DayType.PaidLeaveDay)).ToList();
     }
 }
