@@ -68,8 +68,12 @@ public sealed class PaymentObligationRepository : IPaymentObligationRepository
 
     public Task<PaymentObligationLine?> GetLineByIdAsync(int lineId, bool asNoTracking, CancellationToken ct = default)
     {
+        // v3.1: Include EmployeeInformation + PayrollPeriod để handler dựng payload thông báo
+        // (EmployeeUserId, PeriodYear/Month) mà không cần round-trip DB phụ.
         var q = _context.Set<PaymentObligationLine>()
             .Include(l => l.PaymentObligation)
+                .ThenInclude(o => o.PayrollPeriod)
+            .Include(l => l.EmployeeInformation)
             .AsQueryable();
         if (asNoTracking) q = q.AsNoTracking();
         return q.FirstOrDefaultAsync(l => l.Id == lineId, ct);

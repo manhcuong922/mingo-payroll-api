@@ -90,6 +90,22 @@ public sealed class BhxhTaxOverdueBridge : INotificationHandler<BhxhTaxOverdueNo
     public Task Handle(BhxhTaxOverdueNotification n, CancellationToken ct) => _notifier.RaiseAsync(n, ct);
 }
 
+/// <summary>v3.1 — line BHXH/TNCN của 1 NV được ghi nhận Paid → báo NV đó.</summary>
+public sealed class BhxhTaxLinePaidBridge : INotificationHandler<BhxhTaxLinePaidNotification>
+{
+    private readonly INotifier _notifier;
+    public BhxhTaxLinePaidBridge(INotifier notifier) => _notifier = notifier;
+    public Task Handle(BhxhTaxLinePaidNotification n, CancellationToken ct) => _notifier.RaiseAsync(n, ct);
+}
+
+/// <summary>v3.1 — line BHXH/TNCN của 1 NV bị đánh dấu Excluded → báo NV đó.</summary>
+public sealed class BhxhTaxLineExcludedBridge : INotificationHandler<BhxhTaxLineExcludedNotification>
+{
+    private readonly INotifier _notifier;
+    public BhxhTaxLineExcludedBridge(INotifier notifier) => _notifier = notifier;
+    public Task Handle(BhxhTaxLineExcludedNotification n, CancellationToken ct) => _notifier.RaiseAsync(n, ct);
+}
+
 // ===== Phase 5 — Compliance =====
 
 public sealed class CompliancePendingSoonBridge : INotificationHandler<CompliancePendingSoonNotification>

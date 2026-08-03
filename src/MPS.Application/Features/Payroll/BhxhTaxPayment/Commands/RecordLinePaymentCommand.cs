@@ -1,5 +1,7 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Models.Payroll;
 using MPS.Application.Features.Payroll.BhxhTaxPayment.Common;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
@@ -26,13 +28,21 @@ public sealed class RecordLinePaymentCommandHandler : IRequestHandler<RecordLine
     private readonly IPaymentObligationRepository _repo;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
+    private readonly IMediator _mediator;
+    private readonly ILogger<RecordLinePaymentCommandHandler> _logger;
 
     public RecordLinePaymentCommandHandler(
-        IPaymentObligationRepository repo, ICurrentUserService currentUser, IClock clock)
+        IPaymentObligationRepository repo,
+        ICurrentUserService currentUser,
+        IClock clock,
+        IMediator mediator,
+        ILogger<RecordLinePaymentCommandHandler> logger)
     {
         _repo = repo;
         _currentUser = currentUser;
         _clock = clock;
+        _mediator = mediator;
+        _logger = logger;
     }
 
     public async Task Handle(RecordLinePaymentCommand request, CancellationToken ct)
@@ -65,6 +75,31 @@ public sealed class RecordLinePaymentCommandHandler : IRequestHandler<RecordLine
         await _repo.SaveChangesAsync(ct);
 
         await ParentStatusDeriver.RefreshAsync(_repo, line.PaymentObligation, userId, now, ct);
+
+        // v3.1 — thông báo NV chủ line. Bọc try/catch: publish lỗi KHÔNG được rollback nghiệp vụ chính.
+        try
+        {
+            var period = line.PaymentObligation.PayrollPeriod;
+            var notification = new BhxhTaxLinePaidNotification(
+                LineId: line.Id,
+                ObligationId: line.PaymentObligationId,
+                ObligationType: line.PaymentObligation.ObligationType,
+                PeriodYear: period.PeriodYear,
+                PeriodMonth: period.PeriodMonth,
+                EmployeeInformationId: line.EmployeeInformationId,
+                EmployeeUserId: line.EmployeeInformation.UserId,
+                EmployeeCodeSnapshot: line.EmployeeCodeSnapshot,
+                EmployeeFullNameSnapshot: line.EmployeeFullNameSnapshot,
+                PaidAmount: line.PaidAmount ?? 0m,
+                PaidDate: line.PaidDate ?? request.PaidDate);
+            await _mediator.Publish(notification, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Publish BhxhTaxLinePaidNotification thất bại — LineId={LineId}, ObligationId={ObligationId}",
+                line.Id, line.PaymentObligationId);
+        }
     }
 
     private static void ApplyRowVersion(Domain.Entities.Payroll.BhxhTax.PaymentObligationLine line, string rowVersion)

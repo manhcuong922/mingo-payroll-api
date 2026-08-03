@@ -53,6 +53,10 @@ public enum NotificationType
     BhxhTaxDeadlineSoon = 32,
     /// <summary>BHXH / thuế đã quá hạn (gửi hằng ngày cho tới khi thanh toán — plan §N9).</summary>
     BhxhTaxOverdue = 33,
+    /// <summary>Đã ghi nhận nộp BHXH / thuế cho 1 NV (line-level) — báo cho chính NV đó (v3.1).</summary>
+    BhxhTaxLinePaid = 34,
+    /// <summary>Line BHXH / thuế của 1 NV bị đánh dấu bỏ qua (VD nghỉ việc trước hạn) — báo NV đó biết (v3.1).</summary>
+    BhxhTaxLineExcluded = 35,
 
     // ===== Phase 5 — Compliance =====
     /// <summary>Bản pending sắp tự active (T-7 / T-1).</summary>
