@@ -74,7 +74,13 @@ public sealed record EmployeeShiftAssignmentDto(
     /// applyTarget của template (null khi <see cref="ScheduleTemplateId"/> null).
     /// View "Tổng hợp theo phòng ban" chỉ include row có <c>Departments</c>.
     /// </summary>
-    Domain.Enums.Attendance.ScheduleApplyTarget? ScheduleApplyTarget);
+    Domain.Enums.Attendance.ScheduleApplyTarget? ScheduleApplyTarget,
+    /// <summary>
+    /// Giờ công chuẩn của ca (<c>ShiftTemplate.StandardHours</c>) — KHÔNG suy ra được từ
+    /// <see cref="StartTime"/>/<see cref="EndTime"/> vì đã trừ giờ nghỉ giữa ca (VD 08:00–17:00
+    /// nhưng chuẩn 8h). FE cần số này để cộng tổng giờ/ngày và tô cảnh báo vượt cap 8h.
+    /// </summary>
+    decimal StandardHours);
 
 public sealed record ShiftRosterLockedDateDto(
     int EmployeeInformationId,

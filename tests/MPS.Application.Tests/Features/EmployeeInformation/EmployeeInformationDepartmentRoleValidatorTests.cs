@@ -27,6 +27,7 @@ public sealed class EmployeeInformationDepartmentRoleValidatorTests
         _repo.Setup(r => r.GetByUserIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((MPS.Domain.Entities.EmployeeInformation?)null);
         _repo.Setup(r => r.PositionExistsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _repo.Setup(r => r.IsUserActiveAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _departments.Setup(d => d.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MPS.Domain.Entities.Department { Id = 5, Code = "IT", Name = "IT" });
     }

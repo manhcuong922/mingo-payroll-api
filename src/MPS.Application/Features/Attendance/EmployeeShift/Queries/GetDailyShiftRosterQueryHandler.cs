@@ -36,6 +36,7 @@ public class GetDailyShiftRosterQueryHandler : IRequestHandler<GetDailyShiftRost
             a.WorkDate,
             a.CreatedAt,
             a.ScheduleTemplateId,
-            a.ScheduleTemplate?.ApplyTarget)).ToList();
+            a.ScheduleTemplate?.ApplyTarget,
+            a.ShiftTemplate.StandardHours)).ToList();
     }
 }

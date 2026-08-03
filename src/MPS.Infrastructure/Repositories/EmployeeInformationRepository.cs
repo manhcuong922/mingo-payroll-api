@@ -160,6 +160,9 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
     public Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default) =>
         _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId, cancellationToken);
 
+    public Task<bool> IsUserActiveAsync(int userId, CancellationToken cancellationToken = default) =>
+        _context.Users.AsNoTracking().AnyAsync(u => u.Id == userId && u.Status == 1, cancellationToken);
+
     public async Task<int?> GetUserRoleIdAsync(int userId, CancellationToken cancellationToken = default)
     {
         var role = await _context.Users.AsNoTracking()
@@ -181,6 +184,16 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         _context.EmployeeInformations
             .AsNoTracking()
             .AnyAsync(e => e.CitizenId == citizenId && (excludeId == null || e.Id != excludeId), cancellationToken);
+
+    public Task<bool> TaxNoExistsAsync(string taxNo, int? excludeId = null, CancellationToken cancellationToken = default) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.TaxNo == taxNo && (excludeId == null || e.Id != excludeId), cancellationToken);
+
+    public Task<bool> SocialNoExistsAsync(string socialNo, int? excludeId = null, CancellationToken cancellationToken = default) =>
+        _context.EmployeeInformations
+            .AsNoTracking()
+            .AnyAsync(e => e.SocialNo == socialNo && (excludeId == null || e.Id != excludeId), cancellationToken);
 
     public Task<string?> GetPositionCodeAsync(int positionId, CancellationToken cancellationToken = default) =>
         _context.Positions
@@ -205,6 +218,16 @@ public class EmployeeInformationRepository : IEmployeeInformationRepository
         await _context.EmployeeInformations.AddAsync(entity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return entity.Id;
+    }
+
+    public async Task<bool> SetDepartmentAsync(int id, int? departmentId, CancellationToken cancellationToken = default)
+    {
+        var existing = await _context.EmployeeInformations.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        if (existing is null) return false;
+
+        existing.DepartmentId = departmentId;
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<bool> UpdateAsync(EmployeeInformation entity, CancellationToken cancellationToken = default)

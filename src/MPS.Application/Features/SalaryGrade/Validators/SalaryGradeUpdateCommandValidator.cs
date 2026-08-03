@@ -1,11 +1,12 @@
 using FluentValidation;
+using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.SalaryGrade.Commands;
 
 namespace MPS.Application.Features.SalaryGrade.Validators;
 
 public class SalaryGradeUpdateCommandValidator : AbstractValidator<SalaryGradeUpdateCommand>
 {
-    public SalaryGradeUpdateCommandValidator()
+    public SalaryGradeUpdateCommandValidator(IComplianceLookupService complianceLookup)
     {
         RuleFor(x => x.Id).GreaterThan(0);
 
@@ -23,5 +24,7 @@ public class SalaryGradeUpdateCommandValidator : AbstractValidator<SalaryGradeUp
 
         RuleFor(x => x.Description)
             .MaximumLength(500).WithMessage("Description must not exceed 500 characters.");
+
+        MinimumWageRule.AddMinimumWageRule(this, complianceLookup, x => x.BaseSalary, x => x.Currency);
     }
 }

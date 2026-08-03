@@ -1,4 +1,5 @@
 using FluentValidation;
+using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.SalaryGrade.Commands;
 using MPS.Domain.Interfaces;
 
@@ -6,7 +7,9 @@ namespace MPS.Application.Features.SalaryGrade.Validators;
 
 public class SalaryGradeCreateCommandValidator : AbstractValidator<SalaryGradeCreateCommand>
 {
-    public SalaryGradeCreateCommandValidator(IPositionRepository positionRepository)
+    public SalaryGradeCreateCommandValidator(
+        IPositionRepository positionRepository,
+        IComplianceLookupService complianceLookup)
     {
         RuleFor(x => x.PositionId)
             .GreaterThan(0).WithMessage("PositionId is required.")
@@ -30,5 +33,7 @@ public class SalaryGradeCreateCommandValidator : AbstractValidator<SalaryGradeCr
 
         RuleFor(x => x.Description)
             .MaximumLength(500).WithMessage("Description must not exceed 500 characters.");
+
+        MinimumWageRule.AddMinimumWageRule(this, complianceLookup, x => x.BaseSalary, x => x.Currency);
     }
 }
