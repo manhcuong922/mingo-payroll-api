@@ -3,7 +3,8 @@
 Tài liệu này liệt kê **từng bước** từ lệnh cụ thể đến thao tác thủ công để đưa hệ thống lên VPS, với pipeline tự động.
 
 > **Thông tin đã chốt cho dự án này:**
-> - Tên miền: UI = `app.operix.fun`, API = `api.operix.fun`
+> - Tên miền: UI = `app.operix.fun`, API = `api.operix.fun`, MinIO = `s3.operix.fun`,
+>   kiosk quét mặt = `kiosk.operix.fun`, AI service = `ai.operix.fun`
 > - VPS: `103.179.173.60`
 > - Email Let's Encrypt: `luans1mple2004@gmail.com`
 > - Owner GHCR (lowercase): `luans1mple`
@@ -119,40 +120,66 @@ echo "<YOUR_GITHUB_TOKEN>" | docker login ghcr.io -u luans1mple --password-stdin
 
 ## BƯỚC 4 — Trỏ DNS
 
-Tại nơi quản lý tên miền `operix.fun`, tạo 2 bản ghi **A**:
+Tại nơi quản lý tên miền `operix.fun`, tạo 5 bản ghi **A**:
 
-| Loại | Tên (host) | Giá trị            |
-|------|------------|--------------------|
-| A    | `app`      | `103.179.173.60`   |
-| A    | `api`      | `103.179.173.60`   |
+| Loại | Tên (host) | Giá trị            | Dùng cho                       |
+|------|------------|--------------------|--------------------------------|
+| A    | `app`      | `103.179.173.60`   | Payroll UI                     |
+| A    | `api`      | `103.179.173.60`   | Backend API                    |
+| A    | `s3`       | `103.179.173.60`   | MinIO (presigned URL ảnh/file) |
+| A    | `kiosk`    | `103.179.173.60`   | UI quét khuôn mặt              |
+| A    | `ai`       | `103.179.173.60`   | AI service nhận diện           |
 
-Kiểm tra đã trỏ đúng (Caddy cần DNS đúng để xin cert):
+Kiểm tra đã trỏ đúng (Caddy cần DNS đúng để xin cert — **thiếu bất kỳ bản ghi nào
+là Caddy fail toàn bộ khi xin cert**):
 ```bash
-nslookup app.operix.fun
-nslookup api.operix.fun
+for h in app api s3 kiosk ai; do nslookup $h.operix.fun; done
 ```
 
 ---
  đến đây r
 ## BƯỚC 5 — Cấu hình GitHub
 
-### 5.1. Secrets — tạo ở **cả 2 repo** (API và UI)
+### 5.1. Secrets — tạo ở **cả 4 repo**
+`mingo-payroll-api`, `mingo-payroll-ui`, `mingo-payroll-attendance-tracking`,
+`mingo-payroll-attendance-tracking-ui`.
+
 Repo → Settings → Secrets and variables → Actions → tab **Secrets** → New repository secret:
 
-| Tên secret    | Giá trị                                                        |
-|---------------|----------------------------------------------------------------|
-| `VPS_HOST`    | `103.179.173.60`                                               |
-| `VPS_USER`    | `deploy`                                                       |
-| `VPS_SSH_KEY` | toàn bộ nội dung file `mingo_deploy_key` (gồm dòng BEGIN/END)  |
+| Tên secret      | Giá trị                                                        |
+|-----------------|----------------------------------------------------------------|
+| `VPS_HOST`      | `103.179.173.60`                                               |
+| `VPS_USER`      | `deploy`                                                       |
+| `VPS_SSH_KEY`   | toàn bộ nội dung file `mingo_deploy_key` (gồm dòng BEGIN/END)  |
+| `MAIL_USERNAME` | Gmail dùng gửi báo cáo deploy                                  |
+| `MAIL_PASSWORD` | App Password của Gmail đó                                      |
 
-### 5.2. Variable — chỉ ở **repo UI**
-Cùng trang → tab **Variables** → New repository variable:
+### 5.2. Variables
+Cùng trang → tab **Variables** → New repository variable.
+
+Cả 4 repo:
+
+| Tên                     | Giá trị                                  |
+|-------------------------|------------------------------------------|
+| `DEPLOY_NOTIFY_EMAILS`  | danh sách email nhận báo cáo, phân tách `,` |
+
+Riêng **repo `mingo-payroll-ui`**:
 
 | Tên                 | Giá trị                         |
 |---------------------|---------------------------------|
 | `VITE_API_BASE_URL` | `https://api.operix.fun/api`    |
 
-### 5.3. Branch protection — đặt cho nhánh **`dev`** (cả 2 repo)
+Riêng **repo `mingo-payroll-attendance-tracking-ui`**:
+
+| Tên                       | Giá trị                          |
+|---------------------------|----------------------------------|
+| `VITE_PAYROLL_API_BASE`   | `https://api.operix.fun/api`     |
+| `VITE_AI_SERVICE_BASE`    | `https://ai.operix.fun`          |
+
+> 2 biến này được Vite **inline vào bundle lúc build**, không đọc lúc chạy. Sửa xong
+> phải build lại image thì trình duyệt mới thấy giá trị mới.
+
+### 5.3. Branch protection — đặt cho nhánh **`dev`** (cả 4 repo)
 Settings → Branches → Add rule, branch name pattern = `dev`:
 - ☑ Require a pull request before merging → Require approvals = **1**
 - ☑ Require status checks to pass before merging → chọn check **CI**
@@ -259,6 +286,70 @@ curl -i https://api.operix.fun/health/minio     # mong đợi HTTP 200
 
 ---
 
+## BƯỚC 7B — Module chấm công khuôn mặt
+
+Module này gồm 2 container thêm vào stack: `attendance-ai` (Flask, nhận diện) và
+`attendance-ui` (kiosk quét mặt). Cả hai deploy theo đúng pipeline như api/ui.
+
+### 7B.1. Repo & CI/CD
+
+| Repo                                    | Image GHCR                                          | Lệnh deploy trên VPS        |
+|-----------------------------------------|-----------------------------------------------------|-----------------------------|
+| `mingo-payroll-attendance-tracking`     | `mingo-payroll-attendance-tracking`                 | `./deploy.sh attendance-ai` |
+| `mingo-payroll-attendance-tracking-ui`  | `mingo-payroll-attendance-tracking-ui`              | `./deploy.sh attendance-ui` |
+
+Cả 2 repo phải nằm dưới owner `luans1mple` để dùng chung `REGISTRY_OWNER` và
+credential GHCR đã login ở Bước 3. Mỗi repo cần nhánh `dev` (CI) và `main` (deploy).
+
+> Workflow của 2 repo này **không scp file nào** lên VPS: `docker-compose.prod.yml`,
+> `Caddyfile`, `deploy.sh` thuộc repo `mingo-payroll-api`. Sửa stack ⇒ commit ở repo
+> api và deploy repo api thì file trên VPS mới được cập nhật.
+
+### 7B.2. Biến trong `/opt/mingo/.env`
+
+Đã có sẵn trong `.env.example`, chỉ cần kiểm tra 3 chỗ:
+
+| Biến                  | Bắt buộc làm gì                                                                 |
+|-----------------------|---------------------------------------------------------------------------------|
+| `AI_SERVICE_PASSWORD` | Đổi thành mật khẩu mạnh. Compose truyền **cùng giá trị này** vào `AiServiceAccount__Password` của api và `SERVICE_PASSWORD` của AI service, nên không thể lệch. |
+| `AI_ALLOWED_IPS`      | IP public của mạng công ty (`curl ifconfig.me` từ máy trong mạng đó). **Để rỗng = chặn hết**, kiosk sẽ không quét được. Nhiều dải cách nhau bằng dấu cách. |
+| `SEED_RESET_ON_STARTUP` | **Đặt `false`.** Để `true` thì mỗi lần api restart là xoá sạch DB, kéo theo toàn bộ đăng ký khuôn mặt đã duyệt → AI service load 0 embedding. |
+
+### 7B.3. Lần khởi động đầu tiên — tải model
+
+Model (~600MB: InsightFace `buffalo_l` + MiniFASNetV2) **không nằm trong image**.
+Lần chạy đầu container tự tải về volume `attendance-models`, mất **2–5 phút** tuỳ
+đường truyền VPS; trong thời gian đó `/health` chưa trả 200 (đã set `start_period: 300s`
+nên container không bị đánh dấu unhealthy oan). Các lần deploy sau dùng lại volume,
+khởi động chỉ vài giây.
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f attendance-ai
+# Đợi tới dòng: Authenticated with backend as 'ai-service'
+#               Loaded N employee face embeddings from backend
+```
+
+> Xoá volume `attendance-models` = phải tải lại từ đầu. Tránh `down -v` với stack này.
+
+### 7B.4. Verify
+
+```bash
+# Từ máy TRONG mạng đã khai trong AI_ALLOWED_IPS:
+curl https://ai.operix.fun/health
+# → {"status":"healthy","backend_connected":true,"employees_loaded":N,...}
+
+# Từ mạng khác phải bị chặn:
+curl -o /dev/null -w "%{http_code}\n" https://ai.operix.fun/health   # → 403
+```
+
+Sau đó chạy thử trọn luồng:
+1. Mở `https://kiosk.operix.fun` → đăng nhập → **Đăng ký khuôn mặt** (camera phải bật
+   được; nếu không thì trang đang không chạy trên HTTPS).
+2. Vào `https://app.operix.fun` bằng tài khoản admin → duyệt đăng ký đó.
+3. Quay lại kiosk → **Quét** → check-in phải hiện trong danh sách.
+
+---
+
 ## BƯỚC 8 — Quy trình vận hành hằng ngày (CI/CD)
 
 Sau khi lần deploy đầu (Bước 6) đã chạy ổn, pipeline hoạt động liên tục:
@@ -278,6 +369,8 @@ docker compose -f docker-compose.prod.yml ps              # trạng thái
 docker compose -f docker-compose.prod.yml logs -f api     # log 1 service
 ./deploy.sh api                                           # cập nhật tay service api
 ./deploy.sh ui                                            # cập nhật tay service ui
+./deploy.sh attendance-ai                                 # cập nhật tay AI nhận diện
+./deploy.sh attendance-ui                                 # cập nhật tay kiosk quét mặt
 docker compose -f docker-compose.prod.yml restart         # restart all
 docker compose -f docker-compose.prod.yml down            # dừng (giữ data)
 docker compose -f docker-compose.prod.yml down -v         # dừng + XOÁ data (cẩn thận!)
@@ -314,6 +407,12 @@ docker run --rm --network mingo_mingo -v /opt/mingo/backup:/backup \
 | UI gọi API bị CORS | `Cors__AllowedOrigins__0` phải là `https://app.operix.fun`. Sửa `.env` → `./deploy.sh api`. |
 | UI gọi sai địa chỉ API | Variable `VITE_API_BASE_URL` sai → sửa rồi merge lại để build lại UI. |
 | Actions deploy lỗi SSH | Kiểm tra `VPS_HOST` / `VPS_USER` / `VPS_SSH_KEY` (private key dán đầy đủ). |
+| Kiosk không bật được camera | `getUserMedia` chỉ chạy trên HTTPS. Phải vào bằng `https://kiosk.operix.fun`, không dùng http hay IP thuần. |
+| Kiosk gọi AI bị 403 | IP hiện tại không nằm trong `AI_ALLOWED_IPS`. Lấy IP thật (`curl ifconfig.me`), thêm vào `.env` → `./deploy.sh caddy`. |
+| Log AI: `Login failed: HTTP 401` | `AI_SERVICE_PASSWORD` không khớp mật khẩu tài khoản `ai-service` trong DB. Tài khoản chỉ được seed **một lần**; đổi biến sau đó không đổi mật khẩu trong DB — phải đổi mật khẩu qua API hoặc reseed DB. |
+| `Loaded 0 employee face embeddings` | Chưa có đăng ký khuôn mặt nào được duyệt, hoặc DB vừa bị reset do `SEED_RESET_ON_STARTUP=true`. |
+| `attendance-ai` unhealthy sau khi deploy | Lần đầu đang tải model (~600MB), đợi tới 5 phút. Xem `logs attendance-ai`; nếu lỗi tải mạng thì VPS đang chặn outbound tới GitHub/CDN insightface. |
+| Duyệt mặt xong quét vẫn không nhận | `AiService__BaseUrl` thiếu trong `.env` nên api không gọi được `/reload_employees`. Tạm thời: `docker exec mingo-attendance-ai curl -XPOST localhost:5002/reload_employees`. |
 
 ---
 

@@ -17,6 +17,25 @@
 	reverse_proxy api:8080
 }
 
+# UI kiosk quét khuôn mặt. HTTPS là bắt buộc: getUserMedia chỉ hoạt động trên
+# secure context, mở qua http hay qua IP thuần là camera không bật được.
+{$KIOSK_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy attendance-ui:80
+}
+
+# AI service. /process_frame, /extract_embedding, /reload_employees KHÔNG có auth,
+# nên chặn theo IP ở đây là lớp bảo vệ duy nhất — chỉ mạng công ty gọi được.
+# route{} để giữ đúng thứ tự viết (mặc định Caddy tự sắp xếp lại directive).
+{$AI_DOMAIN} {
+	encode gzip zstd
+	route {
+		@blocked not remote_ip {$AI_ALLOWED_IPS}
+		respond @blocked "Forbidden" 403
+		reverse_proxy attendance-ai:5002
+	}
+}
+
 # MinIO — phục vụ presigned URL cho trình duyệt (ảnh khuôn mặt, file hợp đồng).
 # Caddy giữ nguyên Host header khi forward → chữ ký SigV4 (ký theo Minio__ExternalEndpoint
 # = giá trị {$S3_DOMAIN}) khớp với Host mà MinIO nhận được.

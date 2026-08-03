@@ -14,6 +14,12 @@ services:
       APP_DOMAIN: ${APP_DOMAIN}
       API_DOMAIN: ${API_DOMAIN}
       S3_DOMAIN: ${S3_DOMAIN}
+      KIOSK_DOMAIN: ${KIOSK_DOMAIN}
+      AI_DOMAIN: ${AI_DOMAIN}
+      # Dải IP được phép gọi AI service (cách nhau bằng dấu cách). Các endpoint
+      # /process_frame, /extract_embedding, /reload_employees không có auth, nên đây
+      # là lớp chặn duy nhất — để rỗng là chặn hết.
+      AI_ALLOWED_IPS: ${AI_ALLOWED_IPS}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -23,6 +29,8 @@ services:
       - api
       - ui
       - minio
+      - attendance-ai
+      - attendance-ui
     networks:
       - mingo
 
@@ -43,8 +51,12 @@ services:
     environment:
       # DEMO: mỗi lần api khởi động sẽ XÓA SẠCH DB rồi seed lại -> data luôn giống seeder sau mỗi deploy.
       # Mặc định TRUE ở stack demo này; tắt bằng cách đặt SEED_RESET_ON_STARTUP=false trong .env trên VPS.
-      # ⚠️ Bật = mọi lần api restart (deploy/reboot/crash) đều mất toàn bộ dữ liệu.
+      # ⚠️ Bật = mọi lần api restart (deploy/reboot/crash) đều mất toàn bộ dữ liệu,
+      #    kể cả các đăng ký khuôn mặt đã duyệt -> AI service load 0 embedding.
       Seed__ResetOnStartup: ${SEED_RESET_ON_STARTUP:-true}
+      # Mật khẩu seed cho tài khoản 'ai-service'. Khai báo ở đây (thay vì để trong
+      # env_file) để nó và SERVICE_PASSWORD của attendance-ai luôn cùng một giá trị.
+      AiServiceAccount__Password: ${AI_SERVICE_PASSWORD}
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -52,6 +64,54 @@ services:
         condition: service_healthy
       llmproxy:
         condition: service_started
+    networks:
+      - mingo
+
+  # AI nhận diện khuôn mặt (Flask, cổng 5002). Không publish port; ra ngoài qua Caddy
+  # ({$AI_DOMAIN}) có gate IP, vào trong thì api gọi http://attendance-ai:5002.
+  attendance-ai:
+    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-attendance-tracking:${IMAGE_TAG:-latest}
+    container_name: mingo-attendance-ai
+    restart: unless-stopped
+    # Khai báo tường minh thay vì env_file: .env — tránh đẩy chuỗi kết nối DB,
+    # secret MinIO/SMTP vào container này một cách không cần thiết.
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      BACKEND_URL: http://api:8080
+      MODEL_DIR: /app/models
+      SERVICE_USERNAME: ${AI_SERVICE_USERNAME:-ai-service}
+      SERVICE_PASSWORD: ${AI_SERVICE_PASSWORD}
+      CAMERA_ID: ${AI_CAMERA_ID:-1}
+      MATCH_THRESHOLD: ${AI_MATCH_THRESHOLD:-0.7}
+      LIVENESS_THRESHOLD: ${AI_LIVENESS_THRESHOLD:-0.5}
+      CHECKIN_COOLDOWN: ${AI_CHECKIN_COOLDOWN:-30}
+      LOG_LEVEL: ${AI_LOG_LEVEL:-INFO}
+    volumes:
+      # Model (~600MB) không nằm trong image; lần chạy đầu tải về đây rồi dùng lại
+      # cho mọi lần deploy sau. Xoá volume này = phải tải lại từ đầu.
+      - attendance-models:/app/models
+      - attendance-logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Lần boot đầu tải ~300MB model trước khi /health trả 200 — 60s của Dockerfile
+      # là quá ngắn và container sẽ bị đánh dấu unhealthy oan.
+      start_period: 300s
+    depends_on:
+      - api
+    networks:
+      - mingo
+
+  # UI kiosk quét khuôn mặt. Bắt buộc phục vụ qua HTTPS ({$KIOSK_DOMAIN}) vì
+  # getUserMedia chỉ chạy trên secure context.
+  attendance-ui:
+    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-attendance-tracking-ui:${IMAGE_TAG:-latest}
+    container_name: mingo-attendance-ui
+    restart: unless-stopped
+    depends_on:
+      - attendance-ai
     networks:
       - mingo
 
@@ -144,3 +204,5 @@ volumes:
   caddy-config:
   mssql-data:
   minio-data:
+  attendance-models:
+  attendance-logs:
