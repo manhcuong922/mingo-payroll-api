@@ -24,8 +24,12 @@ namespace MPS.Application.Features.Payroll.Common;
 /// </summary>
 public static class RegularHoursPremiumCalculator
 {
-    /// <summary>Giờ công thường của 1 ngày, kèm loại ngày đã resolve.</summary>
-    public readonly record struct WorkDaySegment(DayType DayType, decimal DayHours, decimal NightHours);
+    /// <summary>
+    /// Giờ công thường của 1 ngày, kèm loại ngày đã resolve.
+    /// ⭐ [Mục 1] <paramref name="Date"/> quyết định lấy hằng số luật của ngày nào.
+    /// </summary>
+    public readonly record struct WorkDaySegment(
+        DateOnly Date, DayType DayType, decimal DayHours, decimal NightHours);
 
     /// <param name="DayTypePremium">Phụ trội do ngày nghỉ tuần / lễ — 0 nếu chỉ làm ngày thường.</param>
     /// <param name="NightPremium">Phụ cấp làm đêm 30% cho giờ thường.</param>
@@ -34,16 +38,18 @@ public static class RegularHoursPremiumCalculator
     public static Result Accumulate(
         IEnumerable<WorkDaySegment> segments,
         decimal hourlyRate,
-        LaborLawConstantsSnapshot labor)
+        LaborLawTimeline timeline)
     {
         if (hourlyRate <= 0m) return new Result(0m, 0m);
 
         decimal dayTypePremium = 0m, nightPremium = 0m;
-        var normalRate = labor.WorkRateNormalFloor;
-        var nightSurcharge = labor.NightWorkSurchargePercent / 100m;
 
         foreach (var seg in segments)
         {
+            // ⭐ [Mục 1] Sàn ngày nghỉ/lễ và % phụ cấp đêm tra theo NGÀY CÔNG, không theo ngày cuối kỳ.
+            var labor = timeline.For(seg.Date);
+            var normalRate = labor.WorkRateNormalFloor;
+            var nightSurcharge = labor.NightWorkSurchargePercent / 100m;
             var hours = seg.DayHours + seg.NightHours;
 
             // Phần CÒN THIẾU so với mức đã trả qua cột THU NHẬP (luôn = hệ số ngày thường).

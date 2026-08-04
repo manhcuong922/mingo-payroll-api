@@ -153,17 +153,23 @@ internal static class PayrollCollectorFixture
 
     /// <summary>Chạy collector trên <paramref name="db"/> và trả input của NV duy nhất.</summary>
     public static async Task<PayrollEmployeeInputs> CollectAsync(
+        AppDbContext db, IComplianceLookupService? compliance = null) =>
+        (await CollectFullAsync(db, compliance)).Employees.Single();
+
+    /// <summary>
+    /// Như <see cref="CollectAsync"/> nhưng trả TOÀN BỘ kết quả — cần cho các test đọc
+    /// <c>ComplianceRefs</c> / <c>ComplianceNotes</c> chứ không chỉ số của nhân viên.
+    /// </summary>
+    public static async Task<PayrollCollectionResult> CollectFullAsync(
         AppDbContext db, IComplianceLookupService? compliance = null)
     {
         var lookup = compliance ?? new FakeComplianceLookup();
         var collector = new PayrollDataCollector(
             db, lookup, new DayTypeResolver(db), new OvertimeMultiplierCalculator(lookup));
 
-        var result = await collector.CollectAsync(
+        return await collector.CollectAsync(
             new PayrollCollectionRequest(Year, Month, PayDate, StandardDays, new[] { EmpId }),
             CancellationToken.None);
-
-        return result.Employees.Single();
     }
 }
 
@@ -172,6 +178,12 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
 {
     /// <summary>Cho phép test đổi riêng hệ số trần BHYT mà giữ nguyên trần BHXH.</summary>
     public int? HealthCapMultiplierOverride { get; set; }
+
+    /// <summary>
+    /// [Mục 1] Cho phép test trả hằng số luật lao động KHÁC NHAU theo ngày, dựng lại tình huống
+    /// luật đổi giữa kỳ. Null ⇒ cả kỳ dùng một mức (hành vi cũ).
+    /// </summary>
+    public Func<DateOnly, LaborLawConstantsSnapshot>? LaborLawByDate { get; set; }
 
     private SocialInsuranceRateSnapshot CurrentSi =>
         HealthCapMultiplierOverride is int m ? Si with { HealthCapMultiplier = m } : Si;
@@ -201,6 +213,9 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
         VersionId: 1, ValidFrom: new DateOnly(2026, 1, 1), AppliedRegionCode: "I",
         Regions: new[] { new MinimumWageRegionSnapshot("I", 4_960_000m) }, LegalReference: "test");
 
+    /// <summary>Mức luật lao động nền — test có thể nhân bản rồi chỉnh vài trường bằng <c>with</c>.</summary>
+    public static LaborLawConstantsSnapshot BaseLabor => Labor;
+
     private static readonly LaborLawConstantsSnapshot Labor = new(
         VersionId: 1, ValidFrom: new DateOnly(2026, 1, 1),
         ProbationSalaryMinPercent: 85m, OvertimeNightExtraPercent: 20m,
@@ -224,5 +239,6 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
     public Task<MinimumWageSnapshot> GetMinimumWageAtAsync(DateOnly payDate, CancellationToken ct) => Task.FromResult(MinWage);
     public Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAtAsync(int allowanceTypeId, DateOnly payDate, CancellationToken ct) =>
         Task.FromResult<AllowanceExemptThresholdSnapshot?>(null);
-    public Task<LaborLawConstantsSnapshot> GetLaborLawConstantsAtAsync(DateOnly payDate, CancellationToken ct) => Task.FromResult(Labor);
+    public Task<LaborLawConstantsSnapshot> GetLaborLawConstantsAtAsync(DateOnly payDate, CancellationToken ct) =>
+        Task.FromResult(LaborLawByDate?.Invoke(payDate) ?? Labor);
 }

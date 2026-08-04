@@ -31,9 +31,14 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
     private readonly Mock<IPayrollFieldCatalog> _catalog = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
     private readonly Mock<IPayrollAdjustmentRepository> _adjustments = new();
+    private readonly Mock<IPayrollLawChangeNoteBuilder> _noteBuilder = new();
 
     public RecalculatePayrollPeriodCommandHandlerTests()
     {
+        // [Mục 1] Recalc dựng lại ghi chú tự sinh; mặc định bộ diff không sinh gì.
+        _noteBuilder.Setup(b => b.Build(
+                It.IsAny<IReadOnlyList<PayrollComplianceRef>>(), It.IsAny<IReadOnlyList<PayrollComplianceRef>?>()))
+            .Returns(Array.Empty<PayrollNote>());
         _currentUser.SetupGet(c => c.UserId).Returns(2);
         _catalog.Setup(c => c.GetAll()).Returns(Array.Empty<PayrollFieldDescriptor>());
         _graph.Setup(g => g.TopologicalOrder(It.IsAny<IReadOnlyDictionary<string, FormulaNode?>>()))
@@ -51,7 +56,7 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
 
     private RecalculatePayrollPeriodCommandHandler Sut() => new(
         _periods.Object, _readiness.Object, _collector.Object, _calculator.Object,
-        _graph.Object, _catalog.Object, _currentUser.Object, _adjustments.Object);
+        _graph.Object, _catalog.Object, _currentUser.Object, _adjustments.Object, _noteBuilder.Object);
 
     private static PayrollPeriod DraftPeriodWithOneEmployee(bool stale)
     {

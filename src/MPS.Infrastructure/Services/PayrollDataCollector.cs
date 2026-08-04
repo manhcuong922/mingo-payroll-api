@@ -60,7 +60,11 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var si = await _compliance.GetSocialInsuranceAtAsync(req.PayDate, ct);
         var pit = await _compliance.GetPitAtAsync(req.PayDate, ct);
         var minWage = await _compliance.GetMinimumWageAtAsync(req.PayDate, ct);
-        var labor = await _compliance.GetLaborLawConstantsAtAsync(req.PayDate, ct);
+
+        // ⭐ [Mục 1] Hằng số luật lao động tra THEO TỪNG NGÀY thay vì một mốc cuối kỳ. `labor` giữ lại
+        // cho các đại lượng bản chất là "cả kỳ" (đơn giá giờ, công chuẩn/tháng, compliance ref).
+        var laborTimeline = await BuildLaborLawTimelineAsync(periodStart, periodEnd, req.PayDate, ct);
+        var labor = laborTimeline.PeriodEnd;
 
         var mealAllowanceTypeId = await _db.AllowanceTypes.AsNoTracking()
             .Where(a => a.Code == "MEAL").Select(a => (int?)a.Id).FirstOrDefaultAsync(ct);
@@ -196,7 +200,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 nightHours += r.NightHours;
 
                 // BS-2 phần A: ca CHÍNH THỨC (không qua đơn OT) vẫn có thể rơi vào nghỉ tuần/lễ.
-                workSegments.Add(new RegularHoursPremiumCalculator.WorkDaySegment(dayType, r.DayHours, r.NightHours));
+                workSegments.Add(new RegularHoursPremiumCalculator.WorkDaySegment(
+                    r.WorkDate, dayType, r.DayHours, r.NightHours));
                 switch (dayType)
                 {
                     case DayType.WeeklyRestDay:
@@ -222,11 +227,11 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // cuối tuần (200%) và lễ (300%) ⇒ ai tăng ca ngày lễ bị trả thiếu. Với ngày THƯỜNG, hệ số động
             // ra đúng 1.5 (ngày) / 2.0 (đêm) như cũ nên không đổi số cho các kỳ chỉ có OT ngày thường.
             var (tangCa, chenhLech) = await ComputeOvertimePayAsync(
-                e.Id, ots, hourlyRate, labor, dayTypeByDate, ct);
+                e.Id, ots, hourlyRate, laborTimeline, dayTypeByDate, ct);
 
             // ⭐ BS-2 phần A: giờ THƯỜNG ngày nghỉ/lễ chỉ được trả 100% qua cột Thu nhập ⇒ trả phần
             // còn thiếu (200%/300%); cộng phụ cấp làm đêm 30% mà trước đây KHÔNG cột nào trả.
-            var premium = RegularHoursPremiumCalculator.Accumulate(workSegments, hourlyRate, labor);
+            var premium = RegularHoursPremiumCalculator.Accumulate(workSegments, hourlyRate, laborTimeline);
 
             decimal finalScore = 0m, coefficient = 1.0m;
             if (e.UserId.HasValue && scoreByUser.TryGetValue(e.UserId.Value, out var sc) && sc.HasValue)
@@ -348,12 +353,19 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             refs.Add(r);
         }
 
+        // ⭐ [Mục 1] Kỳ có nhiều mức luật lao động ⇒ ghi chú cho kế toán biết số tiền tăng ca/phụ trội
+        // trong kỳ được tính theo từng ngày, không phải một mức duy nhất.
+        var complianceNotes = new List<PayrollNote>();
+        if (MidPeriodComplianceNotes.ForLaborLaw(laborTimeline, DateTime.UtcNow) is { } laborNote)
+            complianceNotes.Add(laborNote);
+
         return new PayrollCollectionResult
         {
             Employees = result,
             ComplianceRefs = refs,
             FunctionContext = new PayrollFunctionContext { PitBrackets = pit.Brackets },
             ProductivitySnapshotJson = prodSnapshotJson,
+            ComplianceNotes = complianceNotes,
         };
     }
 
@@ -412,7 +424,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         int employeeInformationId,
         IReadOnlyList<Domain.Entities.Attendance.OvertimeRequest> ots,
         decimal hourlyRate,
-        MPS.Application.Common.Models.Compliance.LaborLawConstantsSnapshot labor,
+        MPS.Application.Common.Models.Compliance.LaborLawTimeline laborTimeline,
         IReadOnlyDictionary<DateOnly, DayType> dayTypeByDate,
         CancellationToken ct)
     {
@@ -428,12 +440,35 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
             // Case 3 + 5 — dựng segment từ khung giờ THÔ (không dùng OtDayHours/OtNightHours đã gộp),
             // để tách theo ngày lịch và đặt cờ "đêm sau ngày OT" (Đ.98.3) chính xác.
+            // ⭐ [Mục 1] Builder tự tra khung giờ đêm theo ngày của từng phần giờ.
             segments.AddRange(OvertimeSegmentBuilder.Build(
-                ot.OtStartTime, ot.OtEndTime, dayTypeD, dayTypeNext,
-                labor.NightStartTime, labor.NightEndTime));
+                ot.WorkDate, ot.OtStartTime, ot.OtEndTime, dayTypeD, dayTypeNext, laborTimeline));
         }
 
-        return OvertimePayCalculator.Accumulate(segments, hourlyRate, _otMultiplier, labor);
+        return OvertimePayCalculator.Accumulate(segments, hourlyRate, _otMultiplier, laborTimeline);
+    }
+
+    /// <summary>
+    /// ⭐ [Mục 1] Dựng bảng tra hằng số luật lao động theo từng ngày của kỳ, phủ thêm ngày kế tiếp
+    /// <paramref name="periodEnd"/> để khối OT vắt nửa đêm ở ngày cuối tháng vẫn có luật của phần giờ
+    /// sau 00:00.
+    ///
+    /// <para>Đi qua <c>GetLaborLawConstantsAtAsync</c> — cùng đường tra của mọi module khác — nên ngữ
+    /// nghĩa "luật nào có hiệu lực tại ngày X" giữ nguyên, và cache theo ngày của
+    /// <c>ComplianceLookupService</c> làm các lượt tính lại về sau không chạm DB.</para>
+    /// </summary>
+    private async Task<MPS.Application.Common.Models.Compliance.LaborLawTimeline> BuildLaborLawTimelineAsync(
+        DateOnly periodStart, DateOnly periodEnd, DateOnly payDate, CancellationToken ct)
+    {
+        var byDate = new Dictionary<DateOnly, MPS.Application.Common.Models.Compliance.LaborLawConstantsSnapshot>();
+        for (var d = periodStart; d <= periodEnd.AddDays(1); d = d.AddDays(1))
+            byDate[d] = await _compliance.GetLaborLawConstantsAtAsync(d, ct);
+
+        var atPayDate = byDate.TryGetValue(payDate, out var snapshot)
+            ? snapshot
+            : await _compliance.GetLaborLawConstantsAtAsync(payDate, ct);
+
+        return new MPS.Application.Common.Models.Compliance.LaborLawTimeline(byDate, atPayDate);
     }
 
     private async Task<DayType> ResolveDayTypeAsync(
