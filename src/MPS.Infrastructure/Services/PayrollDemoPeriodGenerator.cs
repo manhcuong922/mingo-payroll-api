@@ -142,6 +142,7 @@ public sealed class PayrollDemoPeriodGenerator
         var previous = await _periods.GetPreviousAsync(year, month, ct);
         foreach (var note in _noteBuilder.Build(collection.ComplianceRefs, previous?.ComplianceRefs.ToList()))
             period.Notes.Add(note);
+        foreach (var note in collection.ComplianceNotes) period.Notes.Add(note);
 
         var id = await _periods.AddAsync(period, ct);
         _logger.LogInformation(
