@@ -56,15 +56,22 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var periodEnd = new DateOnly(req.Year, req.Month, DateTime.DaysInMonth(req.Year, req.Month));
         var empIds = req.EmployeeInformationIds;
 
-        // ===== Compliance snapshots tại payDate (dùng chung mọi NV) =====
-        var si = await _compliance.GetSocialInsuranceAtAsync(req.PayDate, ct);
+        // ===== Compliance snapshots (dùng chung mọi NV) =====
+        // ⭐ [Mục 3] Thuế TNCN + giảm trừ + ngưỡng cơm CỐ Ý giữ tra tại một mốc PayDate: biểu thuế
+        // lũy tiến và các mức giảm trừ là đại lượng THEO THÁNG, chia theo ngày sẽ đẩy NLĐ xuống bậc
+        // thấp và làm tổng thuế khấu trừ thấp hơn số thực phải nộp. Xem `PayrollCollectorTaxPeriodTests`.
         var pit = await _compliance.GetPitAtAsync(req.PayDate, ct);
-        var minWage = await _compliance.GetMinimumWageAtAsync(req.PayDate, ct);
 
         // ⭐ [Mục 1] Hằng số luật lao động tra THEO TỪNG NGÀY thay vì một mốc cuối kỳ. `labor` giữ lại
         // cho các đại lượng bản chất là "cả kỳ" (đơn giá giờ, công chuẩn/tháng, compliance ref).
         var laborTimeline = await BuildLaborLawTimelineAsync(periodStart, periodEnd, req.PayDate, ct);
         var labor = laborTimeline.PeriodEnd;
+
+        // ⭐ [Mục 2] Tỷ lệ + trần bảo hiểm TRỘN THEO TRỌNG SỐ NGÀY khi văn bản đổi giữa kỳ. Đổ vào
+        // đúng các field cũ nên bảng công thức không phải đổi một dòng nào.
+        var insurance = await BuildInsuranceRatesAsync(periodStart, periodEnd, ct);
+        var si = await _compliance.GetSocialInsuranceAtAsync(req.PayDate, ct);
+        var minWage = await _compliance.GetMinimumWageAtAsync(req.PayDate, ct);
 
         var mealAllowanceTypeId = await _db.AllowanceTypes.AsNoTracking()
             .Where(a => a.Code == "MEAL").Select(a => (int?)a.Id).FirstOrDefaultAsync(ct);
@@ -72,19 +79,19 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             ? await _compliance.GetAllowanceThresholdAtAsync(mid, req.PayDate, ct)
             : null;
 
-        var bhxhDnRate = si.Funds.Sum(f => f.EmployerPercent) / 100m;
-        var bhxhNldRate = si.Funds.Sum(f => f.EmployeePercent) / 100m;
-        var bhytDnRate = si.EmployerHealthPercent / 100m;
-        var bhytNldRate = si.EmployeeHealthPercent / 100m;
-        var bhtnDnRate = si.EmployerUnemploymentPercent / 100m;
-        var bhtnNldRate = si.EmployeeUnemploymentPercent / 100m;
-        var kpcdRate = si.EmployerUnionFundPercent / 100m;
-        var bhxhBhytCap = si.ReferenceAmount * si.SocialCapMultiplier;
+        var bhxhDnRate = insurance.BhxhDnRate;
+        var bhxhNldRate = insurance.BhxhNldRate;
+        var bhytDnRate = insurance.BhytDnRate;
+        var bhytNldRate = insurance.BhytNldRate;
+        var bhtnDnRate = insurance.BhtnDnRate;
+        var bhtnNldRate = insurance.BhtnNldRate;
+        var kpcdRate = insurance.KpcdRate;
+        var bhxhBhytCap = insurance.BhxhBhytCap;
         // ⭐ D3 — trần BHYT có hệ số RIÊNG trên màn hình cấu hình BHXH (`HealthCapMultiplier`), trước
         // đây không đường nào dùng tới nên admin sửa ô đó không có gì thay đổi.
-        var bhytCap = si.ReferenceAmount * si.HealthCapMultiplier;
-        var regionMinWage = minWage.GetAppliedAmount();
-        var bhtnCap = regionMinWage * si.UnemploymentCapMultiplier;
+        var bhytCap = insurance.BhytCap;
+        var regionMinWage = insurance.RegionMinWage;
+        var bhtnCap = insurance.BhtnCap;
         var mealExempt = mealThreshold?.MonthlyExemptAmount ?? 0m;
 
         // ===== Bảng hệ số năng suất (active) + snapshot JSON =====
@@ -338,13 +345,21 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             result.Add(inputs);
         }
 
-        var refs = new List<PayrollComplianceRef>
-        {
-            Ref(ComplianceVersionType.SocialInsurance, si.VersionId, si.ValidFrom, si.LegalReference, "Trần đóng BHXH", bhxhBhytCap),
-            Ref(ComplianceVersionType.Pit, pit.VersionId, pit.ValidFrom, pit.LegalReference, "Giảm trừ bản thân", pit.PersonalDeductionAmount),
-            Ref(ComplianceVersionType.MinimumWage, minWage.VersionId, minWage.ValidFrom, minWage.LegalReference, "Lương tối thiểu vùng áp dụng", regionMinWage),
-            Ref(ComplianceVersionType.LaborLawConstants, labor.VersionId, labor.ValidFrom, labor.LegalReference, "Công chuẩn/tháng (luật)", labor.StandardWorkingDaysPerMonth),
-        };
+        // ⭐ [Mục 1+2] Kỳ có thể dùng NHIỀU version cùng loại (luật đổi giữa kỳ) ⇒ ghi ref cho TẤT CẢ,
+        // nếu không kế toán đối chiếu "số này căn cứ văn bản nào" sẽ chỉ thấy một nửa câu trả lời.
+        var refs = new List<PayrollComplianceRef> { Ref(ComplianceVersionType.Pit, pit.VersionId, pit.ValidFrom, pit.LegalReference, "Giảm trừ bản thân", pit.PersonalDeductionAmount) };
+
+        foreach (var v in insurance.SocialVersions)
+            refs.Add(Ref(ComplianceVersionType.SocialInsurance, v.VersionId, v.ValidFrom, v.LegalReference,
+                "Trần đóng BHXH", v.ReferenceAmount * v.SocialCapMultiplier));
+
+        foreach (var v in insurance.MinWageVersions)
+            refs.Add(Ref(ComplianceVersionType.MinimumWage, v.VersionId, v.ValidFrom, v.LegalReference,
+                "Lương tối thiểu vùng áp dụng", v.GetAppliedAmount()));
+
+        foreach (var v in laborTimeline.Versions)
+            refs.Add(Ref(ComplianceVersionType.LaborLawConstants, v.VersionId, v.ValidFrom, v.LegalReference,
+                "Công chuẩn/tháng (luật)", v.StandardWorkingDaysPerMonth));
         if (mealThreshold is not null)
         {
             var r = Ref(ComplianceVersionType.AllowanceThreshold, mealThreshold.VersionId, mealThreshold.ValidFrom,
@@ -355,9 +370,13 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
         // ⭐ [Mục 1] Kỳ có nhiều mức luật lao động ⇒ ghi chú cho kế toán biết số tiền tăng ca/phụ trội
         // trong kỳ được tính theo từng ngày, không phải một mức duy nhất.
+        var nowUtc = DateTime.UtcNow;
+        var periodDays = periodEnd.DayNumber - periodStart.DayNumber + 1;
         var complianceNotes = new List<PayrollNote>();
-        if (MidPeriodComplianceNotes.ForLaborLaw(laborTimeline, DateTime.UtcNow) is { } laborNote)
+        if (MidPeriodComplianceNotes.ForLaborLaw(laborTimeline, nowUtc) is { } laborNote)
             complianceNotes.Add(laborNote);
+        if (MidPeriodComplianceNotes.ForInsurance(insurance, periodDays, nowUtc) is { } insuranceNote)
+            complianceNotes.Add(insuranceNote);
 
         return new PayrollCollectionResult
         {
@@ -469,6 +488,24 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             : await _compliance.GetLaborLawConstantsAtAsync(payDate, ct);
 
         return new MPS.Application.Common.Models.Compliance.LaborLawTimeline(byDate, atPayDate);
+    }
+
+    /// <summary>
+    /// ⭐ [Mục 2] Gom cặp (BHXH, lương tối thiểu vùng) có hiệu lực tại TỪNG NGÀY LỊCH của kỳ rồi trộn
+    /// theo trọng số ngày. Kỳ không đổi văn bản ⇒ mọi ngày cùng một cặp ⇒ bình quân bằng đúng số cũ.
+    /// </summary>
+    private async Task<InsurancePeriodRates> BuildInsuranceRatesAsync(
+        DateOnly periodStart, DateOnly periodEnd, CancellationToken ct)
+    {
+        var perDay = new List<InsurancePeriodBlender.DayRates>(31);
+        for (var d = periodStart; d <= periodEnd; d = d.AddDays(1))
+        {
+            perDay.Add(new InsurancePeriodBlender.DayRates(
+                await _compliance.GetSocialInsuranceAtAsync(d, ct),
+                await _compliance.GetMinimumWageAtAsync(d, ct)));
+        }
+
+        return InsurancePeriodBlender.Blend(perDay);
     }
 
     private async Task<DayType> ResolveDayTypeAsync(

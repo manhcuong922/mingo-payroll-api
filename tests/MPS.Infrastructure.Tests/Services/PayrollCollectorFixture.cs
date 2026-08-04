@@ -185,6 +185,18 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
     /// </summary>
     public Func<DateOnly, LaborLawConstantsSnapshot>? LaborLawByDate { get; set; }
 
+    /// <summary>
+    /// [Mục 2] Cho phép test trả tỷ lệ/trần BHXH khác nhau theo ngày. Null ⇒ cả kỳ một mức.
+    /// </summary>
+    public Func<DateOnly, SocialInsuranceRateSnapshot>? SocialInsuranceByDate { get; set; }
+
+    /// <summary>[Mục 2] Tương tự cho lương tối thiểu vùng (kéo theo trần BHTN).</summary>
+    public Func<DateOnly, MinimumWageSnapshot>? MinimumWageByDate { get; set; }
+
+    /// <summary>Mức BHXH / lương tối thiểu nền — test nhân bản rồi chỉnh bằng <c>with</c>.</summary>
+    public static SocialInsuranceRateSnapshot BaseSocialInsurance => Si;
+    public static MinimumWageSnapshot BaseMinimumWage => MinWage;
+
     private SocialInsuranceRateSnapshot CurrentSi =>
         HealthCapMultiplierOverride is int m ? Si with { HealthCapMultiplier = m } : Si;
 
@@ -234,9 +246,11 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
         Task.FromResult<AllowanceExemptThresholdSnapshot?>(null);
     public Task<LaborLawConstantsSnapshot> GetActiveLaborLawConstantsAsync(CancellationToken ct) => Task.FromResult(Labor);
 
-    public Task<SocialInsuranceRateSnapshot> GetSocialInsuranceAtAsync(DateOnly payDate, CancellationToken ct) => Task.FromResult(CurrentSi);
+    public Task<SocialInsuranceRateSnapshot> GetSocialInsuranceAtAsync(DateOnly payDate, CancellationToken ct) =>
+        Task.FromResult(SocialInsuranceByDate?.Invoke(payDate) ?? CurrentSi);
     public Task<PitRegulationSnapshot> GetPitAtAsync(DateOnly payDate, CancellationToken ct) => Task.FromResult(Pit);
-    public Task<MinimumWageSnapshot> GetMinimumWageAtAsync(DateOnly payDate, CancellationToken ct) => Task.FromResult(MinWage);
+    public Task<MinimumWageSnapshot> GetMinimumWageAtAsync(DateOnly payDate, CancellationToken ct) =>
+        Task.FromResult(MinimumWageByDate?.Invoke(payDate) ?? MinWage);
     public Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAtAsync(int allowanceTypeId, DateOnly payDate, CancellationToken ct) =>
         Task.FromResult<AllowanceExemptThresholdSnapshot?>(null);
     public Task<LaborLawConstantsSnapshot> GetLaborLawConstantsAtAsync(DateOnly payDate, CancellationToken ct) =>
