@@ -73,7 +73,9 @@ public class CreateDependentRegistrationRequestCommandHandler : IRequestHandler<
             CitizenId = request.CitizenId?.Trim(),
             RegisteredFromDate = request.RegisteredFromDate,
             RegisteredToDate = request.RegisteredToDate,
-            SupportingDocumentUrl = request.SupportingDocumentUrl?.Trim(),
+            IdentityDocumentType = request.IdentityDocumentType,
+            IdentityDocumentNumber = request.IdentityDocumentNumber?.Trim(),
+            IdentityDocumentIssuedDate = request.IdentityDocumentIssuedDate,
             Reason = request.Reason?.Trim(),
             Status = DependentRequestStatus.Pending,
             CreatedAt = _clock.UtcNow,
@@ -109,8 +111,17 @@ public class CreateDependentRegistrationRequestCommandHandler : IRequestHandler<
             throw new DomainValidationException("Register cần Relationship.");
         if (request.RegisteredFromDate is null)
             throw new DomainValidationException("Register cần RegisteredFromDate.");
-        if (string.IsNullOrWhiteSpace(request.SupportingDocumentUrl))
-            throw new DomainValidationException("Register cần SupportingDocumentUrl (giấy khai sinh/CCCD).");
+
+        // Chưa có MST riêng thì buộc phải kèm giấy tờ chứng minh thân nhân (đối xứng với validator).
+        var hasTaxId = !string.IsNullOrWhiteSpace(request.TaxIdentificationNumber);
+        var hasIdentityDoc = request.IdentityDocumentType.HasValue
+            && !string.IsNullOrWhiteSpace(request.IdentityDocumentNumber)
+            && request.IdentityDocumentIssuedDate.HasValue;
+        if (!hasTaxId && !hasIdentityDoc)
+        {
+            throw new DomainValidationException(
+                "Người phụ thuộc chưa có mã số thuế thì phải cung cấp loại giấy tờ, số giấy tờ và ngày cấp để chứng minh thân nhân.");
+        }
     }
 
     /// <summary>

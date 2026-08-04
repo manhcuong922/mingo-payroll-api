@@ -42,7 +42,7 @@ public sealed class PositionCreateCommandValidatorTests
         var result = await validator.TestValidateAsync(new PositionCreateCommand("dev", "Developer", null));
 
         result.ShouldHaveValidationErrorFor(c => c.Code)
-            .WithErrorMessage("Position code already exists.");
+            .WithErrorMessage("Mã chức danh đã tồn tại.");
     }
 
     [Fact]

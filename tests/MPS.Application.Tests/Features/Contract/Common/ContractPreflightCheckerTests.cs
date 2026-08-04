@@ -161,7 +161,7 @@ public sealed class ContractPreflightCheckerTests
         var act = () => CreateSut().RunAsync(BuildInput(), CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainValidationException>()
-            .WithMessage("*EmployerParty*not active*");
+            .WithMessage("*EMPLOYER_PARTY_INACTIVE*");
     }
 
     // Case: SalaryGrade đã bị admin toggle IsActive=false → không cho HĐ mới gán bậc lương này.

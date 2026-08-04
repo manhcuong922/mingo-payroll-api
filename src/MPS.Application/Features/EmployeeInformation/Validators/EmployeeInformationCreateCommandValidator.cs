@@ -26,7 +26,7 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
             // #1 — trước đây chỉ có unique index ở DB ⇒ trùng CCCD nổ 500. Kiểm ở validator để trả 400.
             .MustAsync(async (citizenId, ct) =>
                 string.IsNullOrWhiteSpace(citizenId) || !await repository.CitizenIdExistsAsync(citizenId.Trim(), null, ct))
-            .WithMessage("CitizenId is already used by another employee.");
+            .WithMessage("Số CCCD đã được dùng cho nhân viên khác.");
 
         RuleFor(x => x.PermanentAddress)
             .NotEmpty().WithMessage("PermanentAddress is required.");
@@ -45,7 +45,7 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
             .MaximumLength(255).WithMessage("Email must not exceed 255 characters.")
             .MustAsync(async (email, ct) =>
                 string.IsNullOrWhiteSpace(email) || !await repository.EmailExistsAsync(email!.Trim(), null, ct))
-            .WithMessage("Email is already used by another employee.");
+            .WithMessage("Email đã được dùng cho nhân viên khác.");
 
         // MST / số sổ BHXH là ĐỊNH DANH DUY NHẤT của một cá nhân với cơ quan thuế và cơ quan BHXH
         // (Điều 30 k.3 Luật QLT 2019; Điều 96 Luật BHXH 2014). Trước đây không có ràng buộc nào —

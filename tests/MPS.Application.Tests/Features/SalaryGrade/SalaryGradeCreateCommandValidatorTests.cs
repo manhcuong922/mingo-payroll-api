@@ -122,19 +122,105 @@ public sealed class SalaryGradeCreateCommandValidatorTests
         result.ShouldNotHaveValidationErrorFor("BaseSalary");
     }
 
+    // ===== Ràng buộc bậc lương tăng dần trong cùng một chức danh =====
+
+    [Fact]
+    public async Task BaseSalary_Not_Greater_Than_Lower_Level_Is_Rejected()
+    {
+        var siblings = new[]
+        {
+            new MPS.Domain.Entities.SalaryGrade
+            {
+                Id = 10, PositionId = 1, Level = 2, BaseSalary = 8_000_000m, Currency = "VND", IsActive = true,
+            },
+        };
+        var validator = NewValidator(positionExists: true, siblings: siblings);
+
+        var result = await validator.TestValidateAsync(ValidCmd() with { Level = 3, BaseSalary = 8_000_000m });
+
+        result.ShouldHaveValidationErrorFor("BaseSalary")
+            .WithErrorMessage("Lương bậc 3 (8,000,000 đ) phải lớn hơn lương bậc 2 (8,000,000 đ).");
+    }
+
+    [Fact]
+    public async Task BaseSalary_Not_Less_Than_Upper_Level_Is_Rejected()
+    {
+        var siblings = new[]
+        {
+            new MPS.Domain.Entities.SalaryGrade
+            {
+                Id = 20, PositionId = 1, Level = 3, BaseSalary = 15_000_000m, Currency = "VND", IsActive = true,
+            },
+        };
+        var validator = NewValidator(positionExists: true, siblings: siblings);
+
+        var result = await validator.TestValidateAsync(ValidCmd() with { Level = 2, BaseSalary = 15_000_000m });
+
+        result.ShouldHaveValidationErrorFor("BaseSalary")
+            .WithErrorMessage("Lương bậc 2 (15,000,000 đ) phải nhỏ hơn lương bậc 3 (15,000,000 đ).");
+    }
+
+    [Fact]
+    public async Task BaseSalary_Strictly_Between_Neighbors_Is_Accepted()
+    {
+        var siblings = new[]
+        {
+            new MPS.Domain.Entities.SalaryGrade
+            {
+                Id = 30, PositionId = 1, Level = 1, BaseSalary = 6_000_000m, Currency = "VND", IsActive = true,
+            },
+            new MPS.Domain.Entities.SalaryGrade
+            {
+                Id = 31, PositionId = 1, Level = 3, BaseSalary = 12_000_000m, Currency = "VND", IsActive = true,
+            },
+        };
+        var validator = NewValidator(positionExists: true, siblings: siblings);
+
+        var result = await validator.TestValidateAsync(ValidCmd() with { Level = 2, BaseSalary = 9_000_000m });
+
+        result.ShouldNotHaveValidationErrorFor("BaseSalary");
+    }
+
+    [Fact]
+    public async Task Different_Currency_Siblings_Are_Skipped_By_Monotonicity()
+    {
+        var siblings = new[]
+        {
+            new MPS.Domain.Entities.SalaryGrade
+            {
+                Id = 40, PositionId = 1, Level = 1, BaseSalary = 20_000m, Currency = "USD", IsActive = true,
+            },
+        };
+        var validator = NewValidator(positionExists: true, siblings: siblings);
+
+        // 5tr VND < 20k USD về số học nhưng khác tệ nên không so được — không được ném lỗi
+        var result = await validator.TestValidateAsync(ValidCmd() with { Level = 2, BaseSalary = 6_000_000m });
+
+        result.ShouldNotHaveValidationErrorFor("BaseSalary");
+    }
+
     /// <summary>Vùng I theo Nghị định 74/2024 — khớp seed.</summary>
     private const decimal AppliedMinimumWage = 5_310_000m;
 
     private static SalaryGradeCreateCommandValidator NewValidator(
         bool positionExists,
-        bool hasActiveMinimumWage = true)
+        bool hasActiveMinimumWage = true,
+        IReadOnlyList<MPS.Domain.Entities.SalaryGrade>? siblings = null)
     {
         var repo = new Mock<IPositionRepository>();
         repo.Setup(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(positionExists
                 ? new MPS.Domain.Entities.Position { Id = 1, Code = "SE", Name = "Senior Engineer" }
                 : null);
-        return new SalaryGradeCreateCommandValidator(repo.Object, NewComplianceLookup(hasActiveMinimumWage));
+
+        var salaryRepo = new Mock<ISalaryGradeRepository>();
+        salaryRepo.Setup(r => r.GetAllAsync(It.IsAny<int?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(siblings ?? Array.Empty<MPS.Domain.Entities.SalaryGrade>());
+
+        return new SalaryGradeCreateCommandValidator(
+            repo.Object,
+            salaryRepo.Object,
+            NewComplianceLookup(hasActiveMinimumWage));
     }
 
     internal static IComplianceLookupService NewComplianceLookup(bool hasActiveMinimumWage = true)

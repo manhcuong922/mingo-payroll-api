@@ -14,5 +14,7 @@ public sealed record CreateDependentRegistrationRequestCommand(
     string? CitizenId,
     DateOnly? RegisteredFromDate,
     DateOnly? RegisteredToDate,
-    string? SupportingDocumentUrl,
+    DependentIdentityDocumentType? IdentityDocumentType,
+    string? IdentityDocumentNumber,
+    DateOnly? IdentityDocumentIssuedDate,
     string? Reason) : IRequest<int>;

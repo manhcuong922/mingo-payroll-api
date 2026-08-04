@@ -3370,6 +3370,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<DateOnly?>("IdentityDocumentIssuedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("IdentityDocumentNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<byte?>("IdentityDocumentType")
+                        .HasColumnType("tinyint");
+
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -3398,10 +3408,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     b.Property<byte>("Status")
                         .HasColumnType("tinyint");
-
-                    b.Property<string>("SupportingDocumentUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int?>("TargetDependentId")
                         .HasColumnType("int");
@@ -3467,6 +3473,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<string>("Gender")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateOnly?>("IdentityDocumentIssuedDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("IdentityDocumentNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<byte?>("IdentityDocumentType")
+                        .HasColumnType("tinyint");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()

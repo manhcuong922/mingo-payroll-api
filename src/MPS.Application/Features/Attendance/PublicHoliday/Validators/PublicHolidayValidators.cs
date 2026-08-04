@@ -11,10 +11,10 @@ public class CreatePublicHolidayCommandValidator : AbstractValidator<CreatePubli
         RuleFor(x => x.Description).MaximumLength(500);
         RuleFor(x => x.HolidayEndDate)
             .GreaterThanOrEqualTo(x => x.HolidayDate)
-            .WithMessage("HolidayEndDate must be on/after HolidayDate.");
+            .WithMessage("Ngày kết thúc kỳ nghỉ lễ phải sau hoặc cùng ngày bắt đầu.");
         RuleFor(x => x.HolidayEndDate.DayNumber - x.HolidayDate.DayNumber + 1)
             .LessThanOrEqualTo(366)
-            .WithMessage("Holiday range cannot exceed 366 days.");
+            .WithMessage("Kỳ nghỉ lễ không được dài quá 366 ngày.");
     }
 }
 
@@ -27,9 +27,9 @@ public class UpdatePublicHolidayCommandValidator : AbstractValidator<UpdatePubli
         RuleFor(x => x.Description).MaximumLength(500);
         RuleFor(x => x.HolidayEndDate)
             .GreaterThanOrEqualTo(x => x.HolidayDate)
-            .WithMessage("HolidayEndDate must be on/after HolidayDate.");
+            .WithMessage("Ngày kết thúc kỳ nghỉ lễ phải sau hoặc cùng ngày bắt đầu.");
         RuleFor(x => x.HolidayEndDate.DayNumber - x.HolidayDate.DayNumber + 1)
             .LessThanOrEqualTo(366)
-            .WithMessage("Holiday range cannot exceed 366 days.");
+            .WithMessage("Kỳ nghỉ lễ không được dài quá 366 ngày.");
     }
 }

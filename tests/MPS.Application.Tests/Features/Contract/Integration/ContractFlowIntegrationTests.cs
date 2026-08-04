@@ -494,6 +494,66 @@ public sealed class ContractFlowIntegrationTests
         files[1].FileName.Should().Be("v2.pdf");
     }
 
+    /// <summary>
+    /// Regression: HR tạo Draft với pháp nhân đang hoạt động, sau đó đóng pháp nhân đó
+    /// (set EffectiveTo). Kích hoạt HĐ phải bị chặn và không được upload PDF lên MinIO.
+    /// </summary>
+    [Fact]
+    public async Task Activate_Rejects_When_EmployerParty_No_Longer_Active()
+    {
+        using var fx = new ContractIntegrationFixture();
+        var (actor, employeeInfo, party, position, grade, _) = await fx.SeedBaselineAsync();
+
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(c => c.UserId).Returns(actor.Id);
+
+        var repo = new ContractRepository(fx.Db);
+        var lookup = new ContractLookupReader(fx.Db);
+        var preflight = new ContractPreflightChecker(lookup, repo);
+        var storage = new FakeFileStorageService();
+
+        var createHandler = new CreateContractCommandHandler(repo, preflight, currentUser.Object, new ContractNoGenerator(fx.Db));
+        var contractId = await createHandler.Handle(
+            ContractCommandFactory.ValidCreate(
+                employeeInformationId: employeeInfo.Id, employerPartyId: party.Id,
+                employerSignerUserId: actor.Id, positionId: position.Id,
+                salaryGradeId: grade.Id),
+            CancellationToken.None);
+
+        // Sau khi Draft được lưu, HR đóng pháp nhân.
+        party.EffectiveTo = DateTime.UtcNow.AddDays(-1);
+        await fx.Db.SaveChangesAsync();
+
+        var activateHandler = new ActivateContractCommandHandler(
+            repo, lookup, storage, currentUser.Object,
+            Mock.Of<IEmployeeInformationRepository>(),
+            Mock.Of<IEmployeeAccountProvisioner>(),
+            Mock.Of<IFirstLoginInvitationService>(),
+            Mock.Of<IEmailSender>(),
+            new NoopPayrollSourceChangeHandler(),
+            new NoopLeaveBalanceInitializer(),
+            NullLogger<ActivateContractCommandHandler>.Instance);
+
+        var pdfBytes = BuildFakePdfBytes();
+        var act = () => activateHandler.Handle(new ActivateContractCommand(
+            ContractId: contractId,
+            PdfStream: new MemoryStream(pdfBytes),
+            FileSizeBytes: pdfBytes.Length,
+            FileName: "x.pdf",
+            ContentType: "application/pdf",
+            SignedAt: DateTime.UtcNow,
+            SignedPlace: "HN",
+            SignedBySource: null), CancellationToken.None);
+
+        await act.Should().ThrowAsync<MPS.Domain.Exceptions.DomainValidationException>()
+            .WithMessage("*EMPLOYER_PARTY_INACTIVE*");
+
+        storage.Uploaded.Should().BeEmpty("inactive party must fail before MinIO upload");
+
+        var saved = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
+        saved.Status.Should().Be(ContractStatus.Draft, "activation was rejected — HĐ phải giữ nguyên Draft");
+    }
+
     private static byte[] BuildFakePdfBytes(string body = "fake-pdf-body")
     {
         var header = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D }; // %PDF-

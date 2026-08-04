@@ -87,6 +87,14 @@ public class ActivateContractCommandHandler : IRequestHandler<ActivateContractCo
         await PdfStreamValidator.ValidateAsync(
             request.PdfStream, request.FileSizeBytes, request.ContentType, cancellationToken: cancellationToken);
 
+        // Re-check EmployerParty ở thời điểm kích hoạt: HR có thể đã đóng (set EffectiveTo) pháp
+        // nhân sau khi lưu Draft. Không kiểm ở đây thì HĐ vẫn được kích hoạt với pháp nhân đã hết
+        // hiệu lực — HR phải sửa HĐ sang pháp nhân đang hoạt động trước khi kích hoạt lại.
+        if (!await _lookup.IsActiveContractPartyAsync(contract.EmployerPartyId, cancellationToken))
+            throw new DomainValidationException(
+                $"EMPLOYER_PARTY_INACTIVE: Pháp nhân {contract.EmployerPartyId} đã hết hiệu lực; " +
+                "không thể kích hoạt hợp đồng. Vui lòng chuyển hợp đồng sang một pháp nhân đang hoạt động rồi kích hoạt lại.");
+
         // Re-read SalaryGrade snapshot at activation moment (Plan §7.2 step 5).
         // Frozen value may differ from the one shown when the draft was first created
         // because HR may have updated the grade in between.

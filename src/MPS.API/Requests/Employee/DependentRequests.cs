@@ -13,7 +13,9 @@ public sealed record CreateDependentRegistrationRequest(
     string? CitizenId,
     DateOnly? RegisteredFromDate,
     DateOnly? RegisteredToDate,
-    string? SupportingDocumentUrl,
+    DependentIdentityDocumentType? IdentityDocumentType,
+    string? IdentityDocumentNumber,
+    DateOnly? IdentityDocumentIssuedDate,
     string? Reason);
 
 public sealed record ApproveDependentRegistrationBody(string? ReviewNote);

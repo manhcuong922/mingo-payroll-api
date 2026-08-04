@@ -13,7 +13,7 @@ public class AllowanceTypeCreateCommandValidator : AbstractValidator<AllowanceTy
             .MaximumLength(50).WithMessage("Code must not exceed 50 characters.")
             .Matches("^[A-Za-z0-9_\\-]+$").WithMessage("Code may only contain letters, digits, hyphen and underscore.")
             .MustAsync(async (code, ct) => !await repository.CodeExistsAsync(code.Trim(), null, ct))
-            .WithMessage("Code already exists.");
+            .WithMessage("Mã loại phụ cấp đã tồn tại.");
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")
