@@ -19,7 +19,8 @@
 
 # UI kiosk quét khuôn mặt. HTTPS là bắt buộc: getUserMedia chỉ hoạt động trên
 # secure context, mở qua http hay qua IP thuần là camera không bật được.
-{$KIOSK_DOMAIN} {
+# Domain đặt cứng (không phải secret) để khỏi phải khai lại trong .env.
+kiosk.operix.fun {
 	encode gzip zstd
 	reverse_proxy attendance-ui:80
 }
@@ -27,7 +28,7 @@
 # AI service. /process_frame, /extract_embedding, /reload_employees KHÔNG có auth,
 # nên chặn theo IP ở đây là lớp bảo vệ duy nhất — chỉ mạng công ty gọi được.
 # route{} để giữ đúng thứ tự viết (mặc định Caddy tự sắp xếp lại directive).
-{$AI_DOMAIN} {
+ai.operix.fun {
 	encode gzip zstd
 	route {
 		@blocked not remote_ip {$AI_ALLOWED_IPS}

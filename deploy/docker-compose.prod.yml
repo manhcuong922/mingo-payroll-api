@@ -14,11 +14,10 @@ services:
       APP_DOMAIN: ${APP_DOMAIN}
       API_DOMAIN: ${API_DOMAIN}
       S3_DOMAIN: ${S3_DOMAIN}
-      KIOSK_DOMAIN: ${KIOSK_DOMAIN}
-      AI_DOMAIN: ${AI_DOMAIN}
       # Dải IP được phép gọi AI service (cách nhau bằng dấu cách). Các endpoint
       # /process_frame, /extract_embedding, /reload_employees không có auth, nên đây
-      # là lớp chặn duy nhất — để rỗng là chặn hết.
+      # là lớp chặn duy nhất — để rỗng là chặn hết (fail-closed, Caddy vẫn chạy).
+      # Là biến vì mỗi nơi triển khai một IP khác, không đoán sẵn được.
       AI_ALLOWED_IPS: ${AI_ALLOWED_IPS}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
@@ -57,6 +56,11 @@ services:
       # Mật khẩu seed cho tài khoản 'ai-service'. Khai báo ở đây (thay vì để trong
       # env_file) để nó và SERVICE_PASSWORD của attendance-ai luôn cùng một giá trị.
       AiServiceAccount__Password: ${AI_SERVICE_PASSWORD}
+      # Không phải secret nên đặt cứng ở đây thay vì bắt điền lại trong .env.
+      # api gọi AI service nội bộ để nạp lại embedding sau khi duyệt đăng ký mặt.
+      AiService__BaseUrl: http://attendance-ai:5002
+      # Origin của kiosk quét mặt (index 0 = payroll UI, nằm trong .env).
+      Cors__AllowedOrigins__1: https://kiosk.operix.fun
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -68,26 +72,19 @@ services:
       - mingo
 
   # AI nhận diện khuôn mặt (Flask, cổng 5002). Không publish port; ra ngoài qua Caddy
-  # ({$AI_DOMAIN}) có gate IP, vào trong thì api gọi http://attendance-ai:5002.
+  # (ai.operix.fun) có gate IP, vào trong thì api gọi http://attendance-ai:5002.
   attendance-ai:
     # Docker Hub chứ không phải GHCR: 2 repo attendance thuộc tài khoản GitHub khác
     # với owner của api/ui, nên đẩy qua Docker Hub tránh hẳn chuyện lệch owner.
-    image: ${DOCKERHUB_NAMESPACE}/mingo-ai-services:${IMAGE_TAG:-latest}
+    image: thanhhui1709/mingo-ai-services:${IMAGE_TAG:-latest}
     container_name: mingo-attendance-ai
     restart: unless-stopped
-    # Khai báo tường minh thay vì env_file: .env — tránh đẩy chuỗi kết nối DB,
-    # secret MinIO/SMTP vào container này một cách không cần thiết.
     environment:
-      TZ: Asia/Ho_Chi_Minh
-      BACKEND_URL: http://api:8080
-      MODEL_DIR: /app/models
-      SERVICE_USERNAME: ${AI_SERVICE_USERNAME:-ai-service}
+      # TZ, BACKEND_URL, MODEL_DIR, SERVICE_USERNAME và các ngưỡng nhận diện đã bake
+      # sẵn trong image (xem ENV trong Dockerfile của repo attendance-tracking).
+      # Chỉ còn mật khẩu phải truyền lúc chạy: ENV trong image đọc được bằng
+      # `docker inspect` nên không bao giờ bake secret vào đó.
       SERVICE_PASSWORD: ${AI_SERVICE_PASSWORD}
-      CAMERA_ID: ${AI_CAMERA_ID:-1}
-      MATCH_THRESHOLD: ${AI_MATCH_THRESHOLD:-0.7}
-      LIVENESS_THRESHOLD: ${AI_LIVENESS_THRESHOLD:-0.5}
-      CHECKIN_COOLDOWN: ${AI_CHECKIN_COOLDOWN:-30}
-      LOG_LEVEL: ${AI_LOG_LEVEL:-INFO}
     volumes:
       # Model (~600MB) không nằm trong image; lần chạy đầu tải về đây rồi dùng lại
       # cho mọi lần deploy sau. Xoá volume này = phải tải lại từ đầu.
@@ -106,10 +103,12 @@ services:
     networks:
       - mingo
 
-  # UI kiosk quét khuôn mặt. Bắt buộc phục vụ qua HTTPS ({$KIOSK_DOMAIN}) vì
+  # UI kiosk quét khuôn mặt. Bắt buộc phục vụ qua HTTPS (kiosk.operix.fun) vì
   # getUserMedia chỉ chạy trên secure context.
   attendance-ui:
-    image: ${DOCKERHUB_NAMESPACE}/mingo-face-scan:${IMAGE_TAG:-latest}
+    # URL của API và AI service đã inline vào bundle lúc build image (Vite), nên
+    # container này không cần biến môi trường nào.
+    image: thanhhui1709/mingo-face-scan:${IMAGE_TAG:-latest}
     container_name: mingo-attendance-ui
     restart: unless-stopped
     depends_on:
