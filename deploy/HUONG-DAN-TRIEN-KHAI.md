@@ -293,13 +293,21 @@ Module này gồm 2 container thêm vào stack: `attendance-ai` (Flask, nhận d
 
 ### 7B.1. Repo & CI/CD
 
-| Repo                                    | Image GHCR                                          | Lệnh deploy trên VPS        |
-|-----------------------------------------|-----------------------------------------------------|-----------------------------|
-| `mingo-payroll-attendance-tracking`     | `mingo-payroll-attendance-tracking`                 | `./deploy.sh attendance-ai` |
-| `mingo-payroll-attendance-tracking-ui`  | `mingo-payroll-attendance-tracking-ui`              | `./deploy.sh attendance-ui` |
+| Repo                                    | Image (Docker Hub)                        | Lệnh deploy trên VPS        |
+|-----------------------------------------|-------------------------------------------|-----------------------------|
+| `mingo-payroll-attendance-tracking`     | `thanhhui1709/mingo-ai-services`          | `./deploy.sh attendance-ai` |
+| `mingo-payroll-attendance-tracking-ui`  | `thanhhui1709/mingo-face-scan`            | `./deploy.sh attendance-ui` |
 
-Cả 2 repo phải nằm dưới owner `luans1mple` để dùng chung `REGISTRY_OWNER` và
-credential GHCR đã login ở Bước 3. Mỗi repo cần nhánh `dev` (CI) và `main` (deploy).
+Khác với `api`/`ui` (dùng GHCR), 2 image này đẩy lên **Docker Hub**: repo GitHub của
+chúng thuộc tài khoản khác owner `luans1mple`, đi qua Docker Hub thì không phải
+transfer repo. Mỗi repo cần nhánh `dev` (CI) và `main` (deploy), cộng thêm:
+
+- Secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (Docker Hub → Account Settings →
+  Personal access tokens, quyền **Read & Write**)
+- Variable: `DOCKERHUB_NAMESPACE` = `thanhhui1709`
+
+Nếu 2 repo Docker Hub để **Public** thì VPS pull không cần login. Nếu Private, chạy
+một lần trên VPS: `docker login -u thanhhui1709`.
 
 > Workflow của 2 repo này **không scp file nào** lên VPS: `docker-compose.prod.yml`,
 > `Caddyfile`, `deploy.sh` thuộc repo `mingo-payroll-api`. Sửa stack ⇒ commit ở repo

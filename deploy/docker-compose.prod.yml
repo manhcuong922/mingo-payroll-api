@@ -70,7 +70,9 @@ services:
   # AI nhận diện khuôn mặt (Flask, cổng 5002). Không publish port; ra ngoài qua Caddy
   # ({$AI_DOMAIN}) có gate IP, vào trong thì api gọi http://attendance-ai:5002.
   attendance-ai:
-    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-attendance-tracking:${IMAGE_TAG:-latest}
+    # Docker Hub chứ không phải GHCR: 2 repo attendance thuộc tài khoản GitHub khác
+    # với owner của api/ui, nên đẩy qua Docker Hub tránh hẳn chuyện lệch owner.
+    image: ${DOCKERHUB_NAMESPACE}/mingo-ai-services:${IMAGE_TAG:-latest}
     container_name: mingo-attendance-ai
     restart: unless-stopped
     # Khai báo tường minh thay vì env_file: .env — tránh đẩy chuỗi kết nối DB,
@@ -107,7 +109,7 @@ services:
   # UI kiosk quét khuôn mặt. Bắt buộc phục vụ qua HTTPS ({$KIOSK_DOMAIN}) vì
   # getUserMedia chỉ chạy trên secure context.
   attendance-ui:
-    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-attendance-tracking-ui:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_NAMESPACE}/mingo-face-scan:${IMAGE_TAG:-latest}
     container_name: mingo-attendance-ui
     restart: unless-stopped
     depends_on:
