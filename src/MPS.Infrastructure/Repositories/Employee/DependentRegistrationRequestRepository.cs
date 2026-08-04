@@ -76,7 +76,9 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
         tracked.CitizenId = entity.CitizenId;
         tracked.RegisteredFromDate = entity.RegisteredFromDate;
         tracked.RegisteredToDate = entity.RegisteredToDate;
-        tracked.SupportingDocumentUrl = entity.SupportingDocumentUrl;
+        tracked.IdentityDocumentType = entity.IdentityDocumentType;
+        tracked.IdentityDocumentNumber = entity.IdentityDocumentNumber;
+        tracked.IdentityDocumentIssuedDate = entity.IdentityDocumentIssuedDate;
         tracked.Status = entity.Status;
         tracked.Reason = entity.Reason;
         tracked.ReviewNote = entity.ReviewNote;
@@ -168,8 +170,17 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
     {
         if (request.DateOfBirth is null || request.Relationship is null || request.RegisteredFromDate is null)
             throw new DomainValidationException("Register cần DateOfBirth, Relationship, RegisteredFromDate.");
-        if (string.IsNullOrWhiteSpace(request.SupportingDocumentUrl))
-            throw new DomainValidationException("Register cần SupportingDocumentUrl (giấy khai sinh/CCCD).");
+
+        // Chưa có MST riêng thì phải có bộ 3 trường giấy tờ chứng minh (đối xứng với handler nộp đơn).
+        var hasTaxId = !string.IsNullOrWhiteSpace(request.TaxIdentificationNumber);
+        var hasIdentityDoc = request.IdentityDocumentType.HasValue
+            && !string.IsNullOrWhiteSpace(request.IdentityDocumentNumber)
+            && request.IdentityDocumentIssuedDate.HasValue;
+        if (!hasTaxId && !hasIdentityDoc)
+        {
+            throw new DomainValidationException(
+                "Người phụ thuộc chưa có mã số thuế thì phải có loại giấy tờ, số giấy tờ và ngày cấp để chứng minh thân nhân.");
+        }
 
         await EnsureCitizenIdNotClaimedAsync(
             request.CitizenId, request.EmployeeInformationId, excludeDependentId: null, cancellationToken);
@@ -183,6 +194,9 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
             Relationship = request.Relationship.Value,
             TaxIdentificationNumber = request.TaxIdentificationNumber,
             CitizenId = request.CitizenId,
+            IdentityDocumentType = request.IdentityDocumentType,
+            IdentityDocumentNumber = request.IdentityDocumentNumber,
+            IdentityDocumentIssuedDate = request.IdentityDocumentIssuedDate,
             RegisteredFromDate = request.RegisteredFromDate.Value,
             RegisteredToDate = request.RegisteredToDate,
             IsActive = true,
@@ -230,6 +244,16 @@ public class DependentRegistrationRequestRepository : IDependentRegistrationRequ
             dependent.RegisteredFromDate = request.RegisteredFromDate.Value;
         if (request.RegisteredToDate.HasValue)
             dependent.RegisteredToDate = request.RegisteredToDate;
+
+        // Giấy tờ chứng minh: cập nhật khi đơn có gửi. Ba trường đi cùng bộ nên chỉ ghi đè khi đủ.
+        if (request.IdentityDocumentType.HasValue
+            && !string.IsNullOrWhiteSpace(request.IdentityDocumentNumber)
+            && request.IdentityDocumentIssuedDate.HasValue)
+        {
+            dependent.IdentityDocumentType = request.IdentityDocumentType;
+            dependent.IdentityDocumentNumber = request.IdentityDocumentNumber;
+            dependent.IdentityDocumentIssuedDate = request.IdentityDocumentIssuedDate;
+        }
 
         dependent.UpdatedAt = nowUtc;
         dependent.UpdatedByUserId = userId;

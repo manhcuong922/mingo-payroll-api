@@ -21,7 +21,8 @@ public class DependentRegistrationRequestEntityConfiguration : IEntityTypeConfig
         builder.Property(e => e.Relationship).HasConversion<byte>();
         builder.Property(e => e.TaxIdentificationNumber).HasMaxLength(13);
         builder.Property(e => e.CitizenId).HasMaxLength(12);
-        builder.Property(e => e.SupportingDocumentUrl).HasMaxLength(1000);
+        builder.Property(e => e.IdentityDocumentType).HasConversion<byte?>();
+        builder.Property(e => e.IdentityDocumentNumber).HasMaxLength(50);
 
         builder.Property(e => e.Status).HasConversion<byte>().IsRequired();
         builder.Property(e => e.Reason).HasMaxLength(500);

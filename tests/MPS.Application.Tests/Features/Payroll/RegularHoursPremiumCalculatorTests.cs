@@ -15,9 +15,13 @@ public sealed class RegularHoursPremiumCalculatorTests
     private const decimal HourlyRate = 50_000m;
 
     // Hằng số luật hiện hành: thường 100%, nghỉ tuần 200%, lễ 300%, phụ cấp đêm 30%.
+    /// <summary>Ngày mặc định cho các ca không quan tâm tới mốc đổi luật.</summary>
+    private static readonly DateOnly AnyDay = new(2026, 6, 10);
+
     private static LaborLawConstantsSnapshot Labor(
-        decimal normal = 100m, decimal weeklyRest = 200m, decimal holiday = 300m, decimal nightSurcharge = 30m) =>
-        new(VersionId: 1, ValidFrom: new DateOnly(2021, 1, 1),
+        decimal normal = 100m, decimal weeklyRest = 200m, decimal holiday = 300m, decimal nightSurcharge = 30m,
+        int versionId = 1) =>
+        new(VersionId: versionId, ValidFrom: new DateOnly(2021, 1, 1),
             ProbationSalaryMinPercent: 85m, OvertimeNightExtraPercent: 20m,
             NightWorkSurchargePercent: nightSurcharge, OvertimeNormalUpliftPercent: 50m,
             NightStartTime: new TimeOnly(22, 0), NightEndTime: new TimeOnly(6, 0),
@@ -28,12 +32,16 @@ public sealed class RegularHoursPremiumCalculatorTests
             LegalReference: "BLLĐ 2019 Đ.98");
 
     private static RegularHoursPremiumCalculator.WorkDaySegment Seg(
-        DayType dayType, decimal dayHours, decimal nightHours) => new(dayType, dayHours, nightHours);
+        DayType dayType, decimal dayHours, decimal nightHours) => new(AnyDay, dayType, dayHours, nightHours);
+
+    private static RegularHoursPremiumCalculator.WorkDaySegment SegOn(
+        DateOnly date, DayType dayType, decimal dayHours, decimal nightHours) =>
+        new(date, dayType, dayHours, nightHours);
 
     private static RegularHoursPremiumCalculator.Result Run(
         LaborLawConstantsSnapshot labor,
         params RegularHoursPremiumCalculator.WorkDaySegment[] segments) =>
-        RegularHoursPremiumCalculator.Accumulate(segments, HourlyRate, labor);
+        RegularHoursPremiumCalculator.Accumulate(segments, HourlyRate, LaborLawTimeline.Uniform(labor));
 
     [Fact]
     public void NgayThuong_KhongPhuTroi()
@@ -101,7 +109,7 @@ public sealed class RegularHoursPremiumCalculatorTests
     {
         var result = RegularHoursPremiumCalculator.Accumulate(
             new[] { Seg(DayType.PublicHoliday, 8m, 8m) },
-            hourlyRate: 0m, Labor());
+            hourlyRate: 0m, LaborLawTimeline.Uniform(Labor()));
 
         result.DayTypePremium.Should().Be(0m);
         result.NightPremium.Should().Be(0m);
@@ -121,5 +129,57 @@ public sealed class RegularHoursPremiumCalculatorTests
 
         current.NightPremium.Should().Be(120_000m);
         updated.NightPremium.Should().Be(160_000m);       // 8 × 50k × 40%
+    }
+
+    // ===== [Mục 1] Luật đổi GIỮA KỲ — phụ trội/phụ cấp đêm tra theo NGÀY CÔNG =====
+
+    private static readonly DateOnly BeforeChange = new(2026, 6, 14);
+    private static readonly DateOnly OnChange = new(2026, 6, 15);
+
+    /// <summary>Kỳ 06/2026: tới 14/06 lễ 300% + đêm 30%, từ 15/06 lễ 400% + đêm 40%.</summary>
+    private static LaborLawTimeline SplitJune()
+    {
+        var oldLaw = Labor(versionId: 1);
+        var newLaw = Labor(holiday: 400m, nightSurcharge: 40m, versionId: 2);
+        var byDate = new Dictionary<DateOnly, LaborLawConstantsSnapshot>();
+        for (var d = new DateOnly(2026, 6, 1); d <= new DateOnly(2026, 7, 1); d = d.AddDays(1))
+            byDate[d] = d.Month == 7 || d.Day >= 15 ? newLaw : oldLaw;
+        return new LaborLawTimeline(byDate, newLaw);
+    }
+
+    [Fact]
+    public void LuatDoiGiuaKy_CaLeTruocMoc_GiuSanCu()
+    {
+        // Ca 8h ngày LỄ 14/06: sàn cũ 300% ⇒ phụ trội 8 × 50k × 200% = 800k (không phải 1.2tr).
+        var result = RegularHoursPremiumCalculator.Accumulate(
+            new[] { SegOn(BeforeChange, DayType.PublicHoliday, 8m, 0m) }, HourlyRate, SplitJune());
+
+        result.DayTypePremium.Should().Be(800_000m);
+    }
+
+    [Fact]
+    public void LuatDoiGiuaKy_CaLeTuMocTroDi_AnSanMoi()
+    {
+        // Cùng ca 8h ngày LỄ nhưng 15/06: sàn mới 400% ⇒ 8 × 50k × 300% = 1.2tr.
+        var result = RegularHoursPremiumCalculator.Accumulate(
+            new[] { SegOn(OnChange, DayType.PublicHoliday, 8m, 0m) }, HourlyRate, SplitJune());
+
+        result.DayTypePremium.Should().Be(1_200_000m);
+    }
+
+    [Fact]
+    public void LuatDoiGiuaKy_PhuCapDem_TinhTheoTungNgay()
+    {
+        // 8h đêm ngày thường mỗi bên mốc: 30% cho 14/06 + 40% cho 15/06 = 120k + 160k.
+        var result = RegularHoursPremiumCalculator.Accumulate(
+            new[]
+            {
+                SegOn(BeforeChange, DayType.Normal, 0m, 8m),
+                SegOn(OnChange, DayType.Normal, 0m, 8m),
+            },
+            HourlyRate, SplitJune());
+
+        result.NightPremium.Should().Be(280_000m);
+        result.DayTypePremium.Should().Be(0m);
     }
 }

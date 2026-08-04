@@ -7,6 +7,8 @@ using MPS.Application.Features.Attendance.Attendance.Commands;
 using MPS.Application.Features.Attendance.Attendance.Queries;
 using MPS.Application.Features.Attendance.AttendanceSetting.Commands;
 using MPS.Application.Features.Attendance.AttendanceSetting.Queries;
+using MPS.Application.Features.Attendance.AttendanceSheet.Commands;
+using MPS.Application.Features.Attendance.AttendanceSheet.Queries;
 using MPS.Domain.Constants;
 
 namespace MPS.API.Controllers;
@@ -212,6 +214,69 @@ public class AttendanceController : ControllerBase
             request.Status,
             request.Notes, request.OverrideReason), cancellationToken);
         if (!updated) return NotFound();
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Xuất "Bảng chấm công theo kỳ" .xlsx — layout chuẩn VN (4-row/NV dynamic theo ca, merged
+    /// cells, freeze pane F8, chú thích ký hiệu cuối sheet). Row TC (Tăng ca) tự aggregate từ
+    /// AttendanceRecord có OvertimeRequestId != NULL — read-only.
+    /// </summary>
+    [HttpGet("sheet/export")]
+    [HasPermission(Permissions.AttendanceReadAll)]
+    public async Task<IActionResult> ExportSheet(
+        [FromQuery] DateOnly fromDate,
+        [FromQuery] DateOnly toDate,
+        [FromQuery] int? departmentId,
+        CancellationToken cancellationToken)
+    {
+        var file = await _mediator.Send(
+            new ExportAttendanceSheetQuery(fromDate, toDate, departmentId), cancellationToken);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    /// <summary>
+    /// Bước 1/2 import: upload .xlsx → parse + resolve + build diff. Trả previewId cache 15p.
+    /// KHÔNG ghi DB. FE render diff cho HR review trước khi Confirm.
+    /// </summary>
+    [HttpPost("sheet/import")]
+    [HasPermission(Permissions.AttendanceUpdateAll)]
+    [RequestSizeLimit(10 * 1024 * 1024)] // 10 MB
+    public async Task<IActionResult> ImportSheetPreview(
+        IFormFile file,
+        [FromQuery] DateOnly fromDate,
+        [FromQuery] DateOnly toDate,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { code = "EMPTY_FILE", message = "Vui lòng chọn file .xlsx." });
+
+        using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(
+            new PreviewAttendanceSheetImportCommand(stream, fromDate, toDate), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>Bước 2/2 import: apply diff đã cache. Skip locked, transaction 1-shot.</summary>
+    [HttpPost("sheet/import/{previewId}/confirm")]
+    [HasPermission(Permissions.AttendanceUpdateAll)]
+    public async Task<IActionResult> ImportSheetConfirm(
+        string previewId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new ConfirmAttendanceSheetImportCommand(previewId), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>Hủy phiên preview — xóa cache ngay. Idempotent (không lỗi nếu đã expire).</summary>
+    [HttpDelete("sheet/import/{previewId}")]
+    [HasPermission(Permissions.AttendanceUpdateAll)]
+    public async Task<IActionResult> ImportSheetCancel(
+        string previewId,
+        CancellationToken cancellationToken)
+    {
+        await _mediator.Send(new CancelAttendanceSheetImportCommand(previewId), cancellationToken);
         return NoContent();
     }
 }

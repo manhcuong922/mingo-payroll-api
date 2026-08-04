@@ -4,7 +4,7 @@
 **Project:** `mingo-payroll-api` (.NET 8, Clean Architecture, EF Core, MediatR CQRS) + `mingo-payroll-ui` (React/Vite)
 **Module:** Attendance ↔ Payroll
 **Scope:** View "Bảng chấm công theo kỳ" + import/export Excel
-**Last updated:** 2026-07-20
+**Last updated:** 2026-08-03
 
 ---
 
@@ -79,12 +79,23 @@ GET /api/attendance/sheet/export?fromDate=2026-07-01&toDate=2026-07-31&departmen
 ```
 
 - Handler: `ExportAttendanceSheetQuery` trong `Application/Features/Attendance/Queries/`.
-- Reuse `IAttendanceRecordRepository.GetForSummaryByEmployeesAsync` (đã có từ `monthly-attendance-summary-plan.md`) nếu match, hoặc thêm method mới `GetRangeByEmployeesAsync(empIds, from, to, ct)` include `ShiftTemplate`.
+- Data sources (UNION theo `EmpId`):
+  - `EmployeeShiftAssignment` trong `[fromDate, toDate]` → tập ca đã phân qua lịch.
+  - `AttendanceRecord` trong `[fromDate, toDate]` (distinct `ShiftTemplateId`) → tập ca đã có record (bao gồm chấm tay ngoài lịch, để không mất data khi export–import round-trip).
+  - **UNION 2 tập** → danh sách ca hiển thị cho NV, sort theo `ShiftTemplate.StartTime`.
+  - NV không thuộc cả 2 tập → 1 row **placeholder** cột `Ca` = `"(Chưa phân ca)"`, các ô ngày để trống.
 - Excel writer: reuse thư viện đang dùng cho `PayrollController.export` (kiểm tra `ExportPayrollPeriodQuery.cs` để xem lib nào — ClosedXML hay EPPlus).
-- Layout sheet Excel:
-  - Header row 1: `Mã NV | Họ tên | Phòng ban | 01/07 | 02/07 | ... | 31/07 | Tổng công | Tổng giờ`
-  - Mỗi cell ngày: string ngắn `"CN1 8h"` hoặc `"—"` / `"L"` (nghỉ) / `"P"` (phép). Format cụ thể chốt ở §5.
-  - Freeze header + 3 cột đầu.
+- Layout sheet Excel — **format chuẩn VN** (tham chiếu `docs/samples/bang-cham-cong-thang-08-2026-mau.xlsx`):
+  - Row 4 merged `B4:AJ4`: title `"BẢNG CHẤM CÔNG THÁNG MM/YYYY"`.
+  - Row 6 header cột: `TT | Mã NV | Họ tên | Chức vụ | Ca | 1 | 2 | ... | N | Tổng công`.
+  - Row 7 sub-header (dưới cột ngày): `T2/T3/T4/T5/T6/T7/CN` theo thứ thực tế của ngày.
+  - Body — mỗi NV chiếm `(N_ca + 1)` rows liên tiếp:
+    - `N_ca` rows đầu: mỗi row = 1 `ShiftTemplate.Code` (VD `CA-SANG`, `CA-CHIEU`, `CA-DEM`), ô ngày điền ký hiệu theo §3.2.4 hoặc rỗng.
+    - Row cuối: cột `Ca` = `"TC"` (Tăng ca) — số giờ OT/ngày, aggregate từ `AttendanceRecord` có `OvertimeRequestId != NULL` (**read-only ở MVP**, import bỏ qua).
+  - Merged cells: `A/B/C/D` span `(N_ca + 1)` rows cho mỗi NV.
+  - Freeze pane tại `E8` (freeze 2 hàng header + 4 cột đầu `TT | Mã NV | Họ tên | Chức vụ`).
+  - Cột `Tổng công` cuối: pre-compute từ ký hiệu (`X = 1`, `1/2 = 0.5`, `P/V/L = 0`).
+  - Block cuối sheet: chú thích ký hiệu (xem §3.2.4).
 
 #### 3.2.2. Endpoint import
 
@@ -101,17 +112,48 @@ Pattern **preview-confirm 2 bước**, tương tự `PreviewMonthlyScheduleImpor
 
 - Preview lưu tạm vào Redis / MemoryCache 15 phút, key = `previewId` (GUID).
 - Validation:
-  - NV phải tồn tại và active.
+  - NV phải tồn tại và active (lookup theo `Mã NV` cột B).
+  - `ShiftTemplate.Code` ở cột E phải tồn tại trong DB (trừ giá trị đặc biệt `"TC"` và `"(Chưa phân ca)"`).
   - `WorkDate` phải nằm trong range param.
   - Ô đã có `AttendanceRecord` với `Status ∈ {Locked, Approved}` → skip + báo trong `conflicts`.
-  - Format giờ phải parse được (chấp nhận `"8"`, `"8h"`, `"8.5"`, `"8:30"`).
-- Confirm: upsert `AttendanceRecord` (composite key `(EmpId, WorkDate)`), transaction 1 shot.
+  - Ký hiệu ô phải thuộc bộ hợp lệ (xem §3.2.4).
+- Row `"TC"` (Tăng ca): **bỏ qua toàn bộ khi import** — không tạo/update `OvertimeRequest` từ file này (workflow OT có form phê duyệt riêng).
+- Row `"(Chưa phân ca)"`: bỏ qua, không tạo record.
+- **Policy overwrite/no-op (hybrid)**:
+  - Ô Excel **có value** → **overwrite** record cũ (kể cả khi khác `Status`), bất kể record cũ được tạo bằng gì.
+  - Ô Excel **rỗng** → **no-op**, giữ nguyên record cũ (không xóa). Lý do: ô rỗng có 2 nghĩa lẫn nhau ("NV không thuộc ca này" hoặc "HR chưa điền") — không phân biệt được → an toàn = giữ. Muốn xóa record phải làm ở web UI, không qua import.
+- **Preview response phải trả về diff bắt buộc** — mỗi ô có thay đổi:
+  ```
+  { cell: "S8", empId, empCode, workDate, shiftCode,
+    oldSymbol: "X" | null, newSymbol: "P",
+    conflict: false | "locked" | "approved" }
+  ```
+  FE render bảng diff cho HR review trước khi Confirm.
+- Confirm: upsert `AttendanceRecord` (composite key `(EmpId, WorkDate, ShiftTemplateId)`), transaction 1 shot.
 
 #### 3.2.3. Không đụng
 
 - `PayrollDataCollector` giữ nguyên (vẫn query range).
 - `PayrollPeriod` giữ nguyên `(Year, Month)`.
 - `AttendanceRule`, `IDayTypeResolver` — chỉ đọc.
+- `OvertimeRequest` — chỉ đọc để aggregate row TC khi export; import không đụng.
+
+#### 3.2.4. Bộ ký hiệu ô (tạm thời, có thể mở rộng)
+
+| Ký hiệu | Nghĩa | Map `AttendanceStatus` | Ghi chú |
+|---|---|---|---|
+| `X` | Đi làm đủ giờ | `Present` | Có `CheckIn/CheckOut` khớp shift; giờ công = `ShiftTemplate.StandardHours` |
+| `P` | Nghỉ phép (có phép) | `OnLeave` | Cần có `LeaveRequest` được duyệt (validate ở confirm) |
+| `V` | Vắng không phép | `Absent` | Không tính công |
+| `M` | Đi muộn | `Late` | Đi làm nhưng check-in muộn hơn shift start |
+| `S` | Về sớm | `EarlyLeave` | Đi làm nhưng check-out sớm hơn shift end |
+| `1/2` | Nửa ca | `HalfDay` | Giờ công = `ShiftTemplate.StandardHours / 2` |
+| `L` | Nghỉ lễ có lương | (không tạo record) | Chỉ hiển thị cho HR; ngày lễ đã có `PublicHoliday` xử lý ở payroll |
+| (rỗng) | Không tạo/không đụng record | — | Import bỏ qua (no-op) — xem policy §3.2.2 |
+
+**Không hỗ trợ** ký hiệu ghép (VD `MS` = vừa muộn vừa sớm) — quá edge case; HR chọn ký hiệu nào ưu tiên (thường `M`).
+
+Block "Chú thích ký hiệu" render ở cuối sheet Excel (từ row 22 trong file mẫu) — giúp HR đọc trực tiếp trên file mà không cần tài liệu ngoài.
 
 ### 3.3. Frontend
 
@@ -154,11 +196,17 @@ Pattern **preview-confirm 2 bước**, tương tự `PreviewMonthlyScheduleImpor
 ### 3.5. Tasks (breakdown để track)
 
 **Backend**
-- [ ] `ExportAttendanceSheetQuery` + handler + Excel writer.
-- [ ] `PreviewAttendanceSheetImportCommand` + handler + preview cache.
-- [ ] `ConfirmAttendanceSheetImportCommand` + handler + upsert logic.
+- [ ] `ExportAttendanceSheetQuery` + handler + Excel writer (layout 4-row/NV, merged cells, freeze `E8`, block chú thích cuối sheet).
+- [ ] Query builder: UNION `EmployeeShiftAssignment` ∪ `AttendanceRecord` distinct `ShiftTemplateId` per NV; placeholder row cho NV không có ca; aggregate OT/ngày cho row TC.
+- [ ] `PreviewAttendanceSheetImportCommand` + handler + preview cache (Redis/MemoryCache 15 phút).
+  - Parser đọc merged cells, group `N_ca` rows/NV theo cột `Ca`.
+  - Skip row `"TC"` và row `"(Chưa phân ca)"`.
+  - Map ký hiệu → `AttendanceStatus` theo §3.2.4 (`X→Present`, `P→OnLeave`, `V→Absent`, `M→Late`, `S→EarlyLeave`, `1/2→HalfDay`, `L→skip`).
+  - Build diff list: chỉ include ô có thay đổi (old ≠ new), skip ô Excel rỗng.
+- [ ] `ConfirmAttendanceSheetImportCommand` + handler + upsert theo key `(EmpId, WorkDate, ShiftTemplateId)`.
+  - Policy hybrid: overwrite khi cell có value, no-op khi cell rỗng, skip khi record `Locked/Approved`.
 - [ ] `AttendanceController` — thêm 3 endpoint.
-- [ ] Unit test parser Excel (giờ, NV code lookup).
+- [ ] Unit test parser Excel (merged cells, symbol map, TC skip, placeholder skip).
 - [ ] Integration test preview → confirm happy path + conflict path.
 
 **Frontend**
@@ -251,10 +299,19 @@ Ghi lại để lần sau bàn tiếp:
 
 ## 5. Quyết định / Câu hỏi mở
 
-- [ ] Excel lib: chốt ClosedXML hay EPPlus (check `ExportPayrollPeriodQuery` trước).
-- [ ] Excel cell format: `"CN1 8h"` (compact) hay 2 sub-column `Ca | Giờ` per ngày (verbose)? Compact dễ nhìn tổng thể; verbose dễ import lại.
-- [ ] Import policy: overwrite hết, hay chỉ update ô trống, hay hỏi user per conflict?
-- [ ] Bind `fromDate/toDate` với `PayrollPeriod` có đưa vào MVP không, hay defer?
+**Đã chốt (2026-08-04):**
+- [x] Excel format: **4-row/NV chuẩn VN** (mỗi ca 1 row + 1 row TC × N cột ngày), không dùng compact `"CN1 8h"`. File mẫu: `docs/samples/bang-cham-cong-thang-08-2026-mau.xlsx`.
+- [x] Nguồn ca hiển thị: **UNION** `EmployeeShiftAssignment` ∪ `AttendanceRecord` (distinct `ShiftTemplateId`) trong range.
+- [x] NV chưa phân ca trong kỳ: **render 1 row placeholder** `"(Chưa phân ca)"`, không skip khỏi bảng.
+- [x] Row `TC` (Tăng ca): **read-only ở MVP** — export điền từ `OvertimeRequest` đã duyệt, import bỏ qua.
+- [x] Bộ ký hiệu: `X/P/V/M/1-2/L` (xem §3.2.4). Có thể mở rộng khi có yêu cầu.
+- [x] Bind với `PayrollPeriod`: **defer** khỏi MVP.
+- [x] Excel lib: **`DocumentFormat.OpenXml` v3.2.0** (đã dùng ở `PayrollExcelExporter`, `OrderEvaluationExcelService`; là package Excel duy nhất trong repo). Reuse `PayrollExcelCells.cs` + `PayrollExcelStyles.cs` cho attendance builder.
+- [x] Shift code trong file mẫu: **`CA-SANG` / `CA-CHIEU` / `CA-DEM`** — khớp `DatabaseSeeder.SeedDefaultShiftTemplatesAsync` (`DatabaseSeeder.cs:1206-1251`). File mẫu đã regen (2026-08-04) với 3 NV × 4 rows/NV, block chú thích ký hiệu ở cuối sheet, freeze pane `F8`.
+- [x] Import policy khi ô đã có record chưa lock: **hybrid** — cell có value → overwrite; cell rỗng → no-op (giữ record cũ, không xóa); `Locked/Approved` → skip. **Preview response bắt buộc trả về diff list** (old → new symbol per cell) để HR review trước Confirm. Xem chi tiết §3.2.2.
+- [x] Ký hiệu `M/S`: **tách 2 ký hiệu riêng** — `M` = `Late` (đi muộn), `S` = `EarlyLeave` (về sớm). Không hỗ trợ ghép `MS`.
+
+**Còn treo:** (không còn)
 
 ---
 
@@ -263,4 +320,5 @@ Ghi lại để lần sau bàn tiếp:
 - `docs/plans/monthly-attendance-summary-plan.md` — tab "Bảng chấm công tháng" (summary aggregate); tab `sheet` ở plan này là view **raw record theo ngày**, khác nhau về mục đích.
 - `docs/plans/monthly-payroll-implementation-plan.md` — payroll period + calculator.
 - `docs/plans/attendance-edit-lock-settings-plan.md` — import phải tôn trọng lock.
+- `docs/samples/bang-cham-cong-thang-08-2026-mau.xlsx` — file mẫu tham chiếu Excel layout (4-row/NV, header 2 hàng, merged cells).
 - Precedent: `MonthlyScheduleImportDialog` (schedule import), `PublicHolidayImportDialog` (holiday import), `ExportPayrollPeriodQuery` (Excel export).

@@ -30,8 +30,11 @@ public class DependentRegistrationRequest
     public DateOnly? RegisteredFromDate { get; set; }
     public DateOnly? RegisteredToDate { get; set; }
 
-    /// <summary>Bắt buộc cho Register — giấy khai sinh / CCCD người phụ thuộc.</summary>
-    public string? SupportingDocumentUrl { get; set; }
+    // Thông tin giấy tờ chứng minh — dùng khi người phụ thuộc chưa có mã số thuế riêng
+    // (ví dụ trẻ nhỏ chưa cấp MST). Cả 3 trường đi cùng nhau, hoặc cùng null hoặc cùng có.
+    public EmployeeEnums.DependentIdentityDocumentType? IdentityDocumentType { get; set; }
+    public string? IdentityDocumentNumber { get; set; }
+    public DateOnly? IdentityDocumentIssuedDate { get; set; }
 
     public EmployeeEnums.DependentRequestStatus Status { get; set; }
 

@@ -145,6 +145,15 @@ public static class InfrastructureServiceRegistration
             MPS.Infrastructure.Services.Payroll.PayrollExcelExporter>();
         services.AddSingleton<IPayrollLawChangeNoteBuilder, PayrollLawChangeNoteBuilder>();
 
+        // Attendance sheet export/import (Excel) — Exporter/Parser singleton (không state), Cache singleton.
+        services.AddSingleton<MPS.Application.Common.Interfaces.Attendance.IAttendanceSheetExcelExporter,
+            MPS.Infrastructure.Services.AttendanceSheet.AttendanceSheetExcelExporter>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.Attendance.IAttendanceSheetExcelParser,
+            MPS.Infrastructure.Services.AttendanceSheet.AttendanceSheetExcelParser>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.Attendance.IAttendanceSheetImportCache,
+            MPS.Infrastructure.Services.AttendanceSheet.AttendanceSheetImportCache>();
+        services.AddScoped<MPS.Application.Features.Attendance.AttendanceSheet.Common.AttendanceSheetDataCollector>();
+
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();

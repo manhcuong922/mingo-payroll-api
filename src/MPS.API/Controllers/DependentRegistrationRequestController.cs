@@ -74,7 +74,9 @@ public class DependentRegistrationRequestController : ControllerBase
             request.CitizenId,
             request.RegisteredFromDate,
             request.RegisteredToDate,
-            request.SupportingDocumentUrl,
+            request.IdentityDocumentType,
+            request.IdentityDocumentNumber,
+            request.IdentityDocumentIssuedDate,
             request.Reason), cancellationToken);
         return Created($"/api/dependent-requests/{id}", new { id });
     }

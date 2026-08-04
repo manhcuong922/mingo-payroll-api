@@ -9,6 +9,7 @@ public class SalaryGradeCreateCommandValidator : AbstractValidator<SalaryGradeCr
 {
     public SalaryGradeCreateCommandValidator(
         IPositionRepository positionRepository,
+        ISalaryGradeRepository salaryGradeRepository,
         IComplianceLookupService complianceLookup)
     {
         RuleFor(x => x.PositionId)
@@ -35,5 +36,6 @@ public class SalaryGradeCreateCommandValidator : AbstractValidator<SalaryGradeCr
             .MaximumLength(500).WithMessage("Description must not exceed 500 characters.");
 
         MinimumWageRule.AddMinimumWageRule(this, complianceLookup, x => x.BaseSalary, x => x.Currency);
+        LevelSalaryMonotonicityRule.AddForCreate(this, salaryGradeRepository);
     }
 }

@@ -13,7 +13,7 @@ public class DepartmentCreateCommandValidator : AbstractValidator<DepartmentCrea
             .MaximumLength(20).WithMessage("Code must not exceed 20 characters.")
             .Matches("^[A-Za-z0-9_\\-]+$").WithMessage("Code may only contain letters, digits, hyphen and underscore.")
             .MustAsync(async (code, ct) => !await repository.CodeExistsAsync(code.Trim().ToUpperInvariant(), null, ct))
-            .WithMessage("Department code already exists.");
+            .WithMessage("Mã phòng ban đã tồn tại.");
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Name is required.")

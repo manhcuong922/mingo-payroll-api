@@ -26,7 +26,7 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
             // #1 — đối xứng với Create: chặn trùng CCCD ở tầng ứng dụng (400) thay vì để DB nổ 500.
             .MustAsync(async (cmd, citizenId, ct) =>
                 string.IsNullOrWhiteSpace(citizenId) || !await repository.CitizenIdExistsAsync(citizenId.Trim(), cmd.Id, ct))
-            .WithMessage("CitizenId is already used by another employee.");
+            .WithMessage("Số CCCD đã được dùng cho nhân viên khác.");
 
         RuleFor(x => x.PermanentAddress)
             .NotEmpty().WithMessage("PermanentAddress is required.");
@@ -43,7 +43,7 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
             .MaximumLength(255).WithMessage("Email must not exceed 255 characters.")
             .MustAsync(async (cmd, email, ct) =>
                 string.IsNullOrWhiteSpace(email) || !await repository.EmailExistsAsync(email!.Trim(), cmd.Id, ct))
-            .WithMessage("Email is already used by another employee.");
+            .WithMessage("Email đã được dùng cho nhân viên khác.");
 
         // Đối xứng với nhánh CREATE — xem chú thích ở đó. `excludeId = cmd.Id` để hồ sơ tự lưu lại
         // chính mã của mình không bị coi là trùng.

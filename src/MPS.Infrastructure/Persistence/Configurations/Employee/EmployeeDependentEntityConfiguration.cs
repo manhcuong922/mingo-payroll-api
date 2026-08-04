@@ -19,6 +19,8 @@ public class EmployeeDependentEntityConfiguration : IEntityTypeConfiguration<Emp
         builder.Property(e => e.Relationship).HasConversion<byte>().IsRequired();
         builder.Property(e => e.TaxIdentificationNumber).HasMaxLength(13);
         builder.Property(e => e.CitizenId).HasMaxLength(12);
+        builder.Property(e => e.IdentityDocumentType).HasConversion<byte?>();
+        builder.Property(e => e.IdentityDocumentNumber).HasMaxLength(50);
         builder.Property(e => e.RegisteredFromDate).IsRequired();
         builder.Property(e => e.RegisteredToDate);
         builder.Property(e => e.IsActive).IsRequired().HasDefaultValue(true);

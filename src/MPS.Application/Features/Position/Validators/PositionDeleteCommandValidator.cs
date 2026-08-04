@@ -15,6 +15,6 @@ public class PositionDeleteCommandValidator : AbstractValidator<PositionDeleteCo
         RuleFor(x => x.Id)
             .GreaterThan(0).WithMessage("Id must be greater than 0.")
             .MustAsync(async (id, ct) => !await repository.HasEmployeeInformationsAsync(id, ct))
-            .WithMessage("Cannot delete Position because EmployeeInformations are still associated.");
+            .WithMessage("Không thể xóa chức danh vì vẫn còn nhân viên đang gắn với chức danh này.");
     }
 }

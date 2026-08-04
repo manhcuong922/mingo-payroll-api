@@ -44,7 +44,9 @@ public sealed class ContractPreflightChecker
 
         // EmployerParty active (EffectiveTo IS NULL) at signing time
         if (!await _lookup.IsActiveContractPartyAsync(input.EmployerPartyId, ct))
-            throw new DomainValidationException($"EmployerParty {input.EmployerPartyId} not found or not active.");
+            throw new DomainValidationException(
+                $"EMPLOYER_PARTY_INACTIVE: Pháp nhân {input.EmployerPartyId} không tồn tại hoặc đã hết hiệu lực. " +
+                "Vui lòng chọn một pháp nhân đang hoạt động.");
 
         // Position exists
         if (!await _lookup.PositionExistsAsync(input.PositionId, ct))

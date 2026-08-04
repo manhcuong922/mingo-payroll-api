@@ -25,6 +25,11 @@ public class EmployeeDependent
     /// <summary>Số CCCD/CMND (12 số). Có thể null với trẻ nhỏ.</summary>
     public string? CitizenId { get; set; }
 
+    // Giấy tờ chứng minh thân nhân — được HR chấp nhận khi người phụ thuộc chưa có MST riêng.
+    public EmployeeEnums.DependentIdentityDocumentType? IdentityDocumentType { get; set; }
+    public string? IdentityDocumentNumber { get; set; }
+    public DateOnly? IdentityDocumentIssuedDate { get; set; }
+
     public DateOnly RegisteredFromDate { get; set; }
     public DateOnly? RegisteredToDate { get; set; }
     public bool IsActive { get; set; }

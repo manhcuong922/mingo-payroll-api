@@ -48,7 +48,7 @@ public sealed class AllowanceTypeCreateCommandValidatorTests
         var result = await validator.TestValidateAsync(ValidCmd() with { Code = "LUNCH" });
 
         result.ShouldHaveValidationErrorFor(c => c.Code)
-            .WithErrorMessage("Code already exists.");
+            .WithErrorMessage("Mã loại phụ cấp đã tồn tại.");
     }
 
     /// <summary>DefaultAmount âm → fail.</summary>
