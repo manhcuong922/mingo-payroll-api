@@ -15,7 +15,13 @@ public sealed class PayrollLawChangeNoteBuilder : IPayrollLawChangeNoteBuilder
         var notes = new List<PayrollNote>();
         var now = DateTime.UtcNow;
 
-        foreach (var cur in currentRefs)
+        // ⭐ [Mục 2] Từ khi luật đổi giữa kỳ được ghi nhận, một kỳ có thể mang NHIỀU ref cùng loại.
+        // So kỳ-với-kỳ phải đối chiếu bản CÓ HIỆU LỰC MUỘN NHẤT của mỗi bên — tức trạng thái luật ở
+        // cuối mỗi kỳ — chứ không phải bản đầu tiên gặp trong danh sách (thứ tự không đảm bảo).
+        var latestCurrent = LatestPerScope(currentRefs);
+        var latestPrevious = LatestPerScope(previousRefs);
+
+        foreach (var cur in latestCurrent)
         {
             // (1) Ghi chú trần/ngưỡng tĩnh của kỳ.
             if (cur.HeadlineValue is { } value && cur.HeadlineLabel is { Length: > 0 } label)
@@ -34,7 +40,7 @@ public sealed class PayrollLawChangeNoteBuilder : IPayrollLawChangeNoteBuilder
             }
 
             // (2) Ghi chú thay đổi luật so kỳ trước (cùng loại + scope).
-            var prev = previousRefs?.FirstOrDefault(p => p.VersionType == cur.VersionType && p.ScopeId == cur.ScopeId);
+            var prev = latestPrevious.FirstOrDefault(p => p.VersionType == cur.VersionType && p.ScopeId == cur.ScopeId);
             if (prev is null || prev.VersionId == cur.VersionId) continue;
 
             var changedValue = cur.HeadlineValue.HasValue && prev.HeadlineValue.HasValue && cur.HeadlineValue != prev.HeadlineValue;
@@ -58,6 +64,18 @@ public sealed class PayrollLawChangeNoteBuilder : IPayrollLawChangeNoteBuilder
 
         return notes;
     }
+
+    /// <summary>
+    /// Mỗi (loại văn bản, scope) lấy đúng MỘT bản — bản hiệu lực muộn nhất. Vừa là mốc so sánh đúng
+    /// với kỳ trước, vừa tránh sinh ghi chú trần/ngưỡng TRÙNG khi kỳ có nhiều mức của cùng một loại.
+    /// </summary>
+    private static IReadOnlyList<PayrollComplianceRef> LatestPerScope(
+        IReadOnlyList<PayrollComplianceRef>? refs) =>
+        refs is null
+            ? Array.Empty<PayrollComplianceRef>()
+            : refs.GroupBy(r => (r.VersionType, r.ScopeId))
+                .Select(g => g.OrderByDescending(r => r.ValidFrom).ThenByDescending(r => r.VersionId).First())
+                .ToList();
 
     private static string VersionTypeLabel(ComplianceVersionType type) => type switch
     {

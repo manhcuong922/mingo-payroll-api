@@ -21,6 +21,12 @@ public sealed class PayrollCollectionResult
     public required IReadOnlyList<PayrollComplianceRef> ComplianceRefs { get; init; }
     public required PayrollFunctionContext FunctionContext { get; init; }
     public required string ProductivitySnapshotJson { get; init; }
+
+    /// <summary>
+    /// ⭐ [Mục 1] Ghi chú do chính bước gom liệu sinh ra — hiện là trường hợp luật đổi NGAY TRONG KỲ,
+    /// thứ mà bộ diff "kỳ này so kỳ trước" không nhìn thấy. Rỗng ở đường phổ biến (kỳ chỉ một mức luật).
+    /// </summary>
+    public IReadOnlyList<PayrollNote> ComplianceNotes { get; init; } = Array.Empty<PayrollNote>();
 }
 
 /// <summary>

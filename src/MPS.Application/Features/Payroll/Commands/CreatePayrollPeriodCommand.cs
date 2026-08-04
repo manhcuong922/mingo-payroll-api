@@ -198,6 +198,9 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         foreach (var note in _noteBuilder.Build(collection.ComplianceRefs, previous?.ComplianceRefs.ToList()))
             period.Notes.Add(note);
 
+        // ⭐ [Mục 1] Ghi chú luật đổi NGAY TRONG KỲ — bộ diff ở trên chỉ so với kỳ trước nên không thấy.
+        foreach (var note in collection.ComplianceNotes) period.Notes.Add(note);
+
         // AddAsync lưu trong 1 transaction; các PayrollAdjustment đang tracked (gán AppliedPeriod =
         // period qua navigation) được EF resolve FK và lưu cùng lượt — không có trạng thái nửa vời
         // "kỳ đã có cột truy lĩnh nhưng khoản vẫn chưa đánh dấu áp".
