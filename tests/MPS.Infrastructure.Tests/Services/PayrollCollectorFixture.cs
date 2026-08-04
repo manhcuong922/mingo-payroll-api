@@ -197,6 +197,25 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
     public static SocialInsuranceRateSnapshot BaseSocialInsurance => Si;
     public static MinimumWageSnapshot BaseMinimumWage => MinWage;
 
+    /// <summary>
+    /// [Mục 3] Cho phép test trả biểu thuế/giảm trừ khác nhau theo ngày. Dùng để CHỨNG MINH thuế
+    /// KHÔNG chia theo ngày: dù lookup sẵn sàng trả số khác nhau, collector vẫn chỉ hỏi tại PayDate.
+    /// </summary>
+    public Func<DateOnly, PitRegulationSnapshot>? PitByDate { get; set; }
+
+    /// <summary>[Mục 3] Tương tự cho ngưỡng miễn thuế phụ cấp (cơm).</summary>
+    public Func<DateOnly, AllowanceExemptThresholdSnapshot?>? AllowanceThresholdByDate { get; set; }
+
+    /// <summary>
+    /// [Mục 3] Nhật ký NGÀY đã bị tra cứu, theo từng loại văn bản. Khoá được ranh giới thiết kế:
+    /// thuế/ngưỡng chỉ hỏi 1 lần tại PayDate, còn luật lao động/bảo hiểm hỏi theo từng ngày của kỳ.
+    /// </summary>
+    public List<DateOnly> QueriedPitDates { get; } = new();
+    public List<DateOnly> QueriedAllowanceThresholdDates { get; } = new();
+    public List<DateOnly> QueriedSocialInsuranceDates { get; } = new();
+
+    public static PitRegulationSnapshot BasePit => Pit;
+
     private SocialInsuranceRateSnapshot CurrentSi =>
         HealthCapMultiplierOverride is int m ? Si with { HealthCapMultiplier = m } : Si;
 
@@ -246,13 +265,23 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
         Task.FromResult<AllowanceExemptThresholdSnapshot?>(null);
     public Task<LaborLawConstantsSnapshot> GetActiveLaborLawConstantsAsync(CancellationToken ct) => Task.FromResult(Labor);
 
-    public Task<SocialInsuranceRateSnapshot> GetSocialInsuranceAtAsync(DateOnly payDate, CancellationToken ct) =>
-        Task.FromResult(SocialInsuranceByDate?.Invoke(payDate) ?? CurrentSi);
-    public Task<PitRegulationSnapshot> GetPitAtAsync(DateOnly payDate, CancellationToken ct) => Task.FromResult(Pit);
+    public Task<SocialInsuranceRateSnapshot> GetSocialInsuranceAtAsync(DateOnly payDate, CancellationToken ct)
+    {
+        QueriedSocialInsuranceDates.Add(payDate);
+        return Task.FromResult(SocialInsuranceByDate?.Invoke(payDate) ?? CurrentSi);
+    }
+    public Task<PitRegulationSnapshot> GetPitAtAsync(DateOnly payDate, CancellationToken ct)
+    {
+        QueriedPitDates.Add(payDate);
+        return Task.FromResult(PitByDate?.Invoke(payDate) ?? Pit);
+    }
     public Task<MinimumWageSnapshot> GetMinimumWageAtAsync(DateOnly payDate, CancellationToken ct) =>
         Task.FromResult(MinimumWageByDate?.Invoke(payDate) ?? MinWage);
-    public Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAtAsync(int allowanceTypeId, DateOnly payDate, CancellationToken ct) =>
-        Task.FromResult<AllowanceExemptThresholdSnapshot?>(null);
+    public Task<AllowanceExemptThresholdSnapshot?> GetAllowanceThresholdAtAsync(int allowanceTypeId, DateOnly payDate, CancellationToken ct)
+    {
+        QueriedAllowanceThresholdDates.Add(payDate);
+        return Task.FromResult(AllowanceThresholdByDate?.Invoke(payDate));
+    }
     public Task<LaborLawConstantsSnapshot> GetLaborLawConstantsAtAsync(DateOnly payDate, CancellationToken ct) =>
         Task.FromResult(LaborLawByDate?.Invoke(payDate) ?? Labor);
 }
