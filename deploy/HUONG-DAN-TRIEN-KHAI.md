@@ -354,7 +354,31 @@ sau khi thêm module này phải tự bổ sung. Đối chiếu với `.env.exam
 | Biến                  | Bắt buộc làm gì                                                                 |
 |-----------------------|---------------------------------------------------------------------------------|
 | `AI_SERVICE_PASSWORD` | Đã đặt sẵn mật khẩu mạnh trong `.env.example`. Compose truyền **cùng giá trị này** vào `AiServiceAccount__Password` của api và `SERVICE_PASSWORD` của AI service, nên không thể lệch. |
-| `AI_ALLOWED_IPS`      | IP public của mạng đặt kiosk (`curl ifconfig.me` từ máy trong mạng đó). **Để rỗng = chặn hết**, kiosk sẽ không quét được. Nhiều dải cách nhau bằng dấu cách. IP nhà mạng VN thường động → phải cập nhật lại khi đổi. |
+| `AI_ALLOWED_IPS`      | IP public của mạng đặt kiosk (`curl ifconfig.me` từ máy trong mạng đó). **Để rỗng = chặn hết**, kiosk sẽ không quét được. Nhiều dải cách nhau bằng dấu cách. IP nhà mạng VN thường động → phải cập nhật lại khi đổi. Mở tạm cho mọi IP để test: xem 7B.2c. |
+
+#### 7B.2c. Mở tạm cho mọi IP (chỉ khi test)
+
+Giai đoạn test thường phải quét từ nhiều mạng khác nhau, khai từng IP rất phiền:
+
+```bash
+cd /opt/mingo
+cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
+sed -i 's|^AI_ALLOWED_IPS=.*|AI_ALLOWED_IPS=0.0.0.0/0 ::/0|' .env
+./deploy.sh caddy          # biến môi trường chỉ nạp lúc tạo container -> phải recreate
+curl https://ai.operix.fun/health    # từ IP bất kỳ, phải ra JSON healthy
+```
+
+Siết lại khi test xong — đổi dòng đó về IP thật rồi `./deploy.sh caddy`.
+
+> ⚠️ **Không để `0.0.0.0/0` khi chạy thật.** Bốn endpoint của AI service
+> (`/process_frame`, `/extract_embedding`, `/reload_employees`, `/stats`) **không có
+> xác thực**, gate IP ở Caddy là lớp bảo vệ duy nhất. Mở hết nghĩa là:
+> - bất kỳ ai cũng gọi được `/process_frame` — tức là gửi ảnh vào luồng **chấm công**;
+> - `/extract_embedding` là tính toán nặng, vài request song song đủ đẩy AI service
+>   (trần `mem_limit: 1g`) xuống swap và làm cả VPS 1.9GB ì ạch.
+>
+> Giá trị này nằm trong `/opt/mingo/.env` — deploy **không** ghi đè, nên đổi rồi thì
+> nó giữ nguyên mãi cho tới khi có người sửa lại. Dễ quên.
 | `SEED_RESET_ON_STARTUP` | **Để `false`** (đã là mặc định của compose và `.env.example`). Đặt `true` thì mỗi lần api restart là xoá sạch DB, kéo theo toàn bộ đăng ký khuôn mặt đã duyệt → AI service load 0 embedding. |
 
 Danh sách đầy đủ các biến module này cần (copy từ `.env.example` nếu `.env` chưa có):
