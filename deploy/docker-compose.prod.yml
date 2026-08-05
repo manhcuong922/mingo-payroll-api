@@ -49,11 +49,12 @@ services:
     env_file:
       - .env
     environment:
-      # DEMO: mỗi lần api khởi động sẽ XÓA SẠCH DB rồi seed lại -> data luôn giống seeder sau mỗi deploy.
-      # Mặc định TRUE ở stack demo này; tắt bằng cách đặt SEED_RESET_ON_STARTUP=false trong .env trên VPS.
+      # Bật = mỗi lần api khởi động sẽ XÓA SẠCH DB rồi seed lại.
+      # Mặc định FALSE (giữ dữ liệu). Chỉ đặt SEED_RESET_ON_STARTUP=true trong .env khi
+      # cố tình muốn reset về đúng trạng thái seeder.
       # ⚠️ Bật = mọi lần api restart (deploy/reboot/crash) đều mất toàn bộ dữ liệu,
       #    kể cả các đăng ký khuôn mặt đã duyệt -> AI service load 0 embedding.
-      Seed__ResetOnStartup: ${SEED_RESET_ON_STARTUP:-true}
+      Seed__ResetOnStartup: ${SEED_RESET_ON_STARTUP:-false}
       # Mật khẩu seed cho tài khoản 'ai-service'. Khai báo ở đây (thay vì để trong
       # env_file) để nó và SERVICE_PASSWORD của attendance-ai luôn cùng một giá trị.
       AiServiceAccount__Password: ${AI_SERVICE_PASSWORD}
@@ -70,9 +71,15 @@ services:
   # AI nhận diện khuôn mặt (Flask, cổng 5002). Không publish port; ra ngoài qua Caddy
   # ({$AI_DOMAIN}) có gate IP, vào trong thì api gọi http://attendance-ai:5002.
   attendance-ai:
-    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-attendance-tracking:${IMAGE_TAG:-latest}
+    # Image nằm trên Docker Hub (public, KHÔNG phải GHCR như api/ui) và chỉ có tag `latest`
+    # — nên không dùng ${IMAGE_TAG} ở đây, đặt IMAGE_TAG=<sha> sẽ làm pull hỏng.
+    image: thanhhui1709/mingo-ai-services:latest
     container_name: mingo-attendance-ai
     restart: unless-stopped
+    # VPS chỉ có 1.9GB RAM. Trần này để AI service không nuốt hết RAM rồi kéo OOM killer
+    # sang giết sqlserver; phần vượt 1GB tràn xuống swap (chậm nhưng không sập).
+    mem_limit: 1g
+    memswap_limit: 3g
     # Khai báo tường minh thay vì env_file: .env — tránh đẩy chuỗi kết nối DB,
     # secret MinIO/SMTP vào container này một cách không cần thiết.
     environment:
@@ -107,7 +114,9 @@ services:
   # UI kiosk quét khuôn mặt. Bắt buộc phục vụ qua HTTPS ({$KIOSK_DOMAIN}) vì
   # getUserMedia chỉ chạy trên secure context.
   attendance-ui:
-    image: ghcr.io/${REGISTRY_OWNER}/mingo-payroll-attendance-tracking-ui:${IMAGE_TAG:-latest}
+    # Docker Hub, public, chỉ có tag `latest` (xem chú thích ở attendance-ai).
+    # Bundle Vite đã nướng sẵn https://api.operix.fun/api + https://ai.operix.fun lúc build.
+    image: thanhhui1709/mingo-face-scan:latest
     container_name: mingo-attendance-ui
     restart: unless-stopped
     depends_on:
@@ -137,6 +146,9 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
       MSSQL_PID: Developer
+      # Không giới hạn thì SQL Server tự lấy gần hết RAM khả dụng. Trên VPS 1.9GB phải
+      # chừa chỗ cho attendance-ai, nếu không OOM killer sẽ giết chính sqlserver.
+      MSSQL_MEMORY_LIMIT_MB: ${MSSQL_MEMORY_LIMIT_MB:-640}
     volumes:
       - mssql-data:/var/opt/mssql
     healthcheck:
