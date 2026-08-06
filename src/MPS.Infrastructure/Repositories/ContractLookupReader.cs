@@ -112,7 +112,7 @@ public sealed class ContractLookupReader : IContractLookupReader
         _context.SalaryGrades
             .AsNoTracking()
             .Where(s => s.Id == salaryGradeId)
-            .Select(s => new SalaryGradeSnapshot(s.Id, s.BaseSalary, s.Currency, s.IsActive))
+            .Select(s => new SalaryGradeSnapshot(s.Id, s.PositionId, s.BaseSalary, s.Currency, s.IsActive))
             .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<int>> GetActiveAllowanceTypeIdsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken)

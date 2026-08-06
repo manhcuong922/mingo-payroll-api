@@ -43,7 +43,9 @@ public class OrderEvaluationController : ControllerBase
     [HasPermission(Permissions.OrderEvaluationScoreOwn)]
     public async Task<IActionResult> Score(int id, [FromBody] ScoreOrderEvaluationRequest request, CancellationToken ct)
     {
+        // Bỏ qua subject không có Lines (FE gửi kèm subject rỗng khi chỉ cập nhật một phần).
         var subjects = request.Subjects
+            .Where(s => s.Lines is { Count: > 0 })
             .Select(s => new ScoreSubjectInput(
                 s.SubjectId, s.Note,
                 s.Lines.Select(l => new ScoreLineInput(l.LineId, l.Score, l.Note)).ToList()))

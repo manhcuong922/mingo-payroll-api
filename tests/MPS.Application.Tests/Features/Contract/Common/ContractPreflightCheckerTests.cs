@@ -50,7 +50,7 @@ public sealed class ContractPreflightCheckerTests
         _lookup.Setup(l => l.PositionExistsAsync(PositionId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         _lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(SalaryGradeId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SalaryGradeSnapshot(SalaryGradeId, baseSalary, "VND", gradeActive));
+            .ReturnsAsync(new SalaryGradeSnapshot(SalaryGradeId, PositionId, baseSalary, "VND", gradeActive));
 
         var ids = allowanceIds ?? Array.Empty<int>();
         _lookup.Setup(l => l.GetActiveAllowanceTypeIdsAsync(
@@ -174,6 +174,21 @@ public sealed class ContractPreflightCheckerTests
 
         await act.Should().ThrowAsync<DomainValidationException>()
             .WithMessage("*SalaryGrade*is inactive*");
+    }
+
+    // Case: SalaryGrade thuộc Position khác Contract.PositionId → reject GRADE_POSITION_MISMATCH.
+    // Rule: bậc lương chỉ chọn được trong danh sách của chức vụ đang gán trên HĐ.
+    [Fact]
+    public async Task RunAsync_Throws_When_SalaryGrade_Belongs_To_Different_Position()
+    {
+        SetupHappyPath();
+        _lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(SalaryGradeId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SalaryGradeSnapshot(SalaryGradeId, PositionId: 999, 20_000_000m, "VND", IsActive: true));
+
+        var act = () => CreateSut().RunAsync(BuildInput(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainValidationException>()
+            .WithMessage("*GRADE_POSITION_MISMATCH*");
     }
 
     // Case: Request gửi 2 AllowanceTypeId (5, 6) nhưng id=6 đã inactive/không tồn tại → reject + báo rõ id nào sai.

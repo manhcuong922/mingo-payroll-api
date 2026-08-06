@@ -90,6 +90,7 @@ public class ContractRepository : IContractRepository
         CancellationToken cancellationToken = default)
     {
         // Điều 20 k.2c chỉ áp dụng cho HĐLĐ toàn thời gian — HĐ dịch vụ/khoán/CTV không tính vào giới hạn này.
+        // PendingTermination cũng tính vì HĐ đã ký hợp lệ, chỉ chờ hiệu lực chấm dứt.
         var query = _context.Contracts.AsNoTracking()
             .Where(c => c.EmployeeInformationId == employeeInformationId
                 && c.EmployerPartyId == employerPartyId
@@ -97,6 +98,7 @@ public class ContractRepository : IContractRepository
                 && c.ContractCategory == ContractCategory.Definite
                 && c.ContractSubtype == ContractSubtype.Official
                 && (c.Status == ContractStatus.Active
+                    || c.Status == ContractStatus.PendingTermination
                     || c.Status == ContractStatus.Expired
                     || c.Status == ContractStatus.Terminated));
 
@@ -292,11 +294,14 @@ public class ContractRepository : IContractRepository
         Contract candidate,
         CancellationToken cancellationToken)
     {
+        // HĐ đang PendingTermination vẫn chiếm khoảng hiệu lực (NLĐ đi làm) — HĐ mới không được
+        // overlap khoảng đó.
         var others = await _context.Contracts
             .AsNoTracking()
             .Where(c => c.EmployeeInformationId == candidate.EmployeeInformationId
                 && c.Id != candidate.Id
-                && c.Status == ContractStatus.Active
+                && (c.Status == ContractStatus.Active
+                    || c.Status == ContractStatus.PendingTermination)
                 && c.ArchivedAt == null)
             .Select(c => new { c.Id, c.ContractNo, c.EffectiveFrom, c.EffectiveTo })
             .ToListAsync(cancellationToken);
@@ -417,11 +422,14 @@ public class ContractRepository : IContractRepository
             .Select(c => c.ArchivedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
+    // "Active contract" ở góc nhìn vận hành = Active HOẶC PendingTermination — NLĐ trong khoảng
+    // đợi chấm dứt vẫn đi làm, chấm công, hưởng lương, nhận task, được provisioned account.
     public Task<bool> HasActiveContractAsync(int employeeInformationId, CancellationToken cancellationToken = default) =>
         _context.Contracts
             .AsNoTracking()
             .AnyAsync(c => c.EmployeeInformationId == employeeInformationId
-                        && c.Status == ContractStatus.Active, cancellationToken);
+                        && (c.Status == ContractStatus.Active
+                            || c.Status == ContractStatus.PendingTermination), cancellationToken);
 
     public async Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithActiveContractsAsync(
         IReadOnlyCollection<int> employeeInformationIds,
@@ -434,7 +442,8 @@ public class ContractRepository : IContractRepository
         return await _context.Contracts
             .AsNoTracking()
             .Where(c => ids.Contains(c.EmployeeInformationId)
-                     && c.Status == ContractStatus.Active)
+                     && (c.Status == ContractStatus.Active
+                         || c.Status == ContractStatus.PendingTermination))
             .Select(c => c.EmployeeInformationId)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -451,7 +460,8 @@ public class ContractRepository : IContractRepository
         var ids = userIds.Distinct().ToArray();
         return await _context.Contracts
             .AsNoTracking()
-            .Where(c => c.Status == ContractStatus.Active
+            .Where(c => (c.Status == ContractStatus.Active
+                         || c.Status == ContractStatus.PendingTermination)
                      && c.EffectiveFrom <= atUtc
                      && (c.EffectiveTo == null || c.EffectiveTo >= atUtc)
                      && c.EmployeeInformation.UserId != null

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
@@ -16,15 +17,18 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
     private readonly AppDbContext _context;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
+    private readonly LateEarlyExcuseResolver _excuseResolver;
 
     public AttendanceAdjustmentRepository(
         AppDbContext context,
         IWorkHourSplitter splitter,
-        IComplianceLookupService complianceLookup)
+        IComplianceLookupService complianceLookup,
+        LateEarlyExcuseResolver excuseResolver)
     {
         _context = context;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
+        _excuseResolver = excuseResolver;
     }
 
     public async Task<(IReadOnlyList<AttendanceAdjustment> Items, int Total)> GetPagedAsync(
@@ -136,6 +140,8 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
         record.CheckInAt = checkInAt;
         record.CheckOutAt = checkOutAt;
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(record.WorkDate, cancellationToken);
+        var excused = await _excuseResolver.GetExcusedMinutesAsync(
+            record.EmployeeInformationId, record.WorkDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter,
             record.Status,
@@ -144,7 +150,9 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
             laborLaw.NightStartTime,
             laborLaw.NightEndTime,
             record.ShiftTemplate,
-            record.WorkDate);
+            record.WorkDate,
+            excusedLateMinutes: excused.LateMinutes,
+            excusedEarlyMinutes: excused.EarlyMinutes);
         record.DayHours = dayHours;
         record.NightHours = nightHours;
         record.UpdatedAt = nowUtc;
@@ -195,6 +203,8 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
         record.CheckInAt = checkInAt;
         record.CheckOutAt = checkOutAt;
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(record.WorkDate, cancellationToken);
+        var excused = await _excuseResolver.GetExcusedMinutesAsync(
+            record.EmployeeInformationId, record.WorkDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter,
             record.Status,
@@ -203,7 +213,9 @@ public class AttendanceAdjustmentRepository : IAttendanceAdjustmentRepository
             laborLaw.NightStartTime,
             laborLaw.NightEndTime,
             record.ShiftTemplate,
-            record.WorkDate);
+            record.WorkDate,
+            excusedLateMinutes: excused.LateMinutes,
+            excusedEarlyMinutes: excused.EarlyMinutes);
         record.DayHours = dayHours;
         record.NightHours = nightHours;
         record.OverrideReason = adjustment.Reason;

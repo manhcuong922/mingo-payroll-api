@@ -40,11 +40,15 @@ public static class TerminationNoticeValidator
         if (input.NoNoticeRequired)
             return TerminationNoticeCheckResult.Ok();
 
+        // Số ngày báo trước = khoảng cách LỊCH thực tế NoticeSentAt → TerminationDate.
+        // KHÔNG tin giá trị NoticeDaysAhead do client gửi (có thể bị khai khống 45 dù thực tế 20).
+        var actualCalendarNoticeDays = CalendarDaysBetween(input.NoticeSentAt, input.TerminationDate);
+
         // HĐ vô thời hạn → cả 2 bên đều phải báo ≥ 45 ngày lịch.
         if (input.Category == ContractCategory.Indefinite)
         {
             return RequireMinDays(
-                input.NoticeDaysAhead,
+                actualCalendarNoticeDays,
                 LaborLawConstants.TerminationNotice.EmployeeNoticeDaysIndefinite,
                 "TERMINATION_NOTICE_INDEFINITE_TOO_SHORT");
         }
@@ -66,7 +70,7 @@ public static class TerminationNoticeValidator
         {
             // 12–36 tháng → ≥ 30 ngày lịch.
             return RequireMinDays(
-                input.NoticeDaysAhead,
+                actualCalendarNoticeDays,
                 LaborLawConstants.TerminationNotice.EmployeeNoticeDaysDefinite12To36M,
                 "TERMINATION_NOTICE_DEFINITE_12_36M_TOO_SHORT");
         }
@@ -88,15 +92,22 @@ public static class TerminationNoticeValidator
         return TerminationNoticeCheckResult.Ok();
     }
 
-    private static TerminationNoticeCheckResult RequireMinDays(int? noticeDaysAhead, int minDays, string errorCode)
+    private static TerminationNoticeCheckResult RequireMinDays(int actualNoticeDays, int minDays, string errorCode)
     {
-        if (noticeDaysAhead is null || noticeDaysAhead < minDays)
+        if (actualNoticeDays < minDays)
         {
             return TerminationNoticeCheckResult.Fail(
                 errorCode,
-                $"NoticeDaysAhead must be at least {minDays} (provided: {noticeDaysAhead?.ToString() ?? "null"}).");
+                $"Notice period (NoticeSentAt → TerminationDate) must be at least {minDays} calendar days " +
+                $"(actual: {actualNoticeDays}).");
         }
         return TerminationNoticeCheckResult.Ok();
+    }
+
+    private static int CalendarDaysBetween(DateTime noticeSentAt, DateTime terminationDate)
+    {
+        var gap = (terminationDate.Date - noticeSentAt.Date).TotalDays;
+        return (int)Math.Max(0, gap);
     }
 
     private static int? ContractDurationDays(DateTime effectiveFrom, DateTime? effectiveTo)

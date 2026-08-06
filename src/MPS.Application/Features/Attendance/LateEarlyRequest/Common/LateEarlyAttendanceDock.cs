@@ -1,70 +1,105 @@
 using Microsoft.Extensions.Logging;
-using MPS.Domain.Enums.Attendance;
+using MPS.Application.Common.Interfaces;
+using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces.Attendance;
 
 namespace MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 
 /// <summary>
-/// BS-4 (phần 2) — khi duyệt đơn đi muộn/về sớm mà KHÔNG bù vào quỹ phép, số giờ thiếu phải bị TRỪ
-/// khỏi giờ công thực tế (DayHours) của ngày đó; trước bản vá duyệt xong không đổi giờ ⇒ NV đi muộn
-/// vẫn hưởng đủ công.
+/// Sau khi 1 đơn đi trễ/về sớm được Approved, RECOMPUTE giờ công (DayHours/NightHours) của
+/// bản ghi chấm công CA CHÍNH cho ngày đó — tính lại từ CheckIn/CheckOut + shift + TỔNG số
+/// phút đã được miễn (đơn Approved cho ngày). Kết quả: NV KHÔNG mất giờ công của phần được
+/// duyệt trễ/sớm (fix bug "chấm công xong 1 ca vẫn bị mất nửa giờ công dù đã có đơn").
 ///
-/// Không trừ khi <c>deductFromLeaveBalance = true</c> — khi đó phần thiếu đã được bù bằng quỹ phép
-/// (xem <see cref="LateEarlyLeaveDeduction"/>), trừ tiếp vào giờ công là phạt hai lần.
+/// Idempotent: recalc luôn tính lại từ nguồn (CheckIn/Out + shift + excused) nên gọi nhiều
+/// lần cho cùng ngày không cộng dồn. Cờ <c>DeductFromLeaveBalance</c> không ảnh hưởng ở đây:
+/// nó chỉ quyết định có trừ quỹ phép năm hay không (xem <see cref="LateEarlyLeaveDeduction"/>).
 ///
-/// Giới hạn đã biết: nếu duyệt TRƯỚC khi có bản ghi chấm công của ngày (chưa check-in) thì không có
-/// gì để trừ — bỏ qua và log. Thực tế đi muộn/về sớm hàm ý đã đi làm nên bản ghi thường đã tồn tại.
+/// Nếu bản ghi chấm công chưa tồn tại (approve trước khi NV chấm công) → bỏ qua; khi bản ghi
+/// được TẠO sau, các handler chấm công cũng gọi <see cref="LateEarlyExcuseResolver"/> để
+/// cộng trả giờ ngay từ đầu, nên không mất dữ liệu.
 /// </summary>
 public sealed class LateEarlyAttendanceDock
 {
     private readonly IAttendanceRecordRepository _records;
+    private readonly IShiftTemplateRepository _shifts;
+    private readonly IComplianceLookupService _complianceLookup;
+    private readonly IWorkHourSplitter _splitter;
+    private readonly LateEarlyExcuseResolver _excuseResolver;
     private readonly ILogger<LateEarlyAttendanceDock> _logger;
 
     public LateEarlyAttendanceDock(
-        IAttendanceRecordRepository records, ILogger<LateEarlyAttendanceDock> logger)
+        IAttendanceRecordRepository records,
+        IShiftTemplateRepository shifts,
+        IComplianceLookupService complianceLookup,
+        IWorkHourSplitter splitter,
+        LateEarlyExcuseResolver excuseResolver,
+        ILogger<LateEarlyAttendanceDock> logger)
     {
         _records = records;
+        _shifts = shifts;
+        _complianceLookup = complianceLookup;
+        _splitter = splitter;
+        _excuseResolver = excuseResolver;
         _logger = logger;
     }
 
-    public async Task DockAsync(
-        int employeeInformationId, DateOnly workDate, int minutes, int lateEarlyRequestId,
-        int approverUserId, DateTime nowUtc, CancellationToken ct)
+    /// <summary>
+    /// Recompute giờ công cho bản ghi chấm công ca chính của (nhân viên, ngày) dựa trên
+    /// TỔNG số phút miễn từ tất cả đơn Late/Early đã Approved (đọc từ DB — caller phải
+    /// đã lưu đơn Approved TRƯỚC khi gọi).
+    /// </summary>
+    public async Task RecomputeAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        int lateEarlyRequestId,
+        int approverUserId,
+        DateTime nowUtc,
+        CancellationToken ct)
     {
-        if (minutes <= 0) return;
-
-        var hoursToDock = Math.Round(minutes / 60m, 2, MidpointRounding.AwayFromZero);
-        if (hoursToDock <= 0m) return;
-
         var records = await _records.GetByEmployeeAndDateAsync(employeeInformationId, workDate, ct);
 
-        // Case 2 — idempotent: đơn này đã được áp vào một bản ghi chấm công rồi thì KHÔNG trừ lại
-        // (chống trừ hai lần khi duyệt/áp lại).
-        if (records.Any(r => r.LateEarlyRequestId == lateEarlyRequestId))
-        {
-            _logger.LogInformation(
-                "Đơn đi muộn/về sớm #{RequestId} đã được áp vào chấm công trước đó — bỏ qua trừ giờ.",
-                lateEarlyRequestId);
-            return;
-        }
-
-        // Chỉ trừ vào bản ghi CA CHÍNH (có ShiftTemplateId, không phải bản ghi OT) còn giờ ngày để trừ.
         var target = records
-            .Where(r => r.ShiftTemplateId != null && r.OvertimeRequestId == null && r.DayHours > 0m)
-            .OrderByDescending(r => r.DayHours)
-            .FirstOrDefault();
+            .FirstOrDefault(r => r.ShiftTemplateId != null && r.OvertimeRequestId == null);
 
         if (target is null)
         {
             _logger.LogInformation(
-                "Duyệt đi muộn/về sớm cho NV {EmployeeId} ngày {WorkDate:yyyy-MM-dd}: chưa có bản ghi chấm công để trừ giờ.",
+                "Duyệt đi muộn/về sớm cho NV {EmployeeId} ngày {WorkDate:yyyy-MM-dd}: chưa có bản ghi chấm công — bỏ qua recompute.",
                 employeeInformationId, workDate);
             return;
         }
 
-        var newDayHours = Math.Max(0m, target.DayHours - hoursToDock);
-        target.DayHours = newDayHours;
-        target.LateEarlyRequestId = lateEarlyRequestId;   // Case 2 — LIÊN KẾT đơn ↔ bản ghi chấm công.
+        var shift = target.ShiftTemplate
+            ?? await _shifts.GetByIdAsync(target.ShiftTemplateId!.Value, ct);
+        if (shift is null)
+        {
+            _logger.LogWarning(
+                "Không nạp được ShiftTemplate {ShiftId} khi recompute chấm công cho đơn #{RequestId}.",
+                target.ShiftTemplateId, lateEarlyRequestId);
+            return;
+        }
+
+        var excused = await _excuseResolver.GetExcusedMinutesAsync(
+            employeeInformationId, workDate, ct);
+
+        var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(workDate, ct);
+
+        var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
+            _splitter,
+            target.Status,
+            target.CheckInAt,
+            target.CheckOutAt,
+            laborLaw.NightStartTime,
+            laborLaw.NightEndTime,
+            shift,
+            workDate,
+            excusedLateMinutes: excused.LateMinutes,
+            excusedEarlyMinutes: excused.EarlyMinutes);
+
+        target.DayHours = dayHours;
+        target.NightHours = nightHours;
+        target.LateEarlyRequestId = lateEarlyRequestId; // truy vết đơn gần nhất áp lên record
         target.UpdatedAt = nowUtc;
         target.UpdatedByUserId = approverUserId;
         await _records.UpdateAsync(target, ct);

@@ -110,15 +110,16 @@ public class ApproveLateEarlyRequestCommandHandler : IRequestHandler<ApproveLate
                 existing.EmployeeInformationId, existing.WorkDate, existing.Minutes,
                 userId, now, cancellationToken);
         }
-        else
-        {
-            // BS-4 (phần 2): không bù quỹ phép → trừ số giờ thiếu khỏi giờ công thực tế của ngày.
-            await _attendanceDock.DockAsync(
-                existing.EmployeeInformationId, existing.WorkDate, existing.Minutes,
-                existing.Id, userId, now, cancellationToken);
-        }
 
+        // Lưu Approved TRƯỚC khi recompute để LateEarlyExcuseResolver đọc đúng tổng phút miễn.
         await _repository.UpdateAsync(existing, cancellationToken);
+
+        // Cộng trả giờ công đã bị mất do trễ/sớm bằng cách recompute DayHours từ CheckIn/Out +
+        // shift + tổng phút miễn. Không phụ thuộc cờ DeductFromLeaveBalance — quy tắc: đơn
+        // Approved luôn miễn giờ công, cờ chỉ quyết định có trừ quỹ phép hay không.
+        await _attendanceDock.RecomputeAsync(
+            existing.EmployeeInformationId, existing.WorkDate,
+            existing.Id, userId, now, cancellationToken);
 
         // BS-6 + BS-5: đổi công/quỹ của ngày → mark stale kỳ Draft, capture Finalized cho NV.
         await _payrollChange.OnSourceChangedAsync(

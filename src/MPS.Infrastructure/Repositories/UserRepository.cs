@@ -226,10 +226,13 @@ public class UserRepository : IUserRepository
     {
         if (employeeInformationIds.Count == 0) return 0;
 
+        // "Đang hoạt động" bao gồm cả PendingTermination — trong khoảng đợi NLĐ vẫn đi làm và
+        // account phải giữ mở (spec chấm dứt HĐ có báo trước).
         var stillHasActive = await _context.Contracts
             .AsNoTracking()
             .Where(c => employeeInformationIds.Contains(c.EmployeeInformationId)
-                && c.Status == ContractStatus.Active)
+                && (c.Status == ContractStatus.Active
+                    || c.Status == ContractStatus.PendingTermination))
             .Select(c => c.EmployeeInformationId)
             .Distinct()
             .ToListAsync(cancellationToken);

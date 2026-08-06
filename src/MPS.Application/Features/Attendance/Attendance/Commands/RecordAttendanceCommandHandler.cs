@@ -4,6 +4,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -33,6 +34,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IAttendanceEditLockChecker _lockChecker;
+    private readonly LateEarlyExcuseResolver _excuseResolver;
     private readonly IClock _clock;
 
     public RecordAttendanceCommandHandler(
@@ -46,6 +48,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         IAttendanceEditLockChecker lockChecker,
+        LateEarlyExcuseResolver excuseResolver,
         IClock clock)
     {
         _repository = repository;
@@ -58,6 +61,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _lockChecker = lockChecker;
+        _excuseResolver = excuseResolver;
         _clock = clock;
     }
 
@@ -115,9 +119,14 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         var resolvedStatus = await ResolveShiftStatusAsync(
             request.Status, checkInAt, checkOutAt, shift, request.WorkDate, ct);
 
+        var excused = await _excuseResolver.GetExcusedMinutesAsync(
+            request.EmployeeInformationId, request.WorkDate, ct);
+
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter, resolvedStatus, checkInAt, checkOutAt,
-            laborLaw.NightStartTime, laborLaw.NightEndTime, shift, request.WorkDate);
+            laborLaw.NightStartTime, laborLaw.NightEndTime, shift, request.WorkDate,
+            excusedLateMinutes: excused.LateMinutes,
+            excusedEarlyMinutes: excused.EarlyMinutes);
 
         var entity = BuildEntity(request, resolvedStatus, userId, checkInAt, checkOutAt, dayHours, nightHours);
         entity.ShiftTemplateId = shiftId;

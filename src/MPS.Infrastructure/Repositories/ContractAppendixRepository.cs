@@ -43,6 +43,10 @@ public class ContractAppendixRepository : IContractAppendixRepository
         return query.AnyAsync(cancellationToken);
     }
 
+    public Task<int> CountForContractAsync(int contractId, CancellationToken cancellationToken = default) =>
+        _context.ContractAppendices.AsNoTracking()
+            .CountAsync(a => a.ContractId == contractId, cancellationToken);
+
     public async Task<int> AddDraftAsync(ContractAppendix appendix, CancellationToken cancellationToken = default)
     {
         await _context.ContractAppendices.AddAsync(appendix, cancellationToken);
@@ -50,12 +54,28 @@ public class ContractAppendixRepository : IContractAppendixRepository
         return appendix.Id;
     }
 
-    public async Task<int> ActivateDraftAsync(
+    public Task<int> ActivateDraftAsync(
         int appendixId,
         ContractFile file,
         Func<Contract, ICollection<ContractAllowance>, ContractAppendix, Task> apply,
         DateTime signedAtUtc,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ActivateOrScheduleAsync(appendixId, file, apply, signedAtUtc, targetStatus: AppendixStatus.Active, cancellationToken);
+
+    public Task<int> ScheduleDraftAsync(
+        int appendixId,
+        ContractFile file,
+        DateTime signedAtUtc,
+        CancellationToken cancellationToken = default) =>
+        ActivateOrScheduleAsync(appendixId, file, apply: null, signedAtUtc, targetStatus: AppendixStatus.Scheduled, cancellationToken);
+
+    private async Task<int> ActivateOrScheduleAsync(
+        int appendixId,
+        ContractFile file,
+        Func<Contract, ICollection<ContractAllowance>, ContractAppendix, Task>? apply,
+        DateTime signedAtUtc,
+        AppendixStatus targetStatus,
+        CancellationToken cancellationToken)
     {
         await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
@@ -80,8 +100,9 @@ public class ContractAppendixRepository : IContractAppendixRepository
             throw new DomainValidationException(
                 $"Cannot activate appendix: parent contract status is {contract.Status}, expected Active.");
 
-        // Caller mutates the tracked Contract + allowance collection (add/update/remove).
-        await apply(contract, contract.ContractAllowances, appendix);
+        // Chỉ apply khi flow Draft → Active. Flow Draft → Scheduled hoãn apply đến job.
+        if (apply is not null)
+            await apply(contract, contract.ContractAllowances, appendix);
 
         // Insert ContractFile (TargetType=Appendix, V1, IsCurrent).
         file.TargetId = appendixId;
@@ -90,12 +111,61 @@ public class ContractAppendixRepository : IContractAppendixRepository
         file.IsCurrent = true;
         await _context.ContractFiles.AddAsync(file, cancellationToken);
 
-        appendix.Status = AppendixStatus.Active;
+        appendix.Status = targetStatus;
         appendix.SignedAt = signedAtUtc;
-        contract.UpdatedAt = DateTime.UtcNow;
+        if (apply is not null)
+            contract.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return file.Id;
+    }
+
+    public async Task<IReadOnlyList<int>> GetDueScheduledAppendixIdsAsync(
+        DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        await _context.ContractAppendices.AsNoTracking()
+            .Where(a => a.Status == AppendixStatus.Scheduled
+                        && a.EffectiveFrom <= nowUtc
+                        && a.Contract.ArchivedAt == null
+                        && a.Contract.Status == ContractStatus.Active)
+            .OrderBy(a => a.EffectiveFrom)
+            .Select(a => a.Id)
+            .ToListAsync(cancellationToken);
+
+    public async Task PromoteScheduledAsync(
+        int appendixId,
+        Func<Contract, ICollection<ContractAllowance>, ContractAppendix, Task> apply,
+        CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var appendix = await _context.ContractAppendices
+            .FirstOrDefaultAsync(a => a.Id == appendixId, cancellationToken)
+            ?? throw new DomainValidationException($"Appendix {appendixId} not found.");
+
+        if (appendix.Status != AppendixStatus.Scheduled)
+            throw new DomainValidationException(
+                $"Cannot promote appendix {appendixId}: status is {appendix.Status}, expected Scheduled.");
+
+        var contract = await _context.Contracts
+            .Include(c => c.ContractAllowances)
+            .FirstOrDefaultAsync(c => c.Id == appendix.ContractId, cancellationToken)
+            ?? throw new DomainValidationException($"Parent contract {appendix.ContractId} not found.");
+
+        if (contract.ArchivedAt is not null)
+            throw new DomainValidationException(
+                $"CONTRACT_ARCHIVED: Parent contract {contract.Id} is archived; cannot promote scheduled appendix.");
+
+        if (contract.Status != ContractStatus.Active)
+            throw new DomainValidationException(
+                $"Cannot promote scheduled appendix: parent contract status is {contract.Status}, expected Active.");
+
+        await apply(contract, contract.ContractAllowances, appendix);
+
+        appendix.Status = AppendixStatus.Active;
+        contract.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 }

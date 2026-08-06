@@ -9,12 +9,6 @@ public class CreateContractAppendixCommandValidator : AbstractValidator<CreateCo
     {
         RuleFor(x => x.ContractId).GreaterThan(0);
 
-        RuleFor(x => x.AppendixNo)
-            .NotEmpty().WithMessage("AppendixNo is required.")
-            .MaximumLength(50);
-
-        RuleFor(x => x.AppendixType).IsInEnum();
-
         RuleFor(x => x.Title)
             .NotEmpty().WithMessage("Title is required.")
             .MaximumLength(300);

@@ -35,15 +35,13 @@ public class ContractAppendixController : ControllerBase
     {
         var cmd = new CreateContractAppendixCommand(
             ContractId: contractId,
-            AppendixNo: request.AppendixNo,
-            AppendixType: request.AppendixType,
             Title: request.Title,
             ChangedClausesJson: request.ChangedClausesJson,
             AppendixText: request.AppendixText,
             EffectiveFrom: request.EffectiveFrom);
 
-        var id = await _mediator.Send(cmd, cancellationToken);
-        return CreatedAtAction(nameof(GetById), new { id }, new { id });
+        var result = await _mediator.Send(cmd, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     /// <summary>GET /api/contracts/{contractId}/appendices — list theo contract.</summary>

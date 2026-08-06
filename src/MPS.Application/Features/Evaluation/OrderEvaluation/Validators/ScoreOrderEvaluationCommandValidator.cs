@@ -12,11 +12,9 @@ public class ScoreOrderEvaluationCommandValidator : AbstractValidator<ScoreOrder
         RuleFor(x => x.Subjects)
             .NotEmpty().WithMessage("Cần ít nhất 1 nhân viên để chấm.");
 
+        // Subject không có Lines đã bị Controller lọc trước khi tạo command; ở đây chỉ còn subject có Lines.
         RuleForEach(x => x.Subjects).ChildRules(subject =>
         {
-            subject.RuleFor(s => s.Lines)
-                .NotEmpty().WithMessage("Cần ít nhất 1 tiêu chí để chấm.");
-
             subject.RuleForEach(s => s.Lines).ChildRules(line =>
             {
                 line.RuleFor(l => l.Score)

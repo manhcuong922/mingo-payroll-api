@@ -45,14 +45,12 @@ public sealed class GetAppendixFilesQueryHandlerTests
             actor.Id, employeeInfo.Id, party.Id, position.Id, grade.Id);
 
         var createApdx = new CreateContractAppendixCommandHandler(appendixRepo, repo, currentUser.Object);
-        var appendixId = await createApdx.Handle(new CreateContractAppendixCommand(
+        var appendixId = (await createApdx.Handle(new CreateContractAppendixCommand(
             ContractId: contractId,
-            AppendixNo: "PL-001",
-            AppendixType: AppendixType.Amendment,
             Title: "Test",
             ChangedClausesJson: "{\"jobDescription\":\"Senior\"}",
             AppendixText: "...",
-            EffectiveFrom: DateTime.UtcNow.AddDays(14)), CancellationToken.None);
+            EffectiveFrom: DateTime.UtcNow.AddDays(14)), CancellationToken.None)).Id;
 
         var activateApdx = new ActivateContractAppendixCommandHandler(
             appendixRepo, applier, storage, currentUser.Object,

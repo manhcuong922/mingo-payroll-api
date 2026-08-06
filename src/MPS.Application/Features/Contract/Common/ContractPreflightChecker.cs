@@ -59,6 +59,11 @@ public sealed class ContractPreflightChecker
         if (!grade.IsActive)
             throw new DomainValidationException($"SalaryGrade {input.SalaryGradeId} is inactive.");
 
+        if (grade.PositionId != input.PositionId)
+            throw new DomainValidationException(
+                $"GRADE_POSITION_MISMATCH: SalaryGrade {input.SalaryGradeId} thuộc Position {grade.PositionId}, " +
+                $"không khớp Position {input.PositionId} của hợp đồng. Bậc lương chỉ chọn được trong danh sách của chức vụ hiện tại.");
+
         // Allowance types: each active + no duplicates
         if (input.AllowanceTypeIds.Count > 0)
         {

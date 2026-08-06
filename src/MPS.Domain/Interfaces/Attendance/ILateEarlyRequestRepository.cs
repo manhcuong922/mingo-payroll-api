@@ -48,4 +48,13 @@ public interface ILateEarlyRequestRepository
         DateOnly endDate,
         int? excludeRequestId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tất cả đơn Late/Early đã Approved cho (employee, workDate). Dùng bởi hourly
+    /// calculator để cộng trả số phút được miễn vào giờ công của bản ghi chấm công.
+    /// </summary>
+    Task<IReadOnlyList<LateEarlyRequest>> GetApprovedByEmployeeAndDateAsync(
+        int employeeInformationId,
+        DateOnly workDate,
+        CancellationToken cancellationToken = default);
 }

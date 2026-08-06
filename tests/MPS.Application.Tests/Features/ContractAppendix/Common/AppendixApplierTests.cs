@@ -51,7 +51,7 @@ public sealed class AppendixApplierTests
 
         var lookup = new Mock<IContractLookupReader>();
         lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(5, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SalaryGradeSnapshot(5, 30_000_000m, "VND", IsActive: true));
+            .ReturnsAsync(new SalaryGradeSnapshot(5, PositionId: 7, 30_000_000m, "VND", IsActive: true));
 
         var applier = new AppendixApplier(lookup.Object);
 
@@ -72,7 +72,7 @@ public sealed class AppendixApplierTests
         var contract = NewContract();
         var lookup = new Mock<IContractLookupReader>();
         lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(99, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SalaryGradeSnapshot(99, 10_000_000m, "VND", IsActive: false));
+            .ReturnsAsync(new SalaryGradeSnapshot(99, PositionId: 7, 10_000_000m, "VND", IsActive: false));
 
         var applier = new AppendixApplier(lookup.Object);
 
@@ -244,10 +244,91 @@ public sealed class AppendixApplierTests
         allowances.Should().BeEmpty(); // chỉ 10 bị remove, 99 idempotent ignore.
     }
 
+    /// <summary>
+    /// Grade thuộc Position khác Contract.PositionId → throw GRADE_POSITION_MISMATCH.
+    /// User rule: bậc lương chỉ chọn được trong danh sách của chức vụ hiện tại của hợp đồng.
+    /// </summary>
+    [Fact]
+    public async Task SalaryGrade_Swap_Rejects_When_Grade_Belongs_To_Another_Position()
+    {
+        var contract = NewContract(); // PositionId = 7
+        var lookup = new Mock<IContractLookupReader>();
+        lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(50, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SalaryGradeSnapshot(50, PositionId: 99, 20_000_000m, "VND", IsActive: true));
+
+        var applier = new AppendixApplier(lookup.Object);
+
+        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(),
+            new AppendixChangeSet { SalaryGradeId = 50 }, NowUtc, CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainValidationException>()
+            .WithMessage("*GRADE_POSITION_MISMATCH*");
+    }
+
+    /// <summary>
+    /// Đổi Position qua phụ lục → chỉ cập nhật Contract.PositionId, không đụng EmployeeInformation.
+    /// </summary>
+    [Fact]
+    public async Task PositionChange_Updates_Contract_Only()
+    {
+        var contract = NewContract();
+        contract.PositionId = 7;
+
+        var lookup = new Mock<IContractLookupReader>();
+        lookup.Setup(l => l.PositionExistsAsync(12, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var applier = new AppendixApplier(lookup.Object);
+
+        await applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(),
+            new AppendixChangeSet { PositionId = 12 }, NowUtc, CancellationToken.None);
+
+        contract.PositionId.Should().Be(12);
+    }
+
+    /// <summary>
+    /// Cùng phụ lục đổi cả Position (7→12) lẫn Grade — grade phải thuộc Position MỚI, không phải
+    /// position cũ. Kiểm tra thứ tự apply: position được đổi trước, rồi mới check grade.
+    /// </summary>
+    [Fact]
+    public async Task Position_And_Grade_Change_Uses_New_Position_For_Grade_Check()
+    {
+        var contract = NewContract();
+        contract.PositionId = 7;
+
+        var lookup = new Mock<IContractLookupReader>();
+        lookup.Setup(l => l.PositionExistsAsync(12, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(80, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SalaryGradeSnapshot(80, PositionId: 12, 35_000_000m, "VND", IsActive: true));
+
+        var applier = new AppendixApplier(lookup.Object);
+
+        await applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(),
+            new AppendixChangeSet { PositionId = 12, SalaryGradeId = 80 }, NowUtc, CancellationToken.None);
+
+        contract.PositionId.Should().Be(12);
+        contract.SalaryGradeId.Should().Be(80);
+    }
+
+    /// <summary>Position không tồn tại → throw.</summary>
+    [Fact]
+    public async Task PositionChange_Rejects_When_Position_Not_Found()
+    {
+        var contract = NewContract();
+        var lookup = new Mock<IContractLookupReader>();
+        lookup.Setup(l => l.PositionExistsAsync(999, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var applier = new AppendixApplier(lookup.Object);
+
+        var act = () => applier.ApplyAsync(contract, new List<ContractAllowance>(), Appendix(),
+            new AppendixChangeSet { PositionId = 999 }, NowUtc, CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainValidationException>()
+            .WithMessage("*Position 999*not found*");
+    }
+
     private static Domain.Entities.Contract NewContract() => new()
     {
         Id = 1,
         ContractNo = "HDLD-2026-0001",
+        PositionId = 7,
         SalaryGradeId = 1,
         SalaryAmountSnapshot = 25_000_000m,
         SalaryCurrencySnapshot = "VND",

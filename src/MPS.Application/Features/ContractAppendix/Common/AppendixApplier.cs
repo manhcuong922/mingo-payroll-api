@@ -59,6 +59,15 @@ public sealed class AppendixApplier
         if (change.WorkingTimeJson is not null)
             contract.WorkingTimeJson = change.WorkingTimeJson;
 
+        // Đổi chức vụ (phải chạy TRƯỚC nhánh SalaryGrade để check grade-position dùng position mới).
+        // Chỉ tác động Contract.PositionId; không đồng bộ ngược lên EmployeeInformation.
+        if (change.PositionId is { } newPositionId && newPositionId != contract.PositionId)
+        {
+            if (!await _lookup.PositionExistsAsync(newPositionId, cancellationToken))
+                throw new DomainValidationException($"Position {newPositionId} not found.");
+            contract.PositionId = newPositionId;
+        }
+
         // [D12] — đổi bậc lương qua phụ lục: ngoài việc đổi tham chiếu thang lương, phải ĐÓNG BĂNG
         // mức lương mới NGAY TRÊN PHỤ LỤC, gắn với mốc `EffectiveFrom` của nó.
         //
@@ -72,6 +81,11 @@ public sealed class AppendixApplier
                 ?? throw new DomainValidationException($"SalaryGrade {newGradeId} not found.");
             if (!grade.IsActive)
                 throw new DomainValidationException($"SalaryGrade {newGradeId} is inactive.");
+            if (grade.PositionId != contract.PositionId)
+                throw new DomainValidationException(
+                    $"GRADE_POSITION_MISMATCH: SalaryGrade {newGradeId} thuộc Position {grade.PositionId}, " +
+                    $"không khớp Position {contract.PositionId} của hợp đồng. Đổi chức vụ trong cùng phụ lục " +
+                    "nếu muốn dùng bậc lương của chức vụ khác.");
             contract.SalaryGradeId = newGradeId;
             appendix.SalaryAmountSnapshot = grade.BaseSalary;
             appendix.SalaryCurrencySnapshot = contract.SalaryCurrencySnapshot;

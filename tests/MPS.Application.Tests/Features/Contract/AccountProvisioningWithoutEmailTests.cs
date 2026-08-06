@@ -47,6 +47,7 @@ public sealed class AccountProvisioningWithoutEmailTests
         EmployeeInformationId = EmployeeInfoId,
         Status = ContractStatus.Draft,
         EffectiveFrom = new DateTime(2026, 7, 1),
+        PositionId = 1,
         SalaryGradeId = 1,
     };
 
@@ -65,7 +66,7 @@ public sealed class AccountProvisioningWithoutEmailTests
             .ReturnsAsync(77);
 
         _lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SalaryGradeSnapshot(1, 15_000_000m, "VND", true));
+            .ReturnsAsync(new SalaryGradeSnapshot(1, 1, 15_000_000m, "VND", true));
 
         _storage.Setup(s => s.UploadAsync(It.IsAny<FileUploadRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StoredFileMetadata("mps-test", "contracts/x.pdf", 100, "sha", "application/pdf", DateTime.UtcNow, null));

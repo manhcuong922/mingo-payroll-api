@@ -100,7 +100,8 @@ public sealed class ContractTerminationFlowIntegrationTests
         // === Step 2: terminate với reason C9 ===
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
-            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
+            new FakeClock());
 
         var noticeSent = DateTime.UtcNow;
         var terminationResult = await createTermHandler.Handle(new CreateContractTerminationCommand(
@@ -118,9 +119,11 @@ public sealed class ContractTerminationFlowIntegrationTests
         var terminationId = terminationResult.Id;
         terminationId.Should().BeGreaterThan(0);
         terminationResult.OpenTasks.Should().BeEmpty();
+        // TerminationDate ở tương lai (50 ngày) → HĐ vào khoảng đợi, job daily sẽ tự flip sau ngày đó.
+        terminationResult.AppliedStatus.Should().Be(ContractStatus.PendingTermination);
 
         var contractAfter = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
-        contractAfter.Status.Should().Be(ContractStatus.Terminated);
+        contractAfter.Status.Should().Be(ContractStatus.PendingTermination);
         contractAfter.UpdatedAt.Should().NotBeNull();
 
         var term = await fx.Db.ContractTerminations.AsNoTracking()
@@ -158,7 +161,8 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
-            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
+            new FakeClock());
 
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
@@ -202,14 +206,22 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
-            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
+            new FakeClock());
 
-        var terminationResult = await createTermHandler.Handle(new CreateContractTerminationCommand(
+        // TerminationDate ở quá khứ (NLĐ chết hôm qua, HR ghi nhận hôm nay) → chấm dứt tức thời.
+        // Dùng FakeClock để mốc "hôm nay" nằm sau TerminationDate → xác định deterministic.
+        var termHandlerWithClock = new CreateContractTerminationCommandHandler(
+            termRepo, repo, lookup, currentUser.Object,
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
+            new FakeClock(new DateTime(2026, 8, 5, 0, 0, 0, DateTimeKind.Utc)));
+
+        var terminationResult = await termHandlerWithClock.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
             ReasonRefId: 6,
             TerminationParty: TerminationParty.ByLaw,
-            TerminationDate: DateTime.UtcNow,
-            NoticeSentAt: DateTime.UtcNow,
+            TerminationDate: new DateTime(2026, 8, 4, 0, 0, 0, DateTimeKind.Utc), // hôm qua (VN)
+            NoticeSentAt: new DateTime(2026, 8, 4, 0, 0, 0, DateTimeKind.Utc),
             NoticeDaysAhead: null,
             NoNoticeRequired: false,
             WrittenNoticeFileId: null,
@@ -219,6 +231,7 @@ public sealed class ContractTerminationFlowIntegrationTests
         var terminationId = terminationResult.Id;
         terminationId.Should().BeGreaterThan(0);
         terminationResult.OpenTasks.Should().BeEmpty();
+        terminationResult.AppliedStatus.Should().Be(ContractStatus.Terminated);
 
         var contractAfter = await fx.Db.Contracts.AsNoTracking().FirstAsync(c => c.Id == contractId);
         contractAfter.Status.Should().Be(ContractStatus.Terminated);
@@ -247,7 +260,8 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
-            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
+            new FakeClock());
 
         await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
@@ -339,7 +353,8 @@ public sealed class ContractTerminationFlowIntegrationTests
 
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
-            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db));
+            new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
+            new FakeClock());
 
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,

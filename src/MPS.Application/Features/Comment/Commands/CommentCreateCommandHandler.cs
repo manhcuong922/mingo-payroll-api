@@ -98,13 +98,25 @@ public class CommentCreateCommandHandler : IRequestHandler<CommentCreateCommand,
         }
     }
 
+    // Mã lỗi cho FE — dùng để hiển thị toast tiếng Việt chuẩn hoá thay vì parse message.
+    internal const string CommentNotAssignedErrorCode = "COMMENT_NOT_ASSIGNED";
+    internal const string CommentProjectForbiddenErrorCode = "COMMENT_PROJECT_FORBIDDEN";
+
     private async Task EnsureCanWriteAsync(CommentCreateCommand request, int userId, CancellationToken ct)
     {
         if (request.OwnerType == CommentOwnerType.Project)
         {
             var project = await _projects.GetByIdAsync(request.OwnerId, ct)
                 ?? throw new NotFoundException($"Không tìm thấy đơn #{request.OwnerId}.");
-            await ProjectScopeGuard.EnsureCanWriteAsync(project.DepartmentId, _currentUser, _authorizer, ct);
+            try
+            {
+                await ProjectScopeGuard.EnsureCanWriteAsync(project.DepartmentId, _currentUser, _authorizer, ct);
+            }
+            catch (ForbiddenAccessException ex) when (ex.ErrorCode is null)
+            {
+                // Bọc lại để FE nhận diện case comment cấp đơn bị chặn (vd công nhân) và render toast riêng.
+                throw new ForbiddenAccessException(ex.Message, CommentProjectForbiddenErrorCode);
+            }
             return;
         }
 
@@ -131,6 +143,6 @@ public class CommentCreateCommandHandler : IRequestHandler<CommentCreateCommand,
             if (withGraph?.Assignees.Any(a => a.UserId == userId) == true) return;
         }
 
-        throw new ForbiddenAccessException("Bạn không có quyền viết comment trên task này.");
+        throw new ForbiddenAccessException("Bạn không được gán vào công việc này.", CommentNotAssignedErrorCode);
     }
 }

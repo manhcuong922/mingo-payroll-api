@@ -11,12 +11,17 @@ namespace MPS.Application.Features.ContractTermination.Commands;
 public class CreateContractTerminationCommandHandler
     : IRequestHandler<CreateContractTerminationCommand, CreateContractTerminationResult>
 {
+    // Múi giờ VN — dùng để so TerminationDate với "hôm nay". Semantic: TerminationDate là ngày làm
+    // việc cuối cùng, HĐ chỉ chuyển Terminated sau khi qua ngày đó (giờ VN).
+    private const int VnUtcOffsetHours = 7;
+
     private readonly IContractTerminationRepository _terminations;
     private readonly IContractRepository _contracts;
     private readonly IContractLookupReader _lookup;
     private readonly ICurrentUserService _currentUser;
     private readonly IEmployeeInformationRepository _employees;
     private readonly IProjectTaskRepository _tasks;
+    private readonly IClock _clock;
 
     public CreateContractTerminationCommandHandler(
         IContractTerminationRepository terminations,
@@ -24,7 +29,8 @@ public class CreateContractTerminationCommandHandler
         IContractLookupReader lookup,
         ICurrentUserService currentUser,
         IEmployeeInformationRepository employees,
-        IProjectTaskRepository tasks)
+        IProjectTaskRepository tasks,
+        IClock clock)
     {
         _terminations = terminations;
         _contracts = contracts;
@@ -32,6 +38,7 @@ public class CreateContractTerminationCommandHandler
         _currentUser = currentUser;
         _employees = employees;
         _tasks = tasks;
+        _clock = clock;
     }
 
     public async Task<CreateContractTerminationResult> Handle(
@@ -92,6 +99,11 @@ public class CreateContractTerminationCommandHandler
                     $"WrittenNoticeFileId {request.WrittenNoticeFileId} is not the current termination notice for contract {request.ContractId}.");
         }
 
+        // Persist notice days = khoảng cách LỊCH thực NoticeSentAt → TerminationDate (source of truth).
+        // Không lưu client-supplied NoticeDaysAhead để tránh lệch với dữ liệu vừa được validator kiểm.
+        var computedNoticeDaysAhead = (int)Math.Max(
+            0, (request.TerminationDate.Date - request.NoticeSentAt.Date).TotalDays);
+
         var entity = new Domain.Entities.ContractTermination
         {
             ContractId = request.ContractId,
@@ -100,7 +112,7 @@ public class CreateContractTerminationCommandHandler
             TerminationParty = request.TerminationParty,
             LegalBasis = request.LegalBasis.Trim(),
             NoticeSentAt = request.NoticeSentAt,
-            NoticeDaysAhead = request.NoticeDaysAhead,
+            NoticeDaysAhead = computedNoticeDaysAhead,
             NoNoticeRequired = request.NoNoticeRequired,
             WrittenNoticeFileId = request.WrittenNoticeFileId,
             DecidedByUserId = userId,
@@ -108,10 +120,18 @@ public class CreateContractTerminationCommandHandler
             CreatedAt = DateTime.UtcNow,
         };
 
-        var id = await _terminations.AddAndMarkContractTerminatedAsync(entity, cancellationToken);
+        // TerminationDate là ngày làm việc cuối cùng. Nếu đã qua ngày đó theo giờ VN → Terminated
+        // ngay (hồi tố). Còn ≥ hôm nay → PendingTermination, job daily sẽ tự flip sau ngày đó.
+        var todayVn = _clock.UtcNow.AddHours(VnUtcOffsetHours).Date;
+        var targetStatus = request.TerminationDate.Date < todayVn
+            ? ContractStatus.Terminated
+            : ContractStatus.PendingTermination;
+
+        var id = await _terminations.AddAndMarkContractTerminatedAsync(entity, targetStatus, cancellationToken);
 
         return new CreateContractTerminationResult(
             id,
+            targetStatus,
             await CollectOpenTaskWarningsAsync(contract.EmployeeInformationId, cancellationToken));
     }
 

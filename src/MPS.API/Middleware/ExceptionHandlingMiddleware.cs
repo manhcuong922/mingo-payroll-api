@@ -123,8 +123,10 @@ public class ExceptionHandlingMiddleware
         {
             context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(
-                JsonSerializer.Serialize(new { error = fex.Message }));
+            var payload = fex.ErrorCode is null
+                ? (object)new { error = fex.Message }
+                : new { code = fex.ErrorCode, error = fex.Message };
+            await context.Response.WriteAsync(JsonSerializer.Serialize(payload));
         }
         catch (SystemRoleModificationException srex)
         {

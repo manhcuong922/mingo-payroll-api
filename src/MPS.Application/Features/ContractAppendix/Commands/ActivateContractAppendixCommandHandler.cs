@@ -95,16 +95,28 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
             UploadedByUserId = userId,
         };
 
+        // Ngày hiệu lực đến hoặc đã qua → apply changes ngay và chuyển Active.
+        // Còn ở tương lai → chỉ lưu PDF + set Scheduled; job AppendixEffectiveDateJob sẽ apply
+        // và promote khi tới ngày. UX nhất quán: khi user thấy "Đang hiệu lực" thì HĐ đã đổi thật.
+        var nowUtc = DateTime.UtcNow;
+        var applyNow = appendix.EffectiveFrom.Date <= nowUtc.Date;
+
         int appendixFileId;
         try
         {
-            appendixFileId = await _appendices.ActivateDraftAsync(
-                appendixId: request.AppendixId,
-                file: file,
-                apply: (contract, allowances, appendix) =>
-                    _applier.ApplyAsync(contract, allowances, appendix, change, DateTime.UtcNow, cancellationToken),
-                signedAtUtc: request.SignedAt,
-                cancellationToken: cancellationToken);
+            appendixFileId = applyNow
+                ? await _appendices.ActivateDraftAsync(
+                    appendixId: request.AppendixId,
+                    file: file,
+                    apply: (contract, allowances, appx) =>
+                        _applier.ApplyAsync(contract, allowances, appx, change, nowUtc, cancellationToken),
+                    signedAtUtc: request.SignedAt,
+                    cancellationToken: cancellationToken)
+                : await _appendices.ScheduleDraftAsync(
+                    appendixId: request.AppendixId,
+                    file: file,
+                    signedAtUtc: request.SignedAt,
+                    cancellationToken: cancellationToken);
         }
         catch
         {
@@ -122,14 +134,16 @@ public class ActivateContractAppendixCommandHandler : IRequestHandler<ActivateCo
             throw;
         }
 
-        // BS-6 + BS-5: phụ lục đổi lương/phụ cấp có hiệu lực từ EffectiveFrom
-        // → mark stale mọi kỳ Draft từ tháng đó về sau (APX-X01);
-        // → nếu có kỳ Finalized nằm sau EffectiveFrom (ký phụ lục sau khi kỳ đã chốt), capture bù cho NV.
-        await _payrollChange.OnEffectiveFromChangedAsync(
-            appendix.EffectiveFrom.Year, appendix.EffectiveFrom.Month,
-            appendix.Contract.EmployeeInformationId,
-            $"Kích hoạt phụ lục HĐ {appendix.AppendixNo} (hiệu lực {appendix.EffectiveFrom:dd/MM/yyyy})",
-            cancellationToken);
+        // Payroll invalidation chỉ chạy khi thật sự apply. Với flow Scheduled, job sẽ trigger sau
+        // khi promote — trước đó HĐ chưa đổi nên payroll không cần biết.
+        if (applyNow)
+        {
+            await _payrollChange.OnEffectiveFromChangedAsync(
+                appendix.EffectiveFrom.Year, appendix.EffectiveFrom.Month,
+                appendix.Contract.EmployeeInformationId,
+                $"Kích hoạt phụ lục HĐ {appendix.AppendixNo} (hiệu lực {appendix.EffectiveFrom:dd/MM/yyyy})",
+                cancellationToken);
+        }
 
         return appendixFileId;
     }

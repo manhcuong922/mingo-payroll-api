@@ -98,26 +98,57 @@ public static class ProjectScopeGuard
     // === Đọc task ===
 
     /// <summary>
-    /// Công nhân (Task.Read.Assigned) có task trong đơn X → được ĐỌC mọi task của đơn X (xem cả việc
-    /// của đồng nghiệp trong cùng đơn để nắm bối cảnh dây chuyền). Đơn không tham gia vẫn bị chặn,
-    /// và task IsConfidential vẫn lọc riêng ở đầu EnsureCanReadTaskAsync.
+    /// Mã lỗi cho FE (POST /api/Comment / GET Task) — hiển thị toast tiếng Việt chuẩn hoá thay vì parse message.
     /// </summary>
-    public static async Task<bool> CanReadTasksOfJoinedProjectAsync(
-        int? projectId,
+    public const string TaskNotAssignedErrorCode = "TASK_NOT_ASSIGNED";
+
+    /// <summary>
+    /// Tính tập id task mà công nhân (Task.Read.Assigned) được phép nhìn thấy trong 1 đơn:
+    /// = các task lá có Assignees chứa userId ∪ tất cả tổ tiên theo ParentTaskId.
+    /// Không bao gồm anh chị em. Tính trên tập <paramref name="allProjectTasks"/> đã load sẵn
+    /// (flat list toàn đơn) để không phải fetch lặp — dùng chung cho TaskGetByProject và
+    /// TaskGetById (worker path).
+    /// </summary>
+    public static HashSet<int> ComputeVisibleTaskIdsForAssignedUser(
+        IEnumerable<ProjectTaskEntity> allProjectTasks, int userId)
+    {
+        var parentMap = allProjectTasks.ToDictionary(t => t.Id, t => t.ParentTaskId);
+        var visible = new HashSet<int>();
+        foreach (var t in allProjectTasks)
+        {
+            if (!t.Assignees.Any(a => a.UserId == userId)) continue;
+            var cursor = (int?)t.Id;
+            while (cursor is int id && visible.Add(id))
+                cursor = parentMap.TryGetValue(id, out var parent) ? parent : null;
+        }
+        return visible;
+    }
+
+    /// <summary>
+    /// Worker path: task này có nằm trong "cây được phép xem" của user không?
+    /// Assignee của chính task → xem được. Task container/batch parent → xem được nếu có ít nhất
+    /// 1 descendant lá được gán cho user (để mở modal chi tiết công đoạn xem tiến độ rollup).
+    /// Ngược lại → false. Task nội bộ (ProjectId=null) không thuộc phạm vi worker.
+    /// </summary>
+    public static async Task<bool> IsTaskVisibleToAssignedUserAsync(
+        ProjectTaskEntity task,
         IProjectTaskRepository tasks,
-        ICurrentUserService currentUser,
+        int userId,
         CancellationToken ct)
     {
-        if (projectId is null) return false;                                  // task nội bộ, không thuộc đơn
-        if (!currentUser.HasPermission(Permissions.TaskReadAssigned)) return false;
-        if (currentUser.UserId is not int userId) return false;
+        if (task.Assignees.Any(a => a.UserId == userId)) return true;
+        if (task.ProjectId is not int projectId) return false;
+        // Chỉ container mới có "descendant assigned" — leaf của người khác luôn bị chặn.
+        if (!task.IsBatchParent) return false;
 
-        return await tasks.HasAssignedTaskInProjectAsync(userId, projectId.Value, ct);
+        var siblings = await tasks.GetByProjectIdAsync(projectId, ct, includeCancelled: true);
+        var visible = ComputeVisibleTaskIdsForAssignedUser(siblings, userId);
+        return visible.Contains(task.Id);
     }
 
     // ReadAll → mọi task; ReadFullDepartment/ReadDepartment + là quản lý xưởng → trọn cây xưởng;
-    // ReadAssigned + là assignee → task được giao, HOẶC task thuộc đơn mình có tham gia
-    // (CanReadTasksOfJoinedProjectAsync). (refactor: bỏ lọc theo AssignedPmUserId.)
+    // ReadAssigned (công nhân) → chỉ task được gán trực tiếp HOẶC task tổ tiên (batch parent) của
+    // task được gán — không còn "cùng đơn thì thấy tất cả" (siết theo policy privacy mới).
     public static async Task EnsureCanReadTaskAsync(
         ProjectTaskEntity task,
         IProjectTaskRepository tasks,
@@ -145,11 +176,13 @@ public static class ProjectScopeGuard
             || currentUser.HasPermission(Permissions.TaskReadDepartment);
         if (canReadDepartment && isManagerOfTaskDepartment) return;
 
-        if (currentUser.HasPermission(Permissions.TaskReadAssigned) && isAssignee) return;
+        if (currentUser.HasPermission(Permissions.TaskReadAssigned)
+            && userId is int workerId
+            && await IsTaskVisibleToAssignedUserAsync(task, tasks, workerId, ct))
+        {
+            return;
+        }
 
-        // Công nhân xem task của đồng nghiệp trong đơn mình cùng làm.
-        if (await CanReadTasksOfJoinedProjectAsync(task.ProjectId, tasks, currentUser, ct)) return;
-
-        throw new ForbiddenAccessException("Bạn không có quyền xem task này.");
+        throw new ForbiddenAccessException("Bạn không được gán vào công việc này.", TaskNotAssignedErrorCode);
     }
 }

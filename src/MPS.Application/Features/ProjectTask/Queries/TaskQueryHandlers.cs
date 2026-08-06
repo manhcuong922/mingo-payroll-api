@@ -32,12 +32,30 @@ public class TaskGetByIdQueryHandler : IRequestHandler<TaskGetByIdQuery, Project
 
         await ProjectScopeGuard.EnsureCanReadTaskAsync(task, _tasks, _currentUser, _authorizer, ct);
 
-        var includeChildren = _currentUser.HasPermission(Permissions.TaskReadAll)
+        var isManager = _currentUser.HasPermission(Permissions.TaskReadAll)
             || _currentUser.HasPermission(Permissions.TaskReadDepartment)
-            || _currentUser.HasPermission(Permissions.TaskReadFullDepartment)
-            // Công nhân mở node công đoạn của đơn mình tham gia → cần thấy task con.
-            || await ProjectScopeGuard.CanReadTasksOfJoinedProjectAsync(task.ProjectId, _tasks, _currentUser, ct);
-        return TaskMapper.ToDto(task, includeChildren: includeChildren);
+            || _currentUser.HasPermission(Permissions.TaskReadFullDepartment);
+
+        if (isManager)
+        {
+            return TaskMapper.ToDto(task, includeChildren: true);
+        }
+
+        // Công nhân (Task.Read.Assigned): mở node container → chỉ thấy children thuộc "nhánh của mình"
+        // (assigned leaves + tổ tiên trong project). Leaf người khác trong cùng công đoạn KHÔNG hiện.
+        if (task.IsBatchParent
+            && _currentUser.HasPermission(Permissions.TaskReadAssigned)
+            && _currentUser.UserId is int workerId
+            && task.ProjectId is int projectId)
+        {
+            var siblings = await _tasks.GetByProjectIdAsync(projectId, ct, includeCancelled: true);
+            var visible = ProjectScopeGuard.ComputeVisibleTaskIdsForAssignedUser(siblings, workerId);
+            task.Children = task.Children.Where(c => visible.Contains(c.Id)).ToList();
+            return TaskMapper.ToDto(task, includeChildren: true);
+        }
+
+        // Leaf worker được gán trực tiếp → không có children để render (leaf), map thẳng.
+        return TaskMapper.ToDto(task, includeChildren: false);
     }
 }
 
@@ -119,28 +137,43 @@ public class TaskGetByProjectQueryHandler
 
     public async Task<IReadOnlyList<ProjectTaskDto>> Handle(TaskGetByProjectQuery request, CancellationToken ct)
     {
-        if (!_currentUser.HasPermission(Permissions.TaskReadAll))
+        var isFullReader = _currentUser.HasPermission(Permissions.TaskReadAll);
+        var isManagerOfProjectDepartment = false;
+
+        if (!isFullReader)
         {
             var project = await _projects.GetByIdAsync(request.ProjectId, ct)
                 ?? throw new NotFoundException($"Không tìm thấy đơn #{request.ProjectId}.");
 
             var userId = _currentUser.UserId;
-            var isManagerOfProjectDepartment = userId is not null && project.DepartmentId is not null
+            isManagerOfProjectDepartment = userId is not null && project.DepartmentId is not null
                 && await _authorizer.IsManagerOfAsync(userId.Value, project.DepartmentId.Value, ct);
 
-            // Công nhân có task trong đơn này → xem được trọn cây task của đơn (task nhạy cảm vẫn lọc dưới).
-            var joinedProject = await ProjectScopeGuard.CanReadTasksOfJoinedProjectAsync(
-                request.ProjectId, _tasks, _currentUser, ct);
+            // Công nhân (Task.Read.Assigned) — pass gate nếu có ít nhất 1 task được gán trong đơn;
+            // filter cụ thể (assigned leaves ∪ tổ tiên) chạy sau khi load flat list.
+            var isAssignedWorker = _currentUser.HasPermission(Permissions.TaskReadAssigned)
+                && userId is int workerId
+                && await _tasks.HasAssignedTaskInProjectAsync(workerId, request.ProjectId, ct);
 
-            if (!isManagerOfProjectDepartment && !joinedProject)
+            if (!isManagerOfProjectDepartment && !isAssignedWorker)
                 throw new ForbiddenAccessException("Bạn không có quyền xem task của đơn này.");
         }
 
         var items = await _tasks.GetByProjectIdAsync(request.ProjectId, ct, request.IncludeCancelled);
 
-        return items
-            .Where(t => !t.IsConfidential || _currentUser.HasPermission(Permissions.TaskReadConfidential))
-            .Select(t => TaskMapper.ToDto(t))
-            .ToList();
+        var canSeeConfidential = _currentUser.HasPermission(Permissions.TaskReadConfidential);
+        var visibleItems = items.Where(t => !t.IsConfidential || canSeeConfidential);
+
+        // Quản lý xưởng đơn / GĐ giữ nguyên hành vi trọn cây. Công nhân → chỉ leaves được gán + tổ tiên.
+        if (!isFullReader && !isManagerOfProjectDepartment)
+        {
+            if (_currentUser.UserId is not int workerId)
+                return Array.Empty<ProjectTaskDto>();
+
+            var visibleIds = ProjectScopeGuard.ComputeVisibleTaskIdsForAssignedUser(items, workerId);
+            visibleItems = visibleItems.Where(t => visibleIds.Contains(t.Id));
+        }
+
+        return visibleItems.Select(t => TaskMapper.ToDto(t)).ToList();
     }
 }

@@ -8,6 +8,7 @@ using MPS.Domain.Enums;
 using MPS.Domain.Interfaces;
 using Xunit;
 using ProjectTaskEntity = MPS.Domain.Entities.ProjectTask;
+using TaskAssignee = MPS.Domain.Entities.TaskAssignee;
 
 namespace MPS.Application.Tests.Features.ProjectTask;
 
@@ -81,14 +82,16 @@ public sealed class TaskReadScopeTests
             .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>();
     }
 
-    // ===== Công nhân (Task.Read.Assigned) xem task của đồng nghiệp trong đơn mình cùng làm =====
+    // ===== Công nhân (Task.Read.Assigned) — policy mới: CHỈ xem task được gán trực tiếp
+    //       + tổ tiên (batch parent chứa descendant của mình). Leaf người khác luôn bị chặn,
+    //       kể cả trong đơn mình cùng làm. =====
 
     private const int WorkerUserId = 55;
     private const int JoinedProjectId = 71;
     private const int OtherProjectId = 72;
 
     /// <summary>Task của NGƯỜI KHÁC (Assignees rỗng với worker) trong 1 đơn cụ thể.</summary>
-    private static ProjectTaskEntity TeammateTask(int id, int projectId, bool isConfidential = false) => new()
+    private static ProjectTaskEntity TeammateTask(int id, int projectId, bool isConfidential = false, bool isBatchParent = false, int? parentTaskId = null) => new()
     {
         Id = id,
         ProjectId = projectId,
@@ -96,8 +99,21 @@ public sealed class TaskReadScopeTests
         Status = TaskItemStatus.InProgress,
         ProgressType = ProgressType.Quantity,
         IsConfidential = isConfidential,
+        IsBatchParent = isBatchParent,
+        ParentTaskId = parentTaskId,
         CreatedByUserId = ManagerUserId,
     };
+
+    /// <summary>Task được gán cho worker.</summary>
+    private static ProjectTaskEntity MyLeaf(int id, int projectId, int? parentTaskId = null)
+    {
+        var t = TeammateTask(id, projectId, parentTaskId: parentTaskId);
+        t.Assignees = new List<TaskAssignee>
+        {
+            new() { TaskId = id, UserId = WorkerUserId, AssignedAt = DateTime.UtcNow },
+        };
+        return t;
+    }
 
     private static (Mock<IProjectTaskRepository> Tasks, Mock<IDepartmentManagerAuthorizer> Authorizer, Mock<ICurrentUserService> CurrentUser)
         WorkerContext()
@@ -110,26 +126,73 @@ public sealed class TaskReadScopeTests
         currentUser.Setup(c => c.HasPermission(Permissions.TaskReadAssigned)).Returns(true);
         authorizer.Setup(a => a.IsManagerOfAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
-        tasks.Setup(t => t.HasAssignedTaskInProjectAsync(WorkerUserId, JoinedProjectId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-        tasks.Setup(t => t.HasAssignedTaskInProjectAsync(WorkerUserId, OtherProjectId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
         return (tasks, authorizer, currentUser);
     }
 
     [Fact]
-    public async Task EnsureCanReadTaskAsync_Worker_AllowedOnTeammateTaskInJoinedProject()
+    public async Task EnsureCanReadTaskAsync_Worker_ForbiddenOnTeammateLeafEvenInJoinedProject()
     {
+        // Policy mới: công nhân KHÔNG được xem task lá của đồng nghiệp, kể cả cùng đơn.
         var (tasks, authorizer, currentUser) = WorkerContext();
+        var teammateLeaf = TeammateTask(400, JoinedProjectId, isBatchParent: false);
 
         await FluentActions
             .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
-                TeammateTask(400, JoinedProjectId), tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+                teammateLeaf, tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+            .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>()
+            .Where(ex => ex.ErrorCode == ProjectScopeGuard.TaskNotAssignedErrorCode);
+    }
+
+    [Fact]
+    public async Task EnsureCanReadTaskAsync_Worker_AllowedOnAssignedLeaf()
+    {
+        var (tasks, authorizer, currentUser) = WorkerContext();
+        var myLeaf = MyLeaf(500, JoinedProjectId, parentTaskId: 600);
+
+        await FluentActions
+            .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
+                myLeaf, tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
             .Should().NotThrowAsync();
     }
 
     [Fact]
-    public async Task EnsureCanReadTaskAsync_Worker_ForbiddenOnProjectNotJoined()
+    public async Task EnsureCanReadTaskAsync_Worker_AllowedOnBatchParentWithAssignedDescendant()
+    {
+        // Batch parent (id=600) chứa task lá 500 được gán cho worker → mở được node công đoạn.
+        var (tasks, authorizer, currentUser) = WorkerContext();
+        var stage = TeammateTask(600, JoinedProjectId, isBatchParent: true);
+        var myLeaf = MyLeaf(500, JoinedProjectId, parentTaskId: 600);
+        var siblingLeaf = TeammateTask(501, JoinedProjectId, parentTaskId: 600);
+
+        tasks.Setup(t => t.GetByProjectIdAsync(JoinedProjectId, It.IsAny<CancellationToken>(), true))
+            .ReturnsAsync(new[] { stage, myLeaf, siblingLeaf });
+
+        await FluentActions
+            .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
+                stage, tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+            .Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task EnsureCanReadTaskAsync_Worker_ForbiddenOnBatchParentWithoutAssignedDescendant()
+    {
+        // Batch parent chỉ chứa leaf của người khác → worker không được mở.
+        var (tasks, authorizer, currentUser) = WorkerContext();
+        var stage = TeammateTask(601, JoinedProjectId, isBatchParent: true);
+        var siblingLeaf = TeammateTask(510, JoinedProjectId, parentTaskId: 601);
+
+        tasks.Setup(t => t.GetByProjectIdAsync(JoinedProjectId, It.IsAny<CancellationToken>(), true))
+            .ReturnsAsync(new[] { stage, siblingLeaf });
+
+        await FluentActions
+            .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
+                stage, tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
+            .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>()
+            .Where(ex => ex.ErrorCode == ProjectScopeGuard.TaskNotAssignedErrorCode);
+    }
+
+    [Fact]
+    public async Task EnsureCanReadTaskAsync_Worker_ForbiddenOnLeafInProjectNotJoined()
     {
         var (tasks, authorizer, currentUser) = WorkerContext();
 
@@ -163,5 +226,29 @@ public sealed class TaskReadScopeTests
             .Awaiting(() => ProjectScopeGuard.EnsureCanReadTaskAsync(
                 internalTask, tasks.Object, currentUser.Object, authorizer.Object, CancellationToken.None))
             .Should().ThrowAsync<MPS.Domain.Exceptions.ForbiddenAccessException>();
+    }
+
+    // ===== ComputeVisibleTaskIdsForAssignedUser — helper thuần =====
+
+    [Fact]
+    public void ComputeVisibleTaskIdsForAssignedUser_ReturnsAssignedLeavesAndAncestorsOnly()
+    {
+        // Cây: 1 (root batch) → 2 (stage batch) → {3 mine, 4 teammate}; 10 (stage) → 11 teammate.
+        var root = new ProjectTaskEntity { Id = 1, IsBatchParent = true };
+        var stage = new ProjectTaskEntity { Id = 2, IsBatchParent = true, ParentTaskId = 1 };
+        var mine = new ProjectTaskEntity
+        {
+            Id = 3,
+            ParentTaskId = 2,
+            Assignees = new List<TaskAssignee> { new() { TaskId = 3, UserId = WorkerUserId } },
+        };
+        var teammate = new ProjectTaskEntity { Id = 4, ParentTaskId = 2 };
+        var otherStage = new ProjectTaskEntity { Id = 10, IsBatchParent = true };
+        var otherLeaf = new ProjectTaskEntity { Id = 11, ParentTaskId = 10 };
+
+        var visible = ProjectScopeGuard.ComputeVisibleTaskIdsForAssignedUser(
+            new[] { root, stage, mine, teammate, otherStage, otherLeaf }, WorkerUserId);
+
+        visible.Should().BeEquivalentTo(new[] { 1, 2, 3 });
     }
 }

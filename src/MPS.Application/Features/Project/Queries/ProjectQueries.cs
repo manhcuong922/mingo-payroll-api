@@ -10,7 +10,11 @@ public record ProjectGetAllQuery(bool IncludeCancelled = false, ProjectStatus? S
 
 public record ProjectGetByIdQuery(int Id) : IRequest<ProjectDto?>;
 
-/// <summary>Đơn hàng mà NV hiện tại có task được gán (kèm tiến độ) — dùng cho workspace công nhân.</summary>
+/// <summary>
+/// Đơn hàng liên quan trực tiếp tới NV hiện tại — kèm tiến độ trọn cây. Dùng cho workspace công nhân
+/// và tổ trưởng sản xuất. Scope (plan §2.2): P xuất hiện ⇔ P.ResponsibleUserId == userId
+/// HOẶC ∃ Task T ∈ P.Tasks: T.Assignees ∋ userId. Xem docs/plans/team-leader-orders-api.md.
+/// </summary>
 public record ProjectGetMyQuery(bool IncludeCancelled = false) : IRequest<IReadOnlyList<ProjectDto>>;
 
 public record ProjectGetPagedQuery(

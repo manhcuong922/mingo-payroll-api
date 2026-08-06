@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MPS.Application.Common.Interfaces;
@@ -73,16 +74,19 @@ public sealed class ContractAppendixFlowIntegrationTests
         var effectiveFrom = DateTime.UtcNow.AddDays(14);
 
         var createHandler = new CreateContractAppendixCommandHandler(appendixRepo, repo, currentUser.Object);
-        var appendixId = await createHandler.Handle(new CreateContractAppendixCommand(
+        var created = await createHandler.Handle(new CreateContractAppendixCommand(
             ContractId: contractId,
-            AppendixNo: "PL-2026-001",
-            AppendixType: AppendixType.Amendment,
             Title: "Phụ lục đổi vị trí + phụ cấp đi lại",
             ChangedClausesJson: changeJson,
             AppendixText: "Toàn văn phụ lục...",
             EffectiveFrom: effectiveFrom), CancellationToken.None);
 
+        var appendixId = created.Id;
         appendixId.Should().BeGreaterThan(0);
+        created.AppendixNo.Should().Be($"{await GetContractNoAsync(fx, contractId)}-PL-01",
+            "handler tự sinh AppendixNo theo mẫu {ContractNo}-PL-{seq:D2}");
+        created.AppendixType.Should().Be(AppendixType.Amendment.ToString(),
+            "phụ lục có addAllowances phải được suy là Amendment");
 
         var draftAppendix = await fx.Db.ContractAppendices.AsNoTracking().FirstAsync(a => a.Id == appendixId);
         draftAppendix.Status.Should().Be(AppendixStatus.Draft);
@@ -98,16 +102,42 @@ public sealed class ContractAppendixFlowIntegrationTests
             AppendixId: appendixId,
             PdfStream: new MemoryStream(pdfBytes),
             FileSizeBytes: pdfBytes.Length,
-            FileName: "PL-2026-001.pdf",
+            FileName: $"{created.AppendixNo}.pdf",
             ContentType: "application/pdf",
             SignedAt: DateTime.UtcNow,
             SignedBySource: "mingo-signing"), CancellationToken.None);
 
         fileId.Should().BeGreaterThan(0);
 
+        // EffectiveFrom = today+14 → Activate chỉ scheduled + upload PDF; changes CHƯA lên HĐ.
+        var scheduled = await fx.Db.ContractAppendices.AsNoTracking().FirstAsync(a => a.Id == appendixId);
+        scheduled.Status.Should().Be(AppendixStatus.Scheduled,
+            "phụ lục có EffectiveFrom trong tương lai thì activate = Scheduled, chưa Active");
+        scheduled.SignedAt.Should().NotBeNull();
+
+        var contractBeforePromote = await fx.Db.Contracts.AsNoTracking()
+            .Include(c => c.ContractAllowances)
+            .FirstAsync(c => c.Id == contractId);
+        contractBeforePromote.JobDescription.Should().NotBe("Tech Lead",
+            "trước ngày hiệu lực, HĐ không được cập nhật");
+        contractBeforePromote.ContractAllowances.Should().NotContain(a => a.AllowanceTypeId == transport.Id,
+            "phụ cấp mới chưa được add cho tới khi tới ngày hiệu lực");
+
+        // Fast-forward: chuyển EffectiveFrom về hôm nay + chạy job → promote sang Active.
+        var appendixEntity = await fx.Db.ContractAppendices.FirstAsync(a => a.Id == appendixId);
+        appendixEntity.EffectiveFrom = DateTime.UtcNow.AddSeconds(-1);
+        await fx.Db.SaveChangesAsync();
+
+        // Detach để job scope tự query lại (tránh xung đột EF change tracker giữa fixture DbContext
+        // và scoped DbContext của job).
+        foreach (var entry in fx.Db.ChangeTracker.Entries().ToList()) entry.State = EntityState.Detached;
+
+        var job = BuildEffectiveDateJob(fx);
+        var promotedCount = await job.RunOnceAsync(CancellationToken.None);
+        promotedCount.Should().Be(1);
+
         var activated = await fx.Db.ContractAppendices.AsNoTracking().FirstAsync(a => a.Id == appendixId);
         activated.Status.Should().Be(AppendixStatus.Active);
-        activated.SignedAt.Should().NotBeNull();
 
         var updatedContract = await fx.Db.Contracts.AsNoTracking()
             .Include(c => c.ContractAllowances)
@@ -123,7 +153,7 @@ public sealed class ContractAppendixFlowIntegrationTests
         file.TargetId.Should().Be(appendixId);
         file.Version.Should().Be(1);
         file.IsCurrent.Should().BeTrue();
-        file.MinioObjectKey.Should().MatchRegex(@"^appendices/\d{4}/\d{2}/HDLD-[A-Z]+-\d{4}-\d{4}/PL-2026-001-v1\.pdf$");
+        file.MinioObjectKey.Should().MatchRegex(@"^appendices/\d{4}/\d{2}/HDLD-[A-Z]+-\d{4}-\d{4}/HDLD-[A-Z]+-\d{4}-\d{4}-PL-01-v1\.pdf$");
         storage.Uploaded.Should().ContainKey($"{FakeFileStorageService.DefaultBucket}/{file.MinioObjectKey}");
     }
 
@@ -155,8 +185,6 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         var act = () => createHandler.Handle(new CreateContractAppendixCommand(
             ContractId: contractId,
-            AppendixNo: "PL-BAD",
-            AppendixType: AppendixType.Amendment,
             Title: "Bad appendix",
             ChangedClausesJson: badJson,
             AppendixText: "...",
@@ -197,8 +225,6 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         var act = () => createHandler.Handle(new CreateContractAppendixCommand(
             ContractId: contractId,
-            AppendixNo: "PL-FAST",
-            AppendixType: AppendixType.Amendment,
             Title: "Quá gấp",
             ChangedClausesJson: changeJson,
             AppendixText: "...",
@@ -236,14 +262,12 @@ public sealed class ContractAppendixFlowIntegrationTests
 
         var changeJson = """{"jobDescription": "Senior"}""";
         var createHandler = new CreateContractAppendixCommandHandler(appendixRepo, repo, currentUser.Object);
-        var appendixId = await createHandler.Handle(new CreateContractAppendixCommand(
+        var appendixId = (await createHandler.Handle(new CreateContractAppendixCommand(
             ContractId: contractId,
-            AppendixNo: "PL-ARCH",
-            AppendixType: AppendixType.Amendment,
             Title: "x",
             ChangedClausesJson: changeJson,
             AppendixText: "...",
-            EffectiveFrom: DateTime.UtcNow.AddDays(14)), CancellationToken.None);
+            EffectiveFrom: DateTime.UtcNow.AddDays(14)), CancellationToken.None)).Id;
 
         var contract = await fx.Db.Contracts.FirstAsync(c => c.Id == contractId);
         contract.ArchivedAt = DateTime.UtcNow;
@@ -307,6 +331,38 @@ public sealed class ContractAppendixFlowIntegrationTests
             SignedPlace: "HN",
             SignedBySource: null), CancellationToken.None);
         return contractId;
+    }
+
+    private static Task<string> GetContractNoAsync(ContractIntegrationFixture fx, int contractId) =>
+        fx.Db.Contracts.AsNoTracking().Where(c => c.Id == contractId).Select(c => c.ContractNo).FirstAsync();
+
+    /// <summary>
+    /// Job cần IServiceScopeFactory để tạo scoped services. Trong test, ta dựng SP với DbContext
+    /// singleton (đúng instance mà fixture đang dùng) và các collaborator scoped, để scope của job
+    /// đọc/ghi cùng DB in-memory với fixture.
+    /// </summary>
+    private static MPS.Infrastructure.BackgroundJobs.AppendixEffectiveDateJob BuildEffectiveDateJob(
+        ContractIntegrationFixture fx)
+    {
+        var sp = new Microsoft.Extensions.DependencyInjection.ServiceCollection()
+            .AddSingleton(fx.Db)
+            .AddSingleton<MPS.Application.Common.Interfaces.IClock>(new FixedUtcClock(DateTime.UtcNow))
+            .AddScoped<IContractLookupReader>(_ => new ContractLookupReader(fx.Db))
+            .AddScoped<IContractAppendixRepository>(_ => new ContractAppendixRepository(fx.Db))
+            .AddScoped<MPS.Application.Features.ContractAppendix.Common.AppendixApplier>()
+            .AddScoped<MPS.Domain.Interfaces.Payroll.IPayrollSourceChangeHandler>(_ => new NoopPayrollSourceChangeHandler())
+            .BuildServiceProvider();
+
+        return new MPS.Infrastructure.BackgroundJobs.AppendixEffectiveDateJob(
+            sp.GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
+            NullLogger<MPS.Infrastructure.BackgroundJobs.AppendixEffectiveDateJob>.Instance);
+    }
+
+    private sealed class FixedUtcClock : MPS.Application.Common.Interfaces.IClock
+    {
+        private readonly DateTime _utcNow;
+        public FixedUtcClock(DateTime utcNow) { _utcNow = utcNow; }
+        public DateTime UtcNow => _utcNow;
     }
 
     private static byte[] BuildFakePdfBytes(string body = "fake-pdf-body")

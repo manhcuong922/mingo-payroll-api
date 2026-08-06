@@ -210,6 +210,81 @@ public sealed class TerminationNoticeValidatorTests
         result.ErrorCode.Should().Be("TERMINATION_NOTICE_INDEFINITE_TOO_SHORT");
     }
 
+    // === Anti-forgery: NoticeDaysAhead do client khai KHÔNG ĐƯỢC dùng làm nguồn tin ===
+    // Bug đã ghi nhận: client khai NoticeDaysAhead đủ ngày nhưng NoticeSentAt→TerminationDate
+    // thực tế thấp hơn ngưỡng luật → hệ thống vẫn cho lưu. Validator phải bám dates thực.
+
+    /// <summary>HĐ vô thời hạn — dates thực chỉ 40 ngày dù client khai NoticeDaysAhead=45 → fail (45 luật).</summary>
+    [Fact]
+    public void Employee_Indefinite_Fail_When_Actual_Date_Gap_Below_45_Even_If_Client_Claims_45()
+    {
+        var notice = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var termination = notice.AddDays(40); // thực = 40
+
+        var result = TerminationNoticeValidator.Validate(new TerminationNoticeCheckInput(
+            Party: TerminationParty.Employee,
+            Kind: ContractKind.LaborFullTime,
+            Category: ContractCategory.Indefinite,
+            EffectiveFrom: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            EffectiveTo: null,
+            NoticeSentAt: notice,
+            TerminationDate: termination,
+            NoticeDaysAhead: 45, // client "khai" đủ 45 → không được tin
+            NoNoticeRequired: false));
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorCode.Should().Be("TERMINATION_NOTICE_INDEFINITE_TOO_SHORT");
+    }
+
+    /// <summary>HĐ định hạn 12-36 tháng — dates thực chỉ 20 ngày dù client khai 30 → fail.</summary>
+    [Fact]
+    public void Employee_Definite_12_To_36_Months_Fail_When_Actual_Date_Gap_Below_30_Even_If_Client_Claims_30()
+    {
+        var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var notice = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var termination = notice.AddDays(20);
+
+        var result = TerminationNoticeValidator.Validate(new TerminationNoticeCheckInput(
+            Party: TerminationParty.Employee,
+            Kind: ContractKind.LaborFullTime,
+            Category: ContractCategory.Definite,
+            EffectiveFrom: from,
+            EffectiveTo: from.AddYears(2), // 24 tháng
+            NoticeSentAt: notice,
+            TerminationDate: termination,
+            NoticeDaysAhead: 30,
+            NoNoticeRequired: false));
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorCode.Should().Be("TERMINATION_NOTICE_DEFINITE_12_36M_TOO_SHORT");
+    }
+
+    /// <summary>
+    /// HĐ định hạn &lt; 12 tháng — dates thực chỉ 1 ngày làm việc dù client khai NoticeDaysAhead=3 → fail.
+    /// Path này vốn đã tính working-day thực từ dates; test lock-in để tránh regress.
+    /// </summary>
+    [Fact]
+    public void Employee_Definite_Under_12_Months_Fail_When_Actual_Working_Days_Below_3_Even_If_Client_Claims_3()
+    {
+        var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var noticeMonday = new DateTime(2026, 6, 8, 0, 0, 0, DateTimeKind.Utc);
+        var terminationTuesday = new DateTime(2026, 6, 9, 0, 0, 0, DateTimeKind.Utc); // chỉ 1 working day
+
+        var result = TerminationNoticeValidator.Validate(new TerminationNoticeCheckInput(
+            Party: TerminationParty.Employee,
+            Kind: ContractKind.LaborFullTime,
+            Category: ContractCategory.Definite,
+            EffectiveFrom: from,
+            EffectiveTo: from.AddMonths(6), // < 12 tháng
+            NoticeSentAt: noticeMonday,
+            TerminationDate: terminationTuesday,
+            NoticeDaysAhead: 3,
+            NoNoticeRequired: false));
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorCode.Should().Be("TERMINATION_NOTICE_DEFINITE_UNDER_12M_TOO_SHORT");
+    }
+
     /// <summary>Edge case: Definite mà thiếu EffectiveTo → fail (input không nhất quán).</summary>
     [Fact]
     public void Returns_Fail_When_Definite_Without_EffectiveTo()

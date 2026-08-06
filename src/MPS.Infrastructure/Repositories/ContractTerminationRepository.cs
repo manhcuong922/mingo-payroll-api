@@ -30,18 +30,43 @@ public class ContractTerminationRepository : IContractTerminationRepository
             .AnyAsync(t => t.ContractId == contractId, cancellationToken);
 
     public async Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithMaturedTerminationAsync(
-        DateTime asOfUtc, CancellationToken cancellationToken = default) =>
-        await _context.ContractTerminations
+        DateTime todayVn, CancellationToken cancellationToken = default)
+    {
+        var cutoff = todayVn.Date;
+        return await _context.ContractTerminations
             .AsNoTracking()
-            .Where(t => t.TerminationDate <= asOfUtc)
+            .Where(t => t.TerminationDate < cutoff)
             .Select(t => t.Contract.EmployeeInformationId)
             .Distinct()
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> PromoteMaturedPendingTerminationsAsync(
+        DateTime todayVn, CancellationToken cancellationToken = default)
+    {
+        var cutoff = todayVn.Date;
+        var now = DateTime.UtcNow;
+
+        // TerminationDate < cutoff = đã hết ngày làm việc cuối (theo giờ VN).
+        return await _context.Contracts
+            .Where(c => c.Status == ContractStatus.PendingTermination
+                && _context.ContractTerminations
+                    .Any(t => t.ContractId == c.Id && t.TerminationDate < cutoff))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, ContractStatus.Terminated)
+                .SetProperty(c => c.UpdatedAt, now), cancellationToken);
+    }
 
     public async Task<int> AddAndMarkContractTerminatedAsync(
         ContractTermination termination,
+        ContractStatus targetStatus,
         CancellationToken cancellationToken = default)
     {
+        if (targetStatus is not (ContractStatus.Terminated or ContractStatus.PendingTermination))
+            throw new ArgumentException(
+                $"targetStatus must be Terminated or PendingTermination (got {targetStatus}).",
+                nameof(targetStatus));
+
         await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
         var contract = await _context.Contracts.FirstOrDefaultAsync(c => c.Id == termination.ContractId, cancellationToken)
@@ -63,7 +88,7 @@ public class ContractTerminationRepository : IContractTerminationRepository
 
         await _context.ContractTerminations.AddAsync(termination, cancellationToken);
 
-        contract.Status = ContractStatus.Terminated;
+        contract.Status = targetStatus;
         contract.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);

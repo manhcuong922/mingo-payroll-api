@@ -79,6 +79,7 @@ public static class AppendixSchemaValidator
     private static bool HasNoEffectiveChange(AppendixChangeSet c) =>
         c.JobDescription is null
         && c.WorkLocation is null
+        && c.PositionId is null
         && c.SalaryGradeId is null
         && c.PromotionPolicy is null
         && c.PpePolicy is null

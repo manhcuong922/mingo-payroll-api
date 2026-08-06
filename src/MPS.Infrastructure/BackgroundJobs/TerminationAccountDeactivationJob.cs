@@ -7,20 +7,24 @@ using MPS.Domain.Interfaces;
 namespace MPS.Infrastructure.BackgroundJobs;
 
 /// <summary>
-/// Case 7 — Daily tick: NV có HĐ đã CHẤM DỨT thủ công (ContractTermination) tới hạn
-/// (TerminationDate &lt;= now) và không còn HĐ Active nào ⇒ vô hiệu hoá tài khoản.
+/// Daily tick — 2 việc:
+/// <list type="number">
+/// <item><b>Promote</b> HĐ đang <c>PendingTermination</c> có TerminationDate đã qua (theo giờ VN)
+/// sang <c>Terminated</c>.</item>
+/// <item><b>Deactivate</b> tài khoản của NV có bản ghi chấm dứt tới hạn và không còn HĐ nào
+/// đang <c>Active</c> hay <c>PendingTermination</c>.</item>
+/// </list>
 ///
-/// Lỗ hổng trước bản vá: luồng chấm dứt chỉ đặt Contract.Status=Terminated, KHÔNG đụng tài khoản —
-/// nên NV nghỉ việc vẫn đăng nhập/thao tác được. Luồng HĐ HẾT HẠN đã có <see cref="ContractExpiryJob"/>
-/// deactivate; job này bù cho luồng chấm dứt.
+/// Semantic ngày: TerminationDate là ngày làm việc CUỐI CÙNG. Job chỉ xử lý khi đã qua ngày đó
+/// (giờ VN, UTC+7) — HĐ với TerminationDate = 5/8 chỉ được flip Terminated từ sáng 6/8 VN.
 ///
-/// Tôn trọng thời gian báo trước: chấm dứt có thể đặt TerminationDate ở tương lai, khi đó tài khoản
-/// vẫn giữ hoạt động tới khi qua mốc. Việc "không còn HĐ Active" do
-/// <see cref="IUserRepository.DeactivateForEmployeesWithoutActiveContractAsync"/> tự lọc (NV còn HĐ
-/// Active khác — vd tái ký — sẽ được bỏ qua).
+/// Luồng HĐ HẾT HẠN tự nhiên có <see cref="ContractExpiryJob"/> lo riêng; job này chỉ phụ trách
+/// luồng chấm dứt thủ công.
 /// </summary>
 public sealed class TerminationAccountDeactivationJob : BackgroundService
 {
+    private const int VnUtcOffsetHours = 7;
+
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -69,7 +73,7 @@ public sealed class TerminationAccountDeactivationJob : BackgroundService
             var terminations = scope.ServiceProvider.GetRequiredService<IContractTerminationRepository>();
             var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
 
-            return await DeactivateMaturedAsync(terminations, users, clock.UtcNow, _logger, cancellationToken);
+            return await RunOnceAsync(terminations, users, clock.UtcNow, _logger, cancellationToken);
         }
         finally
         {
@@ -78,17 +82,27 @@ public sealed class TerminationAccountDeactivationJob : BackgroundService
     }
 
     /// <summary>
-    /// Lõi thuần (không đụng DI/scope) để test được: lấy NV có chấm dứt tới hạn → deactivate account
-    /// những người không còn HĐ Active. Trả số tài khoản đã vô hiệu hoá.
+    /// Lõi thuần (không đụng DI/scope) để test được. Thứ tự BẮT BUỘC:
+    /// promote PendingTermination → Terminated trước, rồi mới deactivate account (để check
+    /// "còn HĐ Active/PendingTermination" phản ánh đúng trạng thái sau promote).
+    /// Trả số tài khoản đã vô hiệu hoá.
     /// </summary>
-    public static async Task<int> DeactivateMaturedAsync(
+    public static async Task<int> RunOnceAsync(
         IContractTerminationRepository terminations,
         IUserRepository users,
         DateTime nowUtc,
         ILogger logger,
         CancellationToken cancellationToken)
     {
-        var employeeIds = await terminations.GetEmployeeInformationIdsWithMaturedTerminationAsync(nowUtc, cancellationToken);
+        var todayVn = nowUtc.AddHours(VnUtcOffsetHours).Date;
+
+        var promoted = await terminations.PromoteMaturedPendingTerminationsAsync(todayVn, cancellationToken);
+        if (promoted > 0)
+            logger.LogInformation(
+                "TerminationAccountDeactivationJob: promoted {Count} contract(s) PendingTermination → Terminated.",
+                promoted);
+
+        var employeeIds = await terminations.GetEmployeeInformationIdsWithMaturedTerminationAsync(todayVn, cancellationToken);
         if (employeeIds.Count == 0)
         {
             logger.LogDebug("TerminationAccountDeactivationJob: no matured terminations.");

@@ -4,6 +4,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
 
@@ -23,6 +24,7 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IAttendanceEditLockChecker _lockChecker;
+    private readonly LateEarlyExcuseResolver _excuseResolver;
     private readonly IClock _clock;
 
     public UpdateAttendanceCommandHandler(
@@ -33,6 +35,7 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         IAttendanceEditLockChecker lockChecker,
+        LateEarlyExcuseResolver excuseResolver,
         IClock clock)
     {
         _repository = repository;
@@ -42,6 +45,7 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _lockChecker = lockChecker;
+        _excuseResolver = excuseResolver;
         _clock = clock;
     }
 
@@ -74,6 +78,11 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
         // Nếu vẫn null (record không có ShiftTemplate — OT), giữ status hiện tại.
         var finalStatus = resolvedStatus ?? existing.Status;
 
+        var excused = existing.ShiftTemplate is not null
+            ? await _excuseResolver.GetExcusedMinutesAsync(
+                existing.EmployeeInformationId, existing.WorkDate, cancellationToken)
+            : LateEarlyExcuseMinutes.Zero;
+
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter,
             finalStatus,
@@ -82,7 +91,9 @@ public class UpdateAttendanceCommandHandler : IRequestHandler<UpdateAttendanceCo
             laborLaw.NightStartTime,
             laborLaw.NightEndTime,
             existing.ShiftTemplate,
-            existing.WorkDate);
+            existing.WorkDate,
+            excusedLateMinutes: excused.LateMinutes,
+            excusedEarlyMinutes: excused.EarlyMinutes);
 
         existing.CheckInAt = checkInAt;
         existing.CheckOutAt = checkOutAt;

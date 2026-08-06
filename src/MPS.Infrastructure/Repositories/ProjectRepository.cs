@@ -77,6 +77,23 @@ public class ProjectRepository : IProjectRepository
         return await query.OrderByDescending(p => p.Id).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<Project>> GetByResponsibleUserIdAsync(
+        int userId, CancellationToken ct, bool includeCancelled = false)
+    {
+        var query = _context.Projects
+            .AsNoTracking()
+            .Include(p => p.Department)
+            .Include(p => p.CreatedBy)
+            .Include(p => p.ResponsibleUser)
+            .Where(p => p.ResponsibleUserId == userId)
+            .AsQueryable();
+
+        if (!includeCancelled)
+            query = query.Where(p => p.DeletedAt == null);
+
+        return await query.OrderByDescending(p => p.Id).ToListAsync(ct);
+    }
+
     public async Task<(IReadOnlyList<Project> Items, int Total)> GetPagedAsync(
         string? keyword, int? departmentId, int page, int pageSize, CancellationToken ct,
         bool includeCancelled = false, ProjectStatus? status = null)

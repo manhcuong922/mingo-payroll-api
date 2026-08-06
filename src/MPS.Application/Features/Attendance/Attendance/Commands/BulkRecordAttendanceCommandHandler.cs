@@ -4,6 +4,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
@@ -29,6 +30,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IAttendanceEditLockChecker _lockChecker;
+    private readonly LateEarlyExcuseResolver _excuseResolver;
     private readonly IClock _clock;
 
     public BulkRecordAttendanceCommandHandler(
@@ -41,6 +43,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         IAttendanceEditLockChecker lockChecker,
+        LateEarlyExcuseResolver excuseResolver,
         IClock clock)
     {
         _repository = repository;
@@ -52,6 +55,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _lockChecker = lockChecker;
+        _excuseResolver = excuseResolver;
         _clock = clock;
     }
 
@@ -106,6 +110,9 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                 var resolvedStatus = row.Status ?? _statusResolver.Resolve(
                     rowCheckInAt, rowCheckOutAt, shift, request.WorkDate, setting);
 
+                var excused = await _excuseResolver.GetExcusedMinutesAsync(
+                    row.EmployeeInformationId, request.WorkDate, cancellationToken);
+
                 var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
                     _splitter,
                     resolvedStatus,
@@ -114,7 +121,9 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                     laborLaw.NightStartTime,
                     laborLaw.NightEndTime,
                     shift,
-                    request.WorkDate);
+                    request.WorkDate,
+                    excusedLateMinutes: excused.LateMinutes,
+                    excusedEarlyMinutes: excused.EarlyMinutes);
 
                 if (existing is null)
                 {

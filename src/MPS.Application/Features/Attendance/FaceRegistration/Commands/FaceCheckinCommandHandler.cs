@@ -5,6 +5,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Services;
 using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces;
@@ -29,6 +30,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IEmployeeDayOffChecker _dayOffChecker;
     private readonly IOvertimeRequestRepository _overtimeRepository;
+    private readonly LateEarlyExcuseResolver _excuseResolver;
     private readonly IClock _clock;
     private readonly ILogger<FaceCheckinCommandHandler> _logger;
     private readonly AttendanceCheckinSettings _checkinSettings;
@@ -44,6 +46,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         IComplianceLookupService complianceLookup,
         IEmployeeDayOffChecker dayOffChecker,
         IOvertimeRequestRepository overtimeRepository,
+        LateEarlyExcuseResolver excuseResolver,
         IClock clock,
         ILogger<FaceCheckinCommandHandler> logger,
         IOptions<AttendanceCheckinSettings> checkinSettings)
@@ -58,6 +61,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         _complianceLookup = complianceLookup;
         _dayOffChecker = dayOffChecker;
         _overtimeRepository = overtimeRepository;
+        _excuseResolver = excuseResolver;
         _clock = clock;
         _logger = logger;
         _checkinSettings = checkinSettings.Value;
@@ -276,10 +280,15 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
 
         // Tính DayHours/NightHours giống hệt luồng chấm công tay
         // (RecordAttendanceCommandHandler): splitter + break của ca + khung giờ đêm theo luật.
+        // Cộng trả phần trễ/sớm đã được đơn Late/Early duyệt (nếu có).
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(workDate, cancellationToken);
+        var excused = await _excuseResolver.GetExcusedMinutesAsync(
+            employeeInformationId, workDate, cancellationToken);
         var (dayHours, nightHours) = AttendanceHourCalculator.Compute(
             _splitter, checkoutStatus, existing.CheckInAt, localTime,
-            laborLaw.NightStartTime, laborLaw.NightEndTime, existing.ShiftTemplate!, workDate);
+            laborLaw.NightStartTime, laborLaw.NightEndTime, existing.ShiftTemplate!, workDate,
+            excusedLateMinutes: excused.LateMinutes,
+            excusedEarlyMinutes: excused.EarlyMinutes);
 
         existing.CheckOutAt      = localTime;
         existing.Status          = checkoutStatus;

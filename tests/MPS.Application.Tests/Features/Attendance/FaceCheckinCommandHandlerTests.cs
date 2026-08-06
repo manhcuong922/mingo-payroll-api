@@ -6,6 +6,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Services;
 using MPS.Application.DTOs.Attendance;
 using MPS.Application.Features.Attendance.FaceRegistration.Commands;
+using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Application.Settings;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
@@ -31,6 +32,16 @@ public sealed class FaceCheckinCommandHandlerTests
     private readonly Mock<IComplianceLookupService> _complianceLookup = new();
     private readonly Mock<IEmployeeDayOffChecker> _dayOffChecker = new();
     private readonly Mock<IOvertimeRequestRepository> _overtimeRepository = new();
+    private readonly Mock<ILateEarlyRequestRepository> _lateEarlyRepository = CreateEmptyLateEarlyRepo();
+
+    private static Mock<ILateEarlyRequestRepository> CreateEmptyLateEarlyRepo()
+    {
+        var mock = new Mock<ILateEarlyRequestRepository>();
+        mock.Setup(r => r.GetApprovedByEmployeeAndDateAsync(
+                It.IsAny<int>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<LateEarlyRequest>());
+        return mock;
+    }
     private readonly Mock<IClock> _clock = new();
     private readonly Mock<ILogger<FaceCheckinCommandHandler>> _logger = new();
 
@@ -47,6 +58,7 @@ public sealed class FaceCheckinCommandHandlerTests
         _complianceLookup.Object,
         _dayOffChecker.Object,
         _overtimeRepository.Object,
+        new LateEarlyExcuseResolver(_lateEarlyRepository.Object),
         _clock.Object,
         _logger.Object,
         Microsoft.Extensions.Options.Options.Create(_checkinSettings));

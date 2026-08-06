@@ -22,6 +22,16 @@ public sealed record AppendixChangeSet
 {
     public string? JobDescription { get; init; }
     public string? WorkLocation { get; init; }
+
+    /// <summary>
+    /// Đổi chức vụ qua phụ lục. Chỉ ảnh hưởng <c>Contract.PositionId</c>, KHÔNG đồng bộ ngược lên
+    /// <c>EmployeeInformation.PositionId</c> — HR có thể để hai giá trị lệch nhau (hồ sơ giữ chức
+    /// danh tổ chức, HĐ giữ chức danh pháp lý theo phụ lục).
+    ///
+    /// Nếu cùng phụ lục có thêm <see cref="SalaryGradeId"/>, bậc lương mới phải thuộc chức vụ mới
+    /// (grade.PositionId == PositionId). Xem <see cref="AppendixApplier"/>.
+    /// </summary>
+    public int? PositionId { get; init; }
     public int? SalaryGradeId { get; init; }
     public string? PromotionPolicy { get; init; }
     public string? PpePolicy { get; init; }

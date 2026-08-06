@@ -168,6 +168,7 @@ public class AttendanceRecordRepository : IAttendanceRecordRepository
         if (tracked is null) return false;
 
         tracked.ShiftTemplateId = entity.ShiftTemplateId;
+        tracked.LateEarlyRequestId = entity.LateEarlyRequestId;
         tracked.CheckInAt = entity.CheckInAt;
         tracked.CheckOutAt = entity.CheckOutAt;
         tracked.DayHours = entity.DayHours;

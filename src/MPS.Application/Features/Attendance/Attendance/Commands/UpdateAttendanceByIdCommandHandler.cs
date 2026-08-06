@@ -3,6 +3,7 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.Attendance.Common;
 using MPS.Application.Features.Attendance.Common;
+using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
@@ -18,6 +19,7 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IAttendanceEditLockChecker _lockChecker;
+    private readonly LateEarlyExcuseResolver _excuseResolver;
     private readonly IClock _clock;
 
     public UpdateAttendanceByIdCommandHandler(
@@ -28,6 +30,7 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
         IAttendanceEditLockChecker lockChecker,
+        LateEarlyExcuseResolver excuseResolver,
         IClock clock)
     {
         _repository = repository;
@@ -37,6 +40,7 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         _splitter = splitter;
         _complianceLookup = complianceLookup;
         _lockChecker = lockChecker;
+        _excuseResolver = excuseResolver;
         _clock = clock;
     }
 
@@ -76,16 +80,27 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
             finalStatus = existing.Status;
         }
 
-        // Shift record → dùng AttendanceHourCalculator (cap về khung ca + break).
-        // OT record (không có ShiftTemplate) → split trực tiếp, không cap.
-        var (dayHours, nightHours) = existing.ShiftTemplate is not null
-            ? AttendanceHourCalculator.Compute(
+        // Shift record → dùng AttendanceHourCalculator (cap về khung ca + break) và cộng trả
+        // phần đã được miễn bởi đơn Late/Early Approved. OT record → split trực tiếp, không cap.
+        decimal dayHours;
+        decimal nightHours;
+        if (existing.ShiftTemplate is not null)
+        {
+            var excused = await _excuseResolver.GetExcusedMinutesAsync(
+                existing.EmployeeInformationId, existing.WorkDate, cancellationToken);
+            (dayHours, nightHours) = AttendanceHourCalculator.Compute(
                 _splitter, finalStatus, checkInAt, checkOutAt,
                 laborLaw.NightStartTime, laborLaw.NightEndTime,
-                existing.ShiftTemplate, existing.WorkDate)
-            : SplitHoursWithoutShift(
+                existing.ShiftTemplate, existing.WorkDate,
+                excusedLateMinutes: excused.LateMinutes,
+                excusedEarlyMinutes: excused.EarlyMinutes);
+        }
+        else
+        {
+            (dayHours, nightHours) = SplitHoursWithoutShift(
                 finalStatus, checkInAt, checkOutAt,
                 laborLaw.NightStartTime, laborLaw.NightEndTime);
+        }
 
         existing.CheckInAt = checkInAt;
         existing.CheckOutAt = checkOutAt;

@@ -12,6 +12,10 @@ namespace MPS.Application.Features.Attendance.Common;
 ///     rồi splitter compute với break từ shift template.
 ///     Chấm vào SỚM trước ShiftStart hoặc chấm ra MUỘN sau ShiftEnd không tính công
 ///     thường — muốn tính giờ ngoài ca, NV phải đăng ký OvertimeRequest.
+///   - <paramref name="excusedLateMinutes"/> / <paramref name="excusedEarlyMinutes"/>
+///     là tổng số phút đi trễ / về sớm đã được Approved bởi đơn Late/Early cho ngày đó.
+///     Cửa sổ hiệu dụng được DỜI về sớm/muộn tương ứng (cap tại khung ca) trước khi
+///     splitter chia giờ ⇒ NV được cộng trả giờ công đã mất do trễ/sớm được miễn.
 ///
 /// Đặt ở Application layer (không phải Infrastructure) để command handler gọi
 /// trực tiếp mà không cần inject splitter+constants riêng.
@@ -26,7 +30,9 @@ public static class AttendanceHourCalculator
         TimeOnly nightStart,
         TimeOnly nightEnd,
         ShiftTemplateEntity shift,
-        DateOnly workDate)
+        DateOnly workDate,
+        int excusedLateMinutes = 0,
+        int excusedEarlyMinutes = 0)
     {
         if (status is AttendanceStatus.OnLeave or AttendanceStatus.Absent)
             return (0m, 0m);
@@ -37,6 +43,11 @@ public static class AttendanceHourCalculator
         var (effectiveIn, effectiveOut) = ClampToShiftWindow(
             checkInAt.Value, checkOutAt.Value,
             shift.StartTime, shift.EndTime, workDate);
+
+        (effectiveIn, effectiveOut) = ApplyExcusedMinutes(
+            effectiveIn, effectiveOut,
+            shift.StartTime, shift.EndTime, workDate,
+            excusedLateMinutes, excusedEarlyMinutes);
 
         if (effectiveOut <= effectiveIn)
             return (0m, 0m);
@@ -50,6 +61,46 @@ public static class AttendanceHourCalculator
             NightEnd: nightEnd));
 
         return (breakdown.DayHours, breakdown.NightHours);
+    }
+
+    /// <summary>
+    /// Dời cửa sổ hiệu dụng để bù số phút đi trễ / về sớm đã được duyệt:
+    ///   - excusedLateMinutes  → coi như check-in sớm hơn tương ứng (không vượt shiftStart).
+    ///   - excusedEarlyMinutes → coi như check-out muộn hơn tương ứng (không vượt shiftEnd).
+    /// Không có tác dụng khi bản ghi chưa từng bị trễ / sớm (cửa sổ đã sát khung ca).
+    /// </summary>
+    private static (DateTime EffectiveIn, DateTime EffectiveOut) ApplyExcusedMinutes(
+        DateTime effectiveIn,
+        DateTime effectiveOut,
+        TimeOnly shiftStart,
+        TimeOnly shiftEnd,
+        DateOnly workDate,
+        int excusedLateMinutes,
+        int excusedEarlyMinutes)
+    {
+        if (excusedLateMinutes <= 0 && excusedEarlyMinutes <= 0)
+            return (effectiveIn, effectiveOut);
+
+        var shiftStartDt = workDate.ToDateTime(shiftStart, DateTimeKind.Unspecified);
+        var shiftEndDt = shiftEnd > shiftStart
+            ? workDate.ToDateTime(shiftEnd, DateTimeKind.Unspecified)
+            : workDate.AddDays(1).ToDateTime(shiftEnd, DateTimeKind.Unspecified);
+
+        if (excusedLateMinutes > 0)
+        {
+            var shifted = effectiveIn.AddMinutes(-excusedLateMinutes);
+            if (shifted < shiftStartDt) shifted = shiftStartDt;
+            effectiveIn = shifted;
+        }
+
+        if (excusedEarlyMinutes > 0)
+        {
+            var shifted = effectiveOut.AddMinutes(excusedEarlyMinutes);
+            if (shifted > shiftEndDt) shifted = shiftEndDt;
+            effectiveOut = shifted;
+        }
+
+        return (effectiveIn, effectiveOut);
     }
 
     /// <summary>

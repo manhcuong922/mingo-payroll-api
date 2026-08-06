@@ -47,6 +47,6 @@ public sealed record UserSnapshot(int Id, int Status, DateTime Dob, string FullN
 
 public sealed record EmployeeInfoSnapshot(int Id, DateTime Dob, string FullName);
 
-public sealed record SalaryGradeSnapshot(int Id, decimal BaseSalary, string Currency, bool IsActive);
+public sealed record SalaryGradeSnapshot(int Id, int PositionId, decimal BaseSalary, string Currency, bool IsActive);
 
 public sealed record TerminationReasonRefSnapshot(int Id, string Code, bool RequiresWrittenNotice);

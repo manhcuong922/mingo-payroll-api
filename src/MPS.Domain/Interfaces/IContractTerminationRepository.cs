@@ -1,4 +1,5 @@
 using MPS.Domain.Entities;
+using MPS.Domain.Enums.Contract;
 
 namespace MPS.Domain.Interfaces;
 
@@ -13,8 +14,10 @@ public interface IContractTerminationRepository
     Task<bool> ExistsForContractAsync(int contractId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Insert <see cref="ContractTermination"/> + đặt parent <c>Contract.Status = Terminated</c>
-    /// trong cùng transaction. Reject nếu:
+    /// Insert <see cref="ContractTermination"/> + đặt parent <c>Contract.Status</c> theo
+    /// <paramref name="targetStatus"/> (<see cref="ContractStatus.Terminated"/> nếu ngày chấm dứt
+    /// đã qua, <see cref="ContractStatus.PendingTermination"/> nếu còn ở tương lai) trong cùng
+    /// transaction. Reject nếu:
     ///   - Contract không tồn tại
     ///   - Contract.ArchivedAt != null
     ///   - Contract.Status != Active
@@ -23,13 +26,22 @@ public interface IContractTerminationRepository
     /// <returns>Id của ContractTermination vừa insert.</returns>
     Task<int> AddAndMarkContractTerminatedAsync(
         ContractTermination termination,
+        ContractStatus targetStatus,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Case 7 — EmployeeInformationId (distinct) của các NV có bản ghi chấm dứt HĐ đã TỚI HẠN
-    /// (<c>TerminationDate &lt;= asOfUtc</c>). Dùng cho job vô hiệu hoá tài khoản: chấm dứt có thể
-    /// đặt ngày hiệu lực ở tương lai (thời gian báo trước) nên chỉ xử lý khi đã qua mốc đó.
+    /// EmployeeInformationId (distinct) của các NV có bản ghi chấm dứt HĐ đã TỚI HẠN — tức
+    /// <c>TerminationDate.Date &lt; <paramref name="todayVn"/>.Date</c> (đã qua ngày làm cuối
+    /// theo giờ VN). Dùng cho job vô hiệu hoá tài khoản.
     /// </summary>
     Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithMaturedTerminationAsync(
-        DateTime asOfUtc, CancellationToken cancellationToken = default);
+        DateTime todayVn, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Promote HĐ đang <see cref="ContractStatus.PendingTermination"/> có TerminationDate đã qua
+    /// (theo <paramref name="todayVn"/>) sang <see cref="ContractStatus.Terminated"/>. Trả số HĐ
+    /// đã flip. Idempotent — chạy lại cùng ngày không đổi thêm.
+    /// </summary>
+    Task<int> PromoteMaturedPendingTerminationsAsync(
+        DateTime todayVn, CancellationToken cancellationToken = default);
 }

@@ -159,8 +159,10 @@ public class ProjectGetPagedQueryHandler : IRequestHandler<ProjectGetPagedQuery,
 }
 
 /// <summary>
-/// Đơn hàng NV hiện tại tham gia (có task được gán) + tiến độ thật. Không đòi Project.Read.* —
-/// scope tự giới hạn theo TaskAssignee của chính user, nên công nhân (Task.Read.Assigned) dùng được.
+/// Đơn hàng liên quan trực tiếp tới NV hiện tại + tiến độ thật. Không đòi Project.Read.* —
+/// scope tự giới hạn theo TaskAssignee HOẶC ResponsibleUserId của chính user, nên công nhân
+/// (Task.Read.Assigned) lẫn tổ trưởng sản xuất (Task.Read.Department) đều dùng được.
+/// Xem plan docs/plans/team-leader-orders-api.md §2.2.
 /// </summary>
 public class ProjectGetMyQueryHandler : IRequestHandler<ProjectGetMyQuery, IReadOnlyList<ProjectDto>>
 {
@@ -186,18 +188,25 @@ public class ProjectGetMyQueryHandler : IRequestHandler<ProjectGetMyQuery, IRead
         var userId = _currentUser.UserId;
         if (userId is null) return Array.Empty<ProjectDto>();
 
-        var projectIds = await _tasks.GetAssignedProjectIdsByUserAsync(userId.Value, ct);
-        if (projectIds.Count == 0) return Array.Empty<ProjectDto>();
+        // Nhánh 1: đơn user được giao phụ trách (ResponsibleUserId). Đã lọc DeletedAt trong repo.
+        var responsibleProjects = await _projects.GetByResponsibleUserIdAsync(
+            userId.Value, ct, request.IncludeCancelled);
 
-        var projects = new List<Domain.Entities.Project>(projectIds.Count);
-        foreach (var projectId in projectIds)
+        // Nhánh 2: đơn user có task được gán. Merge + dedupe theo Id.
+        var assignedProjectIds = await _tasks.GetAssignedProjectIdsByUserAsync(userId.Value, ct);
+
+        var projectsById = responsibleProjects.ToDictionary(p => p.Id);
+        foreach (var projectId in assignedProjectIds)
         {
+            if (projectsById.ContainsKey(projectId)) continue;
             var project = await _projects.GetByIdAsync(projectId, ct);
             if (project is null) continue;
             if (project.DeletedAt is not null && !request.IncludeCancelled) continue;
-            projects.Add(project);
+            projectsById.Add(projectId, project);
         }
-        if (projects.Count == 0) return Array.Empty<ProjectDto>();
+
+        if (projectsById.Count == 0) return Array.Empty<ProjectDto>();
+        var projects = projectsById.Values.ToList();
 
         // Tiến độ tính trên TRỌN cây task của đơn (không chỉ task của NV) — để con số khớp với
         // những gì quản lý xưởng thấy.

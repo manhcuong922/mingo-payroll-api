@@ -3,14 +3,13 @@ using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Contract.Common;
 using MPS.Application.Features.ContractAppendix.Common;
 using MPS.Domain.Constants;
-using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 
 namespace MPS.Application.Features.ContractAppendix.Commands;
 
-public class CreateContractAppendixCommandHandler : IRequestHandler<CreateContractAppendixCommand, int>
+public class CreateContractAppendixCommandHandler : IRequestHandler<CreateContractAppendixCommand, CreateContractAppendixResult>
 {
     private readonly IContractAppendixRepository _appendices;
     private readonly IContractRepository _contracts;
@@ -26,7 +25,7 @@ public class CreateContractAppendixCommandHandler : IRequestHandler<CreateContra
         _currentUser = currentUser;
     }
 
-    public async Task<int> Handle(CreateContractAppendixCommand request, CancellationToken cancellationToken)
+    public async Task<CreateContractAppendixResult> Handle(CreateContractAppendixCommand request, CancellationToken cancellationToken)
     {
         var userId = _currentUser.UserId
             ?? throw new ForbiddenAccessException("Authenticated user context is required to create an appendix.");
@@ -42,16 +41,9 @@ public class CreateContractAppendixCommandHandler : IRequestHandler<CreateContra
             throw new DomainValidationException(
                 $"Cannot append to contract {request.ContractId}: status is {contract.Status}, expected Active.");
 
-        // AppendixNo unique trong phạm vi contract.
-        var dup = await _appendices.AppendixNoExistsForContractAsync(
-            request.ContractId, request.AppendixNo.Trim(), excludeId: null, cancellationToken);
-        if (dup)
-            throw new DomainValidationException(
-                $"AppendixNo '{request.AppendixNo}' already exists for contract {request.ContractId}.");
-
-        // Validate JSON schema (chặn key cấm + parse được) — không cần kết quả ở đây,
-        // chỉ cần fail-fast nếu sai. Activate handler sẽ parse lần nữa để apply.
-        _ = AppendixSchemaValidator.ParseAndValidate(request.ChangedClausesJson);
+        // Validate JSON schema (chặn key cấm + parse được). Cần ChangeSet để suy AppendixType nên
+        // ta giữ luôn giá trị parse ra, thay vì gọi hai lần.
+        var changeSet = AppendixSchemaValidator.ParseAndValidate(request.ChangedClausesJson);
 
         // Điều 33 k.1 — báo trước ≥ 3 ngày làm việc (so với NoticeSentAt = NOW()).
         var nowUtc = DateTime.UtcNow;
@@ -63,11 +55,14 @@ public class CreateContractAppendixCommandHandler : IRequestHandler<CreateContra
                 $"{LaborLawConstants.Appendix.AmendmentNoticeMinWorkingDays} working days after NoticeSentAt — Điều 33 k.1 BLLĐ 2019.");
         }
 
+        var appendixNo = await GenerateNextAppendixNoAsync(contract.Id, contract.ContractNo, cancellationToken);
+        var appendixType = DeriveAppendixType(changeSet);
+
         var entity = new Domain.Entities.ContractAppendix
         {
             ContractId = request.ContractId,
-            AppendixNo = request.AppendixNo.Trim(),
-            AppendixType = request.AppendixType,
+            AppendixNo = appendixNo,
+            AppendixType = appendixType,
             Title = request.Title.Trim(),
             ChangedClausesJson = request.ChangedClausesJson,
             AppendixText = request.AppendixText,
@@ -79,6 +74,38 @@ public class CreateContractAppendixCommandHandler : IRequestHandler<CreateContra
             CreatedByUserId = userId,
         };
 
-        return await _appendices.AddDraftAsync(entity, cancellationToken);
+        var id = await _appendices.AddDraftAsync(entity, cancellationToken);
+        return new CreateContractAppendixResult(id, appendixNo, appendixType.ToString());
+    }
+
+    /// <summary>
+    /// Sinh <c>{ContractNo}-PL-{seq:D2}</c>. Seq = COUNT(phụ lục hiện có) + 1, có retry nhẹ nếu
+    /// đụng phụ lục vừa được tạo song song (race hiếm — Draft vẫn đếm nên seq luôn nhảy).
+    /// </summary>
+    private async Task<string> GenerateNextAppendixNoAsync(int contractId, string contractNo, CancellationToken ct)
+    {
+        var baseCount = await _appendices.CountForContractAsync(contractId, ct);
+        for (var offset = 1; offset <= 5; offset++)
+        {
+            var candidate = $"{contractNo}-PL-{(baseCount + offset):D2}";
+            var taken = await _appendices.AppendixNoExistsForContractAsync(contractId, candidate, excludeId: null, ct);
+            if (!taken) return candidate;
+        }
+        throw new DomainValidationException(
+            $"Không sinh được AppendixNo mới cho hợp đồng {contractNo} sau 5 lần thử. Vui lòng thử lại.");
+    }
+
+    /// <summary>
+    /// Amendment nếu phụ lục thay đổi Position / SalaryGrade / Allowance (những trường có tác động
+    /// định danh hoặc giá trị lương); ngược lại là Detail (chỉ mô tả bổ sung).
+    /// </summary>
+    private static AppendixType DeriveAppendixType(AppendixChangeSet change)
+    {
+        var isAmendment = change.PositionId is not null
+            || change.SalaryGradeId is not null
+            || change.AddAllowances.Count > 0
+            || change.UpdateAllowances.Count > 0
+            || change.RemoveAllowanceTypeIds.Count > 0;
+        return isAmendment ? AppendixType.Amendment : AppendixType.Detail;
     }
 }

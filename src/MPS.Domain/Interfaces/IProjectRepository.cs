@@ -22,6 +22,12 @@ public interface IProjectRepository
     Task<Project?> GetByIdWithTasksAsync(int id, CancellationToken ct);   // include Tasks + DependsOn cho EV/PV
     Task<IReadOnlyList<Project>> GetByDepartmentAsync(
         int departmentId, CancellationToken ct, bool includeCancelled = false, ProjectStatus? status = null);
+
+    // Đơn mà user được gán làm ResponsibleUserId (tổ trưởng sản xuất phụ trách đơn). Dùng cho
+    // GET /api/Project/my — mở rộng scope để tổ trưởng thấy đơn mình phụ trách kể cả khi chưa có
+    // task nào assign cho mình (plan: docs/plans/team-leader-orders-api.md §2.2).
+    Task<IReadOnlyList<Project>> GetByResponsibleUserIdAsync(
+        int userId, CancellationToken ct, bool includeCancelled = false);
     Task<(IReadOnlyList<Project> Items, int Total)> GetPagedAsync(
         string? keyword, int? departmentId, int page, int pageSize, CancellationToken ct,
         bool includeCancelled = false, ProjectStatus? status = null);

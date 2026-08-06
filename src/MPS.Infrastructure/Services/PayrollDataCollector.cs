@@ -438,7 +438,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var endDt = end.ToDateTime(TimeOnly.MaxValue);
         return contracts
             .Where(c => c.EffectiveFrom <= endDt && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
-            .OrderByDescending(c => c.Status == ContractEnums.ContractStatus.Active)
+            // Ưu tiên HĐ "đang vận hành" — Active hoặc PendingTermination (chưa qua ngày làm cuối);
+            // trong khoảng chờ NLĐ vẫn hưởng lương như HĐ Active.
+            .OrderByDescending(c => c.Status == ContractEnums.ContractStatus.Active
+                || c.Status == ContractEnums.ContractStatus.PendingTermination)
             .ThenByDescending(c => c.EffectiveFrom)
             .FirstOrDefault();
     }
