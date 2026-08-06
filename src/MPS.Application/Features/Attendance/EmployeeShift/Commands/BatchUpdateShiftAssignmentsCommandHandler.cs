@@ -309,7 +309,7 @@ public class BatchUpdateShiftAssignmentsCommandHandler
 
         foreach (var range in ranges)
         {
-            var map = await _dayTypeResolver.ResolveRangeAsync(range.EmployeeId, range.From, range.To, cancellationToken);
+            var map = await _dayTypeResolver.ResolveGuardRangeAsync(range.EmployeeId, range.From, range.To, cancellationToken);
             result[range.EmployeeId] = map;
         }
 

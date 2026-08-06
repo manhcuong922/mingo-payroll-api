@@ -18,4 +18,18 @@ public interface IDayTypeResolver
         DateOnly fromDate,
         DateOnly toDate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Biến thể của <see cref="ResolveRangeAsync"/> chuyên dùng cho <b>guard trước khi
+    /// tạo assignment</b> (BatchUpdateShiftAssignments). Khác biệt duy nhất: suy
+    /// WeeklyRestDay từ DOW-pattern của lịch sử <c>[addFrom-28, addFrom-1]</c> — KHÔNG
+    /// dùng chính khoảng đang add làm cửa sổ dò, tránh vòng luẩn quẩn "chưa có ca ⇒
+    /// mọi ngày là rest day ⇒ không tạo được ca". Holiday và PaidLeave dò theo semantic
+    /// tuyệt đối như cũ.
+    /// </summary>
+    Task<IReadOnlyDictionary<DateOnly, AttendanceEnums.DayType>> ResolveGuardRangeAsync(
+        int employeeInformationId,
+        DateOnly addFrom,
+        DateOnly addTo,
+        CancellationToken cancellationToken = default);
 }
