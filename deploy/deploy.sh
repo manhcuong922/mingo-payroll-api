@@ -24,7 +24,11 @@ if [ -n "$SERVICE" ]; then
   docker compose -f "$COMPOSE_FILE" up -d --no-deps "$SERVICE"
 else
   echo "==> Deploy toàn bộ stack"
-  docker compose -f "$COMPOSE_FILE" pull
+  # --ignore-pull-failures: stack kéo image từ 2 registry khác nhau (GHCR cho api/ui,
+  # Docker Hub cho attendance-*). Không có cờ này thì chỉ cần 1 image lỗi là `set -e`
+  # giết script TRƯỚC khi kịp `up -d` -> không service nào được cập nhật.
+  # Image nào pull hỏng thì `up -d` bên dưới dùng bản local đang có.
+  docker compose -f "$COMPOSE_FILE" pull --ignore-pull-failures || true
   docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
 fi
 

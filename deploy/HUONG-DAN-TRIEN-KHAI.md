@@ -5,10 +5,15 @@ Tài liệu này liệt kê **từng bước** từ lệnh cụ thể đến tha
 > **Thông tin đã chốt cho dự án này:**
 > - Tên miền: UI = `app.operix.fun`, API = `api.operix.fun`, MinIO = `s3.operix.fun`,
 >   kiosk quét mặt = `kiosk.operix.fun`, AI service = `ai.operix.fun`
-> - VPS: `103.179.173.60`
+> - VPS: `103.179.173.60` — **1.9 GB RAM + 4 GB swap**, 38 GB đĩa
 > - Email Let's Encrypt: `luans1mple2004@gmail.com`
-> - Owner GHCR (lowercase): `luans1mple`
+> - Owner GHCR (lowercase): `luans1mple` — dùng cho `api` và `ui`
+> - Docker Hub `thanhhui1709` (public) — dùng cho `attendance-ai` và `attendance-ui`
 > - Thư mục triển khai trên VPS: `/opt/mingo`
+
+> ⚠️ **Stack kéo image từ HAI registry khác nhau.** `api`/`ui` build bằng GitHub Actions
+> rồi push lên GHCR (private, cần login). `attendance-ai`/`attendance-ui` là image dựng sẵn
+> trên Docker Hub, **public, không có CI, chỉ có tag `latest`** — xem BƯỚC 7B.
 
 ---
 
@@ -23,7 +28,11 @@ Team member  ──PR──►  nhánh dev  ──(bạn review & approve)
    Repo API: Actions build image → push GHCR → scp deploy/* lên VPS → ssh ./deploy.sh
    Repo UI : Actions build image → push GHCR → ssh ./deploy.sh ui
 
-VPS: Caddy(443) → ui(nginx) + api(.NET) → sqlserver + minio
+   attendance-ai / attendance-ui: KHÔNG nằm trong pipeline — image dựng sẵn trên
+   Docker Hub, cập nhật thủ công bằng ./deploy.sh attendance-ai (xem BƯỚC 7B)
+
+VPS: Caddy(443) → ui(nginx) + api(.NET) + attendance-ui(kiosk) + attendance-ai(Flask)
+                → sqlserver + minio + llmproxy
 ```
 
 - **CI (build/test)** chạy khi có **PR vào `dev`** → là cổng review.
@@ -106,9 +115,17 @@ cách này **chạy được ngay cả khi package còn Private và chưa tồn 
    → Generate new token → tích scope **`read:packages`** → Generate → copy token.
 2. SSH vào VPS bằng user `deploy`, rồi login (token nhập 1 lần, Docker lưu lại):
 ```bash
-echo "<YOUR_GITHUB_TOKEN>" | docker login ghcr.io -u luans1mple --password-stdin
+echo "<DÁN_PAT_VÀO_ĐÂY>" | docker login ghcr.io -u luans1mple --password-stdin
 # Thành công sẽ in: Login Succeeded
 ```
+
+> ⚠️ **Không dán PAT thật vào file này.** Bản trước của tài liệu có hardcode một token
+> `ghp_...` — token đó phải coi như đã lộ và **cần revoke** tại
+> GitHub → Settings → Developer settings → Personal access tokens.
+>
+> Trạng thái hiện tại: VPS **đã login rồi**, credential lưu ở
+> `/home/deploy/.docker/config.json`. Chỉ phải làm lại bước này khi đổi token hoặc dựng
+> VPS mới. Hai image `attendance-*` nằm trên Docker Hub public nên không cần login.
 
 > Các lần `docker pull` / `./deploy.sh` sau đó tự dùng credential đã lưu, không cần login lại.
 >
@@ -130,19 +147,30 @@ Tại nơi quản lý tên miền `operix.fun`, tạo 5 bản ghi **A**:
 | A    | `kiosk`    | `103.179.173.60`   | UI quét khuôn mặt              |
 | A    | `ai`       | `103.179.173.60`   | AI service nhận diện           |
 
-Kiểm tra đã trỏ đúng (Caddy cần DNS đúng để xin cert — **thiếu bất kỳ bản ghi nào
-là Caddy fail toàn bộ khi xin cert**):
+Kiểm tra đã trỏ đúng:
 ```bash
 for h in app api s3 kiosk ai; do nslookup $h.operix.fun; done
 ```
 
+> **Thiếu bản ghi nào thì chỉ subdomain đó chết, không kéo sập các domain còn lại.**
+> Caddy xin cert độc lập cho từng site: site nào thiếu DNS thì ACME trả `NXDOMAIN`,
+> Caddy retry vô hạn ở nền (tối đa 30 ngày) trong khi vẫn phục vụ bình thường các site
+> đã có cert. Triệu chứng: truy cập subdomain đó bị lỗi TLS, còn `docker logs mingo-caddy`
+> đầy dòng `could not get certificate from issuer ... NXDOMAIN looking up A for ...`.
+>
+> Hệ quả thực tế đã gặp: thiếu bản ghi `s3` → presigned URL của MinIO không dùng được
+> → **ảnh và file hợp đồng trên `app.operix.fun` không tải được**, dù trang web vẫn vào
+> bình thường. Rất dễ tưởng nhầm là lỗi MinIO hoặc lỗi code.
+
 ---
- đến đây r
+
 ## BƯỚC 5 — Cấu hình GitHub
 
-### 5.1. Secrets — tạo ở **cả 4 repo**
-`mingo-payroll-api`, `mingo-payroll-ui`, `mingo-payroll-attendance-tracking`,
-`mingo-payroll-attendance-tracking-ui`.
+### 5.1. Secrets — tạo ở **cả 2 repo có CI/CD**
+`mingo-payroll-api` và `mingo-payroll-ui`.
+
+> Hai service `attendance-*` **không có repo CI/CD** — image được đẩy tay lên Docker Hub,
+> nên không cần secret nào cho chúng.
 
 Repo → Settings → Secrets and variables → Actions → tab **Secrets** → New repository secret:
 
@@ -157,7 +185,7 @@ Repo → Settings → Secrets and variables → Actions → tab **Secrets** → 
 ### 5.2. Variables
 Cùng trang → tab **Variables** → New repository variable.
 
-Cả 4 repo:
+Cả 2 repo:
 
 | Tên                     | Giá trị                                  |
 |-------------------------|------------------------------------------|
@@ -169,17 +197,11 @@ Riêng **repo `mingo-payroll-ui`**:
 |---------------------|---------------------------------|
 | `VITE_API_BASE_URL` | `https://api.operix.fun/api`    |
 
-Riêng **repo `mingo-payroll-attendance-tracking-ui`**:
+> Biến này được Vite **inline vào bundle lúc build**, không đọc lúc chạy. Sửa xong
+> phải build lại image thì trình duyệt mới thấy giá trị mới. Kiosk (`attendance-ui`)
+> cũng vậy — xem BƯỚC 7B.1.
 
-| Tên                       | Giá trị                          |
-|---------------------------|----------------------------------|
-| `VITE_PAYROLL_API_BASE`   | `https://api.operix.fun/api`     |
-| `VITE_AI_SERVICE_BASE`    | `https://ai.operix.fun`          |
-
-> 2 biến này được Vite **inline vào bundle lúc build**, không đọc lúc chạy. Sửa xong
-> phải build lại image thì trình duyệt mới thấy giá trị mới.
-
-### 5.3. Branch protection — đặt cho nhánh **`dev`** (cả 4 repo)
+### 5.3. Branch protection — đặt cho nhánh **`dev`** (cả 2 repo)
 Settings → Branches → Add rule, branch name pattern = `dev`:
 - ☑ Require a pull request before merging → Require approvals = **1**
 - ☑ Require status checks to pass before merging → chọn check **CI**
@@ -217,6 +239,16 @@ cp .env.example .env
 > Không cần sửa gì thêm. (Nếu muốn đổi mật khẩu, sửa trong `.env` và đảm bảo
 > `MSSQL_SA_PASSWORD` khớp password trong `ConnectionStrings__DefaultConnection`,
 > `MINIO_BACKEND_PASSWORD` khớp `Minio__SecretKey`.)
+
+> ⚠️ **Nếu VPS ĐÃ có `.env` từ lần deploy trước** thì đừng `cp` đè — sẽ mất giá trị đang
+> chạy. Thay vào đó **thêm các biến còn thiếu**. Lệnh dưới liệt kê biến có trong
+> `.env.example` mà `.env` chưa có:
+> ```bash
+> cd /opt/mingo
+> cp .env .env.bak.$(date +%Y%m%d-%H%M%S)      # luôn backup trước
+> comm -23 <(grep -oE '^[A-Za-z_][A-Za-z0-9_]*' .env.example | sort -u) \
+>          <(grep -oE '^[A-Za-z_][A-Za-z0-9_]*' .env         | sort -u)
+> ```
 
 ### 6.2b. Cấu hình proxy LLM (CLIProxyAPI — module Compliance)
 
@@ -291,29 +323,92 @@ curl -i https://api.operix.fun/health/minio     # mong đợi HTTP 200
 Module này gồm 2 container thêm vào stack: `attendance-ai` (Flask, nhận diện) và
 `attendance-ui` (kiosk quét mặt). Cả hai deploy theo đúng pipeline như api/ui.
 
-### 7B.1. Repo & CI/CD
+### 7B.1. Image — Docker Hub, KHÔNG có CI/CD
 
-| Repo                                    | Image GHCR                                          | Lệnh deploy trên VPS        |
-|-----------------------------------------|-----------------------------------------------------|-----------------------------|
-| `mingo-payroll-attendance-tracking`     | `mingo-payroll-attendance-tracking`                 | `./deploy.sh attendance-ai` |
-| `mingo-payroll-attendance-tracking-ui`  | `mingo-payroll-attendance-tracking-ui`              | `./deploy.sh attendance-ui` |
+Khác với `api`/`ui`, hai service này **không build từ repo nào trong tổ chức**. Image do
+người phát triển module đẩy tay lên Docker Hub cá nhân, public nên VPS pull không cần login:
 
-Cả 2 repo phải nằm dưới owner `luans1mple` để dùng chung `REGISTRY_OWNER` và
-credential GHCR đã login ở Bước 3. Mỗi repo cần nhánh `dev` (CI) và `main` (deploy).
+| Service compose  | Image                                    | Cỡ     | Lệnh deploy tay trên VPS    |
+|------------------|------------------------------------------|--------|-----------------------------|
+| `attendance-ai`  | `thanhhui1709/mingo-ai-services:latest`  | 523 MB | `./deploy.sh attendance-ai` |
+| `attendance-ui`  | `thanhhui1709/mingo-face-scan:latest`    | 26 MB  | `./deploy.sh attendance-ui` |
 
-> Workflow của 2 repo này **không scp file nào** lên VPS: `docker-compose.prod.yml`,
-> `Caddyfile`, `deploy.sh` thuộc repo `mingo-payroll-api`. Sửa stack ⇒ commit ở repo
-> api và deploy repo api thì file trên VPS mới được cập nhật.
+Hệ quả cần nhớ:
+
+- **Chỉ có tag `latest`.** Vì vậy compose cố định `:latest` cho 2 service này thay vì
+  dùng `${IMAGE_TAG}` — đặt `IMAGE_TAG=<sha>` để rollback api/ui sẽ **không** ảnh hưởng
+  chúng, và nếu lỡ dùng `${IMAGE_TAG}` thì pull sẽ hỏng.
+- **Không có pipeline.** Code module đổi ⇒ phải nhờ người giữ image build & push lại,
+  rồi chạy `./deploy.sh attendance-ai` trên VPS. Merge vào `main` không tự cập nhật chúng.
+- **Bundle kiosk nướng cứng URL lúc build**: đã kiểm chứng image hiện tại chứa
+  `https://api.operix.fun/api` và `https://ai.operix.fun`. Đổi tên miền ⇒ phải build lại
+  image kiosk, sửa `.env` không có tác dụng.
+- `docker-compose.prod.yml`, `Caddyfile`, `deploy.sh` thuộc repo `mingo-payroll-api`.
+  Sửa stack ⇒ commit ở repo api và deploy repo api thì file trên VPS mới được cập nhật.
 
 ### 7B.2. Biến trong `/opt/mingo/.env`
 
-Đã có sẵn trong `.env.example`, chỉ cần kiểm tra 3 chỗ:
+`.env` trên VPS **không tự cập nhật khi deploy** (workflow cố ý không đụng vào nó), nên
+sau khi thêm module này phải tự bổ sung. Đối chiếu với `.env.example` và kiểm 3 chỗ sau:
 
 | Biến                  | Bắt buộc làm gì                                                                 |
 |-----------------------|---------------------------------------------------------------------------------|
-| `AI_SERVICE_PASSWORD` | Đổi thành mật khẩu mạnh. Compose truyền **cùng giá trị này** vào `AiServiceAccount__Password` của api và `SERVICE_PASSWORD` của AI service, nên không thể lệch. |
-| `AI_ALLOWED_IPS`      | IP public của mạng công ty (`curl ifconfig.me` từ máy trong mạng đó). **Để rỗng = chặn hết**, kiosk sẽ không quét được. Nhiều dải cách nhau bằng dấu cách. |
-| `SEED_RESET_ON_STARTUP` | **Đặt `false`.** Để `true` thì mỗi lần api restart là xoá sạch DB, kéo theo toàn bộ đăng ký khuôn mặt đã duyệt → AI service load 0 embedding. |
+| `AI_SERVICE_PASSWORD` | Đã đặt sẵn mật khẩu mạnh trong `.env.example`. Compose truyền **cùng giá trị này** vào `AiServiceAccount__Password` của api và `SERVICE_PASSWORD` của AI service, nên không thể lệch. |
+| `AI_ALLOWED_IPS`      | IP public của mạng đặt kiosk (`curl ifconfig.me` từ máy trong mạng đó). **Để rỗng = chặn hết**, kiosk sẽ không quét được. Nhiều dải cách nhau bằng dấu cách. IP nhà mạng VN thường động → phải cập nhật lại khi đổi. Mở tạm cho mọi IP để test: xem 7B.2c. |
+
+#### 7B.2c. Mở tạm cho mọi IP (chỉ khi test)
+
+Giai đoạn test thường phải quét từ nhiều mạng khác nhau, khai từng IP rất phiền:
+
+```bash
+cd /opt/mingo
+cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
+sed -i 's|^AI_ALLOWED_IPS=.*|AI_ALLOWED_IPS=0.0.0.0/0 ::/0|' .env
+./deploy.sh caddy          # biến môi trường chỉ nạp lúc tạo container -> phải recreate
+curl https://ai.operix.fun/health    # từ IP bất kỳ, phải ra JSON healthy
+```
+
+Siết lại khi test xong — đổi dòng đó về IP thật rồi `./deploy.sh caddy`.
+
+> ⚠️ **Không để `0.0.0.0/0` khi chạy thật.** Bốn endpoint của AI service
+> (`/process_frame`, `/extract_embedding`, `/reload_employees`, `/stats`) **không có
+> xác thực**, gate IP ở Caddy là lớp bảo vệ duy nhất. Mở hết nghĩa là:
+> - bất kỳ ai cũng gọi được `/process_frame` — tức là gửi ảnh vào luồng **chấm công**;
+> - `/extract_embedding` là tính toán nặng, vài request song song đủ đẩy AI service
+>   (trần `mem_limit: 1g`) xuống swap và làm cả VPS 1.9GB ì ạch.
+>
+> Giá trị này nằm trong `/opt/mingo/.env` — deploy **không** ghi đè, nên đổi rồi thì
+> nó giữ nguyên mãi cho tới khi có người sửa lại. Dễ quên.
+| `SEED_RESET_ON_STARTUP` | **Để `false`** (đã là mặc định của compose và `.env.example`). Đặt `true` thì mỗi lần api restart là xoá sạch DB, kéo theo toàn bộ đăng ký khuôn mặt đã duyệt → AI service load 0 embedding. |
+
+Danh sách đầy đủ các biến module này cần (copy từ `.env.example` nếu `.env` chưa có):
+`KIOSK_DOMAIN`, `AI_DOMAIN`, `AI_ALLOWED_IPS`, `AI_SERVICE_USERNAME`, `AI_SERVICE_PASSWORD`,
+`AiService__BaseUrl`, `AI_MATCH_THRESHOLD`, `AI_LIVENESS_THRESHOLD`, `AI_CHECKIN_COOLDOWN`,
+`AI_CAMERA_ID`, `AI_LOG_LEVEL`, `Cors__AllowedOrigins__1`, `SEED_RESET_ON_STARTUP`.
+
+### 7B.2b. RAM — điều kiện tiên quyết
+
+VPS chỉ có **1.9 GB RAM**. Trước khi bật module này, các container cũ đã chiếm ~1.26 GB
+(`sqlserver` 725 MB, `api` 289 MB, `minio` 206 MB), chỉ còn ~325 MB trống. AI service cần
+**1.2–1.8 GB** khi nạp InsightFace `buffalo_l` + MiniFASNetV2 vào ONNX runtime.
+
+Nếu không xử lý, OOM killer sẽ giết tiến trình RSS lớn nhất — tức `sqlserver` — làm sập DB.
+Ba biện pháp đã áp dụng, **cả ba đều cần**:
+
+```bash
+# 1) Swap 4 GB (đã tạo, đã ghi /etc/fstab nên sống sót qua reboot)
+fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+free -h        # kiểm tra: dòng Swap phải hiện 4.0Gi
+```
+
+2. `MSSQL_MEMORY_LIMIT_MB=640` trong `.env` — chặn SQL Server tự lấy gần hết RAM.
+3. `mem_limit: 1g` + `memswap_limit: 3g` cho `attendance-ai` trong compose — phần vượt
+   1 GB tràn xuống swap thay vì đẩy cả máy vào OOM.
+
+> ⚠️ Đây là cấu hình **đủ để chạy, không phải để chạy nhanh**. AI service sẽ dùng swap,
+> nên nhận diện mỗi khuôn mặt chậm hơn đáng kể so với chạy đủ RAM. Muốn kiosk mượt thì
+> phải nâng VPS lên **4 GB RAM**, sau đó nâng `MSSQL_MEMORY_LIMIT_MB` và `mem_limit` lên.
 
 ### 7B.3. Lần khởi động đầu tiên — tải model
 
@@ -381,6 +476,9 @@ docker compose -f docker-compose.prod.yml down -v         # dừng + XOÁ data (
 # Sửa IMAGE_TAG trong .env sang tag SHA cũ (xem tag trên GHCR), rồi:
 ./deploy.sh
 ```
+> Chỉ áp dụng cho `api` và `ui`. Hai service `attendance-*` cố định `:latest`
+> (Docker Hub không có tag SHA) nên không rollback theo cách này được — muốn lùi phiên bản
+> phải nhờ người giữ image push lại bản cũ.
 
 ### Sao lưu (nên đặt cron)
 ```bash
@@ -401,7 +499,10 @@ docker run --rm --network mingo_mingo -v /opt/mingo/backup:/backup \
 
 | Triệu chứng | Cách xử lý |
 |-------------|------------|
-| Caddy không xin được cert | DNS chưa trỏ đúng hoặc port 80/443 bị chặn. Kiểm tra `nslookup` và `ufw status`. |
+| Caddy không xin được cert | DNS chưa trỏ đúng hoặc port 80/443 bị chặn. Kiểm tra `nslookup` và `ufw status`. Chỉ subdomain thiếu DNS bị ảnh hưởng, các site khác vẫn chạy — xem BƯỚC 4. |
+| Ảnh/file hợp đồng không tải được nhưng web vẫn vào bình thường | Gần như chắc là `s3.operix.fun` chưa có bản ghi A → Caddy không có cert → presigned URL của MinIO chết. `docker logs mingo-caddy \| grep NXDOMAIN` để xác nhận. |
+| `sqlserver` tự nhiên chết / api mất kết nối DB sau khi bật module khuôn mặt | OOM killer. Kiểm tra `dmesg -T \| grep -i "killed process"` và `free -h`. Xem BƯỚC 7B.2b — phải có swap + `MSSQL_MEMORY_LIMIT_MB` + `mem_limit`. |
+| `deploy.sh` báo lỗi pull nhưng vẫn chạy tiếp | Đúng thiết kế: `pull --ignore-pull-failures` để một image lỗi không chặn cả stack. Service đó giữ nguyên image local đang chạy. Đọc kỹ log xem image nào hỏng. |
 | `api` restart liên tục | Xem `logs api`. Thường do DB chưa sẵn sàng (đợi vài chục giây) hoặc sai connection string. |
 | Pull image lỗi `unauthorized` | Package GHCR đang private mà VPS chưa login → làm Bước 3. |
 | UI gọi API bị CORS | `Cors__AllowedOrigins__0` phải là `https://app.operix.fun`. Sửa `.env` → `./deploy.sh api`. |
@@ -420,7 +521,9 @@ docker run --rm --network mingo_mingo -v /opt/mingo/backup:/backup \
 
 - **`appsettings.json` (trong source) đã gỡ secret** (để rỗng). Local dev đọc secret từ
   `appsettings.Development.json` (đã gitignore — mỗi máy team tự tạo). Production đọc từ `/opt/mingo/.env`.
-- **Điều kiện cho pipeline UI:** `yarn build` phải xanh. Hiện còn vài lỗi TypeScript có sẵn trong
-  code UI cần sửa, nếu không Docker build & CI của UI sẽ fail.
+- **Điều kiện cho pipeline UI:** `yarn build` phải xanh (Dockerfile chạy `tsc -b && vite build`).
+  Một lỗi TypeScript thôi là job `Build & Deploy UI` fail ngay ở bước build image, chưa kịp
+  tới bước deploy — nên UI trên server sẽ đứng ở bản cũ mà không có dấu hiệu gì ngoài
+  job đỏ trong tab Actions. Luôn chạy `yarn build` ở local trước khi merge vào `main`.
 - **Bảo mật:** `.env.example` đang chứa secret thật để tiện copy-chạy → **giữ repo private**.
   Nếu công khai repo, rotate lại toàn bộ mật khẩu/khóa.
