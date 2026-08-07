@@ -26,6 +26,8 @@ public class ContractRepository : IContractRepository
         var query = _context.Contracts
             .AsNoTracking()
             .Include(c => c.EmployeeInformation)
+            .Include(c => c.EmployerParty)
+            .Include(c => c.EmployerSignerUser)
             .Include(c => c.SalaryGrade)
             .AsQueryable();
 
@@ -40,6 +42,7 @@ public class ContractRepository : IContractRepository
     }
 
     public async Task<(IReadOnlyList<Domain.Entities.Contract> Items, int Total)> GetPagedAsync(
+        string? keyword,
         int? employeeInformationId,
         ContractStatus? status,
         ContractCategory? category,
@@ -52,6 +55,15 @@ public class ContractRepository : IContractRepository
             .AsNoTracking()
             .Include(c => c.EmployeeInformation)
             .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            var pattern = $"%{kw}%";
+            query = query.Where(c =>
+                EF.Functions.Like(c.ContractNo, pattern) ||
+                EF.Functions.Like(c.EmployeeInformation.FullName, pattern));
+        }
 
         if (employeeInformationId.HasValue)
             query = query.Where(c => c.EmployeeInformationId == employeeInformationId.Value);

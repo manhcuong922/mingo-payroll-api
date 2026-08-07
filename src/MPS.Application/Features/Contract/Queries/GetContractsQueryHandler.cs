@@ -49,6 +49,7 @@ public class GetContractsQueryHandler : IRequestHandler<GetContractsQuery, Paged
         var size = request.Size <= 0 ? 20 : Math.Min(request.Size, 100);
 
         var (items, total) = await _repository.GetPagedAsync(
+            request.Keyword,
             effectiveEmployeeInformationId,
             request.Status,
             request.Category,

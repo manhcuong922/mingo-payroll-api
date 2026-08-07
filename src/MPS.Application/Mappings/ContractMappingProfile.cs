@@ -47,6 +47,10 @@ public class ContractMappingProfile : Profile
                 opt => opt.MapFrom(src => src.ProbationResultStatus.HasValue ? src.ProbationResultStatus.Value.ToString() : null))
             .ForCtorParam(nameof(ContractDetailDto.EmployeeFullName),
                 opt => opt.MapFrom(src => src.EmployeeInformation != null ? src.EmployeeInformation.FullName : null))
+            .ForCtorParam(nameof(ContractDetailDto.EmployerPartyName),
+                opt => opt.MapFrom(src => src.EmployerParty != null ? src.EmployerParty.LegalName : null))
+            .ForCtorParam(nameof(ContractDetailDto.EmployerSignerFullName),
+                opt => opt.MapFrom(src => src.EmployerSignerUser != null ? src.EmployerSignerUser.FullName : null))
             .ForCtorParam(nameof(ContractDetailDto.SalaryGradeCode),
                 opt => opt.MapFrom(src => src.SalaryGrade != null ? src.SalaryGrade.Code : null))
             .ForCtorParam(nameof(ContractDetailDto.Allowances),

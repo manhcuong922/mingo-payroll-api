@@ -166,7 +166,7 @@ public sealed class ContractFlowIntegrationTests
         var listHandler = new GetContractsQueryHandler(repo, fx.Mapper, selfUser.Object, lookup);
 
         var result = await listHandler.Handle(
-            new GetContractsQuery(EmployeeInformationId: null, Status: null, Category: null, Kind: null, Page: 1, Size: 50),
+            new GetContractsQuery(Keyword: null, EmployeeInformationId: null, Status: null, Category: null, Kind: null, Page: 1, Size: 50),
             CancellationToken.None);
 
         result.Total.Should().Be(1);

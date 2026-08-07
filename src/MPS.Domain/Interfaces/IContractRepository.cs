@@ -8,6 +8,7 @@ public interface IContractRepository
     Task<Contract?> GetByIdAsync(int id, bool includeAllowances = false, CancellationToken cancellationToken = default);
 
     Task<(IReadOnlyList<Contract> Items, int Total)> GetPagedAsync(
+        string? keyword,
         int? employeeInformationId,
         ContractStatus? status,
         ContractCategory? category,

@@ -27,6 +27,7 @@ public class ContractController : ControllerBase
     [HttpGet]
     [HasAnyPermission(Permissions.ContractReadAll, Permissions.ContractReadSelf)]
     public async Task<IActionResult> GetAll(
+        [FromQuery] string? keyword,
         [FromQuery] int? employeeInformationId,
         [FromQuery] ContractStatus? status,
         [FromQuery] ContractCategory? category,
@@ -36,7 +37,7 @@ public class ContractController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(
-            new GetContractsQuery(employeeInformationId, status, category, kind, page, size),
+            new GetContractsQuery(keyword, employeeInformationId, status, category, kind, page, size),
             cancellationToken);
         return Ok(result);
     }
