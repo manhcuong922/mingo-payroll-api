@@ -116,20 +116,34 @@ public sealed class FptAiCitizenIdOcrServiceTests
 
     [Theory]
     [InlineData("cccd_front")]
-    [InlineData("cccd_back")]
     [InlineData("cmnd_front")]
-    [InlineData("cmnd_back")]
     [InlineData("chip_front")]
-    [InlineData("chip_back")]
     [InlineData("cc_front")]
-    [InlineData("cc_back")]
-    public async Task RecognizeAsync_Accepts_All_Valid_DocumentTypes(string docType)
+    public async Task RecognizeAsync_Accepts_All_Valid_Front_DocumentTypes(string docType)
     {
         var json = $$"""{ "errorCode": 0, "data": [{ "type": "{{docType}}" }] }""";
 
         var act = async () => await BuildService(json).RecognizeAsync(JpegStream(), "image/jpeg");
 
         await act.Should().NotThrowAsync();
+    }
+
+    /// <summary>
+    /// Đối xứng với <see cref="RecognizeBackAsync_Throws_When_Front_Image_Uploaded"/>:
+    /// endpoint mặt trước phải từ chối ảnh mặt sau, thay vì trả về record toàn null.
+    /// </summary>
+    [Theory]
+    [InlineData("cccd_back")]
+    [InlineData("cmnd_back")]
+    [InlineData("chip_back")]
+    [InlineData("cc_back")]
+    public async Task RecognizeAsync_Throws_When_Back_Image_Uploaded(string docType)
+    {
+        var json = $$"""{ "errorCode": 0, "data": [{ "type": "{{docType}}" }] }""";
+
+        var act = async () => await BuildService(json).RecognizeAsync(JpegStream(), "image/jpeg");
+
+        await act.Should().ThrowAsync<OcrInvalidDocumentTypeException>();
     }
 
     [Fact]

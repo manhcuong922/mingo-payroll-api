@@ -254,10 +254,16 @@ public static class InfrastructureServiceRegistration
         // Document rendering (DOCX merge)
         services.AddScoped<IDocumentRenderingService, DocxMergeService>();
 
-        // OCR — FPT.AI citizen ID
+        // OCR CCCD — Claude vision là provider chính, FPT.AI giữ lại làm fallback.
+        // Đăng ký 2 concrete type (mỗi cái một HttpClient riêng), rồi bọc bằng composite
+        // để ICitizenIdOcrService vẫn là một service duy nhất với controller.
+        services.AddOptions<AnthropicOcrOptions>()
+            .Bind(configuration.GetSection(AnthropicOcrOptions.SectionName));
         services.AddOptions<FptAiOcrOptions>()
             .Bind(configuration.GetSection(FptAiOcrOptions.SectionName));
-        services.AddHttpClient<ICitizenIdOcrService, FptAiCitizenIdOcrService>();
+        services.AddHttpClient<AnthropicCitizenIdOcrService>();
+        services.AddHttpClient<FptAiCitizenIdOcrService>();
+        services.AddScoped<ICitizenIdOcrService, FallbackCitizenIdOcrService>();
 
         // AI attendance service — báo reload embeddings sau khi face registration thay đổi
         services.AddOptions<AiServiceOptions>()

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -10,23 +9,14 @@ using Polly.Retry;
 
 namespace MPS.Infrastructure.Services;
 
+/// <summary>
+/// OCR CCCD qua FPT.AI. Từ 2026 giữ lại làm FALLBACK cho
+/// <see cref="AnthropicCitizenIdOcrService"/> (FPT ngừng cấp dịch vụ cho tài khoản cá nhân).
+///
+/// Logic map dữ liệu nằm ở <see cref="CitizenIdOcrParsing"/>, dùng chung với provider Claude.
+/// </summary>
 public sealed class FptAiCitizenIdOcrService : ICitizenIdOcrService
 {
-    private static readonly IReadOnlySet<string> ValidDocTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        // CMND (cũ) + CCCD mã vạch
-        "cmnd_front", "cmnd_back", "cccd_front", "cccd_back",
-        // CCCD gắn chip (2021+) — FPT.AI trả về chip_front/chip_back
-        "chip_front", "chip_back",
-        // Thẻ Căn cước mới theo Luật Căn cước 2023 (hiệu lực 01/07/2024) — FPT.AI trả về cc_front/cc_back
-        "cc_front", "cc_back"
-    };
-
-    private static readonly IReadOnlySet<string> BackDocTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "cmnd_back", "cccd_back", "chip_back", "cc_back"
-    };
-
     private readonly HttpClient _http;
     private readonly FptAiOcrOptions _options;
     private readonly AsyncRetryPolicy<HttpResponseMessage> _retryPolicy;
@@ -44,13 +34,22 @@ public sealed class FptAiCitizenIdOcrService : ICitizenIdOcrService
             .WaitAndRetryAsync(2, attempt => TimeSpan.FromSeconds(attempt));
     }
 
+    /// <summary>Không có API key thì đừng gọi — dùng để quyết định có fallback sang đây hay không.</summary>
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.ApiKey);
+
     public async Task<CitizenIdOcrResult> RecognizeAsync(Stream imageStream, string contentType, CancellationToken cancellationToken)
-        => ParseResponse(await CallFptAsync(imageStream, contentType, cancellationToken));
+    {
+        using var doc = await CallFptAsync(imageStream, contentType, cancellationToken);
+        return CitizenIdOcrParsing.ParseFront(FirstData(doc));
+    }
 
     public async Task<CitizenIdBackOcrResult> RecognizeBackAsync(Stream imageStream, string contentType, CancellationToken cancellationToken)
-        => ParseBackResponse(await CallFptAsync(imageStream, contentType, cancellationToken));
+    {
+        using var doc = await CallFptAsync(imageStream, contentType, cancellationToken);
+        return CitizenIdOcrParsing.ParseBack(FirstData(doc));
+    }
 
-    private async Task<string> CallFptAsync(Stream imageStream, string contentType, CancellationToken cancellationToken)
+    private async Task<JsonDocument> CallFptAsync(Stream imageStream, string contentType, CancellationToken cancellationToken)
     {
         // Buffer all bytes once so Polly retries can re-create the body.
         // MultipartFormDataContent.Dispose() closes the StreamContent it owns,
@@ -80,15 +79,19 @@ public sealed class FptAiCitizenIdOcrService : ICitizenIdOcrService
             throw new OcrUnavailableException(ex);
         }
 
-        if (!response.IsSuccessStatusCode)
-            throw new OcrUnavailableException(new HttpRequestException($"HTTP {(int)response.StatusCode}"));
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+                throw new OcrUnavailableException(new HttpRequestException($"HTTP {(int)response.StatusCode}"));
 
-        return await response.Content.ReadAsStringAsync(cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            return JsonDocument.Parse(json);
+        }
     }
 
-    private static CitizenIdOcrResult ParseResponse(string json)
+    /// <summary>Bóc phần tử data[0] từ envelope FPT, ném <see cref="OcrFailedException"/> nếu API báo lỗi.</summary>
+    private static JsonElement FirstData(JsonDocument doc)
     {
-        using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
         if (root.TryGetProperty("errorCode", out var errCode) && errCode.GetInt32() != 0)
@@ -100,103 +103,6 @@ public sealed class FptAiCitizenIdOcrService : ICitizenIdOcrService
         if (!root.TryGetProperty("data", out var dataArr) || dataArr.ValueKind != JsonValueKind.Array || dataArr.GetArrayLength() == 0)
             throw new OcrFailedException("Empty data in OCR response.");
 
-        var data = dataArr[0];
-
-        var docType = data.TryGetProperty("type", out var tp) ? tp.GetString() : null;
-        if (docType is null || !ValidDocTypes.Contains(docType))
-            throw new OcrInvalidDocumentTypeException(docType);
-
-        DateTime? dob = null;
-        if (data.TryGetProperty("dob", out var dobProp) && dobProp.GetString() is { } dobStr)
-            dob = TryParseDateVn(dobStr);
-
-        var gender = data.TryGetProperty("sex", out var sexProp) ? MapGender(sexProp.GetString()) : null;
-
-        double? confidence = null;
-        if (data.TryGetProperty("confidence", out var confProp) &&
-            confProp.TryGetDouble(out var confVal))
-            confidence = confVal;
-
-        return new CitizenIdOcrResult(
-            FullName: GetString(data, "name"),
-            Dob: dob,
-            Gender: gender,
-            CitizenId: GetString(data, "id"),
-            Nationality: GetString(data, "nationality"),
-            PermanentAddress: GetString(data, "home"),
-            NativePlaceAddress: GetString(data, "home"),      // Quê quán
-            ResidenceAddress: GetString(data, "address"),     // Nơi thường trú
-            Type: docType,
-            RawConfidence: confidence
-        );
+        return dataArr[0];
     }
-
-    private static CitizenIdBackOcrResult ParseBackResponse(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("errorCode", out var errCode) && errCode.GetInt32() != 0)
-        {
-            var errMsg = root.TryGetProperty("errorMessage", out var em) ? em.GetString() : "Unknown error";
-            throw new OcrFailedException(errMsg ?? "Unknown error");
-        }
-
-        if (!root.TryGetProperty("data", out var dataArr) || dataArr.ValueKind != JsonValueKind.Array || dataArr.GetArrayLength() == 0)
-            throw new OcrFailedException("Empty data in OCR response.");
-
-        var data = dataArr[0];
-
-        var docType = data.TryGetProperty("type", out var tp) ? tp.GetString() : null;
-        if (docType is null || !BackDocTypes.Contains(docType))
-            throw new OcrInvalidDocumentTypeException(docType);
-
-        DateTime? issuedDate = null;
-        if (data.TryGetProperty("issue_date", out var idProp) && idProp.GetString() is { } idStr)
-            issuedDate = TryParseDateVn(idStr);
-
-        // FPT đặt tên field không nhất quán giữa các phiên bản (cccd_back / chip_back / cc_back) → thử lần lượt.
-        var issuedPlace = GetFirstString(data, "issue_loc", "issue_place", "issued_at", "place_of_issue");
-
-        // Thẻ Căn cước mới (cc_back): "nơi cư trú" và "nơi đăng ký khai sinh" nằm ở mặt sau (Luật Căn cước 2023).
-        var residenceAddress = GetFirstString(data, "place_of_residence", "residence", "address", "home");
-        var placeOfBirthRegistration = GetFirstString(data, "place_of_birth_registration", "place_of_birth", "birth_place", "pob");
-
-        double? confidence = null;
-        if (data.TryGetProperty("confidence", out var confProp) && confProp.TryGetDouble(out var confVal))
-            confidence = confVal;
-
-        return new CitizenIdBackOcrResult(issuedDate, issuedPlace, residenceAddress, placeOfBirthRegistration, confidence);
-    }
-
-    private static string? GetString(JsonElement el, string key) =>
-        el.TryGetProperty(key, out var p) ? p.GetString() : null;
-
-    private static string? GetFirstString(JsonElement el, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (el.TryGetProperty(key, out var p) && p.ValueKind == JsonValueKind.String)
-            {
-                var val = p.GetString();
-                if (!string.IsNullOrWhiteSpace(val)) return val;
-            }
-        }
-        return null;
-    }
-
-    private static DateTime? TryParseDateVn(string s)
-    {
-        if (DateTime.TryParseExact(s, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
-            return DateTime.SpecifyKind(d, DateTimeKind.Utc);
-        return null;
-    }
-
-    private static string? MapGender(string? sex) =>
-        sex?.ToUpperInvariant() switch
-        {
-            "NAM" => "Male",
-            "NỮ" or "NU" => "Female",
-            _ => sex
-        };
 }
