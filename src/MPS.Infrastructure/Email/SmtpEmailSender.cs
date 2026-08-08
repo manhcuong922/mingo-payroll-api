@@ -27,16 +27,14 @@ public sealed class SmtpEmailSender : IRealEmailSender
     public Task SendPasswordResetAsync(
         string toEmail,
         string resetToken,
+        string resetUrl,
         DateTime expiresAt,
         CancellationToken cancellationToken = default)
     {
-        var subject = "[Mingo Payroll] Yêu cầu đặt lại mật khẩu";
-        var plain =
-            $"Mã đặt lại mật khẩu: {resetToken}{Environment.NewLine}" +
-            $"Hết hạn lúc: {expiresAt:u}{Environment.NewLine}" +
-            "Nếu bạn không yêu cầu, vui lòng bỏ qua email này.";
+        var html = PasswordResetTemplate.BuildHtml(resetToken, resetUrl, expiresAt);
+        var plain = PasswordResetTemplate.BuildPlainText(resetToken, resetUrl, expiresAt);
 
-        return SendAsync(toEmail, subject, htmlBody: null, plainBody: plain, attachment: null, cancellationToken);
+        return SendAsync(toEmail, PasswordResetTemplate.Subject, html, plain, attachment: null, cancellationToken);
     }
 
     [Obsolete("Dùng SendFirstLoginInvitationAsync cho tài khoản mới. Xem plan §2 N8.")]

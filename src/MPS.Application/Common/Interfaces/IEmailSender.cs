@@ -2,7 +2,13 @@ namespace MPS.Application.Common.Interfaces;
 
 public interface IEmailSender
 {
-    Task SendPasswordResetAsync(string toEmail, string resetToken, DateTime expiresAt, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Gửi mail "quên mật khẩu". <paramref name="resetUrl"/> là link 1-lần đã ghép sẵn từ
+    /// PasswordResetOptions.FrontendBaseUrl + LinkPath — mail hiển thị nút bấm dẫn thẳng tới
+    /// form đặt lại mật khẩu. <paramref name="resetToken"/> giữ lại để template fallback hiển thị
+    /// mã thô khi FrontendBaseUrl chưa cấu hình (và cho outbox cũ chưa có URL).
+    /// </summary>
+    Task SendPasswordResetAsync(string toEmail, string resetToken, string resetUrl, DateTime expiresAt, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// [DEPRECATED] Gửi mail chứa username + password thô. KHÔNG dùng cho tài khoản mới —

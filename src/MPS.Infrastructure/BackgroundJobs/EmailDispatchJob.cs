@@ -150,7 +150,8 @@ public sealed class EmailDispatchJob : BackgroundService
         EmailOutboxMessage message, IRealEmailSender sender, IOutboxPayloadProtector protector, CancellationToken cancellationToken)
     {
         var p = Deserialize<PasswordResetPayload>(message, protector);
-        return sender.SendPasswordResetAsync(message.ToEmail, p.ResetToken, p.ExpiresAt, cancellationToken);
+        return sender.SendPasswordResetAsync(
+            message.ToEmail, p.ResetToken, p.ResetUrl ?? string.Empty, p.ExpiresAt, cancellationToken);
     }
 
     // AccountCredentials deprecated (plan §2 N8) — private helper chỉ để tiêu thụ nốt outbox cũ.

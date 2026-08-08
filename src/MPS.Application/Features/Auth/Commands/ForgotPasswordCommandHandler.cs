@@ -2,7 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MPS.Application.Common.Interfaces;
+using MPS.Application.Common.Options;
+using MPS.Application.Common.Services;
 using MPS.Domain.Entities;
 using MPS.Domain.Interfaces;
 
@@ -11,22 +14,24 @@ namespace MPS.Application.Features.Auth.Commands;
 public sealed class ForgotPasswordCommandHandler : IRequestHandler<ForgotPasswordCommand, bool>
 {
     private const int RawTokenBytes = 48;
-    private static readonly TimeSpan TokenLifetime = TimeSpan.FromHours(1);
 
     private readonly IUserRepository _userRepository;
     private readonly IPasswordResetTokenRepository _tokenRepository;
     private readonly IEmailSender _emailSender;
+    private readonly PasswordResetOptions _options;
     private readonly ILogger<ForgotPasswordCommandHandler> _logger;
 
     public ForgotPasswordCommandHandler(
         IUserRepository userRepository,
         IPasswordResetTokenRepository tokenRepository,
         IEmailSender emailSender,
+        IOptions<PasswordResetOptions> options,
         ILogger<ForgotPasswordCommandHandler> logger)
     {
         _userRepository = userRepository;
         _tokenRepository = tokenRepository;
         _emailSender = emailSender;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -45,7 +50,7 @@ public sealed class ForgotPasswordCommandHandler : IRequestHandler<ForgotPasswor
         await _tokenRepository.InvalidateActiveTokensForUserAsync(user.Id, cancellationToken);
 
         var rawToken = GenerateRawToken();
-        var expiresAt = DateTime.UtcNow.Add(TokenLifetime);
+        var expiresAt = DateTime.UtcNow.Add(_options.TokenLifetime);
 
         var entity = new PasswordResetToken
         {
@@ -57,7 +62,13 @@ public sealed class ForgotPasswordCommandHandler : IRequestHandler<ForgotPasswor
         };
 
         await _tokenRepository.AddAsync(entity, cancellationToken);
-        await _emailSender.SendPasswordResetAsync(user.Email, rawToken, expiresAt, cancellationToken);
+
+        // Mail phải chứa link bấm được (không bắt user tự ghép token vào URL) — cùng cách làm
+        // với mail mời đặt mật khẩu lần đầu. Token thô vẫn gửi kèm để template fallback khi
+        // FrontendBaseUrl chưa cấu hình.
+        var resetUrl = FrontendLinkBuilder.Build(_options.FrontendBaseUrl, _options.LinkPath, rawToken);
+
+        await _emailSender.SendPasswordResetAsync(user.Email, rawToken, resetUrl, expiresAt, cancellationToken);
         return true;
     }
 

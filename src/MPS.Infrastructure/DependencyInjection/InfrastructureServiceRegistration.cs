@@ -253,6 +253,9 @@ public static class InfrastructureServiceRegistration
         services.Configure<FirstLoginOptions>(configuration.GetSection(FirstLoginOptions.SectionName));
         services.AddScoped<IFirstLoginInvitationService, FirstLoginInvitationService>();
 
+        // Link 1-lần trong mail "quên mật khẩu" (cùng cơ chế token với FirstLogin, hạn ngắn hơn).
+        services.Configure<PasswordResetOptions>(configuration.GetSection(PasswordResetOptions.SectionName));
+
         // Document rendering (DOCX merge)
         services.AddScoped<IDocumentRenderingService, DocxMergeService>();
 

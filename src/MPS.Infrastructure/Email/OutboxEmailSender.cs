@@ -24,10 +24,11 @@ public sealed class OutboxEmailSender : IEmailSender
     }
 
     public Task SendPasswordResetAsync(
-        string toEmail, string resetToken, DateTime expiresAt, CancellationToken cancellationToken = default) =>
+        string toEmail, string resetToken, string resetUrl, DateTime expiresAt,
+        CancellationToken cancellationToken = default) =>
         EnqueueAsync(
             EmailOutboxType.PasswordReset, toEmail,
-            new PasswordResetPayload(resetToken, expiresAt),
+            new PasswordResetPayload(resetToken, expiresAt, resetUrl),
             cancellationToken: cancellationToken);
 
     [Obsolete("Dùng SendFirstLoginInvitationAsync cho tài khoản mới. Xem plan §2 N8.")]

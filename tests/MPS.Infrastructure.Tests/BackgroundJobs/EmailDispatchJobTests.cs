@@ -73,7 +73,9 @@ public sealed class EmailDispatchJobTests
         var repo = scope.ServiceProvider.GetRequiredService<IEmailOutboxRepository>();
         var protector = scope.ServiceProvider.GetRequiredService<IOutboxPayloadProtector>();
         var sender = new OutboxEmailSender(repo, h.Clock, protector);
-        await sender.SendPasswordResetAsync("user@mingo.local", "TOKEN", h.Clock.UtcNow.AddHours(1));
+        await sender.SendPasswordResetAsync(
+            "user@mingo.local", "TOKEN", "https://operix.fun/reset-password?token=TOKEN",
+            h.Clock.UtcNow.AddHours(1));
     }
 
     [Fact]
@@ -89,7 +91,8 @@ public sealed class EmailDispatchJobTests
         // Assert
         sent.Should().Be(1);
         h.Sender.Verify(s => s.SendPasswordResetAsync(
-            "user@mingo.local", "TOKEN", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+            "user@mingo.local", "TOKEN", "https://operix.fun/reset-password?token=TOKEN",
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
 
         await using var db = h.NewContext();
         var row = await db.EmailOutboxMessages.SingleAsync();
@@ -104,7 +107,8 @@ public sealed class EmailDispatchJobTests
         // Arrange
         var h = BuildHarness(new EmailDispatchOptions { MaxAttempts = 5, BaseBackoffSeconds = 30 });
         h.Sender.Setup(s => s.SendPasswordResetAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("smtp down"));
         await SeedPasswordResetAsync(h);
 
@@ -127,7 +131,8 @@ public sealed class EmailDispatchJobTests
         // Arrange
         var h = BuildHarness(new EmailDispatchOptions { MaxAttempts = 3 });
         h.Sender.Setup(s => s.SendPasswordResetAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("smtp down"));
         await SeedPasswordResetAsync(h);
 
@@ -167,8 +172,10 @@ public sealed class EmailDispatchJobTests
 
         string? capturedToken = null;
         h.Sender.Setup(s => s.SendPasswordResetAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string, DateTime, CancellationToken>((_, token, _, _) => capturedToken = token)
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, string, DateTime, CancellationToken>(
+                (_, token, _, _, _) => capturedToken = token)
             .Returns(Task.CompletedTask);
 
         // Act
@@ -198,6 +205,7 @@ public sealed class EmailDispatchJobTests
         // Assert
         sent.Should().Be(0);
         h.Sender.Verify(s => s.SendPasswordResetAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

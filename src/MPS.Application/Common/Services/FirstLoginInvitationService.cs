@@ -71,16 +71,10 @@ public sealed class FirstLoginInvitationService : IFirstLoginInvitationService
         return expiresAt;
     }
 
-    private string BuildInvitationUrl(string rawToken)
-    {
-        var baseUrl = _options.FrontendBaseUrl?.TrimEnd('/');
-        var path = _options.LinkPath.Replace("{token}", Uri.EscapeDataString(rawToken));
-        if (!path.StartsWith('/')) path = "/" + path;
-
-        // Nếu chưa cấu hình FrontendBaseUrl, vẫn phải trả về gì đó có ý nghĩa để user thao tác:
-        // chỉ trả về path — HR/dev nhìn log/UI sẽ biết cấu hình thiếu và tự bổ sung domain.
-        return string.IsNullOrWhiteSpace(baseUrl) ? path : baseUrl + path;
-    }
+    // Nếu chưa cấu hình FrontendBaseUrl, FrontendLinkBuilder trả về path — HR/dev nhìn log/UI
+    // sẽ biết cấu hình thiếu và tự bổ sung domain.
+    private string BuildInvitationUrl(string rawToken) =>
+        FrontendLinkBuilder.Build(_options.FrontendBaseUrl, _options.LinkPath, rawToken);
 
     private static string GenerateRawToken()
     {

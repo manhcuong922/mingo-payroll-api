@@ -3,7 +3,9 @@ namespace MPS.Infrastructure.Email;
 // Hợp đồng nội bộ giữa OutboxEmailSender (ghi) và EmailDispatchJob (đọc) — serialize vào
 // EmailOutboxMessage.PayloadJson. Không rò ra ngoài Infrastructure.
 
-internal sealed record PasswordResetPayload(string ResetToken, DateTime ExpiresAt);
+// ResetUrl thêm sau (link bấm được thay cho mã thô) → để cuối + nullable để payload cũ
+// trong outbox vẫn deserialize được; template tự fallback về hiển thị mã khi thiếu URL.
+internal sealed record PasswordResetPayload(string ResetToken, DateTime ExpiresAt, string? ResetUrl = null);
 
 internal sealed record AccountCredentialsPayload(string FullName, string Username, string PlainPassword);
 

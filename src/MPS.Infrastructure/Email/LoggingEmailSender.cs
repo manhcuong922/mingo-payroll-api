@@ -17,12 +17,13 @@ public sealed class LoggingEmailSender : IRealEmailSender
     public Task SendPasswordResetAsync(
         string toEmail,
         string resetToken,
+        string resetUrl,
         DateTime expiresAt,
         CancellationToken cancellationToken = default)
     {
         _logger.LogWarning(
-            "[DEV EMAIL] Password reset for {Email}. Token: {Token}. Expires at: {ExpiresAt:u}.",
-            toEmail, resetToken, expiresAt);
+            "[DEV EMAIL] Password reset for {Email}. Url: {Url}. Token: {Token}. Expires at: {ExpiresAt:u}.",
+            toEmail, resetUrl, resetToken, expiresAt);
         return Task.CompletedTask;
     }
 

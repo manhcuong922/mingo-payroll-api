@@ -27,7 +27,7 @@ public sealed class OutboxEmailSenderTests
     }
 
     [Fact]
-    public async Task SendPasswordResetAsync_WritesPendingRow_WithTokenInPayload()
+    public async Task SendPasswordResetAsync_WritesPendingRow_WithTokenAndUrlInPayload()
     {
         // Arrange
         await using var db = NewContext();
@@ -35,7 +35,9 @@ public sealed class OutboxEmailSenderTests
         var sender = new OutboxEmailSender(new EmailOutboxRepository(db), clock, new NoOpOutboxPayloadProtector());
 
         // Act
-        await sender.SendPasswordResetAsync("user@mingo.local", "RESET-TOKEN-123", clock.UtcNow.AddHours(1));
+        await sender.SendPasswordResetAsync(
+            "user@mingo.local", "RESET-TOKEN-123",
+            "https://operix.fun/reset-password?token=RESET-TOKEN-123", clock.UtcNow.AddHours(1));
 
         // Assert
         var row = await db.EmailOutboxMessages.SingleAsync();
@@ -44,7 +46,8 @@ public sealed class OutboxEmailSenderTests
         row.Status.Should().Be(EmailOutboxStatus.Pending);
         row.Attempts.Should().Be(0);
         row.CreatedAt.Should().Be(clock.UtcNow);
-        row.PayloadJson.Should().Contain("RESET-TOKEN-123");
+        row.PayloadJson.Should().Contain("RESET-TOKEN-123")
+            .And.Contain("https://operix.fun/reset-password"); // link bấm được phải đi kèm token
         row.StorageBucket.Should().BeNull();
         row.StorageObjectKey.Should().BeNull();
     }
