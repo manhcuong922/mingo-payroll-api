@@ -26,6 +26,13 @@ public class EmployeeInformation
     public int PositionId { get; set; }
     public int DependentsNo { get; set; }
 
+    /// <summary>
+    /// NLĐ có tham gia công đoàn (đoàn viên) hay không. Chỉ đoàn viên mới bị thu ĐOÀN PHÍ công đoàn
+    /// (cột PHICONGDOANVIEN, QĐ 1908/QĐ-TLĐ) — khác KPCĐ vốn là nghĩa vụ của DN với mọi NLĐ.
+    /// Mặc định false: không tự coi ai là đoàn viên, HR phải tick khi NLĐ thực sự gia nhập.
+    /// </summary>
+    public bool IsUnionMember { get; set; }
+
     // Financial — nullable, may not be filled at contract creation time
     public string? TaxNo { get; set; }
     public string? SocialNo { get; set; }

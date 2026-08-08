@@ -18,6 +18,7 @@ public sealed record UpdateEmployeeInformationRequest(
     int PositionId,
     int? DepartmentId,
     int DependentsNo,
+    bool IsUnionMember,
     string? TaxNo,
     string? SocialNo,
     string? BankNumber,

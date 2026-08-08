@@ -65,6 +65,7 @@ public record MonthlyEvaluationDto(
     string Source,
     decimal? FinalScore,
     string Status,
+    bool IsSystemDefault,
     int? ApprovedByUserId,
     DateTime? ApprovedAt,
     int? ReopenedByUserId,

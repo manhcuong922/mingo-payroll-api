@@ -34,6 +34,13 @@ public class MonthlyEvaluation
 
     public EvaluationStatus Status { get; set; } = EvaluationStatus.Draft;   // chỉ Draft | Approved
 
+    /// <summary>
+    /// Bảng Direct do job sinh sẵn với điểm mặc định (<see cref="Constants.EvaluationSubjectRoles.DefaultDirectScore"/>)
+    /// và Director CHƯA sửa. Về false ngay khi Director chấm lần đầu. Chỉ để hiển thị/lọc —
+    /// không đổi công thức tính điểm; bảng vẫn là chuẩn tính phụ cấp kể cả khi chưa sửa.
+    /// </summary>
+    public bool IsSystemDefault { get; set; }
+
     public int? ApprovedByUserId { get; set; }
     public DateTime? ApprovedAt { get; set; }
 

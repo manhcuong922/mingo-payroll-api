@@ -30,6 +30,7 @@ public sealed record ContractDetailDto(
     bool SocialInsuranceFlag,
     bool HealthInsuranceFlag,
     bool UnemploymentInsuranceFlag,
+    bool UnionFundExemptFlag,
     string? TaxPolicy,
     string? TrainingPolicy,
     string? ConfidentialityClause,

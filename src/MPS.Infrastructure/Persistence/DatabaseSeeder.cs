@@ -815,6 +815,8 @@ public sealed partial class DatabaseSeeder
             EmployeeUnemploymentPercent = 1.00m,
             EmployerUnemploymentPercent = 1.00m,
             EmployerUnionFundPercent = 2.00m,
+            EmployeeUnionDuesPercent = 1.00m,        // QĐ 1908/QĐ-TLĐ Đ.23 — đoàn viên đóng 1% lương
+            EmployeeUnionDuesCapPercent = 10.00m,    // trần 10% mức lương cơ sở
             ReferenceAmount = 2_340_000m,
             SocialCapMultiplier = 20,
             HealthCapMultiplier = 20,
@@ -839,6 +841,8 @@ public sealed partial class DatabaseSeeder
             EmployeeUnemploymentPercent = 1.00m,
             EmployerUnemploymentPercent = 1.00m,
             EmployerUnionFundPercent = 2.00m,
+            EmployeeUnionDuesPercent = 1.00m,        // QĐ 1908/QĐ-TLĐ Đ.23 — đoàn viên đóng 1% lương
+            EmployeeUnionDuesCapPercent = 10.00m,    // trần 10% mức lương cơ sở
             ReferenceAmount = 2_530_000m,
             SocialCapMultiplier = 20,
             HealthCapMultiplier = 20,

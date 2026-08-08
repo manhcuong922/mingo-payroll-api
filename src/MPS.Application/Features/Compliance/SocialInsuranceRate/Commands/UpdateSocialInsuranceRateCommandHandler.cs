@@ -48,6 +48,8 @@ public sealed class UpdateSocialInsuranceRateCommandHandler : IRequestHandler<Up
             EmployeeUnemploymentPercent = request.EmployeeUnemploymentPercent,
             EmployerUnemploymentPercent = request.EmployerUnemploymentPercent,
             EmployerUnionFundPercent = request.EmployerUnionFundPercent,
+            EmployeeUnionDuesPercent = request.EmployeeUnionDuesPercent,
+            EmployeeUnionDuesCapPercent = request.EmployeeUnionDuesCapPercent,
             ReferenceAmount = request.ReferenceAmount,
             SocialCapMultiplier = request.SocialCapMultiplier,
             HealthCapMultiplier = request.HealthCapMultiplier,

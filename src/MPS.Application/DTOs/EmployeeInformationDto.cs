@@ -20,6 +20,7 @@ public record EmployeeInformationDto(
     int? DepartmentId,
     string? DepartmentName,
     int DependentsNo,
+    bool IsUnionMember,
     string? TaxNo,
     string? SocialNo,
     string? BankNumber,

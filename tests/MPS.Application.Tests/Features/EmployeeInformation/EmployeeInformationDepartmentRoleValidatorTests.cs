@@ -51,6 +51,7 @@ public sealed class EmployeeInformationDepartmentRoleValidatorTests
             PositionId: 1,
             DepartmentId: departmentId,
             DependentsNo: 0,
+            IsUnionMember: false,
             TaxNo: null,
             SocialNo: null,
             BankNumber: null,

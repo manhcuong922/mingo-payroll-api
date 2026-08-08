@@ -37,6 +37,7 @@ public class ScoreDirectMonthlyEvaluationCommandHandler
         }
 
         evaluation.FinalScore = EvaluationScoreCalculator.ComputeFinalScore(evaluation.Scores);
+        evaluation.IsSystemDefault = false;   // Director đã chấm ⇒ không còn là điểm mặc định
 
         var expected = RowVersionCodec.Decode(request.RowVersion);
         var ok = await _repo.UpdateWithConcurrencyAsync(evaluation, expected, ct);

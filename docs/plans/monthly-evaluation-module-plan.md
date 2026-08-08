@@ -27,6 +27,9 @@
 | D13 | Duyệt bảng Direct (Loại B) | **HR duyệt + khóa** (nhất quán Loại A); Director chỉ chấm |
 | D14 | Đơn nhiều công đoạn / nhiều PM | **1 tổ trưởng/đơn** = `Project.ResponsibleUserId` là người chấm |
 | D15 | Thời điểm gộp tháng | **Cả hai**: auto-recalc khi bảng tháng còn Draft + nút "Tổng hợp tháng" thủ công |
+| D16 ⭐ | Sinh bảng Direct (Loại B) | **Auto-sinh với điểm mặc định 4/5**, đầu tháng sau cho kỳ vừa kết thúc. Director sửa hoặc không — không sửa thì lấy điểm mặc định. Xem §4.4b |
+| D17 ⭐ | Rubric theo vai trò | **KHÔNG lọc `TargetRoles`** — rubric CHUNG toàn công ty cho mọi vai trò bị chấm (chốt lại, khác mô tả §2 ban đầu). `EvaluationCriteriaSnapshotService` lấy toàn bộ catalog |
+| D18 ⭐ | Đổi vị trí nhân sự giữa kỳ | Kỳ đang dở **vẫn chấm theo đơn** (Aggregated); chấm trực tiếp áp dụng **từ kỳ sau**. Auto-sinh và tạo tay đều bỏ qua người còn bảng-theo-đơn trong kỳ |
 
 > ⚠️ Lưu ý thuật ngữ: **KHÔNG dùng chữ "Quản đốc"** — đó chỉ là *tên chức danh (Position)* của người mang role 5. Trong plan này gọi theo ROLE: **Director (role 4)**, **HR (role 2)**, **Kế toán/Accountant (role 3)**, **Planning Manager (role 5)**, **Tổ trưởng/Production Team Leader (role 6)**, **Công nhân/Employee (role 7)**.
 
@@ -83,7 +86,7 @@ Có **2 loại đối tượng bị chấm**, đi theo 2 luồng khác nhau như
 
 Không tạo lại catalog. Dùng nguyên `TypePerformanceMetric` (nhóm, có `Weight`) → `PerformanceMetric` (tiêu chí con, `Weight` 0–100, `TargetRoles[]`). Ràng buộc hiện có "tổng Weight tiêu chí con trong 1 nhóm ≤ 100" GIỮ NGUYÊN.
 
-- **Bộ tiêu chí cho 1 đối tượng** = các `PerformanceMetric` có `TargetRoles` chứa **role của đối tượng đó**. Ví dụ chấm công nhân → lấy tiêu chí `TargetRoles` chứa role 7.
+- **Bộ tiêu chí cho 1 đối tượng** = **TOÀN BỘ** `PerformanceMetric` trong catalog — rubric CHUNG cho mọi vai trò bị chấm (D17). Cột `TargetRoles` KHÔNG được dùng để lọc; `EvaluationCriteriaSnapshotService` lấy hết và bắt buộc rubric cân 100% (tổng nhóm = 100 và mỗi nhóm tổng tiêu chí = 100), lệch thì ném `DomainValidationException` (E3).
 - **Đề xuất bổ sung (nhỏ):** thêm cột `PerformanceMetric.IsActive (bool, default true)` + `TypePerformanceMetric.IsActive` để **ngừng dùng (soft-retire)** 1 tiêu chí mà không xóa cứng — bảng mới sẽ bỏ qua tiêu chí `IsActive=false`, bảng cũ vẫn giữ snapshot. (Snapshot D2 đã đủ an toàn khi xóa; `IsActive` chỉ để lọc lúc sinh bảng mới cho gọn.)
 
 > **Cốt lõi D2 — snapshot:** khi sinh bảng (theo đơn hoặc direct), COPY vào từng dòng điểm: `SourceMetricId` (ref, nullable), `TypeNameSnapshot`, `MetricNameSnapshot`, `TypeWeightSnapshot`, `MetricWeightSnapshot`, `Scale=5`. Sau đó sửa/xóa catalog **không** đụng bảng đã sinh. Pattern giống `Contract.SalaryAmountSnapshot`.
@@ -247,12 +250,39 @@ Submitted có Period = (Y, M):
 ```
 POST /api/MonthlyEvaluation/direct   (Director — quyền §6)
      body: { employeeUserId, year, month }
-     - Guard: role của NV ∈ {6,5,3,2}; chưa có bảng (EmployeeUserId,Y,M).
-     - metrics = PerformanceMetric (IsActive) TargetRoles chứa role NV → snapshot EvaluationScoreLine.
+     - Guard: role của NV ∈ {6,5,3,2}; chưa có bảng (EmployeeUserId,Y,M); chưa có bảng-theo-đơn kỳ đó.
+     - metrics = TOÀN BỘ PerformanceMetric (rubric chung, D17) → snapshot EvaluationScoreLine.
      - Tạo MonthlyEvaluation { Source=Direct, Status=Draft, CreatedByUserId=Director } + Scores.
 
 PUT  /api/MonthlyEvaluation/{id}/scores   (Director cho điểm; recalc FinalScore §5.1)
+     - Set IsSystemDefault = false (Director đã chấm ⇒ không còn là điểm mặc định).
 ```
+
+> **Guard bổ sung (đổi vị trí giữa kỳ).** Nếu NV còn bảng-theo-đơn trong kỳ (Y,M) → chặn tạo Direct
+> (400). Kỳ đó điểm tháng gộp từ đơn (Aggregated), chấm trực tiếp áp dụng **từ kỳ sau**. Không có
+> guard này thì "Tổng hợp tháng" sẽ ghi đè bảng Direct vừa tạo.
+
+### 4.4b. Auto-sinh bảng Direct với ĐIỂM MẶC ĐỊNH ⭐
+
+Director không phải tạo tay từng người từng tháng: `DirectEvaluationAutoGenerateJob` (tick 24h) sinh
+sẵn bảng cho **tháng liền trước** (giờ VN). Director sửa hay không tuỳ ý — **không sửa thì giữ nguyên
+điểm mặc định**, bảng vẫn là chuẩn tính phụ cấp. HR chỉ duyệt (không sửa điểm) nên không phát sinh
+xung đột vai trò.
+
+```
+Đối tượng : User.Status == 1 và RoleId ∈ EvaluationSubjectRoles.DirectScorableRoleIds {6,5,3,2}
+Điểm      : mọi dòng = EvaluationSubjectRoles.DefaultDirectScore (4/5 "Đạt yêu cầu")
+            → FinalScore = 4.00 (rubric cân 100%/100%); vẫn chạy qua EvaluationScoreCalculator
+Cờ        : IsSystemDefault = true (UI hiện chip "Điểm mặc định"); về false khi Director chấm
+Bỏ qua    : (a) đã có bảng tháng (Y,M) — idempotent, chạy lại an toàn
+            (b) còn bảng-theo-đơn trong kỳ — mới đổi vị trí ⇒ điểm gộp từ đơn (xem guard §4.4)
+Rubric lỗi: E3 — không sinh gì cả, trả RubricError để HR sửa rồi chạy lại
+Trigger tay: POST /api/MonthlyEvaluation/direct/auto-generate?year&month
+            (quyền MonthlyEvaluation.ScoreDirect.All; mặc định = tháng liền trước)
+```
+
+Nghiệp vụ nằm ở `IDirectEvaluationAutoGenerateService` (tầng Application, unit-test được); job chỉ lo
+lịch + scope DI — cùng pattern `AnnualLeaveGrantJob`.
 
 ### 4.5. HR duyệt / khóa / reopen bảng tháng (D8)
 

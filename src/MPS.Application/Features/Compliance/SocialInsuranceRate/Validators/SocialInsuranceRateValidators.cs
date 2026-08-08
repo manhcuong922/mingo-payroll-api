@@ -50,6 +50,9 @@ public sealed class CreateSocialInsuranceRateCommandValidator : AbstractValidato
         RuleFor(x => x.EmployeeUnemploymentPercent).InclusiveBetween(0, 100);
         RuleFor(x => x.EmployerUnemploymentPercent).InclusiveBetween(0, 100);
         RuleFor(x => x.EmployerUnionFundPercent).InclusiveBetween(0, 100);
+        RuleFor(x => x.EmployeeUnionDuesPercent).InclusiveBetween(0, 100);
+        // Trần đoàn phí là % của mức lương cơ sở; 0 = không áp trần.
+        RuleFor(x => x.EmployeeUnionDuesCapPercent).InclusiveBetween(0, 100);
         RuleFor(x => x.ReferenceAmount).GreaterThan(0);
         RuleFor(x => x.SocialCapMultiplier).InclusiveBetween(1, 100);
         RuleFor(x => x.HealthCapMultiplier).InclusiveBetween(1, 100);
@@ -101,6 +104,9 @@ public sealed class UpdateSocialInsuranceRateCommandValidator : AbstractValidato
         RuleFor(x => x.EmployeeUnemploymentPercent).InclusiveBetween(0, 100);
         RuleFor(x => x.EmployerUnemploymentPercent).InclusiveBetween(0, 100);
         RuleFor(x => x.EmployerUnionFundPercent).InclusiveBetween(0, 100);
+        RuleFor(x => x.EmployeeUnionDuesPercent).InclusiveBetween(0, 100);
+        // Trần đoàn phí là % của mức lương cơ sở; 0 = không áp trần.
+        RuleFor(x => x.EmployeeUnionDuesCapPercent).InclusiveBetween(0, 100);
         RuleFor(x => x.ReferenceAmount).GreaterThan(0);
         RuleFor(x => x.SocialCapMultiplier).InclusiveBetween(1, 100);
         RuleFor(x => x.HealthCapMultiplier).InclusiveBetween(1, 100);

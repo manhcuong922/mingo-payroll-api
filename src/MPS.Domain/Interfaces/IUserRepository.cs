@@ -19,6 +19,13 @@ public interface IUserRepository
     Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// User còn hoạt động (<c>Status == 1</c>) thuộc các role chỉ định, sắp theo Id.
+    /// Dùng cho job auto-sinh bảng đánh giá tháng (Loại B).
+    /// </summary>
+    Task<IReadOnlyList<User>> GetActiveByRoleIdsAsync(
+        IReadOnlyList<int> roleIds, CancellationToken cancellationToken = default);
+
     Task<(IReadOnlyList<User> Items, int TotalCount)> GetPagedAsync(
         string? keyword,
         int? roleId,

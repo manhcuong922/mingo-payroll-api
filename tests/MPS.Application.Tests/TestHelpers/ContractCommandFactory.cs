@@ -59,6 +59,7 @@ internal static class ContractCommandFactory
             SocialInsuranceFlag: isUserChoice ? false : null,
             HealthInsuranceFlag: isUserChoice ? false : null,
             UnemploymentInsuranceFlag: isUserChoice ? false : null,
+            UnionFundExemptFlag: null,   // mặc định: DN vẫn trích KPCĐ
             TaxPolicy: isUserChoice ? TaxPolicy.FlatRate10Percent : null,
             TrainingPolicy: null,
             ConfidentialityClause: null,

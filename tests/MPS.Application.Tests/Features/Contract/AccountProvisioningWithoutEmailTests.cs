@@ -30,6 +30,7 @@ public sealed class AccountProvisioningWithoutEmailTests
     private const int ContractId = 1;
     private const int EmployeeInfoId = 10;
     private const int ActorUserId = 2;
+    private const int EmployerPartyId = 1;
 
     private readonly Mock<IContractRepository> _contracts = new();
     private readonly Mock<IContractLookupReader> _lookup = new();
@@ -45,6 +46,7 @@ public sealed class AccountProvisioningWithoutEmailTests
         Id = ContractId,
         ContractNo = "HDLD-2026-0001",
         EmployeeInformationId = EmployeeInfoId,
+        EmployerPartyId = EmployerPartyId,
         Status = ContractStatus.Draft,
         EffectiveFrom = new DateTime(2026, 7, 1),
         PositionId = 1,
@@ -67,6 +69,10 @@ public sealed class AccountProvisioningWithoutEmailTests
 
         _lookup.Setup(l => l.GetSalaryGradeSnapshotAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SalaryGradeSnapshot(1, 1, 15_000_000m, "VND", true));
+
+        // Pháp nhân còn hiệu lực — điều kiện nền, không phải đối tượng đo của nhóm test này.
+        _lookup.Setup(l => l.IsActiveContractPartyAsync(EmployerPartyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         _storage.Setup(s => s.UploadAsync(It.IsAny<FileUploadRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StoredFileMetadata("mps-test", "contracts/x.pdf", 100, "sha", "application/pdf", DateTime.UtcNow, null));

@@ -47,6 +47,9 @@ internal static class ContractBuilder
             SocialInsuranceFlag = si,
             HealthInsuranceFlag = hi,
             UnemploymentInsuranceFlag = ui,
+            // A7 — miễn KPCĐ là quyết định nghiệp vụ riêng, KHÔNG đi qua
+            // InsuranceDeterminationMode như 3 công tắc BH: kind nào cũng khai được.
+            UnionFundExemptFlag = cmd.UnionFundExemptFlag ?? false,
             TaxPolicy = tax,
             TrainingPolicy = cmd.TrainingPolicy,
             ConfidentialityClause = cmd.ConfidentialityClause,
@@ -99,6 +102,7 @@ internal static class ContractBuilder
         entity.SocialInsuranceFlag = si;
         entity.HealthInsuranceFlag = hi;
         entity.UnemploymentInsuranceFlag = ui;
+        entity.UnionFundExemptFlag = cmd.UnionFundExemptFlag ?? false;
         entity.TaxPolicy = tax;
         entity.TrainingPolicy = cmd.TrainingPolicy;
         entity.ConfidentialityClause = cmd.ConfidentialityClause;

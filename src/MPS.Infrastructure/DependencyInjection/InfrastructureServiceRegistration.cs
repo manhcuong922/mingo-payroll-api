@@ -71,6 +71,8 @@ public static class InfrastructureServiceRegistration
             MPS.Infrastructure.Repositories.Evaluation.EvaluationCriteriaSnapshotService>();
         services.AddScoped<MPS.Application.Features.Evaluation.Common.IMonthlyAggregationService,
             MPS.Application.Features.Evaluation.Common.MonthlyAggregationService>();
+        services.AddScoped<MPS.Application.Features.Evaluation.Common.IDirectEvaluationAutoGenerateService,
+            MPS.Application.Features.Evaluation.Common.DirectEvaluationAutoGenerateService>();
         services.AddScoped<MPS.Application.Common.Interfaces.IOrderEvaluationExcelService,
             MPS.Infrastructure.Services.OrderEvaluationExcelService>();
 
@@ -299,6 +301,10 @@ public static class InfrastructureServiceRegistration
         // [D22] — cấp quỹ phép năm cho toàn bộ NV vào đầu năm (tick ngày, chỉ chạy trong tháng 01).
         services.AddSingleton<AnnualLeaveGrantJob>();
         services.AddHostedService(sp => sp.GetRequiredService<AnnualLeaveGrantJob>());
+
+        // Evaluation — sinh sẵn bảng chấm Direct (điểm mặc định) cho tổ trưởng/văn phòng, kỳ tháng trước.
+        services.AddSingleton<DirectEvaluationAutoGenerateJob>();
+        services.AddHostedService(sp => sp.GetRequiredService<DirectEvaluationAutoGenerateJob>());
 
         // Compliance module — background job
         services.AddSingleton<ComplianceActivationJob>();

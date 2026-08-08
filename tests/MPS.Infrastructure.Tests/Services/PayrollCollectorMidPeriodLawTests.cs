@@ -50,6 +50,7 @@ public sealed class PayrollCollectorMidPeriodLawTests
         // OT 4h ban ngày, ngày THƯỜNG 10/07 — trước mốc ⇒ 150% (100 + uplift 50).
         var db = await SeedBaseAsync();
         db.OvertimeRequests.Add(ApprovedOt(1, DayBefore, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(OtRecord(DayBefore, 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db, SplitLookup());
@@ -63,6 +64,7 @@ public sealed class PayrollCollectorMidPeriodLawTests
         // Cùng 4h ban ngày ngày THƯỜNG nhưng 20/07 ⇒ 200% (100 + uplift 100).
         var db = await SeedBaseAsync();
         db.OvertimeRequests.Add(ApprovedOt(1, DayAfter, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(OtRecord(DayAfter, 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db, SplitLookup());
@@ -78,6 +80,8 @@ public sealed class PayrollCollectorMidPeriodLawTests
         var db = await SeedBaseAsync();
         db.OvertimeRequests.Add(ApprovedOt(1, DayBefore, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         db.OvertimeRequests.Add(ApprovedOt(2, DayAfter, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(OtRecord(DayBefore, 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(OtRecord(DayAfter, 2, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db, SplitLookup());
@@ -94,6 +98,8 @@ public sealed class PayrollCollectorMidPeriodLawTests
         var db = await SeedBaseAsync();
         db.OvertimeRequests.Add(ApprovedOt(1, DayBefore, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         db.OvertimeRequests.Add(ApprovedOt(2, DayAfter, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(OtRecord(DayBefore, 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(OtRecord(DayAfter, 2, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db, SplitLookup());
@@ -172,12 +178,14 @@ public sealed class PayrollCollectorMidPeriodLawTests
         // ⇒ chứng minh mục 1 KHÔNG lén đổi cách tính đơn giá giờ (vốn là một con số cho cả bảng lương).
         var db = await SeedBaseAsync();
         db.OvertimeRequests.Add(ApprovedOt(1, DayBefore, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        db.AttendanceRecords.Add(OtRecord(DayBefore, 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await db.SaveChangesAsync();
 
         var split = await CollectAsync(db, SplitLookup());
 
         var dbSingle = await SeedBaseAsync();
         dbSingle.OvertimeRequests.Add(ApprovedOt(1, DayBefore, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        dbSingle.AttendanceRecords.Add(OtRecord(DayBefore, 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await dbSingle.SaveChangesAsync();
         var single = await CollectAsync(dbSingle);
 

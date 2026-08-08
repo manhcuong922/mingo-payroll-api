@@ -30,7 +30,8 @@ public static class ExtractionPrompt
         - BHXH (SocialInsuranceRateVersion): các quỹ thành phần dùng "Fund:{MãQuỹ}:Employee" và "Fund:{MãQuỹ}:Employer"
           với mã quỹ: HT (hưu trí, tử tuất), OdTs (ốm đau, thai sản), TnldBnn (tai nạn lao động, bệnh nghề nghiệp).
           Các tỷ lệ khác: "EmployeeHealthPercent", "EmployerHealthPercent", "EmployeeUnemploymentPercent",
-          "EmployerUnemploymentPercent", "EmployerUnionFundPercent", "ReferenceAmount".
+          "EmployerUnemploymentPercent", "EmployerUnionFundPercent", "EmployeeUnionDuesPercent",
+          "EmployeeUnionDuesCapPercent", "ReferenceAmount".
         - Lương tối thiểu (MinimumWageVersion): "Region:I", "Region:II", "Region:III", "Region:IV".
         - Thuế TNCN (PitRegulationVersion): "PersonalDeductionAmount", "DependentDeductionAmount",
           và mỗi bậc "Bracket:{số thứ tự}:Rate" (thuế suất dạng số thập phân, vd 0.05 cho 5%).

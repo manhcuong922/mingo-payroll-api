@@ -30,6 +30,13 @@ public interface IOrderEvaluationRepository
     Task<IReadOnlyList<OrderEvaluationSubject>> GetSubmittedSubjectsByMonthAsync(
         int year, int month, int? onlyEmployeeUserId, CancellationToken ct);
 
+    /// <summary>
+    /// Distinct UserId có mặt trong bảng-theo-đơn của kỳ (Y, M) — MỌI trạng thái (kể cả Draft).
+    /// Dùng để loại người vừa đổi vị trí khỏi luồng chấm trực tiếp: kỳ nào còn bảng-theo-đơn thì
+    /// kỳ đó điểm tháng gộp từ đơn, chấm trực tiếp áp dụng từ kỳ sau.
+    /// </summary>
+    Task<IReadOnlyList<int>> GetSubjectUserIdsByMonthAsync(int year, int month, CancellationToken ct);
+
     Task<int> AddAsync(OrderEvaluation entity, CancellationToken ct);
 
     Task<bool> UpdateWithConcurrencyAsync(OrderEvaluation entity, byte[] expectedRowVersion, CancellationToken ct);

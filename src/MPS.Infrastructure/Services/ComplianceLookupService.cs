@@ -177,6 +177,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
         new(v.Id, v.ValidFrom, v.EmployeeSocialPercent, v.EmployerSocialPercent,
             v.EmployerOccupationalDiseasePercent, v.EmployeeHealthPercent, v.EmployerHealthPercent,
             v.EmployeeUnemploymentPercent, v.EmployerUnemploymentPercent, v.EmployerUnionFundPercent,
+            v.EmployeeUnionDuesPercent, v.EmployeeUnionDuesCapPercent,
             v.ReferenceAmount, v.SocialCapMultiplier, v.HealthCapMultiplier, v.UnemploymentCapMultiplier, v.LegalReference,
             v.Funds.Select(f => new SocialInsuranceFundEntrySnapshot(f.FundCode, f.FundName, f.EmployeePercent, f.EmployerPercent)).ToList(),
             v.EligibilityMode,

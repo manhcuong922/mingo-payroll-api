@@ -72,11 +72,29 @@ public class MonthlyEvaluationRepository : IMonthlyEvaluationRepository
             .ThenByDescending(m => m.PeriodMonth)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<int>> GetExistingEmployeeUserIdsForMonthAsync(
+        int year, int month, CancellationToken ct) =>
+        await _context.MonthlyEvaluations
+            .AsNoTracking()
+            .Where(m => m.PeriodYear == year && m.PeriodMonth == month)
+            .Select(m => m.EmployeeUserId)
+            .Distinct()
+            .ToListAsync(ct);
+
     public async Task<int> AddAsync(MonthlyEvaluation entity, CancellationToken ct)
     {
         _context.MonthlyEvaluations.Add(entity);
         await _context.SaveChangesAsync(ct);
         return entity.Id;
+    }
+
+    public async Task<int> AddRangeAsync(IReadOnlyList<MonthlyEvaluation> entities, CancellationToken ct)
+    {
+        if (entities.Count == 0) return 0;
+
+        _context.MonthlyEvaluations.AddRange(entities);
+        await _context.SaveChangesAsync(ct);
+        return entities.Count;
     }
 
     public async Task<bool> UpdateWithConcurrencyAsync(
