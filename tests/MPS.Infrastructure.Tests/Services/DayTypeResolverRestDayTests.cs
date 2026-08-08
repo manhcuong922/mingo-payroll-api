@@ -51,6 +51,8 @@ public sealed class DayTypeResolverRestDayTests
         using var db = await SeedBaseAsync();
         db.EmployeeShiftAssignments.Add(ShiftAssignment(11)); // 11/07/2026 — Thứ Bảy có lịch
         db.OvertimeRequests.Add(ApprovedOt(1, day: 11, new TimeOnly(18, 0), new TimeOnly(22, 0)));
+        // OT chỉ ra tiền khi có bản ghi chấm công đối chứng (xem PayrollCollectorFixture.OtRecord).
+        db.AttendanceRecords.Add(OtRecord(day: 11, otRequestId: 1, new TimeOnly(18, 0), new TimeOnly(22, 0)));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db);
