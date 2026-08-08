@@ -85,6 +85,15 @@ public class OrderEvaluationRepository : IOrderEvaluationRepository
         return await query.ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<int>> GetSubjectUserIdsByMonthAsync(
+        int year, int month, CancellationToken ct) =>
+        await _context.OrderEvaluationSubjects
+            .AsNoTracking()
+            .Where(s => s.OrderEvaluation!.PeriodYear == year && s.OrderEvaluation.PeriodMonth == month)
+            .Select(s => s.EmployeeUserId)
+            .Distinct()
+            .ToListAsync(ct);
+
     public async Task<int> AddAsync(OrderEvaluation entity, CancellationToken ct)
     {
         _context.OrderEvaluations.Add(entity);

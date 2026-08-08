@@ -68,6 +68,18 @@ public class UserRepository : IUserRepository
             .Include(u => u.EmployeeInformation)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<User>> GetActiveByRoleIdsAsync(
+        IReadOnlyList<int> roleIds, CancellationToken cancellationToken = default)
+    {
+        if (roleIds.Count == 0) return Array.Empty<User>();
+
+        return await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Status == 1 && roleIds.Contains(u.RoleId))
+            .OrderBy(u => u.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<(IReadOnlyList<User> Items, int TotalCount)> GetPagedAsync(
         string? keyword,
         int? roleId,

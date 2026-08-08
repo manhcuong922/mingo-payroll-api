@@ -15,6 +15,8 @@ public class MonthlyEvaluationEntityConfiguration : IEntityTypeConfiguration<Mon
         b.Property(x => x.Source).HasConversion<string>().HasMaxLength(20);
         b.Property(x => x.FinalScore).HasPrecision(4, 2);
         b.Property(x => x.ReopenReason).HasMaxLength(2000);
+        // Bản ghi cũ (trước job auto-sinh) đều là bảng chấm tay ⇒ false.
+        b.Property(x => x.IsSystemDefault).HasDefaultValue(false);
         b.Property(x => x.RowVersion).IsRowVersion();
 
         b.HasIndex(x => new { x.EmployeeUserId, x.PeriodYear, x.PeriodMonth }).IsUnique();   // D11

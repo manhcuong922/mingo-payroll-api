@@ -3724,6 +3724,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasPrecision(4, 2)
                         .HasColumnType("decimal(4,2)");
 
+                    b.Property<bool>("IsSystemDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("PeriodMonth")
                         .HasColumnType("int");
 

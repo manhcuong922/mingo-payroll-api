@@ -28,7 +28,13 @@ public interface IMonthlyEvaluationRepository
     /// <summary>Bảng tháng của 1 NV (mọi kỳ, mới nhất trước) — cho màn "điểm của tôi" (Read.Self).</summary>
     Task<IReadOnlyList<MonthlyEvaluation>> GetForEmployeeAsync(int employeeUserId, CancellationToken ct);
 
+    /// <summary>Distinct EmployeeUserId đã có bảng tháng trong kỳ (Y, M) — guard idempotent cho job auto-sinh.</summary>
+    Task<IReadOnlyList<int>> GetExistingEmployeeUserIdsForMonthAsync(int year, int month, CancellationToken ct);
+
     Task<int> AddAsync(MonthlyEvaluation entity, CancellationToken ct);
+
+    /// <summary>Thêm nhiều bảng tháng trong 1 <c>SaveChanges</c> — cho job auto-sinh hàng loạt.</summary>
+    Task<int> AddRangeAsync(IReadOnlyList<MonthlyEvaluation> entities, CancellationToken ct);
 
     Task<bool> UpdateWithConcurrencyAsync(MonthlyEvaluation entity, byte[] expectedRowVersion, CancellationToken ct);
 

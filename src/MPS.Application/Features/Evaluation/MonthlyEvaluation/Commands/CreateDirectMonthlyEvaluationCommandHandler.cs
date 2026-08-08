@@ -12,27 +12,26 @@ namespace MPS.Application.Features.Evaluation.MonthlyEvaluation.Commands;
 public class CreateDirectMonthlyEvaluationCommandHandler
     : IRequestHandler<CreateDirectMonthlyEvaluationCommand, int>
 {
-    // Loại B — các role Director chấm trực tiếp (D6): Tổ trưởng(6), Planning Manager(5), Kế toán(3), HR(2).
-    private static readonly HashSet<int> DirectScorableRoleIds = new()
-    {
-        SystemRoles.ProductionTeamLeaderId,   // 6
-        SystemRoles.PlanningManagerId,         // 5
-        SystemRoles.AccountantId,              // 3
-        SystemRoles.HrId,                      // 2
-    };
+    // Loại B — các role Director chấm trực tiếp (D6). Dùng chung với job auto-sinh, xem
+    // MPS.Domain.Constants.EvaluationSubjectRoles.
+    private static readonly HashSet<int> DirectScorableRoleIds =
+        EvaluationSubjectRoles.DirectScorableRoleIds.ToHashSet();
 
     private readonly IMonthlyEvaluationRepository _repo;
+    private readonly IOrderEvaluationRepository _orderEvals;
     private readonly IUserRepository _users;
     private readonly IEvaluationCriteriaSnapshotService _criteria;
     private readonly ICurrentUserService _currentUser;
 
     public CreateDirectMonthlyEvaluationCommandHandler(
         IMonthlyEvaluationRepository repo,
+        IOrderEvaluationRepository orderEvals,
         IUserRepository users,
         IEvaluationCriteriaSnapshotService criteria,
         ICurrentUserService currentUser)
     {
         _repo = repo;
+        _orderEvals = orderEvals;
         _users = users;
         _criteria = criteria;
         _currentUser = currentUser;
@@ -55,6 +54,14 @@ public class CreateDirectMonthlyEvaluationCommandHandler
             throw new ConflictException(
                 $"Đã có bảng đánh giá tháng {request.Month}/{request.Year} cho nhân viên này.");
 
+        // Người vừa được đổi vị trí: kỳ này còn bảng-theo-đơn ⇒ điểm tháng gộp từ đơn (Aggregated).
+        // Tạo bảng Direct ở đây sẽ bị "Tổng hợp tháng" ghi đè → chặn sớm cho rõ nghĩa.
+        var scoredByOrder = await _orderEvals.GetSubjectUserIdsByMonthAsync(request.Year, request.Month, ct);
+        if (scoredByOrder.Contains(request.EmployeeUserId))
+            throw new DomainValidationException(
+                $"Kỳ {request.Month}/{request.Year} nhân sự này vẫn được chấm qua bảng-theo-đơn " +
+                "(mới đổi vị trí trong kỳ) — điểm tháng sẽ gộp từ đơn. Chấm trực tiếp áp dụng từ kỳ sau.");
+
         var lines = await _criteria.BuildLinesAsync(ct);   // rubric chung; E3/chưa cân 100% → 400
 
         var evaluation = new MPS.Domain.Entities.Evaluation.MonthlyEvaluation
@@ -66,6 +73,7 @@ public class CreateDirectMonthlyEvaluationCommandHandler
             Source = EvaluationSource.Direct,
             FinalScore = null,
             Status = EvaluationStatus.Draft,
+            IsSystemDefault = false,   // Director tự tạo ⇒ chấm tay từ đầu, không phải bảng mặc định
             CreatedByUserId = directorId,
             CreatedAt = VietnamClock.Now,
             Scores = lines.ToList(),
