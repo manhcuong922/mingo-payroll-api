@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MPS.Application.Features.Compliance.AutoUpdate.Abstractions;
 using MPS.Application.Features.Compliance.AutoUpdate.Models;
+using MPS.Application.Options;
 using MPS.Domain.Entities.Compliance.AutoUpdate;
 using MPS.Domain.Interfaces;
 
@@ -23,7 +24,11 @@ public sealed class ComplianceDocumentProcessor : IComplianceDocumentProcessor
     private readonly IComplianceLogicValidator _logic;
     private readonly IComplianceDiffService _diff;
     private readonly IComplianceUpdateProposalRepository _proposals;
+    private readonly ComplianceAutoUpdateOptions _options;
     private readonly ILogger<ComplianceDocumentProcessor> _logger;
+
+    /// <summary>Trùng "Layer" của ComplianceDiffService — cùng một lớp validation.</summary>
+    private const string DiffLayer = "Diff";
 
     public ComplianceDocumentProcessor(
         IContentScopeFilter scopeFilter,
@@ -32,6 +37,7 @@ public sealed class ComplianceDocumentProcessor : IComplianceDocumentProcessor
         IComplianceLogicValidator logic,
         IComplianceDiffService diff,
         IComplianceUpdateProposalRepository proposals,
+        ComplianceAutoUpdateOptions options,
         ILogger<ComplianceDocumentProcessor> logger)
     {
         _scopeFilter = scopeFilter;
@@ -40,6 +46,7 @@ public sealed class ComplianceDocumentProcessor : IComplianceDocumentProcessor
         _logic = logic;
         _diff = diff;
         _proposals = proposals;
+        _options = options;
         _logger = logger;
     }
 
@@ -65,8 +72,21 @@ public sealed class ComplianceDocumentProcessor : IComplianceDocumentProcessor
             return IngestionOutcome.Failed("AI extract/parse lỗi.");
 
         result.DocumentNo ??= doc.DocumentNo;
+        result.EffectiveDate ??= doc.EffectiveDate;
         _logger.LogInformation("[Processor] {Label}: AI bóc {Count} field, entity={Entity}.",
             label, result.Values.Count, result.TargetEntityType ?? "(?)");
+
+        // ---- Chốt 1: văn bản phải đúng loại entity caller đang rà ----
+        if (!string.IsNullOrWhiteSpace(doc.ExpectedEntityType)
+            && !string.IsNullOrWhiteSpace(result.TargetEntityType)
+            && !string.Equals(result.TargetEntityType, doc.ExpectedEntityType, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "[Processor] {Label}: đang rà {Expected} nhưng AI phán văn bản thuộc {Actual} — bỏ, không tạo proposal.",
+                label, doc.ExpectedEntityType, result.TargetEntityType);
+            return IngestionOutcome.Failed(
+                $"Văn bản thuộc loại {result.TargetEntityType}, không phải {doc.ExpectedEntityType} đang rà soát.");
+        }
 
         // ---- 3 lớp validation (tuần tự, độc lập) ----
         var report = new ValidationReport();
@@ -79,6 +99,20 @@ public sealed class ComplianceDocumentProcessor : IComplianceDocumentProcessor
         {
             _logger.LogInformation("[Processor] {Label}: data đã trùng — NoChange, không tạo proposal.", label);
             return IngestionOutcome.NoChange(report, diff);
+        }
+
+        // ---- Chốt 2: bóc hụt quá nhiều field đang áp dụng → coi là extract hỏng ----
+        // Mỗi field hụt thành một entry Removed, mà Removed vẫn tính là "thay đổi thực chất".
+        // Không chặn ở đây thì proposal sinh ra toàn field bị xoá, duyệt nhầm là mất sạch dữ liệu đúng.
+        var minCoverage = _options.MinActiveFieldCoverage;
+        if (minCoverage > 0 && diff.ActiveFieldCount > 0 && diff.ActiveFieldCoverage < minCoverage)
+        {
+            var message =
+                $"Chỉ bóc lại được {diff.CoveredFieldCount}/{diff.ActiveFieldCount} field đang áp dụng " +
+                $"({diff.ActiveFieldCoverage:P0} < {minCoverage:P0}) — nghi AI bóc hụt chứ không phải văn bản bãi bỏ.";
+            report.Error(DiffLayer, result.TargetEntityType ?? "(unknown)", message);
+            _logger.LogWarning("[Processor] {Label}: {Message} Không tạo proposal.", label, message);
+            return IngestionOutcome.Failed(message);
         }
 
         // ---- Tạo proposal (PendingReview) ----

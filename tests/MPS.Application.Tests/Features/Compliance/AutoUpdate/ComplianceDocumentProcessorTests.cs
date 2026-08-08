@@ -4,6 +4,7 @@ using Moq;
 using MPS.Application.Features.Compliance.AutoUpdate.Abstractions;
 using MPS.Application.Features.Compliance.AutoUpdate.Ingestion;
 using MPS.Application.Features.Compliance.AutoUpdate.Models;
+using MPS.Application.Options;
 using MPS.Domain.Entities.Compliance.AutoUpdate;
 using MPS.Domain.Interfaces;
 
@@ -22,9 +23,11 @@ public sealed class ComplianceDocumentProcessorTests
     private readonly Mock<IComplianceDiffService> _diff = new();
     private readonly Mock<IComplianceUpdateProposalRepository> _proposals = new();
 
+    private readonly ComplianceAutoUpdateOptions _options = new();
+
     private ComplianceDocumentProcessor CreateSut() => new(
         _scope.Object, _extractor.Object, _grounding.Object, _logic.Object, _diff.Object,
-        _proposals.Object, NullLogger<ComplianceDocumentProcessor>.Instance);
+        _proposals.Object, _options, NullLogger<ComplianceDocumentProcessor>.Instance);
 
     private static RawDocument Doc(bool dryRun = false) =>
         new("manual-upload", null, "74/2024/NĐ-CP", "toàn văn ...", dryRun);
@@ -52,6 +55,85 @@ public sealed class ComplianceDocumentProcessorTests
                 if (hasChange) r.Entries.Add(new DiffEntry("Region:I", "4960000", "5000000", ChangeType.Changed));
                 return r;
             });
+
+    /// <summary>Diff kiểu "AI bóc hụt": data active có <paramref name="activeFields"/> field,
+    /// AI chỉ lấy lại được <paramref name="covered"/> field, phần còn lại thành Removed.</summary>
+    private void SetupPartialDiff(int activeFields, int covered) =>
+        _diff.Setup(d => d.ComputeDiffAsync(It.IsAny<ExtractionResult>(), It.IsAny<ValidationReport>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                var r = new DiffResult();
+                for (var i = 0; i < activeFields; i++)
+                {
+                    r.Entries.Add(i < covered
+                        ? new DiffEntry($"F{i}", "1", "2", ChangeType.Changed)
+                        : new DiffEntry($"F{i}", "1", null, ChangeType.Removed));
+                }
+                return r;
+            });
+
+    [Fact]
+    public async Task ProcessAsync_WrongEntityType_ReturnsFailed_AndDoesNotPersist()
+    {
+        SetupScoped(hasContent: true);
+        // Caller đang rà ngưỡng phụ cấp, AI phán văn bản là hằng số lao động.
+        _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtractionResult
+            {
+                TargetEntityType = TargetEntityTypes.LaborLawConstantsVersion,
+                RawJson = "{}",
+            });
+        SetupDiff(hasChange: true);
+
+        var doc = Doc() with { ExpectedEntityType = TargetEntityTypes.AllowanceExemptThresholdVersion };
+        var outcome = await CreateSut().ProcessAsync(doc, CancellationToken.None);
+
+        outcome.Kind.Should().Be(IngestionKind.Failed);
+        _proposals.Verify(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ExtractionMissesMostActiveFields_ReturnsFailed_AndDoesNotPersist()
+    {
+        SetupScoped(hasContent: true);
+        _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SampleResult());
+        // 13 field đang áp dụng, AI không lấy lại được field nào — đúng ca proposal rác gặp thật.
+        SetupPartialDiff(activeFields: 13, covered: 0);
+
+        var outcome = await CreateSut().ProcessAsync(Doc(), CancellationToken.None);
+
+        outcome.Kind.Should().Be(IngestionKind.Failed);
+        outcome.Reason.Should().Contain("0/13");
+        _proposals.Verify(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ExtractionCoversMostActiveFields_StillCreatesProposal()
+    {
+        SetupScoped(hasContent: true);
+        _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SampleResult());
+        // Bóc lại 9/10 field: bãi bỏ thật 1 field, không được chặn nhầm.
+        SetupPartialDiff(activeFields: 10, covered: 9);
+        _proposals.Setup(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>())).ReturnsAsync(7);
+
+        var outcome = await CreateSut().ProcessAsync(Doc(), CancellationToken.None);
+
+        outcome.Kind.Should().Be(IngestionKind.Proposal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_CoverageGuardDisabled_CreatesProposalEvenWhenExtractionMissesFields()
+    {
+        _options.MinActiveFieldCoverage = 0;
+        SetupScoped(hasContent: true);
+        _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SampleResult());
+        SetupPartialDiff(activeFields: 13, covered: 0);
+        _proposals.Setup(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
+
+        var outcome = await CreateSut().ProcessAsync(Doc(), CancellationToken.None);
+
+        outcome.Kind.Should().Be(IngestionKind.Proposal);
+    }
 
     [Fact]
     public async Task ProcessAsync_NoScopedContent_ReturnsNoScopedContent_AndDoesNotPersist()

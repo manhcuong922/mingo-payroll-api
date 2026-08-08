@@ -726,6 +726,10 @@ public sealed partial class DatabaseSeeder
         await SeedMinimumWageAsync(adminId, now, legalDocumentIdsByCode, ct);
         await SeedLaborLawConstantsAsync(adminId, now, legalDocumentIdsByCode, ct);
         await SeedAllowanceExemptThresholdsAsync(adminId, now, legalDocumentIdsByCode, ct);
+
+        // Móng Kênh B: phải chạy SAU khi đã có version + link legal document —
+        // xem DatabaseSeeder.ComplianceAuthoritativeSources.cs.
+        await SeedComplianceAuthoritativeSourcesAsync(ct);
     }
 
     private async Task<Dictionary<string, int>> SeedLegalDocumentsAsync(int adminId, DateTime now, CancellationToken ct)

@@ -101,8 +101,15 @@ public sealed class ComplianceWatcher : IComplianceWatcher
                     continue;
                 }
 
+                // ExpectedEntityType: lõi loại thẳng văn bản lạc đề (đi tìm ngưỡng phụ cấp mà vớ phải
+                // thông tư khác) thay vì đẻ proposal sai loại entity.
+                // EffectiveDate: dự phòng cho ProposedValidFrom khi AI không bóc được ngày trong toàn văn.
                 var outcome = await _processor.ProcessAsync(
-                    new RawDocument(SourceKey, discovery.SourceUrl, discovery.DocumentNo, fullText), ct);
+                    new RawDocument(
+                        SourceKey, discovery.SourceUrl, discovery.DocumentNo, fullText,
+                        DryRun: false,
+                        ExpectedEntityType: src.TargetEntityType,
+                        EffectiveDate: discovery.EffectiveDate), ct);
 
                 switch (outcome.Kind)
                 {

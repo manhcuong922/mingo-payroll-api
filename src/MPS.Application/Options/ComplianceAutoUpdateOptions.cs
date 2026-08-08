@@ -17,6 +17,14 @@ public sealed class ComplianceAutoUpdateOptions
     public int RequestDelayMs { get; set; } = 1500;
     public string UserAgent { get; set; } = "Mozilla/5.0 (compatible; MingoComplianceBot/1.0)";
 
+    /// <summary>
+    /// Tỷ lệ tối thiểu số field đang áp dụng mà AI phải bóc lại được thì proposal mới đáng tin
+    /// (xem <c>DiffResult.ActiveFieldCoverage</c>). Dưới ngưỡng = AI bóc hụt, KHÔNG tạo proposal —
+    /// vì proposal kiểu đó chỉ toàn field "removed" và duyệt nhầm là xoá sạch dữ liệu đang chuẩn.
+    /// Đặt 0 để tắt chốt này.
+    /// </summary>
+    public double MinActiveFieldCoverage { get; set; } = 0.5;
+
     public Dictionary<string, SourceOptions> Sources { get; set; } = new();
     public LlmOptions Llm { get; set; } = new();
     public OcrOptions Ocr { get; set; } = new();
@@ -37,6 +45,37 @@ public sealed class WatcherOptions
 
     /// <summary>Giới hạn số lượt web_search mỗi entity (kiểm soát chi phí token).</summary>
     public int MaxSearchUses { get; set; } = 3;
+
+    /// <summary>
+    /// Phiên bản server tool web_search.
+    ///
+    /// <c>web_search_20250305</c> (mặc định) — search thuần, CHẠY ĐƯỢC qua CLIProxyAPI (OAuth Claude Pro),
+    /// tức là nằm trọn trong session, không phát sinh phí server tool riêng.
+    ///
+    /// <c>web_search_20260209</c> — có dynamic filtering nên URL trả về sạch hơn, NHƯNG chạy ngầm bằng
+    /// code execution; qua session Pro thì sandbox đó trả <c>too_many_requests</c>, search âm thầm
+    /// KHÔNG chạy (web_search_requests = 0) và model bịa câu trả lời từ trí nhớ. Chỉ dùng khi gọi
+    /// thẳng api.anthropic.com (Llm:BaseUrl rỗng).
+    /// </summary>
+    public string WebSearchToolType { get; set; } = "web_search_20250305";
+
+    /// <summary>
+    /// max_tokens cho câu trả lời của watcher. Phải rộng tay: web_search bản mới có dynamic filtering
+    /// nên model hay viết dài; chạm trần → JSON cụt → parse fail → Lead NeedsHuman oan.
+    /// </summary>
+    public int MaxOutputTokens { get; set; } = 4096;
+
+    /// <summary>
+    /// Chỉ cho web_search tra trong các domain này (khớp cả subdomain). Mục đích: ép model trả URL
+    /// TOÀN VĂN của trang pháp luật chính thống, thay vì link bài báo — bài báo không có cấu trúc
+    /// "Điều N." nên <c>ContentScopeFilter</c> lọc ra 0 điều và pipeline dừng ở NoScopedContent.
+    /// Rỗng = không giới hạn.
+    ///
+    /// CỐ Ý để rỗng, danh sách thật nằm ở appsettings.json: ConfigurationBinder của .NET NỐI THÊM
+    /// phần tử từ config vào mảng mặc định chứ không thay thế — đặt giá trị ở cả hai nơi sẽ sinh
+    /// domain trùng và Anthropic trả 400 "Domain list must not contain duplicates".
+    /// </summary>
+    public string[] AllowedDomains { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>
