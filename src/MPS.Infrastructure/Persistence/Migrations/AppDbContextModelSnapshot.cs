@@ -2470,6 +2470,16 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("EmployeeUnemploymentPercent")
                         .HasColumnType("decimal(5,2)");
 
+                    b.Property<decimal>("EmployeeUnionDuesCapPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(10.00m);
+
+                    b.Property<decimal>("EmployeeUnionDuesPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(1.00m);
+
                     b.Property<decimal>("EmployerHealthPercent")
                         .HasColumnType("decimal(5,2)");
 
@@ -2712,6 +2722,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("UnionFundExemptFlag")
+                        .HasColumnType("bit");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -3593,6 +3606,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<string>("GuardianRelationship")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsUnionMember")
+                        .HasColumnType("bit");
 
                     b.Property<string>("PermanentAddress")
                         .IsRequired()

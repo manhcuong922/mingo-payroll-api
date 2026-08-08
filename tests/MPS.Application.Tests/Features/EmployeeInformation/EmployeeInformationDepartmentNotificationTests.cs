@@ -114,6 +114,7 @@ public sealed class EmployeeInformationDepartmentNotificationTests
         PositionId: 1,
         DepartmentId: departmentId,
         DependentsNo: 0,
+        IsUnionMember: false,
         TaxNo: null,
         SocialNo: null,
         BankNumber: null,

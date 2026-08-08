@@ -56,7 +56,8 @@ internal static class PayrollCollectorFixture
     /// </summary>
     public static async Task<AppDbContext> SeedBaseAsync(
         bool socialFlag = true, bool healthFlag = true, bool unemploymentFlag = true,
-        string? employeeCode = "NV001")
+        string? employeeCode = "NV001",
+        bool isUnionMember = false, bool unionFundExempt = false)
     {
         var db = NewContext();
 
@@ -73,6 +74,7 @@ internal static class PayrollCollectorFixture
             CitizenId = CitizenId,
             PositionId = PositionId,
             Gender = Gender.Male,
+            IsUnionMember = isUnionMember,
         });
         db.ShiftTemplates.Add(new ShiftTemplate
         {
@@ -95,6 +97,7 @@ internal static class PayrollCollectorFixture
             SocialInsuranceFlag = socialFlag,
             HealthInsuranceFlag = healthFlag,
             UnemploymentInsuranceFlag = unemploymentFlag,
+            UnionFundExemptFlag = unionFundExempt,
         });
 
         await db.SaveChangesAsync();
@@ -234,6 +237,7 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
         EmployeeHealthPercent: 1.5m, EmployerHealthPercent: 3m,
         EmployeeUnemploymentPercent: 1m, EmployerUnemploymentPercent: 1m,
         EmployerUnionFundPercent: 2m,
+        EmployeeUnionDuesPercent: 1m, EmployeeUnionDuesCapPercent: 10m,
         ReferenceAmount: 2_340_000m, SocialCapMultiplier: 20, HealthCapMultiplier: 20,
         UnemploymentCapMultiplier: 20, LegalReference: "test",
         Funds: new[] { new SocialInsuranceFundEntrySnapshot("HT", "Hưu trí", 8m, 14m) },

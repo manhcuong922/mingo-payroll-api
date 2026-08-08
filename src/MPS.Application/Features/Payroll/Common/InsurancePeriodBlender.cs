@@ -17,6 +17,8 @@ public sealed record InsurancePeriodRates(
     decimal BhtnDnRate,
     decimal BhtnNldRate,
     decimal KpcdRate,
+    decimal UnionDuesRate,
+    decimal UnionDuesCap,
     decimal BhxhBhytCap,
     decimal BhytCap,
     decimal BhtnCap,
@@ -64,6 +66,11 @@ public static class InsurancePeriodBlender
             BhtnDnRate: Avg(d => d.Social.EmployerUnemploymentPercent) / 100m,
             BhtnNldRate: Avg(d => d.Social.EmployeeUnemploymentPercent) / 100m,
             KpcdRate: Avg(d => d.Social.EmployerUnionFundPercent) / 100m,
+            UnionDuesRate: Avg(d => d.Social.EmployeeUnionDuesPercent) / 100m,
+
+            // Trần đoàn phí chặn trên SỐ TIỀN (10% mức lương cơ sở), nên trộn TRÊN TÍCH giống các
+            // trần khối BH — mức tham chiếu và tỷ lệ trần có thể đổi cùng lúc.
+            UnionDuesCap: Avg(d => d.Social.ReferenceAmount * d.Social.EmployeeUnionDuesCapPercent / 100m),
 
             // Trần = mức tham chiếu × hệ số, TRỘN TRÊN TÍCH chứ không trộn hai thừa số rồi mới nhân:
             // mức tham chiếu và hệ số có thể đổi cùng lúc, nhân hai số bình quân sẽ ra một con số

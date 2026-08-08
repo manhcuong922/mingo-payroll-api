@@ -86,6 +86,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var bhtnDnRate = insurance.BhtnDnRate;
         var bhtnNldRate = insurance.BhtnNldRate;
         var kpcdRate = insurance.KpcdRate;
+        var unionDuesRate = insurance.UnionDuesRate;
+        var unionDuesCap = insurance.UnionDuesCap;
         var bhxhBhytCap = insurance.BhxhBhytCap;
         // ⭐ D3 — trần BHYT có hệ số RIÊNG trên màn hình cấu hình BHXH (`HealthCapMultiplier`), trước
         // đây không đường nào dùng tới nên admin sửa ô đó không có gì thay đổi.
@@ -335,7 +337,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // `CAC-CASE-XAY-RA` §3.2: "không nhận số nhập tay không có căn cứ". Không có bản ghi ⇒ 0.
             n[DependentsCount] = depCountByEmp.TryGetValue(e.Id, out var dc) ? dc : 0m;
             n[BonusThuongDuAn] = 0m;
-            n[UnionFee] = 0m;
+
+            // A4 — đoàn phí công đoàn chỉ thu của ĐOÀN VIÊN; công thức cột PHICONGDOANVIEN nhân cờ
+            // này với (tỷ lệ × lương, chặn trần). Không phải đoàn viên ⇒ 0, đúng như trước.
+            n[UnionMember] = e.IsUnionMember ? 1m : 0m;
             n[BhxhDnRate] = bhxhDnRate;
             n[BhxhNldRate] = bhxhNldRate;
             n[BhytDnRate] = bhytDnRate;
@@ -343,6 +348,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[BhtnDnRate] = bhtnDnRate;
             n[BhtnNldRate] = bhtnNldRate;
             n[KpcdRate] = kpcdRate;
+            n[UnionDuesRate] = unionDuesRate;
+            n[UnionDuesCap] = unionDuesCap;
             n[BhxhBhytCap] = bhxhBhytCap;
             n[BhytCap] = bhytCap;
             n[BhtnCap] = bhtnCap;
@@ -606,11 +613,21 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         return CongCategory.Official;
     }
 
+    /// <summary>
+    /// Suy cờ BH mặc định của kỳ từ hợp đồng đang hiệu lực. Kế toán vẫn đè tay được (cột Input,
+    /// xem [D23]) cho ngoại lệ theo kỳ như thai sản.
+    ///
+    /// <para>⭐ A7 — thứ tự nhánh có ý nghĩa: các cờ "không đóng BH" nặng hơn nên xét trước;
+    /// <see cref="InsuranceFlags.NoUnion"/> chỉ áp cho HĐ VẪN đóng đủ BH mà được miễn KPCĐ, đúng
+    /// như mô tả của cờ ("Vẫn đóng BHXH/BHYT/BHTN nhưng KHÔNG trích KPCĐ"). HĐ vừa miễn BH vừa miễn
+    /// KPCĐ ⇒ trả cờ BH (nặng hơn); KPCĐ của trường hợp đó do 3 công tắc BH cắt sẵn.</para>
+    /// </summary>
     private static string ResolveInsuranceFlag(Contract? c)
     {
         if (c is null) return InsuranceFlags.Full;
         if (!c.SocialInsuranceFlag && !c.HealthInsuranceFlag && !c.UnemploymentInsuranceFlag) return InsuranceFlags.NoInsurance;
         if (c.HealthInsuranceFlag && !c.SocialInsuranceFlag && !c.UnemploymentInsuranceFlag) return InsuranceFlags.HealthOnly;
+        if (c.UnionFundExemptFlag) return InsuranceFlags.NoUnion;
         return InsuranceFlags.Full;
     }
 

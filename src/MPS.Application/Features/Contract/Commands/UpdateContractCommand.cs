@@ -25,6 +25,7 @@ public sealed record UpdateContractCommand(
     bool? SocialInsuranceFlag,
     bool? HealthInsuranceFlag,
     bool? UnemploymentInsuranceFlag,
+    bool? UnionFundExemptFlag,
     TaxPolicy? TaxPolicy,
     string? TrainingPolicy,
     string? ConfidentialityClause,

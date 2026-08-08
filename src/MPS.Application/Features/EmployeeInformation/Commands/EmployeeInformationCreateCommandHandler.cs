@@ -40,6 +40,7 @@ public class EmployeeInformationCreateCommandHandler : IRequestHandler<EmployeeI
             PositionId = request.PositionId,
             DepartmentId = request.DepartmentId,
             DependentsNo = request.DependentsNo,
+            IsUnionMember = request.IsUnionMember,
             TaxNo = request.TaxNo?.Trim(),
             SocialNo = request.SocialNo?.Trim(),
             BankNumber = request.BankNumber?.Trim(),

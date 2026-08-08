@@ -89,6 +89,8 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
             // lên nên `PUT DependentsNo = 99` (0 bản ghi, 0 chứng từ) lưu được ⇒ nếu NV chưa có bản
             // ghi thì đây là suất giảm trừ khống. Theo §3.2: "không nhận số nhập tay không có căn cứ".
             DependentsNo = existing.DependentsNo,
+            // Khác DependentsNo: cờ đoàn viên do HR khai tay (không dẫn xuất từ bản ghi nào).
+            IsUnionMember = request.IsUnionMember,
             // Trường tuỳ chọn: null = giữ nguyên, "" = xoá, có giá trị = ghi.
             CitizenIssuedDate = request.CitizenIssuedDate ?? existing.CitizenIssuedDate,
             CitizenIssuedPlace = Merge(request.CitizenIssuedPlace, existing.CitizenIssuedPlace),

@@ -18,6 +18,7 @@ public sealed record CreateEmployeeInformationRequest(
     int PositionId,
     int? DepartmentId,
     int DependentsNo,
+    bool IsUnionMember,
     string? TaxNo,
     string? SocialNo,
     string? BankNumber,

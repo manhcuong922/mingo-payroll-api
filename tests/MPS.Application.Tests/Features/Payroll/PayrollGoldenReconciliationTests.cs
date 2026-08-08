@@ -60,7 +60,11 @@ public sealed class PayrollGoldenReconciliationTests
                 [PayrollFieldKeys.OtTangCa] = tangCa,
                 [PayrollFieldKeys.OtChenhLech] = chenhLechLtg,
                 [PayrollFieldKeys.DependentsCount] = soNpt,
-                [PayrollFieldKeys.UnionFee] = doanPhi,
+                // Đoàn phí: file mẫu thu 2% × mức lương, KHÔNG áp trần (chính sách công đoàn
+                // của DN, khai trong Compliance) ⇒ rate 2%, cap 0 = không trần, NV là đoàn viên.
+                [PayrollFieldKeys.UnionMember] = 1m,
+                [PayrollFieldKeys.UnionDuesRate] = 0.02m,
+                [PayrollFieldKeys.UnionDuesCap] = 0m,
                 // Compliance 08/2023
                 [PayrollFieldKeys.BhxhDnRate] = 0.175m,
                 [PayrollFieldKeys.BhxhNldRate] = 0.08m,

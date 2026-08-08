@@ -15,6 +15,8 @@ public sealed record CreateSocialInsuranceRateCommand(
     decimal EmployeeUnemploymentPercent,
     decimal EmployerUnemploymentPercent,
     decimal EmployerUnionFundPercent,
+    decimal EmployeeUnionDuesPercent,
+    decimal EmployeeUnionDuesCapPercent,
     decimal ReferenceAmount,
     int SocialCapMultiplier,
     int HealthCapMultiplier,

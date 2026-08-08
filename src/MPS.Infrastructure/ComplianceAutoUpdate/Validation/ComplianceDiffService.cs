@@ -122,6 +122,8 @@ public sealed class ComplianceDiffService : IComplianceDiffService
                     map["EmployeeUnemploymentPercent"] = si.EmployeeUnemploymentPercent;
                     map["EmployerUnemploymentPercent"] = si.EmployerUnemploymentPercent;
                     map["EmployerUnionFundPercent"] = si.EmployerUnionFundPercent;
+                    map["EmployeeUnionDuesPercent"] = si.EmployeeUnionDuesPercent;
+                    map["EmployeeUnionDuesCapPercent"] = si.EmployeeUnionDuesCapPercent;
                     map["ReferenceAmount"] = si.ReferenceAmount;
                 }
                 break;

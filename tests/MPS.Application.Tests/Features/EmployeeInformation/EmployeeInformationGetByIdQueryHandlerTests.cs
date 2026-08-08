@@ -24,7 +24,7 @@ public sealed class EmployeeInformationGetByIdQueryHandlerTests
 
     private static EmployeeInformationDto MakeDto(int id, int? userId) =>
         new(id, userId, "EC", "FullName", new DateTime(1990, 1, 1), "Male", $"0{id:D11}",
-            null, null, "Hà Nội", null, null, null, null, 1, "Pos", null, null, 0, null, null,
+            null, null, "Hà Nội", null, null, null, null, 1, "Pos", null, null, 0, false, null, null,
             null, null, null, null, null);
 
     [Fact]

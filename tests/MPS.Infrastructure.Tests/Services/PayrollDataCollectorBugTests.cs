@@ -14,15 +14,21 @@ namespace MPS.Infrastructure.Tests.Services;
 /// cho A2) rồi commit cùng bản sửa, để mọi commit trên nhánh đều xanh. File này rỗng dần và được
 /// xoá khi hết lỗi.</para>
 ///
-/// <para>Còn lại: A4 (2 cột luôn bằng 0), A7 (cờ bảo hiểm chỉ map 3/8 tổ hợp),
-/// C3 (CCCD làm mã NV), D3 (trần BHYT không có tác dụng).</para>
+/// <para>Còn lại: A4 (cột Thưởng dự án luôn bằng 0), C3 (CCCD làm mã NV),
+/// D3 (trần BHYT không có tác dụng).</para>
 /// </summary>
 public sealed class PayrollDataCollectorBugTests
 {
-    // ===================== A4 — hai cột vĩnh viễn bằng 0 =====================
+    // ===================== A4 (phần Thưởng dự án) — cột vĩnh viễn bằng 0 =====================
+    //
+    // Phần PHÍ CÔNG ĐOÀN của A4 đã sửa xong (xem PayrollUnionDuesTests): đoàn phí nay tính từ tỷ lệ
+    // + trần khai trong Compliance, nhân cờ đoàn viên trên hồ sơ NV. Phần Thưởng dự án dưới đây thì
+    // KHÔNG có nguồn nào để tra — hệ thống không có khái niệm "dự án có thưởng" hay bảng phân bổ
+    // thưởng theo NLĐ. Hai lối ra: (a) mở cột thành Input cho kế toán nhập như Thưởng năm/Thưởng
+    // khác bên cạnh, hoặc (b) dựng nguồn dữ liệu thật. Chờ PO chốt.
 
-    [Fact(DisplayName = "A4 · Thưởng dự án và Phí công đoàn viên phải được tra từ dữ liệu, không gán cứng 0")]
-    public async Task A4_ProjectBonusAndUnionFee_MustNotBeHardcodedZero()
+    [Fact(DisplayName = "A4 · Thưởng dự án phải được tra từ dữ liệu hoặc cho nhập tay, không gán cứng 0")]
+    public async Task A4_ProjectBonus_MustNotBeHardcodedZero()
     {
         using var db = await SeedBaseAsync();
         db.AttendanceRecords.Add(ShiftRecord(day: 6));
@@ -31,33 +37,9 @@ public sealed class PayrollDataCollectorBugTests
         var inputs = await CollectAsync(db);
 
         inputs.Numbers.Should().ContainKey(PayrollFieldKeys.BonusThuongDuAn);
-        inputs.Numbers.Should().ContainKey(PayrollFieldKeys.UnionFee);
-        (inputs.Numbers[PayrollFieldKeys.BonusThuongDuAn] == 0m && inputs.Numbers[PayrollFieldKeys.UnionFee] == 0m)
-            .Should().BeFalse(
-                "cả hai cột luôn = 0 với mọi dữ liệu đầu vào ⇒ NLĐ không bao giờ nhận thưởng dự án " +
-                "và công đoàn không bao giờ thu được phí; cần nguồn tra thật hoặc mở cho kế toán sửa tay");
-    }
-
-    // ===================== A7 (phần KPCĐ) — không có cách khai "miễn phí công đoàn" =====================
-    //
-    // Phần BẢO HIỂM của A7 đã sửa xong (xem PayrollContractInsuranceSwitchTests): mỗi cột BH nay
-    // tôn trọng công tắc riêng của hợp đồng, đủ cả 8 tổ hợp. Phần KPCĐ dưới đây thì KHÔNG sửa được
-    // bằng công thức — `Contract` không có trường "miễn phí công đoàn" nào cả, nên cờ `NoUnion`
-    // (đã tồn tại trong enum và được công thức KPCĐ dùng) không nguồn nào sinh ra được.
-    // Cần thêm cột vào `Contract` + migration + UI ⇒ vượt phạm vi một bản sửa lỗi, chờ PO chốt.
-
-    [Fact(DisplayName = "A7 · Hợp đồng miễn phí công đoàn phải ra cờ NoUnion — hiện không tồn tại nguồn")]
-    public async Task A7_NoUnionFlag_IsUnreachable()
-    {
-        using var db = await SeedBaseAsync();
-        db.AttendanceRecords.Add(ShiftRecord(day: 6));
-        await db.SaveChangesAsync();
-
-        var inputs = await CollectAsync(db);
-
-        InsuranceFlags.All.Should().Contain(InsuranceFlags.NoUnion);
-        inputs.Texts[PayrollFieldKeys.ContractInsuranceFlag].Should().Be(InsuranceFlags.NoUnion,
-            "chưa có cách khai 'không đóng phí công đoàn' trên hợp đồng ⇒ hệ thống LUÔN thu KPCĐ");
+        inputs.Numbers[PayrollFieldKeys.BonusThuongDuAn].Should().NotBe(0m,
+            "cột luôn = 0 với mọi dữ liệu đầu vào ⇒ NLĐ không bao giờ nhận thưởng dự án; " +
+            "cần nguồn tra thật hoặc mở cho kế toán sửa tay");
     }
 
     // ===================== C3 — CCCD làm mã nhân viên =====================

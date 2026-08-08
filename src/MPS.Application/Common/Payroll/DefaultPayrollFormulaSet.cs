@@ -249,7 +249,29 @@ public static class DefaultPayrollFormulaSet
         // ===== Khối H — kết quả cuối =====
         Add(Cc.ThuBhHoanThue, "Thu do BH/hoàn thuế", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThuKhac, "Thu khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
-        Add(Cc.PhiCongDoanVien, "Phí công đoàn viên", GH, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.UnionFee, money: true);
+        // A4 — ĐOÀN PHÍ công đoàn (QĐ 1908/QĐ-TLĐ Đ.23): 1% tiền lương làm căn cứ đóng BHXH, TRẦN
+        // 10% mức lương cơ sở. Trước đây khai `Lookup` vào một field hardcode 0 ⇒ cột vừa không tự
+        // tính vừa không cho kế toán nhập, chết cứng ở 0 với mọi dữ liệu đầu vào.
+        //
+        // Khác cả khối BH ở chỗ trần chặn trên SỐ TIỀN đóng chứ không trên nền đóng, nên KHÔNG dùng
+        // được `BH_CO_TRAN` (hàm đó = MIN(nền, trần) × tỷ_lệ) — phải MIN sau khi đã nhân tỷ lệ.
+        // Giữ quy ước "trần = 0 nghĩa là không áp trần" cho đồng nhất với `BH_CO_TRAN`, vì kỳ lương
+        // tạo trước bản sửa này không có khoá trần (ToFields điền 0).
+        //
+        // Nhân cờ đoàn viên ở ngoài cùng: đoàn phí CHỈ thu của người có tham gia công đoàn, khác
+        // KPCĐ là nghĩa vụ của DN với mọi NLĐ.
+        //
+        // KHÔNG `ProrateByCong`: đoàn phí là khoản đóng theo THÁNG trên tiền lương làm căn cứ đóng
+        // BHXH, không chia theo ngày công thực tế — khác khối BH và tiền cơm. Đối chiếu file lương
+        // mẫu 08/2023 (PayrollGoldenReconciliationTests): 14.641.000 × 2% = 292.820 đúng bằng cột
+        // đoàn phí trên file, prorate vào sẽ lệch.
+        var unionDuesRaw = N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.UnionDuesRate));
+        Add(Cc.PhiCongDoanVien, "Phí công đoàn viên", GH, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
+            formula: N.Mul(
+                N.If(N.Cmp(">", N.Field(Fk.UnionDuesCap), N.Const(0m)),
+                    N.Func(Fn.Min, unionDuesRaw, N.Field(Fk.UnionDuesCap)),
+                    unionDuesRaw),
+                N.Field(Fk.UnionMember)));
         Add(Cc.ChiKhac, "Chi khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // BS-5 — 2 cột truy lĩnh / truy thu, seed từ field do handler tạo kỳ gom sẵn (mặc định 0 khi
         // NV không có khoản chưa áp). Dấu: TRUY_LINH dương (+); TRUY_THU âm (−) — cộng đại số vào THUCNHAN.

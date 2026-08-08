@@ -63,7 +63,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
 
         // Thưởng / công đoàn
         new(BonusThuongDuAn, "Thưởng dự án", "Thưởng", ColumnDataType.Money),
-        new(UnionFee, "Phí công đoàn viên", "Công đoàn", ColumnDataType.Money),
+        new(UnionMember, "Là đoàn viên công đoàn", "Công đoàn", ColumnDataType.Number),
 
         // Compliance — tỷ lệ
         new(BhxhDnRate, "Tỷ lệ BHXH – DN", "Compliance", ColumnDataType.Percent),
@@ -73,11 +73,13 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(BhtnDnRate, "Tỷ lệ BHTN – DN", "Compliance", ColumnDataType.Percent),
         new(BhtnNldRate, "Tỷ lệ BHTN – NLĐ", "Compliance", ColumnDataType.Percent),
         new(KpcdRate, "Tỷ lệ KPCĐ – DN", "Compliance", ColumnDataType.Percent),
+        new(UnionDuesRate, "Tỷ lệ đoàn phí – NLĐ", "Compliance", ColumnDataType.Percent),
 
         // Compliance — trần + giảm trừ
         new(BhxhBhytCap, "Trần đóng BHXH", "Compliance", ColumnDataType.Money),
         new(BhytCap, "Trần đóng BHYT", "Compliance", ColumnDataType.Money),
         new(BhtnCap, "Trần đóng BHTN", "Compliance", ColumnDataType.Money),
+        new(UnionDuesCap, "Trần đoàn phí / tháng", "Compliance", ColumnDataType.Money),
         new(PersonalDeduction, "Giảm trừ bản thân", "Compliance", ColumnDataType.Money),
         new(DependentDeduction, "Giảm trừ mỗi người phụ thuộc", "Compliance", ColumnDataType.Money),
         new(MealExemptThreshold, "Mức cơm miễn thuế tối đa", "Compliance", ColumnDataType.Money),

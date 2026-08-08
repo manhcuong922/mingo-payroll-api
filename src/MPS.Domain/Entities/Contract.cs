@@ -42,6 +42,19 @@ public class Contract
     public bool SocialInsuranceFlag { get; set; } = true;
     public bool HealthInsuranceFlag { get; set; } = true;
     public bool UnemploymentInsuranceFlag { get; set; } = true;
+
+    /// <summary>
+    /// HĐ được MIỄN trích KPCĐ (kinh phí công đoàn DN nộp). Mặc định false — DN nộp KPCĐ cho mọi
+    /// NLĐ theo Luật Công đoàn; chỉ tick khi có căn cứ miễn cụ thể.
+    ///
+    /// <para>Ngữ nghĩa "MIỄN" (true = không trích) chứ không phải "có trích", để HĐ cũ đọc lên
+    /// false vẫn giữ nguyên hành vi đang chạy — cùng quy ước với 3 trường
+    /// <c>Contract*NoInsurance</c> ở <c>PayrollFieldKeys</c>.</para>
+    ///
+    /// <para>Đây là nguồn sinh cờ <c>InsuranceFlags.NoUnion</c>, trước đây không nhánh nào của
+    /// <c>PayrollDataCollector.ResolveInsuranceFlag</c> trả về được.</para>
+    /// </summary>
+    public bool UnionFundExemptFlag { get; set; }
     public ContractEnums.TaxPolicy? TaxPolicy { get; set; }
     public string? TrainingPolicy { get; set; }
     public string? ConfidentialityClause { get; set; }

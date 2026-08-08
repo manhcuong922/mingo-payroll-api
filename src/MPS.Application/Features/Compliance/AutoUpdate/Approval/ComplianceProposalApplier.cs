@@ -152,6 +152,8 @@ public sealed class ComplianceProposalApplier
             D(values, "EmployeeUnemploymentPercent", active.EmployeeUnemploymentPercent),
             D(values, "EmployerUnemploymentPercent", active.EmployerUnemploymentPercent),
             D(values, "EmployerUnionFundPercent", active.EmployerUnionFundPercent),
+            D(values, "EmployeeUnionDuesPercent", active.EmployeeUnionDuesPercent),
+            D(values, "EmployeeUnionDuesCapPercent", active.EmployeeUnionDuesCapPercent),
             D(values, "ReferenceAmount", active.ReferenceAmount),
             active.SocialCapMultiplier,
             active.HealthCapMultiplier,

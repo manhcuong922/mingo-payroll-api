@@ -28,6 +28,12 @@ public class SocialInsuranceRateVersionEntityConfiguration : IEntityTypeConfigur
         builder.Property(e => e.EmployeeUnemploymentPercent).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.EmployerUnemploymentPercent).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(e => e.EmployerUnionFundPercent).HasColumnType("decimal(5,2)").IsRequired();
+        // Bản ghi cũ (trước A4) chưa có 2 cột này — default = mức luật hiện hành QĐ 1908/QĐ-TLĐ
+        // (1% lương, trần 10% lương cơ sở) để kỳ tính sau khi migrate ra đúng ngay.
+        builder.Property(e => e.EmployeeUnionDuesPercent).HasColumnType("decimal(5,2)")
+            .HasDefaultValue(1.00m).IsRequired();
+        builder.Property(e => e.EmployeeUnionDuesCapPercent).HasColumnType("decimal(5,2)")
+            .HasDefaultValue(10.00m).IsRequired();
         builder.Property(e => e.ReferenceAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.SocialCapMultiplier).IsRequired().HasDefaultValue(20);
         builder.Property(e => e.HealthCapMultiplier).IsRequired().HasDefaultValue(20);

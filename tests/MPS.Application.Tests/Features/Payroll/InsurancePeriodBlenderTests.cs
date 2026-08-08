@@ -19,6 +19,7 @@ public sealed class InsurancePeriodBlenderTests
     private static SocialInsuranceRateSnapshot Si(
         int versionId, decimal employeeSocial, decimal employerSocial,
         decimal health = 1.5m, decimal unemployment = 1m, decimal union = 2m,
+        decimal unionDues = 1m, decimal unionDuesCap = 10m,
         decimal referenceAmount = 2_340_000m, int socialCap = 20, int healthCap = 20, int unemploymentCap = 20,
         string legalRef = "VB cũ") => new(
         VersionId: versionId, ValidFrom: new DateOnly(2026, 6, versionId == 1 ? 1 : 15),
@@ -27,6 +28,7 @@ public sealed class InsurancePeriodBlenderTests
         EmployeeHealthPercent: health, EmployerHealthPercent: 3m,
         EmployeeUnemploymentPercent: unemployment, EmployerUnemploymentPercent: 1m,
         EmployerUnionFundPercent: union,
+        EmployeeUnionDuesPercent: unionDues, EmployeeUnionDuesCapPercent: unionDuesCap,
         ReferenceAmount: referenceAmount, SocialCapMultiplier: socialCap,
         HealthCapMultiplier: healthCap, UnemploymentCapMultiplier: unemploymentCap,
         LegalReference: legalRef,

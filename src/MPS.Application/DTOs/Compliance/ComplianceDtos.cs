@@ -21,6 +21,8 @@ public sealed record SocialInsuranceRateDto(
     decimal EmployeeUnemploymentPercent,
     decimal EmployerUnemploymentPercent,
     decimal EmployerUnionFundPercent,
+    decimal EmployeeUnionDuesPercent,
+    decimal EmployeeUnionDuesCapPercent,
     decimal ReferenceAmount,
     int SocialCapMultiplier,
     int HealthCapMultiplier,

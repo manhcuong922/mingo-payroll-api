@@ -86,7 +86,12 @@ public static class PayrollFieldKeys
     // ===== Thưởng / công đoàn / người phụ thuộc =====
     public const string BonusThuongDuAn = "bonus.thuongDuAn";
     public const string DependentsCount = "employee.dependentsCount";
-    public const string UnionFee = "union.phiCongDoanVien";
+
+    // NLĐ có tham gia công đoàn (1 = đoàn viên) — chỉ đoàn viên mới bị thu ĐOÀN PHÍ.
+    // Ngữ nghĩa thuận (1 = có) an toàn ở đây, khác 3 khoá `Contract*NoInsurance` phải đảo:
+    // kỳ lương tạo TRƯỚC bản sửa này thiếu khoá ⇒ `ToFields` điền 0 ⇒ không phải đoàn viên
+    // ⇒ đoàn phí = 0, đúng bằng hành vi cũ (cột này vốn hardcode 0). Không hồi tố thu tiền của ai.
+    public const string UnionMember = "employee.isUnionMember";
 
     // ===== Compliance — tỷ lệ (phân số) =====
     public const string BhxhDnRate = "compliance.bhxhDnRate";
@@ -96,6 +101,9 @@ public static class PayrollFieldKeys
     public const string BhtnDnRate = "compliance.bhtnDnRate";
     public const string BhtnNldRate = "compliance.bhtnNldRate";
     public const string KpcdRate = "compliance.kpcdRate";
+
+    /// <summary>Tỷ lệ ĐOÀN PHÍ công đoàn NLĐ đóng (QĐ 1908/QĐ-TLĐ: 1% lương đóng BHXH).</summary>
+    public const string UnionDuesRate = "compliance.unionDuesRate";
 
     // ===== Compliance — trần + giảm trừ + ngưỡng =====
     public const string BhxhBhytCap = "compliance.bhxhBhytCap";
@@ -108,6 +116,13 @@ public static class PayrollFieldKeys
     // Vì vậy công thức BHYT fallback về `BhxhBhytCap` khi trường này = 0.
     public const string BhytCap = "compliance.bhytCap";
     public const string BhtnCap = "compliance.bhtnCap";
+
+    /// <summary>
+    /// Trần SỐ TIỀN đoàn phí một tháng (= mức lương cơ sở × 10%, QĐ 1908/QĐ-TLĐ). Khác mọi trần
+    /// khác trong nhóm này ở chỗ nó chặn trên KẾT QUẢ chứ không phải trên NỀN đóng — nên công thức
+    /// PHICONGDOANVIEN dùng MIN, không dùng <c>BH_CO_TRAN</c>. 0 = không áp trần.
+    /// </summary>
+    public const string UnionDuesCap = "compliance.unionDuesCap";
     public const string PersonalDeduction = "compliance.personalDeduction";
     public const string DependentDeduction = "compliance.dependentDeduction";
     public const string MealExemptThreshold = "compliance.mealExemptThreshold";
