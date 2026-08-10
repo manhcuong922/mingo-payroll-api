@@ -17,12 +17,18 @@ public sealed class ContentScopeFilter : IContentScopeFilter
         new(@"^Điều\s+(\d+)\s*\.", RegexOptions.Compiled);
 
     // Keyword scope đúng phạm vi compliance của hệ thống.
+    //
+    // Bỏ "bậc": là từ phổ thông (bậc lương, bậc thang, bậc học) nên gần như điều nào cũng khớp,
+    // làm tầng lọc 2 thành vô hiệu. Nhu cầu thật của nó là bảng biểu thuế TNCN, đã có "biểu thuế"
+    // và "thuế suất" phủ. Danh sách này thiên về RECALL — lọt thừa vài điều thì extractor chia lô
+    // xử lý được, còn lọt thiếu là mất hẳn số liệu.
     private static readonly string[] ScopeKeywords =
     {
         "bảo hiểm xã hội", "bảo hiểm y tế", "bảo hiểm thất nghiệp", "kinh phí công đoàn",
         "lương tối thiểu", "mức lương tối thiểu", "vùng i", "vùng ii", "vùng iii", "vùng iv",
-        "thuế thu nhập cá nhân", "biểu thuế", "bậc", "thuế suất", "giảm trừ gia cảnh",
+        "thuế thu nhập cá nhân", "biểu thuế", "thuế suất", "giảm trừ gia cảnh",
         "làm thêm giờ", "tăng ca", "phụ cấp", "mức tham chiếu",
+        "thời giờ làm việc", "nghỉ hằng năm", "thử việc", "làm việc ban đêm",
     };
 
     public ScopedContent Filter(string fullText)

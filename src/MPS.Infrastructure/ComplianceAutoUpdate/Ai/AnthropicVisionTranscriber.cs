@@ -99,8 +99,7 @@ public sealed class AnthropicVisionTranscriber : IVisionTranscriber
                 return string.Empty;
             }
 
-            using var dom = JsonDocument.Parse(body);
-            var text = dom.RootElement.GetProperty("content")[0].GetProperty("text").GetString() ?? string.Empty;
+            var text = AnthropicMessage.ReadText(body);
             _logger.LogInformation("[OCR] Phiên âm {Pages} trang → {Len} ký tự.", pages, text.Length);
             return text;
         }

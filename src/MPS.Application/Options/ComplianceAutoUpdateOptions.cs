@@ -115,7 +115,19 @@ public sealed class LlmOptions
     /// <summary>Tên biến môi trường chứa API key — KHÔNG hardcode key.</summary>
     public string ApiKeyEnvVar { get; set; } = "OPERIX_LLM_API_KEY";
     public string Model { get; set; } = "claude-opus-4-8";
-    public int MaxInputChars { get; set; } = 12000;
+
+    /// <summary>
+    /// Số ký tự tối đa MỖI LƯỢT gọi. Text dài hơn KHÔNG bị cắt cụt nữa mà chia lô theo ranh giới
+    /// "Điều N." (xem <c>ExtractionBatcher</c>). Để rộng tay: một Luật thuế TNCN sau lọc scope đã
+    /// ~25k ký tự, đặt chật là phải chia nhiều lô ⇒ chậm và tốn token vô ích.
+    /// </summary>
+    public int MaxInputChars { get; set; } = 40000;
+
+    /// <summary>
+    /// Trần số lô mỗi văn bản — chặn chi phí với văn bản khổng lồ (Bộ luật Lao động).
+    /// Phần vượt trần bị bỏ; hạ ngưỡng này là quay lại đúng bệnh cắt cụt nên đừng đặt quá thấp.
+    /// </summary>
+    public int MaxBatches { get; set; } = 6;
 
     /// <summary>
     /// Endpoint Messages API. Để trống = gọi thẳng Anthropic.

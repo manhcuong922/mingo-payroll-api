@@ -29,10 +29,10 @@ public sealed class ComplianceDiffService : IComplianceDiffService
         ExtractionResult result, ValidationReport report, CancellationToken ct)
     {
         var entityType = result.TargetEntityType ?? "(unknown)";
-        var active = await LoadActiveAsync(result.TargetEntityType, ct);
+        var (active, activeValidFrom) = await LoadActiveAsync(result.TargetEntityType, ct);
         var proposed = FlattenProposed(result);
 
-        var diff = new DiffResult();
+        var diff = new DiffResult { ActiveValidFrom = activeValidFrom };
         var allFields = active.Keys.Union(proposed.Keys).OrderBy(f => f, StringComparer.Ordinal);
 
         foreach (var field in allFields)
@@ -58,7 +58,9 @@ public sealed class ComplianceDiffService : IComplianceDiffService
             }
             else
             {
-                diff.Entries.Add(new DiffEntry(field, Fmt(oldVal), null, ChangeType.Removed));
+                // Field đang áp dụng mà lần bóc này không lấy được. KHÔNG phải đề xuất xoá —
+                // applier giữ nguyên giá trị active. Đếm riêng để tính ActiveFieldCoverage.
+                diff.Entries.Add(new DiffEntry(field, Fmt(oldVal), null, ChangeType.NotExtracted));
             }
         }
 
@@ -71,10 +73,11 @@ public sealed class ComplianceDiffService : IComplianceDiffService
         else
         {
             report.Pass(Layer, entityType,
-                $"Khác biệt: {diff.ChangedCount} changed, {diff.AddedCount} added, {diff.RemovedCount} removed.");
+                $"Khác biệt: {diff.ChangedCount} changed, {diff.AddedCount} added, " +
+                $"{diff.NotExtractedCount} field không bóc được (giữ nguyên giá trị cũ).");
             _logger.LogInformation(
-                "[Validation L3/Diff] entity={Entity}: changed={C} added={A} removed={R}.",
-                result.TargetEntityType, diff.ChangedCount, diff.AddedCount, diff.RemovedCount);
+                "[Validation L3/Diff] entity={Entity}: changed={C} added={A} notExtracted={N}.",
+                result.TargetEntityType, diff.ChangedCount, diff.AddedCount, diff.NotExtractedCount);
         }
 
         return diff;
@@ -92,19 +95,26 @@ public sealed class ComplianceDiffService : IComplianceDiffService
     }
 
     /// <summary>
-    /// Flatten data active của đúng entity về map field→decimal (cùng convention với extracted, xem ExtractionPrompt).
+    /// Flatten data active của đúng entity về map field→decimal (cùng convention với extracted, xem ExtractionPrompt),
+    /// kèm ValidFrom của version active để chốt recency dùng lại.
     /// CHỈ đọc data active của MPS — không bao giờ ghi.
     /// </summary>
-    private async Task<Dictionary<string, decimal>> LoadActiveAsync(string? entityType, CancellationToken ct)
+    private async Task<(Dictionary<string, decimal> Map, DateOnly? ActiveValidFrom)> LoadActiveAsync(
+        string? entityType, CancellationToken ct)
     {
         var map = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        DateOnly? validFrom = null;
+
         switch (entityType)
         {
             case TargetEntityTypes.MinimumWageVersion:
                 var mw = await _db.MinimumWageVersions.AsNoTracking().Include(v => v.Regions)
                     .FirstOrDefaultAsync(v => v.IsActive && !v.IsArchived, ct);
                 if (mw != null)
+                {
+                    validFrom = mw.ValidFrom;
                     foreach (var r in mw.Regions) map[$"Region:{r.RegionCode}"] = r.AmountPerMonth;
+                }
                 break;
 
             case TargetEntityTypes.SocialInsuranceRateVersion:
@@ -112,6 +122,7 @@ public sealed class ComplianceDiffService : IComplianceDiffService
                     .FirstOrDefaultAsync(v => v.IsActive && !v.IsArchived, ct);
                 if (si != null)
                 {
+                    validFrom = si.ValidFrom;
                     foreach (var f in si.Funds)
                     {
                         map[$"Fund:{f.FundCode}:Employee"] = f.EmployeePercent;
@@ -133,6 +144,7 @@ public sealed class ComplianceDiffService : IComplianceDiffService
                     .FirstOrDefaultAsync(v => v.IsActive && !v.IsArchived, ct);
                 if (pit != null)
                 {
+                    validFrom = pit.ValidFrom;
                     map["PersonalDeductionAmount"] = pit.PersonalDeductionAmount;
                     map["DependentDeductionAmount"] = pit.DependentDeductionAmount;
                     foreach (var br in pit.Brackets) map[$"Bracket:{br.Order}:Rate"] = br.Rate;
@@ -144,6 +156,7 @@ public sealed class ComplianceDiffService : IComplianceDiffService
                     .FirstOrDefaultAsync(v => v.IsActive && !v.IsArchived, ct);
                 if (ll != null)
                 {
+                    validFrom = ll.ValidFrom;
                     map["ProbationSalaryMinPercent"] = ll.ProbationSalaryMinPercent;
                     map["OvertimeNightExtraPercent"] = ll.OvertimeNightExtraPercent;
                     map["NightWorkSurchargePercent"] = ll.NightWorkSurchargePercent;
@@ -165,10 +178,14 @@ public sealed class ComplianceDiffService : IComplianceDiffService
                 // chỉ mang tính tham khảo ở mức tổng — lấy version active đầu tiên có ngưỡng.
                 var at = await _db.AllowanceExemptThresholdVersions.AsNoTracking()
                     .FirstOrDefaultAsync(v => v.IsActive && !v.IsArchived && v.MonthlyExemptAmount != null, ct);
-                if (at?.MonthlyExemptAmount is { } amt) map["MonthlyExemptAmount"] = amt;
+                if (at?.MonthlyExemptAmount is { } amt)
+                {
+                    validFrom = at.ValidFrom;
+                    map["MonthlyExemptAmount"] = amt;
+                }
                 break;
         }
-        return map;
+        return (map, validFrom);
     }
 
     private static Dictionary<string, decimal> FlattenProposed(ExtractionResult r)

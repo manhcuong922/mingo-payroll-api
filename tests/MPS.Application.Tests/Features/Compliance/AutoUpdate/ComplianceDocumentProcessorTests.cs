@@ -57,7 +57,7 @@ public sealed class ComplianceDocumentProcessorTests
             });
 
     /// <summary>Diff kiểu "AI bóc hụt": data active có <paramref name="activeFields"/> field,
-    /// AI chỉ lấy lại được <paramref name="covered"/> field, phần còn lại thành Removed.</summary>
+    /// AI chỉ lấy lại được <paramref name="covered"/> field, phần còn lại thành NotExtracted.</summary>
     private void SetupPartialDiff(int activeFields, int covered) =>
         _diff.Setup(d => d.ComputeDiffAsync(It.IsAny<ExtractionResult>(), It.IsAny<ValidationReport>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
@@ -67,8 +67,18 @@ public sealed class ComplianceDocumentProcessorTests
                 {
                     r.Entries.Add(i < covered
                         ? new DiffEntry($"F{i}", "1", "2", ChangeType.Changed)
-                        : new DiffEntry($"F{i}", "1", null, ChangeType.Removed));
+                        : new DiffEntry($"F{i}", "1", null, ChangeType.NotExtracted));
                 }
+                return r;
+            });
+
+    /// <summary>Diff hợp lệ nhưng văn bản có ngày hiệu lực nằm trước data đang áp dụng.</summary>
+    private void SetupDiffWithActiveValidFrom(DateOnly activeValidFrom) =>
+        _diff.Setup(d => d.ComputeDiffAsync(It.IsAny<ExtractionResult>(), It.IsAny<ValidationReport>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                var r = new DiffResult { ActiveValidFrom = activeValidFrom };
+                r.Entries.Add(new DiffEntry("Region:I", "5310000", "4960000", ChangeType.Changed));
                 return r;
             });
 
@@ -127,8 +137,67 @@ public sealed class ComplianceDocumentProcessorTests
         _options.MinActiveFieldCoverage = 0;
         SetupScoped(hasContent: true);
         _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SampleResult());
-        SetupPartialDiff(activeFields: 13, covered: 0);
+        // 2/13 field — dưới ngưỡng mặc định 50%, nhưng chốt đã tắt nên vẫn phải ra proposal.
+        SetupPartialDiff(activeFields: 13, covered: 2);
         _proposals.Setup(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
+
+        var outcome = await CreateSut().ProcessAsync(Doc(), CancellationToken.None);
+
+        outcome.Kind.Should().Be(IngestionKind.Proposal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ExtractionMissesEveryField_ReturnsNoChange_WhenCoverageGuardDisabled()
+    {
+        // Không field nào bóc được ⇒ không có gì để applier ghi. NotExtracted KHÔNG phải "thay đổi
+        // thực chất", nên kể cả khi tắt chốt coverage cũng không được đẻ proposal rỗng.
+        _options.MinActiveFieldCoverage = 0;
+        SetupScoped(hasContent: true);
+        _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SampleResult());
+        SetupPartialDiff(activeFields: 13, covered: 0);
+
+        var outcome = await CreateSut().ProcessAsync(Doc(), CancellationToken.None);
+
+        outcome.Kind.Should().Be(IngestionKind.NoChange);
+        _proposals.Verify(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DocumentOlderThanActiveData_ReturnsFailed_AndDoesNotPersist()
+    {
+        SetupScoped(hasContent: true);
+        // Nạp NĐ 74/2024 (hiệu lực 01/07/2024) trong khi đang áp dữ liệu từ 01/01/2026.
+        _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtractionResult
+            {
+                TargetEntityType = TargetEntityTypes.MinimumWageVersion,
+                EffectiveDate = new DateOnly(2024, 7, 1),
+                Values = { new ExtractedValue { Field = "Region:I", Number = 4_960_000m } },
+                RawJson = "{}",
+            });
+        SetupDiffWithActiveValidFrom(new DateOnly(2026, 1, 1));
+
+        var outcome = await CreateSut().ProcessAsync(Doc(), CancellationToken.None);
+
+        outcome.Kind.Should().Be(IngestionKind.Failed);
+        outcome.Reason.Should().Contain("cũ hơn");
+        _proposals.Verify(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DocumentNewerThanActiveData_CreatesProposal()
+    {
+        SetupScoped(hasContent: true);
+        _extractor.Setup(e => e.ExtractAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtractionResult
+            {
+                TargetEntityType = TargetEntityTypes.MinimumWageVersion,
+                EffectiveDate = new DateOnly(2027, 1, 1),
+                Values = { new ExtractedValue { Field = "Region:I", Number = 5_600_000m } },
+                RawJson = "{}",
+            });
+        SetupDiffWithActiveValidFrom(new DateOnly(2026, 1, 1));
+        _proposals.Setup(p => p.AddAsync(It.IsAny<ComplianceUpdateProposal>(), It.IsAny<CancellationToken>())).ReturnsAsync(11);
 
         var outcome = await CreateSut().ProcessAsync(Doc(), CancellationToken.None);
 

@@ -45,6 +45,87 @@ public sealed class SourceGroundingValidatorTests
     }
 
     [Fact]
+    public void Validate_Passes_WhenAmountWrittenInMillions()
+    {
+        // Luật thuế TNCN viết "15,5 triệu đồng/tháng", hệ thống lưu 15500000.
+        const string source =
+            "a) Mức giảm trừ đối với người nộp thuế là 15,5 triệu đồng/tháng (186 triệu đồng/năm);";
+        var result = new ExtractionResult
+        {
+            Values =
+            {
+                new ExtractedValue
+                {
+                    Field = "PersonalDeductionAmount",
+                    Number = 15_500_000m,
+                    Evidence = "người nộp thuế là 15,5 triệu đồng/tháng",
+                },
+            },
+        };
+        var report = new ValidationReport();
+
+        _sut.Validate(result, source, report);
+
+        report.HasError.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validate_Passes_WhenRateStoredAsDecimalButWrittenAsPercent()
+    {
+        // Bảng biểu thuế ghi cột thuế suất là "5", hệ thống lưu 0.05.
+        const string source = "| 1 | Đến 120 | Đến 10 | 5 |";
+        var result = new ExtractionResult
+        {
+            Values = { new ExtractedValue { Field = "Bracket:1:Rate", Number = 0.05m, Evidence = source } },
+        };
+        var report = new ValidationReport();
+
+        _sut.Validate(result, source, report);
+
+        report.HasError.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validate_Passes_WhenSourceWritesLeadingZero()
+    {
+        // Bộ luật Lao động viết "08 giờ", "48 giờ" — số 0 đứng đầu không được coi là lệch.
+        const string source = "Thời giờ làm việc bình thường không quá 08 giờ trong 01 ngày.";
+        var result = new ExtractionResult
+        {
+            Values =
+            {
+                new ExtractedValue
+                {
+                    Field = "StandardWorkingHoursPerDay",
+                    Number = 8m,
+                    Evidence = "không quá 08 giờ trong 01 ngày",
+                },
+            },
+        };
+        var report = new ValidationReport();
+
+        _sut.Validate(result, source, report);
+
+        report.HasError.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validate_Errors_WhenRateOffByFactorOfTen()
+    {
+        // 0.5 (50%) không được coi là khớp với cột ghi "5".
+        const string source = "| 1 | Đến 120 | Đến 10 | 5 |";
+        var result = new ExtractionResult
+        {
+            Values = { new ExtractedValue { Field = "Bracket:1:Rate", Number = 0.5m, Evidence = source } },
+        };
+        var report = new ValidationReport();
+
+        _sut.Validate(result, source, report);
+
+        report.HasError.Should().BeTrue();
+    }
+
+    [Fact]
     public void Validate_Errors_WhenNumberMisreadEvenIfEvidencePresent()
     {
         // evidence khớp nhưng con số 3.290.000 không có trong văn bản (văn bản ghi 3.920.000)

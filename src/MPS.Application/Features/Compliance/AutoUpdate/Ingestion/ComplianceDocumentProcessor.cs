@@ -94,16 +94,9 @@ public sealed class ComplianceDocumentProcessor : IComplianceDocumentProcessor
         _logic.Validate(result, report);
         var diff = await _diff.ComputeDiffAsync(result, report, ct);
 
-        // ---- Không khác biệt → không tạo proposal ----
-        if (!diff.HasSubstantiveChange)
-        {
-            _logger.LogInformation("[Processor] {Label}: data đã trùng — NoChange, không tạo proposal.", label);
-            return IngestionOutcome.NoChange(report, diff);
-        }
-
         // ---- Chốt 2: bóc hụt quá nhiều field đang áp dụng → coi là extract hỏng ----
-        // Mỗi field hụt thành một entry Removed, mà Removed vẫn tính là "thay đổi thực chất".
-        // Không chặn ở đây thì proposal sinh ra toàn field bị xoá, duyệt nhầm là mất sạch dữ liệu đúng.
+        // Phải kiểm TRƯỚC nhánh NoChange: bóc hụt không phải là "số liệu trùng nhau", báo NoChange
+        // ở đây là nói dối người dùng và (với watcher) còn đánh dấu nguồn đã kiểm chứng oan.
         var minCoverage = _options.MinActiveFieldCoverage;
         if (minCoverage > 0 && diff.ActiveFieldCount > 0 && diff.ActiveFieldCoverage < minCoverage)
         {
@@ -112,6 +105,28 @@ public sealed class ComplianceDocumentProcessor : IComplianceDocumentProcessor
                 $"({diff.ActiveFieldCoverage:P0} < {minCoverage:P0}) — nghi AI bóc hụt chứ không phải văn bản bãi bỏ.";
             report.Error(DiffLayer, result.TargetEntityType ?? "(unknown)", message);
             _logger.LogWarning("[Processor] {Label}: {Message} Không tạo proposal.", label, message);
+            return IngestionOutcome.Failed(message);
+        }
+
+        // ---- Không khác biệt → không tạo proposal ----
+        if (!diff.HasSubstantiveChange)
+        {
+            _logger.LogInformation("[Processor] {Label}: data đã trùng — NoChange, không tạo proposal.", label);
+            return IngestionOutcome.NoChange(report, diff);
+        }
+
+        // ---- Chốt 3: văn bản phải MỚI HƠN dữ liệu đang áp dụng ----
+        // Nạp nhầm văn bản cũ (vd NĐ 74/2024 trong khi đang áp NĐ 293/2025) thì mọi tầng validation
+        // đều "đạt" — số liệu có thật, evidence khớp, diff có khác biệt — nhưng đề xuất là LÙI dữ liệu.
+        // Tệ hơn: ValidFrom quá khứ khiến applier đặt applyImmediately=true, duyệt nhầm là ghi đè ngay.
+        if (result.EffectiveDate is { } proposedFrom && diff.ActiveValidFrom is { } activeFrom
+            && proposedFrom < activeFrom)
+        {
+            var message =
+                $"Văn bản hiệu lực từ {proposedFrom:dd/MM/yyyy}, cũ hơn dữ liệu đang áp dụng " +
+                $"(từ {activeFrom:dd/MM/yyyy}) — bỏ qua để không lùi số liệu.";
+            report.Error(DiffLayer, result.TargetEntityType ?? "(unknown)", message);
+            _logger.LogWarning("[Processor] {Label}: {Message}", label, message);
             return IngestionOutcome.Failed(message);
         }
 
