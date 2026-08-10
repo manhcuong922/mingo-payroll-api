@@ -108,4 +108,5 @@ public sealed record LaborLawConstantsSnapshot(
     decimal OvertimeMaxHoursPerDay,
     decimal OvertimeMaxHoursPerMonth,
     int OvertimeMaxHoursPerYear,
-    string LegalReference);
+    string LegalReference,
+    bool OvertimeIncomeFullyTaxExempt = false);

@@ -217,6 +217,10 @@ public sealed partial class DatabaseSeeder
                         DayHours = 8m,
                         NightHours = 0m,
                         Status = AttendanceEnums.AttendanceStatus.Present,
+                        // Ngày quá khứ phải có đủ giờ vào/ra — thiếu CheckOutAt khiến bản ghi trông như
+                        // nhân viên "đang làm việc" dù ngày đã qua từ lâu.
+                        CheckInAt = day.ToDateTime(new TimeOnly(8, 0)),
+                        CheckOutAt = day.ToDateTime(new TimeOnly(17, 0)),
                         CreatedAt = now,
                         CreatedByUserId = adminId,
                     }, ct);

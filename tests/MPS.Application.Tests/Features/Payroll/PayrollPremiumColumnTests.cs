@@ -11,7 +11,7 @@ namespace MPS.Application.Tests.Features.Payroll;
 /// <summary>
 /// BS-2 phần A — 2 cột PHUTROI_NGAYNGHI / PHUCAP_DEM trên bảng công thức mặc định phải:
 /// (1) cộng vào TỔNG THU NHẬP (⇒ tăng THỰC NHẬN), và
-/// (2) được trừ khỏi THU NHẬP CHỊU THUẾ — miễn thuế TNCN như "Chênh lệch làm thêm giờ" (chốt PO).
+/// (2) được trừ khỏi THU NHẬP CHỊU THUẾ — miễn thuế TNCN như cột "Tăng ca miễn thuế" (chốt PO).
 /// </summary>
 public sealed class PayrollPremiumColumnTests
 {

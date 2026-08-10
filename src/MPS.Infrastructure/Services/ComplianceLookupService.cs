@@ -213,5 +213,5 @@ public sealed class ComplianceLookupService : IComplianceLookupService
             v.StandardWorkingDaysPerMonth, v.AnnualLeaveMinDays,
             v.WorkRateNormalFloor, v.WorkRateWeeklyRestFloor, v.WorkRateHolidayFloor,
             v.OvertimeMaxHoursPerDay, v.OvertimeMaxHoursPerMonth,
-            v.OvertimeMaxHoursPerYear, v.LegalReference);
+            v.OvertimeMaxHoursPerYear, v.LegalReference, v.OvertimeIncomeFullyTaxExempt);
 }

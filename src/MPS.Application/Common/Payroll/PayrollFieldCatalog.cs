@@ -45,7 +45,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
 
         // Tăng ca
         new(OtTangCa, "Tiền tăng ca", "Tăng ca", ColumnDataType.Money),
-        new(OtChenhLech, "Chênh lệch làm thêm giờ (miễn thuế)", "Tăng ca", ColumnDataType.Money),
+        new(OtChenhLech, "Tăng ca miễn thuế", "Tăng ca", ColumnDataType.Money),
 
         // Phụ trội giờ thường theo loại ngày / ca đêm (BS-2)
         new(PremiumDayType, "Phụ trội ngày nghỉ/lễ (miễn thuế)", "Phụ trội", ColumnDataType.Money),

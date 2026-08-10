@@ -125,6 +125,18 @@ public sealed class ComplianceActivationJob : BackgroundService
             .Where(x => x.IsActive && !x.IsArchived)
             .FirstOrDefaultAsync(ct);
 
+        // Chỉ nhường chỗ cho văn bản có hiệu lực MUỘN HƠN bản đang áp dụng. Thiếu chốt này thì mọi
+        // bản LỊCH SỬ (IsActive=false, ValidFrom đã qua — seed luôn giữ để tính lại kỳ cũ) đều thoả
+        // điều kiện phía trên và bị "kích hoạt" đè lên bản hiện hành; đêm sau bản hiện hành lại thành
+        // ứng viên duy nhất và giành lại cờ ⇒ hai bản LẬT QUA LẬT LẠI mỗi đêm, tiền lương đổi theo.
+        if (current is not null && toActivate.ValidFrom <= current.ValidFrom)
+        {
+            _logger.LogDebug(
+                "ComplianceActivationJob: {Type} bản mới nhất đủ điều kiện (ValidFrom={Candidate:yyyy-MM-dd}) không muộn hơn bản đang áp dụng (ValidFrom={Current:yyyy-MM-dd}); giữ nguyên.",
+                typeName, toActivate.ValidFrom, current.ValidFrom);
+            return 0;
+        }
+
         if (current is not null)
         {
             current.IsActive = false;

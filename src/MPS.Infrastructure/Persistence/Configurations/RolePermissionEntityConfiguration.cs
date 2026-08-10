@@ -122,27 +122,6 @@ public class RolePermissionEntityConfiguration : IEntityTypeConfiguration<RolePe
                 PermissionIds.MonthlyEvaluationScoreDirectAll,
             }),
 
-            // DeputyDirector = Ban kế hoạch cấp cao.
-            (SystemRoles.DeputyDirectorId, new[]
-            {
-                PermissionIds.UserReadSelf, PermissionIds.UserUpdateSelf,
-                PermissionIds.EmployeeInformationReadAll, PermissionIds.EmployeeInformationReadSelf,
-                PermissionIds.EmployeeInformationUpdateSelf,
-                PermissionIds.PositionReadAll,
-                PermissionIds.DepartmentReadAll,
-                PermissionIds.ProcessTemplateReadAll,
-                PermissionIds.ProjectReadAll, PermissionIds.ProjectCreateAll, PermissionIds.ProjectGenerateTasks,
-                PermissionIds.ProjectCompleteDepartment,
-                PermissionIds.TaskReadAll, PermissionIds.TaskReadConfidential, PermissionIds.TaskCreateConfidential,
-                PermissionIds.TaskCreateDepartment, PermissionIds.TaskUpdateDepartment,
-                PermissionIds.TaskUpdateProgressDepartment, PermissionIds.TaskCompleteDepartment,
-                PermissionIds.TaskDeleteDepartment,
-                PermissionIds.ProductionAttachmentReadAll,
-                PermissionIds.ProductionAttachmentReadProject, PermissionIds.ProductionAttachmentWriteProject,
-                PermissionIds.ProductionAttachmentReadStage, PermissionIds.ProductionAttachmentWriteStage,
-                PermissionIds.TaskAuditReadAll,
-            }),
-
             // DepartmentManager = quản lý 1 xưởng cụ thể (trực thuộc qua EmployeeInformation.DepartmentId,
             // xem SystemRoles.DepartmentMemberRoleIds). Xem TOÀN BỘ 3 tầng (đơn/công đoạn/task) của xưởng
             // mình, không bị giới hạn theo AssignedPmUserId như ProjectManager — dùng

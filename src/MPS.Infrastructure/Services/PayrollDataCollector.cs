@@ -323,7 +323,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[DayHours] = dayHours;
             n[NightHours] = nightHours;
             n[OtTangCa] = tangCa;
-            n[OtChenhLech] = chenhLech;
+            // Luật TNCN 109/2025 + NĐ 253/2026 (từ 01/07/2026): miễn thuế TOÀN BỘ tiền OT, không chỉ
+            // phần chênh lệch như luật cũ (TT 111/2013 Đ.3). Hạn mức giờ OT hợp pháp đã chặn ở tầng
+            // tạo đơn (OvertimeCapChecker) nên không cần tách lại ở đây.
+            n[OtChenhLech] = labor.OvertimeIncomeFullyTaxExempt ? tangCa : chenhLech;
             n[PremiumDayType] = premium.DayTypePremium;
             n[PremiumNight] = premium.NightPremium;
             n[WeeklyRestHours] = weeklyRestHours;

@@ -2056,6 +2056,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<bool>("OvertimeIncomeFullyTaxExempt")
+                        .HasColumnType("bit");
+
                     b.Property<decimal>("OvertimeMaxHoursPerDay")
                         .HasColumnType("decimal(4,2)");
 
@@ -6218,14 +6221,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                             Description = "AI Service account — chấm công và đọc embedding từ camera nhận diện khuôn mặt.",
                             IsSystem = true,
                             Name = "AiService"
-                        },
-                        new
-                        {
-                            Id = 9,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Phó giám đốc — ban kế hoạch cấp cao, tạo đơn & quy trình.",
-                            IsSystem = true,
-                            Name = "DeputyDirector"
                         });
                 });
 
@@ -7503,136 +7498,6 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 4,
                             PermissionId = 231
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 2
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 5
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 7
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 8
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 11
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 13
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 143
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 148
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 152
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 154
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 157
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 158
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 159
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 162
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 164
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 163
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 165
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 166
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 167
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 168
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 206
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 220
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 221
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 222
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 223
-                        },
-                        new
-                        {
-                            RoleId = 9,
-                            PermissionId = 207
                         },
                         new
                         {

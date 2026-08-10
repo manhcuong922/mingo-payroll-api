@@ -223,11 +223,17 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.GtBanThan, "Giảm trừ bản thân", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.Progressive)),
                 N.Field(Fk.PersonalDeduction), N.Const(0m)));
-        Add(Cc.ChenhLechLtg, "Chênh lệch làm thêm giờ", GG, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.OtChenhLech, money: true);
+        // Nhãn cố ý KHÔNG còn là "Chênh lệch làm thêm giờ": từ 01/07/2026 (Luật TNCN 109/2025 + NĐ
+        // 253/2026) cột này mang TOÀN BỘ tiền tăng ca chứ không chỉ phần vượt 100%, xem
+        // `LaborLawConstantsVersion.OvertimeIncomeFullyTaxExempt`. "Tăng ca miễn thuế" đúng cho cả hai
+        // thời kỳ — luật cũ miễn phần chênh lệch, luật mới miễn toàn bộ.
+        // Mã cột `CL_GLT`, `Cc.ChenhLechLtg` và lookup key giữ NGUYÊN: chúng là định danh đã đóng băng
+        // trong snapshot của các kỳ lương cũ, đổi là hỏng phần tính lại kỳ cũ.
+        Add(Cc.ChenhLechLtg, "Tăng ca miễn thuế", GG, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.OtChenhLech, money: true);
         Add(Cc.ComMienThue, "Cơm miễn thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Min, N.Col(Cc.Com), N.Field(Fk.MealExemptThreshold)));
         // BS-2 — phụ trội ngày nghỉ/lễ + phụ cấp đêm là phần trả CAO HƠN mức ngày thường do làm đêm/
-        // làm thêm ⇒ MIỄN thuế TNCN (Đ.3 TT111/2013), trừ khỏi TNCT giống "Chênh lệch làm thêm giờ".
+        // làm thêm ⇒ MIỄN thuế TNCN (Đ.3 TT111/2013), trừ khỏi TNCT giống cột "Tăng ca miễn thuế".
         Add(Cc.Tnct, "Thu nhập chịu thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
                 N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)),

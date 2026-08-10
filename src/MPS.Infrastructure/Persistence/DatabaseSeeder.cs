@@ -751,7 +751,8 @@ public sealed partial class DatabaseSeeder
             new() { Code = "LUAT-TNCN-109-2025", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "109/2025/QH15", Title = "Luật Thuế thu nhập cá nhân", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2025, 11, 28), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "NQ-110-2025", DocumentType = LegalDocumentTypes.NghiQuyet, DocumentNumber = "110/2025/UBTVQH15", Title = "Biểu thuế TNCN lũy tiến từng phần", IssuedBy = "UBTVQH", IssuedDate = new DateOnly(2025, 12, 1), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "ND-293-2025", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "293/2025/NĐ-CP", Title = "Lương tối thiểu vùng 2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2025, 12, 20), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
-            new() { Code = "TT-26-2016", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "26/2016/TT-BLĐTBXH", Title = "Ngưỡng phụ cấp ăn ca 730,000", IssuedBy = "Bộ LĐTBXH", IssuedDate = new DateOnly(2016, 9, 1), EffectiveDate = new DateOnly(2016, 10, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "TT-26-2016", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "26/2016/TT-BLĐTBXH", Title = "Ngưỡng phụ cấp ăn ca 730,000 (hết hiệu lực 15/06/2025)", IssuedBy = "Bộ LĐTBXH", IssuedDate = new DateOnly(2016, 9, 1), EffectiveDate = new DateOnly(2016, 10, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "ND-253-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "253/2026/NĐ-CP", Title = "Ngưỡng phụ cấp ăn ca/ăn trưa miễn thuế 1,200,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 30), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "BLLD-2019", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "(không số)", Title = "Bộ luật Lao động 2019", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2019, 11, 20), EffectiveDate = new DateOnly(2021, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
         };
 
@@ -994,9 +995,44 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var version = new LaborLawConstantsVersion
+        // Row 1: historical (2021-01-01, IsActive=false) — miễn thuế OT chỉ phần chênh lệch (TT 111/2013 Đ.3).
+        // Kỳ lương CŨ (trước 01/07/2026) tính lại vẫn ra đúng số của thời điểm đó nhờ
+        // LaborLawConstantsRepository.GetActiveAtAsync fallback theo ValidFrom.
+        var row1 = new LaborLawConstantsVersion
         {
             ValidFrom = new DateOnly(2021, 1, 1),
+            IsActive = false,
+            IsArchived = false,
+            ProbationSalaryMinPercent = 85.00m,
+            OvertimeNightExtraPercent = 20.00m,
+            NightWorkSurchargePercent = 30.00m,
+            OvertimeNormalUpliftPercent = 50.00m,
+            NightStartTime = new TimeOnly(22, 0),
+            NightEndTime = new TimeOnly(6, 0),
+            StandardWorkingHoursPerDay = 8.00m,
+            MaxRegularHoursPerWeek = 48.00m,
+            StandardWorkingDaysPerMonth = 26.00m,
+            AnnualLeaveMinDays = 12,
+            WorkRateNormalFloor = 100.00m,
+            WorkRateWeeklyRestFloor = 200.00m,
+            WorkRateHolidayFloor = 300.00m,
+            OvertimeMaxHoursPerDay = 4.00m,
+            OvertimeMaxHoursPerMonth = 40.00m,
+            OvertimeMaxHoursPerYear = 300,
+            OvertimeIncomeFullyTaxExempt = false,
+            LegalReference = "BLLĐ 2019 Điều 26, 98, 107, 113 + NĐ 145/2020 Điều 54 + TT 111/2013 Đ.3 (miễn thuế OT phần chênh lệch)",
+            CreatedAt = now,
+            CreatedByUserId = adminId,
+        };
+
+        // Row 2: current active (2026-07-01, IsActive=true — ValidFrom đã ở QUÁ KHỨ so với ngày seed)
+        // — miễn thuế TOÀN BỘ tiền tăng ca (Luật TNCN 109/2025 + NĐ 253/2026). Phải bật cờ ngay tại
+        // seed, không chờ ComplianceActivationJob: GetActiveAtAsync ưu tiên hàng CÓ cờ IsActive trước
+        // khi fallback theo ValidFrom, nên để row1 giữ cờ thì payroll sẽ ăn luật CŨ tới lần chạy job
+        // đầu tiên (nửa đêm UTC kế tiếp).
+        var row2 = new LaborLawConstantsVersion
+        {
+            ValidFrom = new DateOnly(2026, 7, 1),
             IsActive = true,
             IsArchived = false,
             ProbationSalaryMinPercent = 85.00m,
@@ -1015,18 +1051,23 @@ public sealed partial class DatabaseSeeder
             OvertimeMaxHoursPerDay = 4.00m,
             OvertimeMaxHoursPerMonth = 40.00m,
             OvertimeMaxHoursPerYear = 300,
-            LegalReference = "BLLĐ 2019 Điều 26, 98, 107, 113 + NĐ 145/2020 Điều 54",
+            OvertimeIncomeFullyTaxExempt = true,
+            LegalReference = "Luật TNCN 109/2025/QH15 + NĐ 253/2026/NĐ-CP — miễn thuế toàn bộ tiền lương làm đêm/OT từ 01/07/2026",
             CreatedAt = now,
             CreatedByUserId = adminId,
         };
 
-        await _context.LaborLawConstantsVersions.AddAsync(version, ct);
+        await _context.LaborLawConstantsVersions.AddRangeAsync(new[] { row1, row2 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded LaborLawConstantsVersion (IsActive=true, BLLĐ 2019).");
+        _logger.LogInformation("Seeded 2 LaborLawConstantsVersion rows (row1 IsActive=false historical BLLĐ 2019, row2 IsActive=true current từ 01/07/2026).");
 
         await LinkLegalDocumentsAsync(
-            ComplianceEntityTypes.LaborLawConstants, version.Id,
+            ComplianceEntityTypes.LaborLawConstants, row1.Id,
             new[] { "BLLD-2019" },
+            legalDocumentIdsByCode, adminId, now, ct);
+        await LinkLegalDocumentsAsync(
+            ComplianceEntityTypes.LaborLawConstants, row2.Id,
+            new[] { "LUAT-TNCN-109-2025", "ND-253-2026" },
             legalDocumentIdsByCode, adminId, now, ct);
     }
 
@@ -1050,26 +1091,43 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var thresholds = new List<AllowanceExemptThresholdVersion>();
+        // BR-15: mỗi version phải liên kết >=1 LegalDocument.
+        var thresholds = new List<(AllowanceExemptThresholdVersion Version, string LegalDocCode)>();
 
         if (allowanceTypes.TryGetValue("MEAL", out var meal))
-            thresholds.Add(new AllowanceExemptThresholdVersion
+        {
+            thresholds.Add((new AllowanceExemptThresholdVersion
             {
                 ValidFrom = new DateOnly(2016, 1, 1),
-                IsActive = true,
+                IsActive = false,
                 IsArchived = false,
                 AllowanceTypeId = meal.Id,
                 ThresholdMode = ThresholdModes.FixedAmount,
                 MonthlyExemptAmount = 730_000m,
                 AppliesToTax = true,
                 AppliesToSocial = true,
-                LegalReference = "TT 26/2016/TT-BLĐTBXH + TT 111/2013/TT-BTC",
+                LegalReference = "TT 26/2016/TT-BLĐTBXH + TT 111/2013/TT-BTC (hết hiệu lực 15/06/2025)",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            });
+            }, "TT-26-2016"));
+            thresholds.Add((new AllowanceExemptThresholdVersion
+            {
+                ValidFrom = new DateOnly(2026, 7, 1),
+                IsActive = true,
+                IsArchived = false,
+                AllowanceTypeId = meal.Id,
+                ThresholdMode = ThresholdModes.FixedAmount,
+                MonthlyExemptAmount = 1_200_000m,
+                AppliesToTax = true,
+                AppliesToSocial = true,
+                LegalReference = "NĐ 253/2026/NĐ-CP — ngưỡng mới 1,200,000 từ 01/07/2026",
+                CreatedAt = now,
+                CreatedByUserId = adminId,
+            }, "ND-253-2026"));
+        }
 
         if (allowanceTypes.TryGetValue("FUEL", out var fuel))
-            thresholds.Add(new AllowanceExemptThresholdVersion
+            thresholds.Add((new AllowanceExemptThresholdVersion
             {
                 ValidFrom = new DateOnly(2013, 10, 1),
                 IsActive = true,
@@ -1082,10 +1140,10 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 111/2013/TT-BTC",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            });
+            }, "TT-26-2016"));
 
         if (allowanceTypes.TryGetValue("PHONE", out var phone))
-            thresholds.Add(new AllowanceExemptThresholdVersion
+            thresholds.Add((new AllowanceExemptThresholdVersion
             {
                 ValidFrom = new DateOnly(2013, 10, 1),
                 IsActive = true,
@@ -1098,20 +1156,19 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 111/2013/TT-BTC",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            });
+            }, "TT-26-2016"));
 
         if (thresholds.Count > 0)
         {
-            await _context.AllowanceExemptThresholdVersions.AddRangeAsync(thresholds, ct);
+            await _context.AllowanceExemptThresholdVersions.AddRangeAsync(thresholds.Select(t => t.Version), ct);
             await _context.SaveChangesAsync(ct);
             _logger.LogInformation("Seeded {Count} AllowanceExemptThreshold rows.", thresholds.Count);
 
-            // BR-15: mỗi version phải liên kết >=1 LegalDocument — dùng TT-26-2016 (văn bản phụ cấp duy nhất trong seed list)
-            foreach (var threshold in thresholds)
+            foreach (var (version, legalDocCode) in thresholds)
             {
                 await LinkLegalDocumentsAsync(
-                    ComplianceEntityTypes.AllowanceExemptThreshold, threshold.Id,
-                    new[] { "TT-26-2016" },
+                    ComplianceEntityTypes.AllowanceExemptThreshold, version.Id,
+                    new[] { legalDocCode },
                     legalDocumentIdsByCode, adminId, now, ct);
             }
         }

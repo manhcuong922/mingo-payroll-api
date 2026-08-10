@@ -18,7 +18,7 @@ namespace MPS.Application.Features.Payroll.Common;
 /// VD 8h đêm ngày lễ: phụ trội lễ (+200%) + phụ cấp đêm (+30%) = tổng 330% cho ngày đó.
 ///
 /// Cả hai là phần trả CAO HƠN mức ngày thường ⇒ **miễn thuế TNCN** (Đ.3 TT111/2013) — người gọi trừ
-/// khỏi thu nhập chịu thuế, giống cột "Chênh lệch làm thêm giờ" sẵn có.
+/// khỏi thu nhập chịu thuế, giống cột "Tăng ca miễn thuế" (<c>CL_GLT</c>) sẵn có.
 ///
 /// Thuần số học (không DbContext) để test độc lập.
 /// </summary>
