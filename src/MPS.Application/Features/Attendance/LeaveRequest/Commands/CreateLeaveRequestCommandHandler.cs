@@ -11,6 +11,7 @@ using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using LeaveRequestEntity = MPS.Domain.Entities.Attendance.LeaveRequest;
 using LeaveTypeEntity = MPS.Domain.Entities.Attendance.LeaveType;
+using AttendanceEnums = MPS.Domain.Enums.Attendance;
 
 namespace MPS.Application.Features.Attendance.LeaveRequest.Commands;
 
@@ -31,6 +32,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
     private readonly LeaveBalanceFallbackResolver _fallbackResolver;
     private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly MedicalCertificateUploader _certificateUploader;
+    private readonly IDayTypeResolver _dayTypeResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly IPublisher _publisher;
@@ -47,6 +49,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         LeaveBalanceFallbackResolver fallbackResolver,
         AttendanceRequestDayConflictChecker dayConflictChecker,
         MedicalCertificateUploader certificateUploader,
+        IDayTypeResolver dayTypeResolver,
         ICurrentUserService currentUser,
         IClock clock,
         IPublisher publisher,
@@ -62,6 +65,7 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
         _fallbackResolver = fallbackResolver;
         _dayConflictChecker = dayConflictChecker;
         _certificateUploader = certificateUploader;
+        _dayTypeResolver = dayTypeResolver;
         _currentUser = currentUser;
         _clock = clock;
         _publisher = publisher;
@@ -106,9 +110,13 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
 
         var assignedDays = await GetShiftAssignedDaysAsync(employeeId, request.StartDate, request.EndDate, cancellationToken);
         var totalDays = (decimal)assignedDays.Count;
-        if (totalDays <= 0)
-            throw new DomainValidationException(
-                "Khoảng nghỉ không có ngày nào đã được phân ca — vui lòng chọn ngày đi làm.");
+        // Mọi loại đơn nghỉ đều phải phủ HẾT các ngày LÀM VIỆC trong range bằng phân ca. Ngày nghỉ
+        // tuần / lễ đã nghỉ sẵn nên bỏ qua — NV vẫn xin nghỉ được cả tuần (Mon→Sun) mà T7/CN không
+        // cần phân ca. Chỉ chặn khi ngày Normal (theo pattern lịch sử 28 ngày) thiếu phân ca.
+        var skippableDays = await GetSkippableDaysAsync(
+            employeeId, request.StartDate, request.EndDate, cancellationToken);
+        ShiftCoverageAssertion.EnsureRangeFullyCovered(
+            $"nghỉ '{leaveType.Code}'", request.StartDate, request.EndDate, assignedDays, skippableDays);
 
         if (leaveType.MaxDaysPerRequest is decimal max && totalDays > max)
             throw new DomainValidationException(
@@ -321,5 +329,25 @@ public class CreateLeaveRequestCommandHandler : IRequestHandler<CreateLeaveReque
             .Distinct()
             .OrderBy(d => d)
             .ToList();
+    }
+
+    /// <summary>
+    /// Ngày trong [start, end] KHÔNG cần đòi phân ca: WeeklyRestDay (T7/CN theo pattern 28 ngày
+    /// gần nhất) và PublicHoliday. Dùng <see cref="IDayTypeResolver.ResolveGuardRangeAsync"/> —
+    /// biến thể tránh vòng luẩn quẩn "chưa có ca ⇒ mọi ngày là rest day".
+    /// </summary>
+    private async Task<IReadOnlyCollection<DateOnly>> GetSkippableDaysAsync(
+        int employeeInformationId,
+        DateOnly start,
+        DateOnly end,
+        CancellationToken cancellationToken)
+    {
+        var map = await _dayTypeResolver.ResolveGuardRangeAsync(
+            employeeInformationId, start, end, cancellationToken);
+        return map
+            .Where(kv => kv.Value == AttendanceEnums.DayType.WeeklyRestDay
+                      || kv.Value == AttendanceEnums.DayType.PublicHoliday)
+            .Select(kv => kv.Key)
+            .ToHashSet();
     }
 }

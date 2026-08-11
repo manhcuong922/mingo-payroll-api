@@ -11,6 +11,7 @@ using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
 using OvertimeRequestEntity = MPS.Domain.Entities.Attendance.OvertimeRequest;
+using AttendanceEnums = MPS.Domain.Enums.Attendance;
 
 namespace MPS.Application.Features.Attendance.OvertimeRequest.Commands;
 
@@ -33,12 +34,14 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
     private readonly IProjectRepository _projectRepository;
     private readonly IProjectTaskRepository _taskRepository;
     private readonly IEmployeeInformationRepository _employeeRepository;
+    private readonly IEmployeeShiftAssignmentRepository _shiftAssignmentRepository;
     private readonly IContractLookupReader _lookup;
     private readonly IContractRepository _contracts;
     private readonly OvertimeCapChecker _capChecker;
     private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IWorkHourSplitter _splitter;
     private readonly IComplianceLookupService _complianceLookup;
+    private readonly IDayTypeResolver _dayTypeResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly IPublisher _publisher;
@@ -49,12 +52,14 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         IProjectRepository projectRepository,
         IProjectTaskRepository taskRepository,
         IEmployeeInformationRepository employeeRepository,
+        IEmployeeShiftAssignmentRepository shiftAssignmentRepository,
         IContractLookupReader lookup,
         IContractRepository contracts,
         OvertimeCapChecker capChecker,
         AttendanceRequestDayConflictChecker dayConflictChecker,
         IWorkHourSplitter splitter,
         IComplianceLookupService complianceLookup,
+        IDayTypeResolver dayTypeResolver,
         ICurrentUserService currentUser,
         IClock clock,
         IPublisher publisher,
@@ -64,12 +69,14 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         _projectRepository = projectRepository;
         _taskRepository = taskRepository;
         _employeeRepository = employeeRepository;
+        _shiftAssignmentRepository = shiftAssignmentRepository;
         _lookup = lookup;
         _contracts = contracts;
         _capChecker = capChecker;
         _dayConflictChecker = dayConflictChecker;
         _splitter = splitter;
         _complianceLookup = complianceLookup;
+        _dayTypeResolver = dayTypeResolver;
         _currentUser = currentUser;
         _clock = clock;
         _publisher = publisher;
@@ -114,6 +121,24 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
         if (!hasAssignedTask)
             throw new DomainValidationException(
                 "Bạn không được assign task nào trong đơn này — không đủ điều kiện đăng ký OT.");
+
+        // 3b. WorkDate phải nằm trong lịch phân ca của NV — đồng nhất với các loại đơn còn lại.
+        // Tuy nhiên OT ngày nghỉ tuần (T7/CN theo pattern) và ngày lễ được phép vì đó là 2 case OT
+        // đặc trưng của BLLĐ (hệ số 200% / 300%). Chỉ chặn khi WorkDate là ngày làm việc bình
+        // thường (Normal) mà HR chưa phân ca.
+        var shiftAssignments = await _shiftAssignmentRepository.GetByEmployeeAndDateAsync(
+            employeeId, request.WorkDate, cancellationToken);
+        if (shiftAssignments.Count == 0)
+        {
+            var dayType = await _dayTypeResolver.ResolveGuardRangeAsync(
+                employeeId, request.WorkDate, request.WorkDate, cancellationToken);
+            var isSkippable = dayType.TryGetValue(request.WorkDate, out var kind)
+                && (kind == AttendanceEnums.DayType.WeeklyRestDay
+                    || kind == AttendanceEnums.DayType.PublicHoliday);
+            if (!isSkippable)
+                throw new DomainValidationException(
+                    $"Ngày {request.WorkDate:dd/MM/yyyy} chưa có phân ca — vui lòng đề nghị HR phân ca trước khi đăng ký OT.");
+        }
 
         // 4. Prep — labor law + hours
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);

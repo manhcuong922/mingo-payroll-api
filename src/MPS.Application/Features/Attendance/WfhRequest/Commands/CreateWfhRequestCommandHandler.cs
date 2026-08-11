@@ -4,6 +4,7 @@ using MPS.Application.Common.Models.Notifications;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Application.Features.Attendance.WfhRequest.Common;
 using MPS.Domain.Enums.Attendance;
+using AttendanceEnums = MPS.Domain.Enums.Attendance;
 using MPS.Domain.Enums.Notifications;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
@@ -25,6 +26,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
     private readonly WfhQuotaChecker _quotaChecker;
     private readonly AttendanceRequestDayConflictChecker _dayConflictChecker;
     private readonly IContractLookupReader _lookup;
+    private readonly IDayTypeResolver _dayTypeResolver;
     private readonly ICurrentUserService _currentUser;
     private readonly IClock _clock;
     private readonly IPublisher _publisher;
@@ -38,6 +40,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         WfhQuotaChecker quotaChecker,
         AttendanceRequestDayConflictChecker dayConflictChecker,
         IContractLookupReader lookup,
+        IDayTypeResolver dayTypeResolver,
         ICurrentUserService currentUser,
         IClock clock,
         IPublisher publisher,
@@ -50,6 +53,7 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         _quotaChecker = quotaChecker;
         _dayConflictChecker = dayConflictChecker;
         _lookup = lookup;
+        _dayTypeResolver = dayTypeResolver;
         _currentUser = currentUser;
         _clock = clock;
         _publisher = publisher;
@@ -85,7 +89,14 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
                 $"WorkPlan phải mô tả tối thiểu {workPlanMinLength} ký tự.");
 
         // Đếm ngày làm việc trong khoảng: mỗi ngày phải có shift assignment.
-        var totalDays = await CountWorkDaysWithShiftAsync(employeeId, request.StartDate, request.EndDate, cancellationToken);
+        var assignedDays = await GetShiftAssignedDaysAsync(employeeId, request.StartDate, request.EndDate, cancellationToken);
+        var totalDays = (decimal)assignedDays.Count;
+        // Range đơn WFH phải phủ hết các ngày LÀM VIỆC trong khoảng bằng phân ca. Ngày nghỉ tuần
+        // và ngày lễ trong range bỏ qua — không cần phân ca, không tính vào totalDays.
+        var skippableDays = await GetSkippableDaysAsync(
+            employeeId, request.StartDate, request.EndDate, cancellationToken);
+        ShiftCoverageAssertion.EnsureRangeFullyCovered(
+            "WFH", request.StartDate, request.EndDate, assignedDays, skippableDays);
         if (totalDays <= 0m)
             throw new DomainValidationException("Không có ngày làm việc nào (có phân ca) trong khoảng WFH.");
 
@@ -141,18 +152,33 @@ public class CreateWfhRequestCommandHandler : IRequestHandler<CreateWfhRequestCo
         return requestId;
     }
 
-    private async Task<decimal> CountWorkDaysWithShiftAsync(
+    private async Task<IReadOnlyList<DateOnly>> GetShiftAssignedDaysAsync(
         int employeeId,
         DateOnly start,
         DateOnly end,
         CancellationToken cancellationToken)
     {
-        var count = 0;
-        for (var date = start; date <= end; date = date.AddDays(1))
-        {
-            var assignments = await _shiftAssignmentRepository.GetByEmployeeAndDateAsync(employeeId, date, cancellationToken);
-            if (assignments.Count > 0) count++;
-        }
-        return count;
+        var assignments = await _shiftAssignmentRepository.GetByEmployeesAndDateRangeAsync(
+            new[] { employeeId }, start, end, includeInactiveTemplates: true, cancellationToken);
+        return assignments
+            .Select(a => a.WorkDate)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
+    }
+
+    /// <summary>WeeklyRestDay (T7/CN theo pattern 28 ngày) + PublicHoliday — không cần đòi phân ca.</summary>
+    private async Task<IReadOnlyCollection<DateOnly>> GetSkippableDaysAsync(
+        int employeeId,
+        DateOnly start,
+        DateOnly end,
+        CancellationToken cancellationToken)
+    {
+        var map = await _dayTypeResolver.ResolveGuardRangeAsync(employeeId, start, end, cancellationToken);
+        return map
+            .Where(kv => kv.Value == AttendanceEnums.DayType.WeeklyRestDay
+                      || kv.Value == AttendanceEnums.DayType.PublicHoliday)
+            .Select(kv => kv.Key)
+            .ToHashSet();
     }
 }

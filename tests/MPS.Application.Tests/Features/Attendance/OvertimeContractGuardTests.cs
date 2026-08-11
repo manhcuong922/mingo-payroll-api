@@ -39,7 +39,10 @@ public sealed class OvertimeContractGuardTests
 
     private CreateOvertimeRequestCommandHandler CreateSut() => new(
         _otRepo.Object, _projects.Object, Mock.Of<IProjectTaskRepository>(), _employees.Object,
-        _lookup.Object, _contracts.Object, null!, null!, null!, null!, _currentUser.Object, _clock,
+        Mock.Of<IEmployeeShiftAssignmentRepository>(),
+        _lookup.Object, _contracts.Object, null!, null!, null!, null!,
+        Mock.Of<IDayTypeResolver>(),
+        _currentUser.Object, _clock,
         Mock.Of<MediatR.IPublisher>(),
         Mock.Of<MPS.Application.Features.Attendance.Common.IAttendanceApproverResolver>());
 
