@@ -12,20 +12,22 @@ public sealed partial class DatabaseSeeder
     // contract-test). 1 HĐ Vô thời hạn Active/người dưới pháp nhân công ty chính. Idempotent theo prefix.
     private const string WorkforceContractNoPrefix = "HDLD-SX-";
 
-    // Bậc lương theo chức danh workforce (mã chức danh → bậc). Lương mang tính minh hoạ xưởng khung tranh.
-    private static readonly (string PosCode, string GradeCode, string GradeName, int Level, decimal Salary)[] WorkforceGrades =
+    // Bậc lương ĐANG HƯỞNG của từng chức danh workforce. Bản thân thang bậc do bảng bậc lương dùng
+    // chung tạo ra (DatabaseSeeder.SalaryGradesData.cs) — ở đây chỉ chọn 1 bậc/chức danh để ký HĐ,
+    // mức lương lấy thẳng từ bậc nên không có chỗ nào lệch số.
+    private static readonly (string PosCode, string GradeCode, string JobTitle)[] WorkforceGrades =
     {
-        ("QDX",     "G-QDX",    "Quản đốc xưởng",         3, 18_000_000m),
-        ("TTSX",    "G-TTSX",   "Tổ trưởng sản xuất",     2, 14_000_000m),
-        ("THOCAT",  "G-THOCAT", "Thợ cắt",                1,  9_000_000m),
-        ("THOGHEP", "G-THOGHEP","Thợ ghép",               1,  9_000_000m),
-        ("THOSON",  "G-THOSON", "Thợ sơn",                1,  9_500_000m),
-        ("THOHT",   "G-THOHT",  "Thợ hoàn thiện",         1,  9_000_000m),
-        ("KCS",     "G-KCS",    "Nhân viên KCS",          2, 10_000_000m),
-        ("TPHR",    "G-TPHR",   "Trưởng phòng Nhân sự",   4, 22_000_000m),
-        ("KTT",     "G-KTT",    "Kế toán trưởng",         4, 22_000_000m),
-        ("GD",      "G-GD",     "Giám đốc",               5, 40_000_000m),
-        ("TPKD",    "G-TPKD",   "Trưởng phòng Kinh doanh",4, 20_000_000m),
+        ("QDX",     "QDX-3",     "Quản đốc xưởng"),
+        ("TTSX",    "TTSX-2",    "Tổ trưởng sản xuất"),
+        ("THOCAT",  "THOCAT-1",  "Thợ cắt"),
+        ("THOGHEP", "THOGHEP-1", "Thợ ghép"),
+        ("THOSON",  "THOSON-1",  "Thợ sơn"),
+        ("THOHT",   "THOHT-1",   "Thợ hoàn thiện"),
+        ("KCS",     "KCS-2",     "Nhân viên KCS"),
+        ("TPHR",    "TPHR-2",    "Trưởng phòng Nhân sự"),
+        ("KTT",     "KTT-2",     "Kế toán trưởng"),
+        ("GD",      "GD-2",      "Giám đốc"),
+        ("TPKD",    "TPKD-2",    "Trưởng phòng Kinh doanh"),
     };
 
     private async Task SeedWorkforceContractsAsync(CancellationToken ct)
@@ -36,12 +38,10 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var taxCode = _configuration["ContractParty:TaxCode"] ?? "0100000000";
-        var party = await _context.ContractParties.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.TaxCode == taxCode, ct);
+        var party = await GetCompanyContractPartyAsync(ct);
         if (party is null)
         {
-            _logger.LogWarning("SeedWorkforceContracts: chưa có pháp nhân công ty (taxCode {Tax}); bỏ qua.", taxCode);
+            _logger.LogWarning("SeedWorkforceContracts: chưa có pháp nhân công ty; bỏ qua.");
             return;
         }
 
@@ -58,27 +58,26 @@ public sealed partial class DatabaseSeeder
             .Where(p => posCodes.Contains(p.Code))
             .ToDictionaryAsync(p => p.Code, p => p.Id, StringComparer.OrdinalIgnoreCase, ct);
 
-        // Đảm bảo bậc lương theo chức danh (insert-if-missing theo Code) → map PositionId → (GradeId, Salary).
+        // Bậc lương do bảng bậc lương dùng chung seed sẵn → chỉ tra theo Code.
         // Đồng thời map PositionId → tên chức danh để làm MÔ TẢ CÔNG VIỆC của HĐ (thay vì nhét tên người).
-        var now = DateTime.UtcNow;
+        var gradeCodes = WorkforceGrades.Select(g => g.GradeCode).ToArray();
+        var gradeByCode = await _context.SalaryGrades.AsNoTracking()
+            .Where(x => gradeCodes.Contains(x.Code))
+            .ToDictionaryAsync(x => x.Code, x => new { x.Id, x.BaseSalary }, StringComparer.OrdinalIgnoreCase, ct);
+
         var gradeByPos = new Dictionary<int, (int GradeId, decimal Salary)>();
         var jobTitleByPos = new Dictionary<int, string>();
         foreach (var g in WorkforceGrades)
         {
             if (!posByCode.TryGetValue(g.PosCode, out var posId)) continue;
-            jobTitleByPos[posId] = g.GradeName;
-            var grade = await _context.SalaryGrades.FirstOrDefaultAsync(x => x.Code == g.GradeCode, ct);
-            if (grade is null)
+            if (!gradeByCode.TryGetValue(g.GradeCode, out var grade))
             {
-                grade = new SalaryGrade
-                {
-                    Code = g.GradeCode, Name = g.GradeName, PositionId = posId, Level = g.Level,
-                    BaseSalary = g.Salary, Currency = "VND", IsActive = true, CreatedAt = now,
-                };
-                await _context.SalaryGrades.AddAsync(grade, ct);
-                await _context.SaveChangesAsync(ct);
+                _logger.LogWarning("SeedWorkforceContracts: thiếu bậc lương {Code}; bỏ qua chức danh {Pos}.",
+                    g.GradeCode, g.PosCode);
+                continue;
             }
-            gradeByPos[posId] = (grade.Id, g.Salary);
+            jobTitleByPos[posId] = g.JobTitle;
+            gradeByPos[posId] = (grade.Id, grade.BaseSalary);
         }
         if (gradeByPos.Count == 0)
         {

@@ -9,6 +9,7 @@ using MPS.Domain.Entities.Compliance;
 using MPS.Domain.Enums;
 using MPS.Domain.Enums.Compliance;
 using MPS.Domain.Enums.Employee;
+using MPS.Domain.Interfaces;
 
 namespace MPS.Infrastructure.Persistence;
 
@@ -621,8 +622,35 @@ public sealed partial class DatabaseSeeder
         return (user.Id, emp.Id);
     }
 
+    // Mã số thuế của các pháp nhân TEST từng được seed ở bản cũ (DatabaseSeeder.ContractTestData.cs).
+    // Công ty chỉ có DUY NHẤT 1 pháp nhân đại diện ⇒ dọn 2 bản ghi này trên DB cũ.
+    private static readonly string[] ObsoleteTestPartyTaxCodes = { "9900000000", "9900000001" };
+
+    /// <summary>
+    /// Pháp nhân đại diện công ty — DUY NHẤT 1 bản ghi. Ưu tiên tra theo MST cấu hình
+    /// (ContractParty:TaxCode); nếu chưa có thì lấy bản ghi đầu tiên (DB dựng tay).
+    /// </summary>
+    private async Task<ContractParty?> GetCompanyContractPartyAsync(CancellationToken ct)
+    {
+        var taxCode = _configuration["ContractParty:TaxCode"];
+        if (!string.IsNullOrWhiteSpace(taxCode))
+        {
+            var byTaxCode = await _context.ContractParties
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.TaxCode == taxCode, ct);
+            if (byTaxCode is not null) return byTaxCode;
+        }
+
+        return await _context.ContractParties
+            .AsNoTracking()
+            .OrderBy(p => p.Id)
+            .FirstOrDefaultAsync(ct);
+    }
+
     private async Task SeedDefaultContractPartyAsync(CancellationToken cancellationToken)
     {
+        await RemoveObsoleteTestContractPartiesAsync(cancellationToken);
+
         var partyExists = await _context.ContractParties
             .AsNoTracking()
             .AnyAsync(cancellationToken);
@@ -667,6 +695,41 @@ public sealed partial class DatabaseSeeder
         await _context.ContractParties.AddAsync(party, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded default ContractParty '{LegalName}'.", legalName);
+    }
+
+    // Dọn 2 pháp nhân TEST của bản seed cũ trên DB đã chạy trước đó: trỏ lại mọi HĐ về pháp nhân
+    // chính thức rồi xoá, để hệ thống chỉ còn DUY NHẤT 1 pháp nhân đại diện công ty.
+    private async Task RemoveObsoleteTestContractPartiesAsync(CancellationToken ct)
+    {
+        var obsolete = await _context.ContractParties
+            .Where(p => ObsoleteTestPartyTaxCodes.Contains(p.TaxCode))
+            .ToListAsync(ct);
+        if (obsolete.Count == 0) return;
+
+        var mainTaxCode = _configuration["ContractParty:TaxCode"];
+        var main = string.IsNullOrWhiteSpace(mainTaxCode)
+            ? null
+            : await _context.ContractParties.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.TaxCode == mainTaxCode, ct);
+        if (main is null)
+        {
+            _logger.LogWarning(
+                "Còn {Count} pháp nhân test nhưng chưa có pháp nhân chính thức (MST {TaxCode}); " +
+                "bỏ qua bước dọn để không làm mồ côi hợp đồng.", obsolete.Count, mainTaxCode);
+            return;
+        }
+
+        var obsoleteIds = obsolete.Select(p => p.Id).ToList();
+        var affected = await _context.Contracts
+            .Where(c => obsoleteIds.Contains(c.EmployerPartyId))
+            .ToListAsync(ct);
+        foreach (var c in affected) c.EmployerPartyId = main.Id;
+
+        _context.ContractParties.RemoveRange(obsolete);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Đã gộp {PartyCount} pháp nhân test vào pháp nhân chính thức '{LegalName}' ({ContractCount} HĐ được trỏ lại).",
+            obsolete.Count, main.LegalName, affected.Count);
     }
 
     private async Task SeedDefaultAllowanceTypesAsync(CancellationToken ct)
@@ -727,9 +790,64 @@ public sealed partial class DatabaseSeeder
         await SeedLaborLawConstantsAsync(adminId, now, legalDocumentIdsByCode, ct);
         await SeedAllowanceExemptThresholdsAsync(adminId, now, legalDocumentIdsByCode, ct);
 
+        // Chốt cờ hiệu lực theo NGÀY CHẠY (không gán cứng theo thời điểm viết seed) — xem
+        // ReconcileActiveComplianceVersionAsync. AllowanceExemptThreshold KHÔNG áp dụng vì mỗi loại
+        // phụ cấp có bản hiệu lực riêng (nhiều bản active cùng lúc là đúng).
+        await ReconcileActiveComplianceVersionAsync<SocialInsuranceRateVersion>("Tỷ lệ BHXH", now, ct);
+        await ReconcileActiveComplianceVersionAsync<PitRegulationVersion>("Thuế TNCN", now, ct);
+        await ReconcileActiveComplianceVersionAsync<MinimumWageVersion>("Lương tối thiểu vùng", now, ct);
+        await ReconcileActiveComplianceVersionAsync<LaborLawConstantsVersion>("Hằng số luật lao động", now, ct);
+
         // Móng Kênh B: phải chạy SAU khi đã có version + link legal document —
         // xem DatabaseSeeder.ComplianceAuthoritativeSources.cs.
         await SeedComplianceAuthoritativeSourcesAsync(ct);
+    }
+
+    /// <summary>
+    /// Mỗi nhóm văn bản luật phải có ĐÚNG 1 bản đang áp dụng: bản có ValidFrom mới nhất mà đã tới
+    /// hiệu lực (ValidFrom &lt;= hôm nay). Cùng quy tắc với ComplianceActivationJob, nhưng chạy ngay
+    /// lúc seed để hệ thống không rơi vào trạng thái "không có bản nào hiệu lực" khi seed được chạy
+    /// sau mốc hiệu lực đã ghi cứng trong dữ liệu mẫu (trường hợp BHXH: mốc 01/07/2026).
+    /// </summary>
+    private async Task ReconcileActiveComplianceVersionAsync<TVersion>(
+        string label, DateTime now, CancellationToken ct)
+        where TVersion : class, IComplianceVersion
+    {
+        var today = DateOnly.FromDateTime(now);
+        var versions = await _context.Set<TVersion>()
+            .Where(v => !v.IsArchived)
+            .ToListAsync(ct);
+        if (versions.Count == 0) return;
+
+        var shouldBeActive = versions
+            .Where(v => v.ValidFrom <= today)
+            .OrderByDescending(v => v.ValidFrom)
+            .ThenByDescending(v => v.Id)
+            .FirstOrDefault();
+        if (shouldBeActive is null)
+        {
+            _logger.LogWarning(
+                "{Label}: mọi bản đều chưa tới hiệu lực (ValidFrom > {Today:yyyy-MM-dd}); giữ nguyên.",
+                label, today);
+            return;
+        }
+
+        var changed = 0;
+        foreach (var v in versions)
+        {
+            var expected = ReferenceEquals(v, shouldBeActive);
+            if (v.IsActive == expected) continue;
+            v.IsActive = expected;
+            v.UpdatedAt = now;
+            changed++;
+        }
+
+        if (changed == 0) return;
+
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "{Label}: đặt bản ValidFrom={ValidFrom:yyyy-MM-dd} (id={Id}) là bản đang áp dụng ({Changed} bản đổi cờ).",
+            label, shouldBeActive.ValidFrom, shouldBeActive.Id, changed);
     }
 
     private async Task<Dictionary<string, int>> SeedLegalDocumentsAsync(int adminId, DateTime now, CancellationToken ct)
@@ -805,8 +923,9 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        // Row 1: historical (ValidFrom=2025-07-01, IsActive=false)
-        // Row 2: pending  (ValidFrom=2026-07-01, IsActive=false — background job activate 01/07/2026)
+        // Row 1: historical (ValidFrom=2025-07-01) · Row 2: mức tham chiếu mới (ValidFrom=2026-07-01).
+        // Cả 2 tạo ra với IsActive=false; ReconcileActiveComplianceVersionAsync ở cuối
+        // SeedDefaultComplianceAsync mới bật cờ cho bản đã tới hiệu lực tại NGÀY CHẠY seed.
         var row1 = new SocialInsuranceRateVersion
         {
             ValidFrom = new DateOnly(2025, 7, 1),
@@ -862,7 +981,7 @@ public sealed partial class DatabaseSeeder
 
         await _context.SocialInsuranceRateVersions.AddRangeAsync(new[] { row1, row2 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 2 SocialInsuranceRateVersion rows (both IsActive=false; background job activates on 2026-07-01).");
+        _logger.LogInformation("Seeded 2 SocialInsuranceRateVersion rows (cờ hiệu lực do bước reconcile đặt theo ngày chạy).");
 
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.SocialInsuranceRate, row1.Id,

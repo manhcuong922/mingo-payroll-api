@@ -109,10 +109,8 @@ public sealed partial class DatabaseSeeder
         var position = await _context.Positions.AsNoTracking()
             .Where(p => p.Code == "THOCAT").Select(p => (int?)p.Id).FirstOrDefaultAsync(ct);
         var grade = await _context.SalaryGrades.AsNoTracking()
-            .Where(g => g.Code == "G-THOCAT").Select(g => new { g.Id, g.BaseSalary }).FirstOrDefaultAsync(ct);
-        var taxCode = _configuration["ContractParty:TaxCode"] ?? "0100000000";
-        var partyId = await _context.ContractParties.AsNoTracking()
-            .Where(p => p.TaxCode == taxCode).Select(p => (int?)p.Id).FirstOrDefaultAsync(ct);
+            .Where(g => g.Code == "THOCAT-1").Select(g => new { g.Id, g.BaseSalary }).FirstOrDefaultAsync(ct);
+        var partyId = (await GetCompanyContractPartyAsync(ct))?.Id;
         var adminId = await _context.Users.AsNoTracking()
             .Where(u => u.RoleId == SystemRoles.SystemAdminId).Select(u => u.Id).FirstOrDefaultAsync(ct);
         if (position is null || grade is null || partyId is null || adminId == 0)

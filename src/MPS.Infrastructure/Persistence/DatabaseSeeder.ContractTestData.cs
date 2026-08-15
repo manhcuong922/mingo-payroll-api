@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities;
@@ -58,8 +58,9 @@ public sealed partial class DatabaseSeeder
         var positionIds = await EnsureContractTestPositionsAsync(ct);
         var userIds = await EnsureContractTestUsersAsync(ct);
         var employeeIds = await EnsureContractTestEmployeeInformationsAsync(userIds, positionIds, ct);
-        var (partyOldId, partyId) = await EnsureContractTestPartiesAsync(ct);
-        var gradeIds = await EnsureContractTestSalaryGradesAsync(positionIds, ct);
+        // Bậc lương: dùng bảng bậc lương DÙNG CHUNG (đủ thang bậc cho mọi chức danh) —
+        // xem DatabaseSeeder.SalaryGradesData.cs. Gọi ở đây vì cần chức danh contract-test đã có.
+        var gradeIds = await EnsureSalaryGradeCatalogAsync(ct);
         var allowanceTypeIds = await EnsureContractTestAllowanceTypesAsync(ct);
         await EnsureContractTestTemplatesAsync(ct);
 
@@ -74,9 +75,18 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        // Công ty chỉ có DUY NHẤT 1 pháp nhân đại diện (seed ở SeedDefaultContractPartyAsync) —
+        // toàn bộ HĐ test đều ký dưới pháp nhân này.
+        var party = await GetCompanyContractPartyAsync(ct);
+        if (party is null)
+        {
+            _logger.LogWarning("SeedContractTestData: chưa có pháp nhân công ty; bỏ qua phần HĐ test.");
+            return;
+        }
+
         var hrUserId = userIds["hr.user"];
         var contracts = await SeedContractTestContractsAsync(
-            hrUserId, employeeIds, partyOldId, partyId, positionIds, gradeIds, ct);
+            hrUserId, employeeIds, party.Id, positionIds, gradeIds, ct);
         await SeedContractTestAllowancesAsync(contracts, allowanceTypeIds, ct);
         var terminationNoticeFile = await SeedContractTestFilesAsync(contracts, hrUserId, ct);
         await SeedContractTestAppendicesAsync(contracts, allowanceTypeIds, hrUserId, ct);
@@ -282,111 +292,7 @@ public sealed partial class DatabaseSeeder
             s => s.Username, s => idByCitizenId[s.CitizenId], StringComparer.OrdinalIgnoreCase);
     }
 
-    // ===== Phase 4: ContractParties — TaxCode prefix '99' để không đụng party mặc định của seeder =====
-    private async Task<(int PartyOldId, int PartyId)> EnsureContractTestPartiesAsync(CancellationToken ct)
-    {
-        const string oldTaxCode = "9900000000";
-        const string activeTaxCode = "9900000001";
-        var taxCodes = new[] { oldTaxCode, activeTaxCode };
-
-        var existing = await _context.ContractParties
-            .Where(p => taxCodes.Contains(p.TaxCode))
-            .Select(p => new { p.Id, p.TaxCode })
-            .ToListAsync(ct);
-        var byTaxCode = existing.ToDictionary(p => p.TaxCode, p => p.Id, StringComparer.Ordinal);
-
-        var toAdd = new List<ContractParty>();
-        if (!byTaxCode.ContainsKey(oldTaxCode))
-        {
-            // Pháp nhân cũ (đã đóng) — test versioning timeline UI
-            toAdd.Add(new ContractParty
-            {
-                LegalName = "Công ty TNHH Mingo (cũ - test)",
-                TaxCode = oldTaxCode,
-                Address = "Tầng 3, 50 Lý Thường Kiệt, Hà Nội",
-                RepresentativeFullName = "Trần Văn Cũ",
-                RepresentativeTitle = "Tổng giám đốc",
-                EffectiveFrom = Utc(2022, 1, 1),
-                EffectiveTo = Utc(2023, 12, 31),
-                CreatedAt = Utc(2022, 1, 1),
-            });
-        }
-        if (!byTaxCode.ContainsKey(activeTaxCode))
-        {
-            toAdd.Add(new ContractParty
-            {
-                LegalName = "Công ty TNHH Mingo (test)",
-                TaxCode = activeTaxCode,
-                Address = "Tầng 5, 99 Nguyễn Trãi, Quận Thanh Xuân, Hà Nội",
-                RepresentativeFullName = "Đỗ Văn Giám",
-                RepresentativeTitle = "Giám đốc",
-                EffectiveFrom = Utc(2024, 1, 1),
-                EffectiveTo = null,
-                CreatedAt = Utc(2024, 1, 1),
-            });
-        }
-
-        if (toAdd.Count > 0)
-        {
-            await _context.ContractParties.AddRangeAsync(toAdd, ct);
-            await _context.SaveChangesAsync(ct);
-            foreach (var p in toAdd) byTaxCode[p.TaxCode] = p.Id;
-            _logger.LogInformation("Seeded {Count} contract-test ContractParty(ies).", toAdd.Count);
-        }
-
-        return (byTaxCode[oldTaxCode], byTaxCode[activeTaxCode]);
-    }
-
-    // ===== Phase 5: SalaryGrades (5 active + 1 inactive BE-99 demo soft-delete) =====
-    private async Task<Dictionary<string, int>> EnsureContractTestSalaryGradesAsync(
-        IReadOnlyDictionary<string, int> positionIds, CancellationToken ct)
-    {
-        var seeds = new[]
-        {
-            (Code: "MOC-1", Name: "Thợ mộc Bậc 1", Pos: "MOC", Level: 1, Salary: 15_000_000m, Desc: (string?)"Mới vào nghề, 0-1 năm KN", IsActive: true),
-            (Code: "MOC-2", Name: "Thợ mộc Bậc 2", Pos: "MOC", Level: 2, Salary: 25_000_000m, Desc: (string?)"Tay nghề khá, 2-3 năm KN", IsActive: true),
-            (Code: "MOC-3", Name: "Thợ mộc Bậc 3 (thợ cả)", Pos: "MOC", Level: 3, Salary: 35_000_000m, Desc: (string?)"Thợ cả, 4-6 năm KN", IsActive: true),
-            (Code: "SON-2", Name: "Thợ sơn Bậc 2", Pos: "SON", Level: 2, Salary: 22_000_000m, Desc: (string?)null, IsActive: true),
-            (Code: "TOTR-1", Name: "Tổ trưởng sản xuất Bậc 1", Pos: "TOTR", Level: 1, Salary: 50_000_000m, Desc: (string?)"Quản lý tổ 3-5 người", IsActive: true),
-            (Code: "MOC-99", Name: "Thợ mộc Bậc lỗi thời", Pos: "MOC", Level: 99, Salary: 10_000_000m, Desc: (string?)"Demo soft-delete: grade inactive", IsActive: false),
-        };
-        var codes = seeds.Select(s => s.Code).ToArray();
-
-        var existing = await _context.SalaryGrades
-            .Where(g => codes.Contains(g.Code))
-            .Select(g => new { g.Id, g.Code })
-            .ToListAsync(ct);
-        var byCode = existing.ToDictionary(g => g.Code, g => g.Id, StringComparer.OrdinalIgnoreCase);
-
-        var now = DateTime.UtcNow;
-        var toAdd = seeds
-            .Where(s => !byCode.ContainsKey(s.Code))
-            .Select(s => new SalaryGrade
-            {
-                Code = s.Code,
-                Name = s.Name,
-                PositionId = positionIds[s.Pos],
-                Level = s.Level,
-                BaseSalary = s.Salary,
-                Currency = "VND",
-                Description = s.Desc,
-                IsActive = s.IsActive,
-                CreatedAt = now,
-                UpdatedAt = s.IsActive ? null : now,
-            })
-            .ToList();
-        if (toAdd.Count > 0)
-        {
-            await _context.SalaryGrades.AddRangeAsync(toAdd, ct);
-            await _context.SaveChangesAsync(ct);
-            foreach (var g in toAdd) byCode[g.Code] = g.Id;
-            _logger.LogInformation("Seeded {Count} contract-test SalaryGrade(s).", toAdd.Count);
-        }
-
-        return byCode;
-    }
-
-    // ===== Phase 6: AllowanceTypes (3 active + 1 inactive) — PHONE tái sử dụng từ seed mặc định =====
+    // ===== Phase 4: AllowanceTypes (3 active + 1 inactive) — PHONE tái sử dụng từ seed mặc định =====
     private async Task<Dictionary<string, int>> EnsureContractTestAllowanceTypesAsync(CancellationToken ct)
     {
         var seeds = new[]
@@ -433,7 +339,7 @@ public sealed partial class DatabaseSeeder
         return byCode;
     }
 
-    // ===== Phase 7: ContractTemplates (2 active + 1 inactive) — idempotent theo Name =====
+    // ===== Phase 5: ContractTemplates (2 active + 1 inactive) — idempotent theo Name =====
     private async Task EnsureContractTestTemplatesAsync(CancellationToken ct)
     {
         var seeds = new[]
@@ -473,11 +379,10 @@ public sealed partial class DatabaseSeeder
         }
     }
 
-    // ===== Phase 8: 15 Contracts cover mọi logic case =====
+    // ===== Phase 6: 15 Contracts cover mọi logic case =====
     private async Task<Dictionary<string, Contract>> SeedContractTestContractsAsync(
         int hrUserId,
         IReadOnlyDictionary<string, int> employeeIds,
-        int partyOldId,
         int partyId,
         IReadOnlyDictionary<string, int> positionIds,
         IReadOnlyDictionary<string, int> gradeIds,
@@ -512,9 +417,8 @@ public sealed partial class DatabaseSeeder
             signedAt: Utc(2024, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2023, 12, 25), updatedAt: Utc(2024, 1, 1));
 
-        // #3 + #4 Hai HĐ Định hạn cũ của Nam — chứng minh Điều 20 k.2c.
-        // Dùng party HIỆN HÀNH (không dùng partyOld) để rule "không cho ký HĐ Định hạn
-        // thứ 3 với CÙNG NSDLĐ" trigger đúng khi HR test tạo HĐ Định hạn mới cho Nam.
+        // #3 + #4 Hai HĐ Định hạn cũ của Nam — chứng minh Điều 20 k.2c: cùng pháp nhân NSDLĐ nên
+        // rule "không cho ký HĐ Định hạn thứ 3" trigger đúng khi HR test tạo HĐ Định hạn mới cho Nam.
         var namHist1 = NewTestContract("HDLD-NAM-HIST-DEF-1",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Expired,
             eiNam, partyId, hrUserId, posBe,
@@ -598,7 +502,7 @@ public sealed partial class DatabaseSeeder
         // #11 ARCHIVED cho Cường — test 409 CONTRACT_ARCHIVED (dùng bậc lương inactive BE-99)
         var archCuong = NewTestContract("HDLD-ARCH-CUONG-2014",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Terminated,
-            eiCuong, partyOldId, hrUserId, posFe,
+            eiCuong, partyId, hrUserId, posFe,
             "Thợ sơn(HĐ cũ 2014 — đã archive sau 10 năm chấm dứt)", "Hà Nội",
             Utc(2014, 1, 1), Utc(2015, 12, 31),
             gradeIds["MOC-99"], 10_000_000m,
@@ -610,7 +514,7 @@ public sealed partial class DatabaseSeeder
         // #12 EXPIRED > 10 năm cho Mai — archive job candidate (Expired path)
         var expMaiOld = NewTestContract("HDLD-EXP-MAI-OLD-2014",
             ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Expired,
-            eiMai, partyOldId, hrUserId, posFe,
+            eiMai, partyId, hrUserId, posFe,
             "Thợ sơn(HĐ Expired 2014 — chờ archive job)", "Hà Nội",
             today.AddYears(-12), today.AddYears(-11),
             gradeIds["SON-2"], 18_000_000m,
@@ -716,7 +620,7 @@ public sealed partial class DatabaseSeeder
             UpdatedAt = updatedAt,
         };
 
-    // ===== Phase 9: ContractAllowances — gắn phụ cấp vào các HĐ Active =====
+    // ===== Phase 7: ContractAllowances — gắn phụ cấp vào các HĐ Active =====
     private async Task SeedContractTestAllowancesAsync(
         IReadOnlyDictionary<string, Contract> contracts,
         IReadOnlyDictionary<string, int> allowanceTypeIds,
@@ -755,9 +659,9 @@ public sealed partial class DatabaseSeeder
         _logger.LogInformation("Seeded {Count} contract-test ContractAllowance(s).", allowances.Count);
     }
 
-    // ===== Phase 10: ContractFiles (metadata — MinIO blob KHÔNG có thật, download sẽ 404) =====
+    // ===== Phase 8: ContractFiles (metadata — MinIO blob KHÔNG có thật, download sẽ 404) =====
     // Multi-version cho HĐ #2 (test replace flow + sort Version DESC + IsCurrent).
-    // Trả về file notice Termination — Phase 12 cần FK WrittenNoticeFileId.
+    // Trả về file notice Termination — Phase 10 cần FK WrittenNoticeFileId.
     private async Task<ContractFile> SeedContractTestFilesAsync(
         IReadOnlyDictionary<string, Contract> contracts, int hrUserId, CancellationToken ct)
     {
@@ -794,7 +698,7 @@ public sealed partial class DatabaseSeeder
                 version: 1, isCurrent: true, Utc(2023, 12, 20, 9, 0), hrUserId),
         };
 
-        // File notice cho termination HĐ #10 — trả về cho Phase 12
+        // File notice cho termination HĐ #10 — trả về cho Phase 10
         var terminationNotice = NewTestFile(
             ContractEnums.FileTargetType.Termination, contracts["HDLD-TERM-CUONG"].Id,
             "termination-notice-2025-12.pdf", "terminations/2025/12/HDLD-TERM-CUONG/notice-v1.pdf",
@@ -838,7 +742,7 @@ public sealed partial class DatabaseSeeder
             UploadedByUserId = uploadedByUserId,
         };
 
-    // ===== Phase 11: ContractAppendices (2 Active + 1 Draft) + file cho phụ lục đầu =====
+    // ===== Phase 9: ContractAppendices (2 Active + 1 Draft) + file cho phụ lục đầu =====
     private async Task SeedContractTestAppendicesAsync(
         IReadOnlyDictionary<string, Contract> contracts,
         IReadOnlyDictionary<string, int> allowanceTypeIds,
@@ -919,7 +823,7 @@ public sealed partial class DatabaseSeeder
         _logger.LogInformation("Seeded 3 contract-test ContractAppendix(es) (2 Active + 1 Draft).");
     }
 
-    // ===== Phase 12: ContractTerminations (2 — HĐ #10 có notice file, HĐ #11 archived không cần) =====
+    // ===== Phase 10: ContractTerminations (2 — HĐ #10 có notice file, HĐ #11 archived không cần) =====
     private async Task SeedContractTestTerminationsAsync(
         IReadOnlyDictionary<string, Contract> contracts,
         ContractFile terminationNoticeFile,
