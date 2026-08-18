@@ -1,10 +1,12 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.ContractTermination.Common;
 using MPS.Domain.Entities;
 using MPS.Domain.Enums.Contract;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.ContractTermination.Commands;
 
@@ -22,6 +24,8 @@ public class CreateContractTerminationCommandHandler
     private readonly IEmployeeInformationRepository _employees;
     private readonly IProjectTaskRepository _tasks;
     private readonly IClock _clock;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
+    private readonly ILogger<CreateContractTerminationCommandHandler> _logger;
 
     public CreateContractTerminationCommandHandler(
         IContractTerminationRepository terminations,
@@ -30,7 +34,9 @@ public class CreateContractTerminationCommandHandler
         ICurrentUserService currentUser,
         IEmployeeInformationRepository employees,
         IProjectTaskRepository tasks,
-        IClock clock)
+        IClock clock,
+        IPayrollSourceChangeHandler payrollChange,
+        ILogger<CreateContractTerminationCommandHandler> logger)
     {
         _terminations = terminations;
         _contracts = contracts;
@@ -39,6 +45,8 @@ public class CreateContractTerminationCommandHandler
         _employees = employees;
         _tasks = tasks;
         _clock = clock;
+        _payrollChange = payrollChange;
+        _logger = logger;
     }
 
     public async Task<CreateContractTerminationResult> Handle(
@@ -129,10 +137,40 @@ public class CreateContractTerminationCommandHandler
 
         var id = await _terminations.AddAndMarkContractTerminatedAsync(entity, targetStatus, cancellationToken);
 
+        await TryMarkPayrollStaleAsync(contract, request.TerminationDate, cancellationToken);
+
         return new CreateContractTerminationResult(
             id,
             targetStatus,
             await CollectOpenTaskWarningsAsync(contract.EmployeeInformationId, cancellationToken));
+    }
+
+    /// <summary>
+    /// ⭐ Phase 4 — chấm dứt HĐ CẮT ngày công của NLĐ từ <c>TerminationDate</c>, tức là một thay đổi
+    /// NGUỒN của bảng lương. Trước đây chỉ kích hoạt HĐ và ký phụ lục báo cho payroll, còn chấm dứt
+    /// thì không ⇒ kỳ Draft đã tạo không được đánh cờ stale và kế toán chốt lương trên số liệu tính
+    /// khi NLĐ còn đi làm cả tháng.
+    ///
+    /// <para>Best-effort: bản ghi chấm dứt đã commit ở trên, lỗi ở đây chỉ được ghi log — ném ra
+    /// ngoài sẽ tạo trạng thái nửa vời (HĐ đã chấm dứt nhưng API báo lỗi).</para>
+    /// </summary>
+    private async Task TryMarkPayrollStaleAsync(
+        Domain.Entities.Contract contract, DateTime terminationDate, CancellationToken ct)
+    {
+        try
+        {
+            await _payrollChange.OnSourceChangedAsync(
+                terminationDate.Year, terminationDate.Month,
+                contract.EmployeeInformationId,
+                $"Chấm dứt hợp đồng {contract.ContractNo} (ngày làm việc cuối {terminationDate:dd/MM/yyyy})",
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Không đánh được cờ tính lại lương sau khi chấm dứt HĐ {ContractId}; việc chấm dứt vẫn thành công.",
+                contract.Id);
+        }
     }
 
     /// <summary>

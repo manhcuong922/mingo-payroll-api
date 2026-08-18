@@ -444,10 +444,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
     private static Contract? PickContract(List<Contract> contracts, DateOnly start, DateOnly end)
     {
-        var startDt = start.ToDateTime(TimeOnly.MinValue);
-        var endDt = end.ToDateTime(TimeOnly.MaxValue);
         return contracts
-            .Where(c => c.EffectiveFrom <= endDt && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
+            .Where(c => DateOnly.FromDateTime(c.EffectiveFrom) <= end && !EndsBefore(c, start))
             // Ưu tiên HĐ "đang vận hành" — Active hoặc PendingTermination (chưa qua ngày làm cuối);
             // trong khoảng chờ NLĐ vẫn hưởng lương như HĐ Active.
             .OrderByDescending(c => c.Status == ContractEnums.ContractStatus.Active
@@ -578,9 +576,25 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     {
         if (contracts.Count == 0) return true;
 
-        var dayDt = day.ToDateTime(new TimeOnly(12, 0));
-        return contracts.Any(c => c.EffectiveFrom <= dayDt && (c.EffectiveTo == null || c.EffectiveTo >= dayDt));
+        return contracts.Any(c => CoversDay(c, day));
     }
+
+    /// <summary>
+    /// HĐ có phủ NGÀY <paramref name="day"/> không.
+    ///
+    /// <para>⭐ Phase 4 — so sánh theo NGÀY, bỏ phần giờ. <c>EffectiveFrom</c>/<c>EffectiveTo</c> là
+    /// <see cref="DateTime"/> nhưng nghiệp vụ chỉ có ngày: <c>EffectiveTo</c> là ngày làm việc CUỐI
+    /// CÙNG (inclusive). Mọi nơi ghi hai mốc này đều để giờ = 00:00 (form HĐ, `TerminationDate`),
+    /// trong khi trước đây hàm này so tại mốc 12:00 trưa ⇒ <c>EffectiveTo (00:00) >= ngày (12:00)</c>
+    /// là FALSE và <b>ngày làm việc cuối cùng bị mất công</b>. Lỗi này ẩn khi `EffectiveTo` gần như
+    /// luôn null; từ khi chấm dứt HĐ tự đóng `EffectiveTo = TerminationDate` nó rơi vào giữa kỳ.</para>
+    /// </summary>
+    private static bool CoversDay(Contract c, DateOnly day) =>
+        DateOnly.FromDateTime(c.EffectiveFrom) <= day && !EndsBefore(c, day);
+
+    /// <summary>HĐ đã kết thúc TRƯỚC ngày <paramref name="day"/> (EffectiveTo null = còn hiệu lực).</summary>
+    private static bool EndsBefore(Contract c, DateOnly day) =>
+        c.EffectiveTo is { } to && DateOnly.FromDateTime(to) < day;
 
     /// <summary>
     /// Mức lương thực trả của một hợp đồng.
@@ -606,9 +620,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
     private static CongCategory ResolveCategory(List<Contract> contracts, DateOnly day, Contract? fallback)
     {
-        var dayDt = day.ToDateTime(new TimeOnly(12, 0));
-        var c = contracts.FirstOrDefault(x => x.EffectiveFrom <= dayDt && (x.EffectiveTo == null || x.EffectiveTo >= dayDt))
-                ?? fallback;
+        var c = contracts.FirstOrDefault(x => CoversDay(x, day)) ?? fallback;
         if (c is null) return CongCategory.Official;
         if (c.Kind == ContractEnums.ContractKind.VocationalTraining) return CongCategory.Apprentice;
         if (c.Kind == ContractEnums.ContractKind.Probation || c.ContractSubtype == ContractEnums.ContractSubtype.Probation)
