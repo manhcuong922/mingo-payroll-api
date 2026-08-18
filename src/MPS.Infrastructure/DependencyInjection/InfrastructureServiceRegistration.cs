@@ -123,6 +123,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPaymentObligationRepository, PaymentObligationRepository>();
         services.AddScoped<MPS.Application.Features.Payroll.BhxhTaxPayment.Common.BhxhTaxEvidenceUploader>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
+        services.AddScoped<IPieceWorkSupportBandRepository, PieceWorkSupportBandRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
         services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
         // BS-6: đánh cờ "cần tính lại" cho kỳ Draft khi nguồn (chấm công/đơn/phụ lục/đánh giá) đổi.

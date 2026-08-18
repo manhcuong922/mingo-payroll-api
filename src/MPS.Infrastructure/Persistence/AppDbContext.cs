@@ -108,6 +108,7 @@ public class AppDbContext : DbContext
     public DbSet<Domain.Entities.Payroll.PayrollCellValue> PayrollCellValues => Set<Domain.Entities.Payroll.PayrollCellValue>();
     public DbSet<Domain.Entities.Payroll.PayrollNote> PayrollNotes => Set<Domain.Entities.Payroll.PayrollNote>();
     public DbSet<Domain.Entities.Payroll.ProductivityCoefficient> ProductivityCoefficients => Set<Domain.Entities.Payroll.ProductivityCoefficient>();
+    public DbSet<Domain.Entities.Payroll.PieceWorkSupportBand> PieceWorkSupportBands => Set<Domain.Entities.Payroll.PieceWorkSupportBand>();
     public DbSet<Domain.Entities.Payroll.PayrollAdjustment> PayrollAdjustments => Set<Domain.Entities.Payroll.PayrollAdjustment>();
 
     // ===== BHXH & Tax Payment Tracking module =====

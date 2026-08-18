@@ -100,11 +100,21 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.CongThuViec, "Công thử việc", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongThuViec);
         Add(Cc.CongTinhLuong, "Công chính thức", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongChinhThuc);
         Add(Cc.CongHocViec, "Công học việc", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongHocViec);
+        // Phase 2 — tổng giờ làm (ca chính + tăng ca thực tế): căn cứ xếp bậc "Hỗ trợ theo tiến độ"
+        // của HĐ khoán. Để kế toán đối chiếu vì sao ra mốc đó; không tham gia công thức nào khác.
+        Add(Cc.TongGioLam, "Tổng giờ làm", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.TotalWorkHours);
 
         // ===== Khối C — lương & phụ cấp tính lương T13 =====
         Add(Cc.MucLuong, "Mức lương", GC, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractMucLuong, money: true);
+        // Phase 2 — HĐ KHOÁN VIỆC không hưởng khoản theo hệ số năng suất; thay bằng "Hỗ trợ theo
+        // tiến độ" ở khối E (cột riêng để trả NGUYÊN, không bị chia theo ngày công).
+        // Cờ `contract.isPieceWork` mang ngữ nghĩa "CÓ phải khoán không" nên kỳ lương cũ (thiếu khoá
+        // ⇒ ToFields điền 0) chạy đúng nhánh cũ.
         Add(Cc.PhuCapLuong, "Trợ cấp lương chính", GC, ColumnDataType.Money, ColumnValueSource.Formula,
-            formula: N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.ProductivityCoefficient)), money: true);
+            formula: N.If(
+                N.Cmp("=", N.Field(Fk.ContractIsPieceWork), N.Const(1m)),
+                N.Const(0m),
+                N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.ProductivityCoefficient))), money: true);
         Add(Cc.TroCapThuViec, "Trợ cấp thử việc", GC, ColumnDataType.Money, ColumnValueSource.Formula,
             formula: N.Col(Cc.PhuCapLuong), money: true);
         Add(Cc.HocViec, "Học việc", GC, ColumnDataType.Money, ColumnValueSource.Input, money: true);
@@ -159,10 +169,16 @@ public static class DefaultPayrollFormulaSet
             Fk.PremiumDayType, money: true);
         Add(Cc.PhuCapDem, "Phụ cấp làm đêm", GE, ColumnDataType.Money, ColumnValueSource.Lookup,
             Fk.PremiumNight, money: true);
+        // Phase 2 — HĐ khoán việc: khoản hỗ trợ theo mốc tổng giờ làm (từ 150h / từ 200h), collector
+        // tra sẵn thành tiền từ bảng bậc `PieceWorkSupportBand`. Cộng THẲNG vào tổng thu nhập nên
+        // KHÔNG bị chia theo ngày công — đủ giờ là nhận đủ, đúng thoả thuận trên hợp đồng.
+        // Loại HĐ khác ⇒ field = 0 ⇒ cột này = 0.
+        Add(Cc.HoTroTienDo, "Hỗ trợ theo tiến độ", GE, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.PieceWorkSupport, money: true);
         Add(Cc.TongThuNhap, "Tổng thu nhập", GE, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.ThuNhap), N.Col(Cc.LuongNgayPhep), N.Col(Cc.TangCa),
                 N.Col(Cc.HoaHong), N.Col(Cc.ThuongDuAn), N.Col(Cc.ThuongNam), N.Col(Cc.ThuongKhac),
-                N.Col(Cc.PhuTroiNgayNghi), N.Col(Cc.PhuCapDem)));
+                N.Col(Cc.PhuTroiNgayNghi), N.Col(Cc.PhuCapDem), N.Col(Cc.HoTroTienDo)));
 
         // ===== Khối F — bảo hiểm =====
         var noBh = new[] { InsuranceFlags.NoInsurance, InsuranceFlags.Maternity };

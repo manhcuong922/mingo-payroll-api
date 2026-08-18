@@ -1,4 +1,4 @@
-namespace MPS.Domain.Constants;
+﻿namespace MPS.Domain.Constants;
 
 // Chú ý: ID trong PermissionIds đã được seed vào DB — KHÔNG đổi giá trị ID cũ.
 // Khi thêm permission mới, dùng ID tiếp theo trong dải trống (xem comment "reserved").
@@ -351,6 +351,10 @@ public static class Permissions
     public const string ProductivityCoefficientReadAll   = "ProductivityCoefficient.Read.All";
     public const string ProductivityCoefficientUpdateAll = "ProductivityCoefficient.Update.All";
 
+    // Phase 2 — bậc hỗ trợ theo tiến độ của HĐ khoán việc (mốc giờ → số tiền).
+    public const string PieceWorkSupportBandReadAll   = "PieceWorkSupportBand.Read.All";
+    public const string PieceWorkSupportBandUpdateAll = "PieceWorkSupportBand.Update.All";
+
     // ===== BHXH & Tax Payment Tracking module — IDs 266–269 =====
     public const string PayrollLockAll             = "Payroll.Lock.All";
     public const string BhxhTaxPaymentReadAll      = "BhxhTaxPayment.Read.All";
@@ -690,6 +694,10 @@ public static class PermissionIds
 
     public const int ProductivityCoefficientReadAll   = 264;
     public const int ProductivityCoefficientUpdateAll = 265;
+
+    // Phase 2 — bậc hỗ trợ theo tiến độ của HĐ khoán việc.
+    public const int PieceWorkSupportBandReadAll   = 270;
+    public const int PieceWorkSupportBandUpdateAll = 271;
 
     // ===== BHXH & Tax Payment Tracking module — IDs 266–269 =====
     public const int PayrollLockAll             = 266;

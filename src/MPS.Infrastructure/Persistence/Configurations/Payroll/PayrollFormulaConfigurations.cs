@@ -49,6 +49,28 @@ public class SalaryColumnDefinitionEntityConfiguration : IEntityTypeConfiguratio
     }
 }
 
+/// <summary>
+/// Bậc thang hỗ trợ theo tiến độ của HĐ khoán việc (Phase 2 — quyết định PO 18/08/2026).
+/// Cùng khuôn với <see cref="ProductivityCoefficientEntityConfiguration"/>.
+/// </summary>
+public class PieceWorkSupportBandEntityConfiguration : IEntityTypeConfiguration<PieceWorkSupportBand>
+{
+    public void Configure(EntityTypeBuilder<PieceWorkSupportBand> builder)
+    {
+        builder.ToTable("PieceWorkSupportBands");
+        builder.HasKey(e => e.Id);
+        // Giờ/tháng: 3 chữ số phần nguyên là quá đủ (208h là trần thực tế), 2 số lẻ cho nửa giờ.
+        builder.Property(e => e.MinHours).HasColumnType("decimal(6,2)").IsRequired();
+        builder.Property(e => e.MaxHours).HasColumnType("decimal(6,2)");
+        builder.Property(e => e.Amount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.Label).HasMaxLength(200);
+        builder.Property(e => e.IsActive).HasDefaultValue(true);
+        builder.Property(e => e.CreatedAt).IsRequired();
+
+        builder.HasIndex(e => new { e.IsActive, e.MinHours });
+    }
+}
+
 public class ProductivityCoefficientEntityConfiguration : IEntityTypeConfiguration<ProductivityCoefficient>
 {
     public void Configure(EntityTypeBuilder<ProductivityCoefficient> builder)

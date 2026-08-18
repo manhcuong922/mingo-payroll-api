@@ -31,6 +31,8 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(ContractAllowanceKhac, "Phụ cấp khác (HĐ, mã ngoài 4 cột cứng)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceNgoaiLe, "Phụ cấp ngoại lệ — trả nguyên, không chia theo công (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceComNgoaiLe, "Phụ cấp cơm ngoại lệ — trả nguyên (HĐ)", "Hợp đồng", ColumnDataType.Money),
+        new(ContractIsPieceWork, "HĐ khoán việc (1 = khoán)", "Hợp đồng", ColumnDataType.Number),
+        new(PieceWorkSupport, "Hỗ trợ theo tiến độ (HĐ khoán)", "Hợp đồng", ColumnDataType.Money),
 
         // Chấm công
         new(CongChuan, "Công chuẩn tháng", "Kỳ lương", ColumnDataType.Number),
@@ -40,6 +42,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(CongHocViec, "Công học việc", "Chấm công", ColumnDataType.Number),
         new(DayHours, "Giờ ban ngày", "Chấm công", ColumnDataType.Number),
         new(NightHours, "Giờ ban đêm", "Chấm công", ColumnDataType.Number),
+        new(TotalWorkHours, "Tổng giờ làm (ca chính + tăng ca)", "Chấm công", ColumnDataType.Number),
         new(AbsentDays, "Số ngày vắng", "Chấm công", ColumnDataType.Number),
         new(LateDays, "Số lần muộn/sớm", "Chấm công", ColumnDataType.Number),
 

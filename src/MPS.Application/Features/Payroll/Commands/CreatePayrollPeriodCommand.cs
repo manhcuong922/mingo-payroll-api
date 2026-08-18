@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using MPS.Application.Common.Exceptions;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Interfaces.Payroll;
@@ -109,6 +109,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
             FormulaSetId = formulaSet.Id,
             FormulaSnapshotJson = PayrollColumnSnapshotMapper.Serialize(columns),
             ProductivitySnapshotJson = collection.ProductivitySnapshotJson,
+            PieceWorkSupportSnapshotJson = collection.PieceWorkSupportSnapshotJson,
             PitBracketsSnapshotJson = PayrollJson.Serialize(collection.FunctionContext.PitBrackets),
             CreatedByUserId = userId,
             CreatedAt = now,

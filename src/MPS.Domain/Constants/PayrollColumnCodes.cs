@@ -23,6 +23,9 @@ public static class PayrollColumnCodes
     public const string CongTinhLuong = "CONGTINHLUONG"; // công chính thức
     public const string CongHocViec = "CONGHOCVIEC";
 
+    /// <summary>Phase 2 — tổng giờ làm trong kỳ (ca chính + tăng ca), căn cứ xếp bậc hỗ trợ HĐ khoán.</summary>
+    public const string TongGioLam = "TONGGIOLAM";
+
     // Khối C — lương & phụ cấp tính lương T13
     public const string MucLuong = "MUCLUONG";
     public const string PhuCapLuong = "PHUCAPLUONG";
@@ -45,6 +48,19 @@ public static class PayrollColumnCodes
     public const string ThuongDuAn = "THUONGDUAN";
     public const string ThuongNam = "THUONGNAM";
     public const string ThuongKhac = "THUONGKHAC";
+
+    /// <summary>
+    /// Phase 2 — khoản HỖ TRỢ THEO TIẾN ĐỘ của HĐ khoán việc (bậc thang theo tổng giờ làm).
+    ///
+    /// <para>Cột RIÊNG chứ không ghi đè <c>PHUCAPLUONG</c> vì cột đó nằm trong nền chia theo ngày
+    /// công của <c>THUNHAP_PHANBO</c> — nhét 200k vào đó thì người làm 20/26 công chỉ nhận ~154k,
+    /// sai thoả thuận "đủ 150h là 200k". Ngoài ra <c>TROCAPTHUVIEC</c> tham chiếu
+    /// <c>PHUCAPLUONG</c> nên ghi đè sẽ nhân đôi khoản này.</para>
+    ///
+    /// <para>⚠️ Nhãn hiển thị phải là "Hỗ trợ theo tiến độ" — chứng từ của hợp đồng dân sự không
+    /// mang chữ "lương"/"thưởng".</para>
+    /// </summary>
+    public const string HoTroTienDo = "HOTRO_TIENDO";
 
     // BS-2 — phụ trội giờ THƯỜNG (ca chính thức, không qua đơn OT). Miễn thuế TNCN như CL_GLT.
     public const string PhuTroiNgayNghi = "PHUTROI_NGAYNGHI";  // ca rơi vào nghỉ tuần/lễ

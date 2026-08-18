@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Payroll;
 using MPS.Domain.Constants;
@@ -29,6 +29,7 @@ public sealed partial class DatabaseSeeder
 
         await SeedPayrollFormulaSetAsync(adminId, ct);
         await SeedProductivityCoefficientsAsync(ct);
+        await SeedPieceWorkSupportBandsAsync(ct);
         await SeedPayrollDemoPeriodsAsync(adminId, ct);
     }
 
@@ -120,6 +121,26 @@ public sealed partial class DatabaseSeeder
         await _context.ProductivityCoefficients.AddRangeAsync(rows, ct);
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation("Seeded {Count} ProductivityCoefficient bands.", rows.Length);
+    }
+
+    /// <summary>
+    /// Phase 2 — bậc hỗ trợ theo tiến độ của HĐ khoán việc (quyết định PO 18/08/2026):
+    /// từ 150 giờ = 200.000đ, từ 200 giờ = 500.000đ. KHÔNG cộng dồn — xem
+    /// <c>PieceWorkSupportResolver</c>.
+    /// </summary>
+    private async Task SeedPieceWorkSupportBandsAsync(CancellationToken ct)
+    {
+        if (await _context.PieceWorkSupportBands.AsNoTracking().AnyAsync(ct)) return;
+
+        var now = DateTime.UtcNow;
+        var rows = new[]
+        {
+            new PieceWorkSupportBand { MinHours = 150m, MaxHours = 200m, Amount = 200_000m, Label = "Từ 150 giờ", IsActive = true, CreatedAt = now },
+            new PieceWorkSupportBand { MinHours = 200m, MaxHours = null, Amount = 500_000m, Label = "Từ 200 giờ", IsActive = true, CreatedAt = now },
+        };
+        await _context.PieceWorkSupportBands.AddRangeAsync(rows, ct);
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seeded {Count} PieceWorkSupportBand rows.", rows.Length);
     }
 
     private const int PayrollDemoMonths = 3;   // 3 kỳ gần nhất (đủ dữ liệu, tránh kỳ hiện tại còn thiếu).

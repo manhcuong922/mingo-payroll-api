@@ -96,6 +96,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var bhtnCap = insurance.BhtnCap;
         var mealExempt = mealThreshold?.MonthlyExemptAmount ?? 0m;
 
+        // ⭐ Phase 2 — bậc hỗ trợ theo tiến độ của HĐ khoán việc (chỉ bậc đang bật).
+        var supportBands = await _db.PieceWorkSupportBands.AsNoTracking()
+            .Where(b => b.IsActive).OrderBy(b => b.MinHours).ToListAsync(ct);
+        var supportBandsSnapshotJson = PayrollJson.Serialize(
+            supportBands.Select(b => new { b.MinHours, b.MaxHours, b.Amount, b.Label }));
+
         // ===== Bảng hệ số năng suất (active) + snapshot JSON =====
         var prodMap = await _db.ProductivityCoefficients.AsNoTracking()
             .Where(p => p.IsActive).OrderBy(p => p.MinScore).ToListAsync(ct);
@@ -243,8 +249,17 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // ⭐ BS-2: hệ số OT theo LOẠI NGÀY (Đ.98) — trước đây dùng cứng 1.5/2.0 cho mọi ngày, bỏ qua
             // cuối tuần (200%) và lễ (300%) ⇒ ai tăng ca ngày lễ bị trả thiếu. Với ngày THƯỜNG, hệ số động
             // ra đúng 1.5 (ngày) / 2.0 (đêm) như cũ nên không đổi số cho các kỳ chỉ có OT ngày thường.
-            var (tangCa, chenhLech) = await ComputeOvertimePayAsync(
+            var (tangCa, chenhLech, otHours) = await ComputeOvertimePayAsync(
                 e.Id, ots, otAttendanceByOtId, hourlyRate, laborTimeline, dayTypeByDate, ct);
+
+            // ⭐ Phase 2 — tổng giờ làm của kỳ + khoản hỗ trợ theo tiến độ của HĐ khoán việc.
+            // Nguồn giờ là bảng chấm công / phân ca bình thường (quyết định PO 18/08/2026), gồm cả
+            // giờ tăng ca thực tế. Loại HĐ khác khoán ⇒ 0đ dù làm bao nhiêu giờ.
+            var totalWorkHours = dayHours + nightHours + otHours;
+            var isPieceWork = activeContract?.Kind == ContractEnums.ContractKind.PieceWork;
+            var pieceWorkSupport = isPieceWork
+                ? PieceWorkSupportResolver.Resolve(supportBands, totalWorkHours)
+                : 0m;
 
             // ⭐ BS-2 phần A: giờ THƯỜNG ngày nghỉ/lễ chỉ được trả 100% qua cột Thu nhập ⇒ trả phần
             // còn thiếu (200%/300%); cộng phụ cấp làm đêm 30% mà trước đây KHÔNG cột nào trả.
@@ -322,6 +337,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[CongHocViec] = congHocViec;
             n[DayHours] = dayHours;
             n[NightHours] = nightHours;
+            n[TotalWorkHours] = totalWorkHours;
+            n[ContractIsPieceWork] = isPieceWork ? 1m : 0m;
+            n[PieceWorkSupport] = pieceWorkSupport;
             n[OtTangCa] = tangCa;
             // Luật TNCN 109/2025 + NĐ 253/2026 (từ 01/07/2026): miễn thuế TOÀN BỘ tiền OT, không chỉ
             // phần chênh lệch như luật cũ (TT 111/2013 Đ.3). Hạn mức giờ OT hợp pháp đã chặn ở tầng
@@ -402,6 +420,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             ComplianceRefs = refs,
             FunctionContext = new PayrollFunctionContext { PitBrackets = pit.Brackets },
             ProductivitySnapshotJson = prodSnapshotJson,
+            PieceWorkSupportSnapshotJson = supportBandsSnapshotJson,
             ComplianceNotes = complianceNotes,
         };
     }
@@ -464,7 +483,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     // từ AttendanceRecord.CheckInAt/CheckOutAt thật (ghi bởi face-checkin lúc tan ca hoặc HR nhập tay qua
     // QuickAttendanceDialog), CAP trong khung đã đăng ký — không vượt OtStartTime/OtEndTime đã duyệt.
     // Đơn Approved chưa có AttendanceRecord tương ứng → 0 giờ, không trả (chờ ai đó ghi nhận).
-    private async Task<(decimal TangCa, decimal ChenhLech)> ComputeOvertimePayAsync(
+    private async Task<(decimal TangCa, decimal ChenhLech, decimal OtHours)> ComputeOvertimePayAsync(
         int employeeInformationId,
         IReadOnlyList<Domain.Entities.Attendance.OvertimeRequest> ots,
         IReadOnlyDictionary<int, Domain.Entities.Attendance.AttendanceRecord> otAttendanceByOtId,
@@ -473,7 +492,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         IReadOnlyDictionary<DateOnly, DayType> dayTypeByDate,
         CancellationToken ct)
     {
-        if (ots.Count == 0 || hourlyRate <= 0m) return (0m, 0m);
+        if (ots.Count == 0) return (0m, 0m, 0m);
 
         var segments = new List<OvertimePayCalculator.OvertimeSegment>(ots.Count);
         foreach (var ot in ots)
@@ -495,7 +514,16 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 ot.WorkDate, actualStart, actualEnd, dayTypeD, dayTypeNext, laborTimeline));
         }
 
-        return OvertimePayCalculator.Accumulate(segments, hourlyRate, _otMultiplier, laborTimeline);
+        // ⭐ Phase 2 — SỐ GIỜ OT tính độc lập với đơn giá: HĐ chưa có mức lương (đơn giá = 0) vẫn
+        // phải cộng đủ giờ vào tổng giờ làm, vì mốc hỗ trợ theo tiến độ của HĐ khoán xếp theo GIỜ.
+        // Nguồn giờ là các segment đã dựng từ chấm công THẬT, nên tự thừa hưởng mọi quy tắc đã có:
+        // đơn duyệt suông không có chấm công ⇒ không có segment ⇒ không có giờ.
+        var otHours = segments.Sum(s => s.DayHours + s.NightHours);
+
+        var (tangCa, chenhLech) = OvertimePayCalculator.Accumulate(
+            segments, hourlyRate, _otMultiplier, laborTimeline);
+
+        return (tangCa, chenhLech, otHours);
     }
 
     /// <summary>

@@ -23,6 +23,12 @@ public sealed class PayrollCollectionResult
     public required string ProductivitySnapshotJson { get; init; }
 
     /// <summary>
+    /// ⭐ Phase 2 — bậc hỗ trợ theo tiến độ của HĐ khoán việc tại thời điểm chốt kỳ. Đóng băng để
+    /// tính lại kỳ CŨ vẫn ra đúng mốc/số tiền lúc đó, kể cả khi admin đã sửa bảng bậc.
+    /// </summary>
+    public string PieceWorkSupportSnapshotJson { get; init; } = string.Empty;
+
+    /// <summary>
     /// ⭐ [Mục 1] Ghi chú do chính bước gom liệu sinh ra — hiện là trường hợp luật đổi NGAY TRONG KỲ,
     /// thứ mà bộ diff "kỳ này so kỳ trước" không nhìn thấy. Rỗng ở đường phổ biến (kỳ chỉ một mức luật).
     /// </summary>

@@ -61,6 +61,15 @@ public static class PayrollFieldKeys
     public const string AbsentDays = "attendance.absentDays";
     public const string LateDays = "attendance.lateDays";
 
+    /// <summary>
+    /// ⭐ Phase 2 — TỔNG giờ làm trong kỳ = giờ ca chính (ngày + đêm) + giờ tăng ca THỰC TẾ đã chấm
+    /// công. Là căn cứ xếp bậc hỗ trợ theo tiến độ của HĐ khoán việc.
+    ///
+    /// <para>Kỳ lương tạo TRƯỚC bản sửa này thiếu khoá ⇒ <c>ToFields</c> điền 0 ⇒ không đạt mốc nào
+    /// ⇒ tiền hỗ trợ = 0, đúng bằng hành vi cũ.</para>
+    /// </summary>
+    public const string TotalWorkHours = "attendance.totalWorkHours";
+
     // ===== Tăng ca =====
     public const string OtTangCa = "ot.tangCa";
     public const string OtChenhLech = "ot.chenhLechLtg";
@@ -82,6 +91,26 @@ public static class PayrollFieldKeys
     // ===== Truy lĩnh / truy thu (BS-5) — gom từ các kỳ Finalized đã sửa nguồn =====
     public const string TruyLinh = "adjustment.truyLinh";   // tổng phần dương (+)
     public const string TruyThu = "adjustment.truyThu";     // tổng phần âm (−, đã clamp để THỰC NHẬN ≥ 0)
+
+    // ===== HĐ khoán việc (Phase 2) =====
+    /// <summary>
+    /// 1 = hợp đồng đang hiệu lực là KHOÁN VIỆC. Công thức dùng cờ này để đổi nhánh cột "Trợ cấp
+    /// lương chính".
+    ///
+    /// <para>⚠️ Ngữ nghĩa cố ý là "CÓ phải khoán không" (1 = khoán): kỳ lương cũ thiếu khoá ⇒
+    /// <c>ToFields</c> điền 0 ⇒ không phải khoán ⇒ công thức chạy đúng nhánh cũ. Ngược lại (0 =
+    /// khoán) sẽ biến mọi dòng lương của kỳ cũ thành HĐ khoán khi tính lại.</para>
+    /// </summary>
+    public const string ContractIsPieceWork = "contract.isPieceWork";
+
+    /// <summary>
+    /// Tiền HỖ TRỢ THEO TIẾN ĐỘ của HĐ khoán, collector tra sẵn từ bảng bậc
+    /// <c>PieceWorkSupportBand</c> theo <see cref="TotalWorkHours"/>. Loại HĐ khác ⇒ 0.
+    ///
+    /// <para>Tên hiển thị trên bảng lương/phiếu lương/Excel là "Hỗ trợ theo tiến độ" — KHÔNG dùng
+    /// chữ "lương"/"thưởng" cho khoản của hợp đồng dân sự.</para>
+    /// </summary>
+    public const string PieceWorkSupport = "support.hoTroTienDo";
 
     // ===== Thưởng / công đoàn / người phụ thuộc =====
     public const string BonusThuongDuAn = "bonus.thuongDuAn";

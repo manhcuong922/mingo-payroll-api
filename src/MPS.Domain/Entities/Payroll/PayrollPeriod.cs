@@ -52,6 +52,13 @@ public class PayrollPeriod
     /// <summary>Biểu thuế TNCN (PitBracketSnapshot) của kỳ — để recompute hàm THUE_LUYTIEN bất biến.</summary>
     public string PitBracketsSnapshotJson { get; set; } = string.Empty;
 
+    /// <summary>
+    /// ⭐ Phase 2 — bậc hỗ trợ theo tiến độ của HĐ khoán việc tại thời điểm chốt kỳ
+    /// (<c>PieceWorkSupportBand</c>). Đóng băng để tính lại kỳ cũ ra đúng mốc/số tiền lúc đó, kể cả
+    /// khi admin đã sửa bảng bậc. Kỳ tạo trước Phase 2 để rỗng.
+    /// </summary>
+    public string PieceWorkSupportSnapshotJson { get; set; } = string.Empty;
+
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public User CreatedByUser { get; set; } = null!;

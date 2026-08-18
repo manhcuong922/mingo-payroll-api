@@ -9,7 +9,7 @@
 > | Phase 4 — đóng `EffectiveTo` khi chấm dứt | ✅ Xong |
 > | Phase 3 — readiness cho HĐ dân sự | ✅ Xong |
 > | Phase 1 — khoán: không BH + thuế 10% | ✅ Xong |
-> | Phase 2 — khoán: hỗ trợ theo tiến độ | ⬜ Chưa |
+> | Phase 2 — khoán: hỗ trợ theo tiến độ | ✅ Xong |
 > | Phase 7 — ngưỡng khấu trừ thuế | ⬜ Chưa |
 > | Phase 5 — lương theo đoạn HĐ | ⬜ Chưa |
 > | Phase 6 — phụ lục | ⬜ Chưa |
@@ -97,7 +97,7 @@
 
 ---
 
-## Phase 2 — HĐ khoán: hỗ trợ theo tiến độ (bậc thang giờ)
+## Phase 2 — HĐ khoán: hỗ trợ theo tiến độ (bậc thang giờ) ✅ ĐÃ XONG
 
 **Mục tiêu:** `PHUCAPLUONG` của HĐ khoán = khoản hỗ trợ theo mốc giờ, trả nguyên (không chia theo ngày công).
 

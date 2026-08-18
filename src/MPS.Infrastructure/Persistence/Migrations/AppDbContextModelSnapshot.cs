@@ -4457,6 +4457,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("PeriodYear")
                         .HasColumnType("int");
 
+                    b.Property<string>("PieceWorkSupportSnapshotJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("");
+
                     b.Property<string>("PitBracketsSnapshotJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -4534,6 +4540,45 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("PayrollPeriodId", "RowType");
 
                     b.ToTable("PayrollRows", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PieceWorkSupportBand", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal?>("MaxHours")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("MinHours")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "MinHours");
+
+                    b.ToTable("PieceWorkSupportBands", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.ProductivityCoefficient", b =>
