@@ -25,7 +25,7 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
             .Where(c => c.Status != ContractStatus.Cancelled
                 && c.EffectiveFrom <= endDt
                 && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
-            .Select(c => new { c.EmployeeInformationId, c.Status })
+            .Select(c => new { c.EmployeeInformationId, c.Status, c.Kind })
             .ToListAsync(ct);
 
         var empIds = contracts.Select(c => c.EmployeeInformationId).Distinct().ToList();
@@ -36,6 +36,23 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
         // những ngày đã làm; chỉ HĐ còn Draft (chưa ai ký) mới tính là thiếu dữ liệu.
         var signedContractEmp = contracts.Where(c => c.Status != ContractStatus.Draft)
             .Select(c => c.EmployeeInformationId).ToHashSet();
+
+        // ⭐ Phase 3 — NV chỉ có hợp đồng DÂN SỰ (khoán việc / dịch vụ / CTV) KHÔNG bị đòi bảng đánh
+        // giá tháng: đánh giá là công cụ quản trị của quan hệ LAO ĐỘNG, người ký HĐ dân sự không nằm
+        // trong quy trình đó nên sẽ không bao giờ có bản được duyệt. Mà `CreatePayrollPeriodCommand`
+        // chặn CẢ KỲ khi bất kỳ NV nào chưa đủ liệu ⇒ chỉ một hợp đồng khoán là không tạo được bảng
+        // lương cho toàn công ty.
+        //
+        // Chấm công thì VẪN đòi (quyết định PO 18/08/2026): mốc giờ của khoản hỗ trợ theo tiến độ
+        // trên HĐ khoán lấy từ chính bảng chấm công / phân ca.
+        //
+        // "Chỉ có HĐ dân sự" chứ không phải "có ít nhất một HĐ dân sự": NV vừa có HĐLĐ vừa có HĐ
+        // dịch vụ trong kỳ vẫn phải có đánh giá cho phần HĐLĐ.
+        var civilOnlyEmp = contracts
+            .GroupBy(c => c.EmployeeInformationId)
+            .Where(g => g.All(c => ContractKindMetadata.Get(c.Kind).LegalFramework == ContractLegalFramework.CivilCode))
+            .Select(g => g.Key)
+            .ToHashSet();
 
         var employees = await _db.EmployeeInformations.AsNoTracking()
             .Where(e => empIds.Contains(e.Id))
@@ -74,7 +91,9 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
             if (!signedContractEmp.Contains(e.Id)) missing.Add("Chưa có hợp đồng đã ký hiệu lực trong kỳ");
             if (!hasAttendance.Contains(e.Id)) missing.Add("Chưa có dữ liệu chấm công trong kỳ");
             if (hasPendingOt.Contains(e.Id)) missing.Add("Còn đơn tăng ca chưa duyệt xong");
-            if (!e.UserId.HasValue || !hasApprovedEval.Contains(e.UserId.Value)) missing.Add("Chưa có bảng đánh giá tháng được duyệt");
+            if (!civilOnlyEmp.Contains(e.Id)
+                && (!e.UserId.HasValue || !hasApprovedEval.Contains(e.UserId.Value)))
+                missing.Add("Chưa có bảng đánh giá tháng được duyệt");
             if (string.IsNullOrWhiteSpace(e.BankNumber) || string.IsNullOrWhiteSpace(e.TaxNo)) missing.Add("Hồ sơ chi lương thiếu (số TK / mã số thuế)");
             result.Add(new PayrollEmployeeReadiness(e.Id, e.Code ?? string.Empty, e.FullName, missing) { Warnings = warnings });
         }
