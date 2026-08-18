@@ -8,7 +8,7 @@
 > |---|---|
 > | Phase 4 — đóng `EffectiveTo` khi chấm dứt | ✅ Xong |
 > | Phase 3 — readiness cho HĐ dân sự | ✅ Xong |
-> | Phase 1 — khoán: không BH + thuế 10% | ⬜ Chưa |
+> | Phase 1 — khoán: không BH + thuế 10% | ✅ Xong |
 > | Phase 2 — khoán: hỗ trợ theo tiến độ | ⬜ Chưa |
 > | Phase 7 — ngưỡng khấu trừ thuế | ⬜ Chưa |
 > | Phase 5 — lương theo đoạn HĐ | ⬜ Chưa |
@@ -63,7 +63,7 @@
 
 ---
 
-## Phase 1 — HĐ khoán: khóa cứng không BH + thuế 10%
+## Phase 1 — HĐ khoán: khóa cứng không BH + thuế 10% ✅ ĐÃ XONG
 
 **Mục tiêu:** `PieceWork` chuyển từ `UserChoice` sang `RuleDriven`, server quyết định 3 cờ BH + `TaxPolicy`.
 
@@ -78,13 +78,22 @@
 
 ### Không cần sửa engine lương
 
-- `PayrollDataCollector.ResolveInsuranceFlag` (dòng ~613) đã trả `InsuranceFlags.NoInsurance` (`x1`) khi cả 3 cờ false ⇒ mọi cột BH + KPCĐ = 0 (công thức đã skip theo `noBh` / `noUnion`).
-- `ResolveTaxFlag` (dòng ~637) đã map `FlatRate10Percent` → `TaxFlags.Khoan10` (`x`) ⇒ thuế = 10% × `TONGTHUNHAP`.
+- `PayrollDataCollector.ResolveInsuranceFlag` đã trả `InsuranceFlags.NoInsurance` (`x1`) khi cả 3 cờ false ⇒ mọi cột BH + KPCĐ = 0 (công thức đã skip theo `noBh` / `noUnion`).
+- `ResolveTaxFlag` đã map `FlatRate10Percent` → `TaxFlags.Khoan10` (`x`) ⇒ thuế = 10% × `TONGTHUNHAP`.
 
-### Test
+### Đã làm
 
-- `ContractKindValidationTests`: HĐ khoán gửi kèm cờ BH/`TaxPolicy` ⇒ 400 (RuleDriven cấm); không gửi ⇒ pass và entity ra đúng 3 cờ false + `FlatRate10Percent`.
-- `PayrollCollectorPieceWorkTests` (mới): cờ BH = `x1`, cờ thuế = `x`, mọi cột BH/KPCĐ = 0.
+- `ContractKindMetadata` — `PieceWork` sang `RuleDriven` + 3 default BH = false + `FlatRate10Percent`, kèm ghi chú căn cứ pháp lý và trỏ về §0.3 cho rủi ro tái định danh.
+- Validator + `ContractBuilder` tự đổi hành vi theo metadata — **không sửa dòng nào**, đúng như dự kiến.
+- Migration `20260818100000_PieceWorkNoInsuranceFlatTax` — backfill HĐ khoán còn hiệu lực (`Draft`/`Active`/`PendingTermination`); HĐ đã kết thúc giữ nguyên để kỳ lương cũ tính lại không đổi số.
+  - ⚠️ `Kind`/`Status`/`TaxPolicy` lưu dạng **chuỗi tên enum** (`HasConversion<string>`), không phải số thứ tự — SQL so chuỗi.
+- UI (`mingo-payroll-ui`): `contractKindMetadata.ts` đổi `insuranceMode`; 4 ô nhập tự ẩn nhờ `showInsurance = insuranceMode === 'UserChoice'` và payload tự gửi `null` nhờ `buildCreateRequest`. `ContractFormFields.tsx` thêm nhánh chú thích riêng cho HĐ khoán ("Không đóng BHXH/BHYT/BHTN · thuế khoán 10%") vì dòng RuleDriven cũ ghi "theo BLLĐ" — sai với hợp đồng dân sự.
+
+### Test (11 test, xanh)
+
+- `PieceWorkContractRulesTests` (8): metadata đúng chế độ; gửi kèm bất kỳ trong 4 trường ⇒ lỗi `RuleDriven`; không gửi ⇒ hợp lệ; entity dựng ra có 3 cờ false + `FlatRate10Percent`; builder **bỏ qua** cờ client gửi kể cả khi lọt validator.
+- `PayrollCollectorPieceWorkTests` (3): cờ BH = `x1` + 3 công tắc miễn = 1; cờ thuế = `x`; HĐLĐ vẫn `x3` + lũy tiến (không nới nhầm).
+- `ContractKindValidationTests`: chuyển `PieceWork` từ nhóm UserChoice sang nhóm RuleDriven.
 
 ---
 
