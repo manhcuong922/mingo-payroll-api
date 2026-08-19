@@ -16,6 +16,26 @@ public static class PayrollFieldKeys
 
     // ===== Mặc định cho cột Input =====
     public const string ContractMucLuong = "contract.mucLuong";
+    /// <summary>
+    /// ⭐ Phase 5 — TRỢ CẤP THỬ VIỆC: phần cộng thêm để những ngày còn THỬ VIỆC trong kỳ được trả
+    /// theo mức thử việc THẬT trên hợp đồng, trong khi <see cref="ContractMucLuong"/> mang mức
+    /// CHÍNH THỨC.
+    ///
+    /// <para>Suy ra từ chính nhánh thử việc của <c>THU_NHAP_PHANBO</c>:
+    /// <c>(MUCLUONG + TROCAPTHUVIEC + phụ_cấp)/J × công_thử_việc</c>, nên
+    /// <c>troCapThuViec = MAX(0, mứcThửViệc × (1 + hệ_số_năng_suất) − mứcChínhThức)</c> cho ra đúng
+    /// "trả theo mức thử việc ghi trên HĐ".</para>
+    ///
+    /// <para>⚠️ KHÔNG dùng hằng số <c>PHUCAPLUONG × 0.85</c>: với HĐ thử việc riêng thì
+    /// <c>MUCLUONG</c> đã là <c>ProbationSalary</c> (85%) nên nhân tiếp 0.85 ra 72,25% — THẤP HƠN
+    /// sàn Điều 26 BLLĐ 2019, tức tự tạo ra vi phạm. Ngoài ra 85% là mức SÀN, hợp đồng có thể ghi
+    /// 90%/95%.</para>
+    ///
+    /// <para>Kỳ không có ngày thử việc ⇒ collector điền 0; kỳ lương cũ dùng công thức đã đóng băng
+    /// (<c>TROCAPTHUVIEC = PHUCAPLUONG</c>) nên không đọc khoá này ⇒ số không đổi.</para>
+    /// </summary>
+    public const string ContractTroCapThuViec = "contract.troCapThuViec";
+
     public const string ContractInsuranceFlag = "contract.insuranceFlag"; // text
     public const string ContractTaxFlag = "contract.taxFlag";             // text
 
@@ -56,6 +76,18 @@ public static class PayrollFieldKeys
     public const string CongThuViec = "attendance.congThuViec";
     public const string CongChinhThuc = "attendance.congChinhThuc";
     public const string CongHocViec = "attendance.congHocViec";
+
+    /// <summary>
+    /// ⭐ Phase 5 — số công của những ngày mà hợp đồng phủ ngày đó KHÔNG đóng bảo hiểm nào (cả 3 cờ
+    /// BHXH/BHYT/BHTN đều tắt, điển hình là HĐ thử việc riêng). Nền đóng BH của kỳ =
+    /// <c>CONGTINHCOM − khoá này</c>, để nửa tháng thử việc không bị tính BH.
+    ///
+    /// <para>⚠️ Cố ý mang ngữ nghĩa NGƯỢC ("công KHÔNG có BH") thay vì "công có BH": kỳ lương cũ
+    /// thiếu khoá ⇒ <c>ToFields</c> điền 0 ⇒ trừ 0 ⇒ nền đóng vẫn là toàn bộ công, đúng hành vi cũ.
+    /// Nếu để chiều thuận thì 0 vừa là "kỳ cũ" vừa là "không ngày nào có BH", không phân biệt được
+    /// ⇒ phải fallback và sẽ thu BH nhầm cho người có 0 ngày được đóng.</para>
+    /// </summary>
+    public const string CongKhongBaoHiem = "attendance.congKhongBaoHiem";
     public const string DayHours = "attendance.dayHours";
     public const string NightHours = "attendance.nightHours";
     public const string AbsentDays = "attendance.absentDays";

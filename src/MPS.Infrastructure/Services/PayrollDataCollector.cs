@@ -112,10 +112,13 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             .Include(e => e.Position).Include(e => e.User)
             .Where(e => empIds.Contains(e.Id)).ToListAsync(ct);
 
+        // ⭐ Phase 5 — loại luôn HĐ còn DRAFT: hợp đồng chưa kích hoạt là hợp đồng chưa ký xong, không
+        // được làm căn cứ trả lương (cổng readiness đã yêu cầu HĐ đã ký mới cho tạo kỳ).
         var contracts = await _db.Contracts.AsNoTracking()
             .Include(c => c.ContractAllowances).ThenInclude(a => a.AllowanceType)
             .Where(c => empIds.Contains(c.EmployeeInformationId)
-                && c.Status != ContractEnums.ContractStatus.Cancelled)
+                && c.Status != ContractEnums.ContractStatus.Cancelled
+                && c.Status != ContractEnums.ContractStatus.Draft)
             .ToListAsync(ct);
         var contractsByEmp = contracts.GroupBy(c => c.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -179,6 +182,19 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var monthLabel = $"{req.Month:D2}/{req.Year}";
         var result = new List<PayrollEmployeeInputs>();
 
+        // [D12] — mức lương của một HĐ: phụ lục đổi lương (hiệu lực từ trước đầu kỳ) thắng mức đóng
+        // băng lúc ký. Nhờ vậy tính lại kỳ CŨ vẫn ra đúng mức lương của thời điểm đó.
+        decimal SalaryOfContract(Contract c) =>
+            salaryChangesByContract.TryGetValue(c.Id, out var changed) ? changed : ResolveContractSalary(c);
+
+        // ⭐ Phase 5 — mức lương áp cho MỘT NGÀY công. Ngày rơi vào giai đoạn thử việc thoả thuận
+        // ngay trong HĐLĐ thì hưởng `ProbationSalary` của chính HĐ đó (Điều 26 BLLĐ 2019); HĐ thử
+        // việc RIÊNG đã được `ResolveContractSalary` xử lý sẵn.
+        decimal SalaryForDay(Contract? c, DateOnly day) =>
+            c is null ? 0m
+            : IsProbationDayInLaborContract(c, day) ? c.ProbationSalary ?? SalaryOfContract(c)
+            : SalaryOfContract(c);
+
         foreach (var e in employees)
         {
             var empContracts = contractsByEmp.GetValueOrDefault(e.Id) ?? new List<Contract>();
@@ -195,6 +211,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
             decimal congCom = 0, congThuViec = 0, congChinhThuc = 0, congHocViec = 0, dayHours = 0, nightHours = 0;
             decimal weeklyRestHours = 0, holidayHours = 0;
+            // ⭐ Phase 5 — tiền lương cộng dồn theo TRỌNG SỐ NGÀY của từng đoạn HĐ, để chia ra mức
+            // bình quân của riêng đoạn chính thức và riêng đoạn thử việc.
+            decimal luongChinhThucTheoCong = 0, luongThuViecTheoCong = 0, congKhongBaoHiem = 0;
             var workSegments = new List<RegularHoursPremiumCalculator.WorkDaySegment>(records.Count);
 
             foreach (var r in records)
@@ -212,12 +231,29 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 if (weight > 0)
                 {
                     congCom += weight;
-                    switch (ResolveCategory(empContracts, r.WorkDate, activeContract))
+
+                    // ⭐ Phase 5 — mọi thứ của một ngày công đều quy về HỢP ĐỒNG PHỦ ĐÚNG NGÀY ĐÓ,
+                    // không còn dùng chung một HĐ đại diện cho cả kỳ: tháng chuyển thử việc → chính
+                    // thức trước đây được trả 100% mức chính thức cho cả những ngày còn thử việc.
+                    var dayContract = ContractForDay(empContracts, r.WorkDate) ?? activeContract;
+                    switch (ResolveCategory(dayContract, r.WorkDate))
                     {
-                        case CongCategory.Probation: congThuViec += weight; break;
-                        case CongCategory.Apprentice: congHocViec += weight; break;
-                        default: congChinhThuc += weight; break;
+                        case CongCategory.Probation:
+                            congThuViec += weight;
+                            luongThuViecTheoCong += weight * SalaryForDay(dayContract, r.WorkDate);
+                            break;
+                        case CongCategory.Apprentice:
+                            congHocViec += weight;
+                            break;
+                        default:
+                            congChinhThuc += weight;
+                            luongChinhThucTheoCong += weight * SalaryForDay(dayContract, r.WorkDate);
+                            break;
                     }
+
+                    // Ngày thuộc HĐ không đóng bảo hiểm nào (điển hình: HĐ thử việc riêng) không
+                    // được vào nền đóng BH của kỳ.
+                    if (dayContract is not null && !HasAnyInsurance(dayContract)) congKhongBaoHiem += weight;
                 }
                 dayHours += r.DayHours;
                 nightHours += r.NightHours;
@@ -235,14 +271,17 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 }
             }
 
-            // [D12] — mức lương áp cho kỳ: nếu HĐ đã có phụ lục đổi lương hiệu lực từ trước đầu kỳ
-            // thì dùng mức của phụ lục gần nhất, không thì dùng mức đóng băng lúc ký HĐ. Nhờ vậy
-            // tính lại một kỳ CŨ vẫn ra đúng mức lương của thời điểm đó.
-            var mucLuong = activeContract is null
-                ? 0m
-                : salaryChangesByContract.TryGetValue(activeContract.Id, out var changed)
-                    ? changed
-                    : ResolveContractSalary(activeContract);
+            // ⭐ Phase 5 — cột "Mức lương" mang mức của ĐOẠN CHÍNH THỨC, không phải bình quân cả kỳ:
+            // nhánh chính thức của THU_NHAP_PHANBO lấy thẳng cột này, còn phần chênh của những ngày
+            // thử việc được bù riêng qua `contract.troCapThuViec` bên dưới. Nhiều HĐ chính thức
+            // trong kỳ (ký lại giữa tháng, đổi bậc) ⇒ bình quân theo trọng số ngày công.
+            //
+            // Không có ngày công chính thức nào (kỳ toàn thử việc / không chấm công) ⇒ lùi về mức
+            // của HĐ đại diện, giữ nguyên hành vi trước Phase 5.
+            var mucLuongHopDong = activeContract is null ? 0m : SalaryOfContract(activeContract);
+            var mucChinhThuc = congChinhThuc > 0 ? luongChinhThucTheoCong / congChinhThuc : mucLuongHopDong;
+            var mucThuViec = congThuViec > 0 ? luongThuViecTheoCong / congThuViec : mucChinhThuc;
+            var mucLuong = mucChinhThuc;
             var hourlyRate = req.StandardWorkingDays > 0 && labor.StandardWorkingHoursPerDay > 0
                 ? mucLuong / (req.StandardWorkingDays * labor.StandardWorkingHoursPerDay) : 0m;
 
@@ -272,6 +311,17 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 var mapped = prodMap.FirstOrDefault(p => finalScore >= p.MinScore && finalScore <= p.MaxScore);
                 if (mapped is not null) coefficient = mapped.Coefficient;
             }
+
+            // ⭐ Phase 5 — phần BÙ để nhánh thử việc của THU_NHAP_PHANBO trả đúng mức thử việc:
+            //   nhánh đó = (MUCLUONG + TROCAPTHUVIEC + phụ_cấp)/J × công_thử_việc
+            // nên đặt TROCAPTHUVIEC = mứcThửViệc × (1 + hệ_số) − mứcChínhThức sẽ ra đúng
+            // (mứcThửViệc × (1 + hệ_số) + phụ_cấp)/J × công_thử_việc.
+            //
+            // Sàn 0 để mức thử việc cao hơn mức chính thức (dữ liệu khai sai) không thành số âm ăn
+            // ngược vào lương. Kỳ không có ngày thử việc ⇒ 0, cột không hiện số lạ.
+            var troCapThuViec = congThuViec > 0
+                ? Math.Max(0m, mucThuViec * (1m + coefficient) - mucChinhThuc)
+                : 0m;
 
             decimal AllowanceByCode(string code) =>
                 activeContract?.ContractAllowances.Where(a => a.AllowanceType.Code == code).Sum(a => a.Amount) ?? 0m;
@@ -323,6 +373,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractNoUnemploymentInsurance] = activeContract is not null && !activeContract.UnemploymentInsuranceFlag ? 1m : 0m;
 
             n[ContractMucLuong] = mucLuong;
+            n[ContractTroCapThuViec] = troCapThuViec;
             n[ContractAllowanceThueNha] = AllowanceByCode("HOUSING");
             n[ContractAllowanceDienThoai] = AllowanceByCode("PHONE");
             n[ContractAllowanceXangXe] = AllowanceByCode("FUEL");
@@ -335,6 +386,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[CongThuViec] = congThuViec;
             n[CongChinhThuc] = congChinhThuc;
             n[CongHocViec] = congHocViec;
+            n[CongKhongBaoHiem] = congKhongBaoHiem;
             n[DayHours] = dayHours;
             n[NightHours] = nightHours;
             n[TotalWorkHours] = totalWorkHours;
@@ -650,13 +702,41 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         contract.Kind == ContractEnums.ContractKind.Probation
         || contract.ContractSubtype == ContractEnums.ContractSubtype.Probation;
 
-    private static CongCategory ResolveCategory(List<Contract> contracts, DateOnly day, Contract? fallback)
+    /// <summary>
+    /// ⭐ Phase 5 — hợp đồng phủ ĐÚNG ngày <paramref name="day"/>. Cùng thứ tự ưu tiên với
+    /// <see cref="PickContract"/> (HĐ đang vận hành trước, rồi bản ký sau) để hai đường không cho ra
+    /// hai hợp đồng khác nhau khi các khoảng hiệu lực chồng nhau.
+    /// </summary>
+    private static Contract? ContractForDay(List<Contract> contracts, DateOnly day) =>
+        contracts
+            .Where(c => CoversDay(c, day))
+            .OrderByDescending(c => c.Status == ContractEnums.ContractStatus.Active
+                || c.Status == ContractEnums.ContractStatus.PendingTermination)
+            .ThenByDescending(c => c.EffectiveFrom)
+            .FirstOrDefault();
+
+    /// <summary>
+    /// ⭐ Phase 5 — ngày nằm trong giai đoạn thử việc thoả thuận NGAY TRONG HĐLĐ
+    /// (<c>HasProbation</c> + <c>ProbationStartDate/EndDate</c>), tức nhánh thử việc không ký hợp
+    /// đồng riêng. Trước đây chỉ <c>Kind</c>/<c>ContractSubtype</c> được xét nên cả tháng bị tính là
+    /// chính thức và NLĐ được trả 100% ngay từ ngày đầu thử việc.
+    ///
+    /// <para><c>ProbationEndDate</c> null ⇒ chưa chốt ngày kết thúc ⇒ coi như còn thử việc.</para>
+    /// </summary>
+    private static bool IsProbationDayInLaborContract(Contract c, DateOnly day) =>
+        c.HasProbation
+        && c.ProbationStartDate is { } from && DateOnly.FromDateTime(from) <= day
+        && (c.ProbationEndDate is not { } to || day <= DateOnly.FromDateTime(to));
+
+    /// <summary>HĐ có đóng ít nhất một loại bảo hiểm không (cả 3 cờ tắt = HĐ thử việc/dân sự).</summary>
+    private static bool HasAnyInsurance(Contract c) =>
+        c.SocialInsuranceFlag || c.HealthInsuranceFlag || c.UnemploymentInsuranceFlag;
+
+    private static CongCategory ResolveCategory(Contract? c, DateOnly day)
     {
-        var c = contracts.FirstOrDefault(x => CoversDay(x, day)) ?? fallback;
         if (c is null) return CongCategory.Official;
         if (c.Kind == ContractEnums.ContractKind.VocationalTraining) return CongCategory.Apprentice;
-        if (c.Kind == ContractEnums.ContractKind.Probation || c.ContractSubtype == ContractEnums.ContractSubtype.Probation)
-            return CongCategory.Probation;
+        if (IsProbationContract(c) || IsProbationDayInLaborContract(c, day)) return CongCategory.Probation;
         return CongCategory.Official;
     }
 
@@ -678,6 +758,15 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         return InsuranceFlags.Full;
     }
 
+    /// <summary>
+    /// Cờ thuế của kỳ, suy từ hợp đồng ĐẠI DIỆN (<see cref="PickContract"/>) chứ không tách theo
+    /// từng đoạn như mức lương và nền đóng BH (Phase 5).
+    ///
+    /// <para>⚠️ Giới hạn CÓ CHỦ ĐÍCH: một dòng lương chỉ chi trả một lần nên chỉ có một cách tính
+    /// thuế. Tháng chuyển từ HĐ khoán (khấu trừ 10%) sang HĐLĐ (luỹ tiến) sẽ áp cách tính của HĐ
+    /// cuối kỳ cho toàn bộ thu nhập tháng đó. Muốn tách đúng thì phải chia thành hai lần chi trả —
+    /// tức hai dòng lương — là thay đổi ở tầng kỳ lương, không phải ở collector.</para>
+    /// </summary>
     private static string ResolveTaxFlag(Contract? c) => c?.TaxPolicy switch
     {
         ContractEnums.TaxPolicy.FlatRate10Percent => TaxFlags.Khoan10,

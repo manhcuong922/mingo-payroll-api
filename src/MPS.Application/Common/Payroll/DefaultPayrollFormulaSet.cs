@@ -58,11 +58,23 @@ public static class DefaultPayrollFormulaSet
         FormulaNode ProrateByCong(FormulaNode value) =>
             N.Mul(N.Div(value, N.Col(Cc.CongChuan)), N.Col(Cc.CongTinhCom));
 
+        // ⭐ Phase 5 — nền đóng BH chỉ tính trên phần công THUỘC DIỆN ĐÓNG. Tháng chuyển thử việc →
+        // chính thức trước đây bị thu BH trên cả những ngày còn thử việc (HĐ thử việc riêng không
+        // đóng BH nào), vì cả kỳ dùng chung một cờ BH của hợp đồng đại diện.
+        //
+        // Trừ đi thay vì nhân trực tiếp "công CÓ bảo hiểm" là có chủ đích: kỳ lương cũ thiếu khoá ⇒
+        // `ToFields` điền 0 ⇒ trừ 0 ⇒ nền đóng vẫn nguyên như trước. Xem `PayrollFieldKeys.CongKhongBaoHiem`.
+        FormulaNode ProrateByCongCoBaoHiem(FormulaNode value) =>
+            N.Mul(N.Div(value, N.Col(Cc.CongChuan)),
+                N.Func(Fn.Max,
+                    N.Sub(N.Col(Cc.CongTinhCom), N.Field(Fk.CongKhongBaoHiem)),
+                    N.Const(0m)));
+
         FormulaNode Bh(string rateField, string capField) =>
             BhWithCap(rateField, N.Field(capField));
 
         FormulaNode BhWithCap(string rateField, FormulaNode capNode) =>
-            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), capNode);
+            N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(N.Col(Cc.MucLuong)), N.Field(rateField), capNode);
 
         // ⭐ D3 — BHYT có trần RIÊNG (hệ số trần BHYT trên màn hình cấu hình BHXH), trước đây bị bỏ
         // qua và dùng chung trần BHXH nên admin sửa ô đó không có tác dụng gì.
@@ -115,8 +127,16 @@ public static class DefaultPayrollFormulaSet
                 N.Cmp("=", N.Field(Fk.ContractIsPieceWork), N.Const(1m)),
                 N.Const(0m),
                 N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.ProductivityCoefficient))), money: true);
-        Add(Cc.TroCapThuViec, "Trợ cấp thử việc", GC, ColumnDataType.Money, ColumnValueSource.Formula,
-            formula: N.Col(Cc.PhuCapLuong), money: true);
+        // ⭐ Phase 5 — collector tính sẵn phần BÙ để những ngày còn thử việc trong kỳ rơi về mức thử
+        // việc THẬT ghi trên hợp đồng; cột chỉ tra khoá. Trước đây cột này = PHUCAPLUONG nên hai
+        // nhánh thử việc / chính thức của THU_NHAP_PHANBO bằng nhau ⇒ tách công ra không tạo chênh
+        // lệch tiền nào, nửa tháng còn thử việc vẫn được trả theo mức chính thức.
+        //
+        // KHÔNG đặt hằng số 0.85 vào công thức: HĐ thử việc riêng vốn đã lấy `ProbationSalary` (85%)
+        // làm MUCLUONG nên nhân tiếp 0.85 ra 72,25% — thấp hơn sàn Điều 26 BLLĐ 2019; và 85% là mức
+        // SÀN, hợp đồng có thể thoả thuận 90%/95%.
+        Add(Cc.TroCapThuViec, "Trợ cấp thử việc", GC, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.ContractTroCapThuViec, money: true);
         Add(Cc.HocViec, "Học việc", GC, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThueNha, "Thuê nhà", GC, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceThueNha, money: true);
         Add(Cc.DienThoai, "Điện thoại", GC, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceDienThoai, money: true);
@@ -223,7 +243,7 @@ public static class DefaultPayrollFormulaSet
                 UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnNldRate, Fk.BhtnCap))));
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
-                N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m))));
+                N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,

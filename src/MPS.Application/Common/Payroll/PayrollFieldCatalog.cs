@@ -19,6 +19,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
 
         // Hợp đồng
         new(ContractMucLuong, "Mức lương hợp đồng", "Hợp đồng", ColumnDataType.Money),
+        new(ContractTroCapThuViec, "Trợ cấp thử việc (bù về mức thử việc)", "Hợp đồng", ColumnDataType.Money),
         new(ContractInsuranceFlag, "Cờ bảo hiểm (mặc định HĐ)", "Hợp đồng", ColumnDataType.Text),
         new(ContractTaxFlag, "Cờ thuế (mặc định HĐ)", "Hợp đồng", ColumnDataType.Text),
         new(ContractNoSocialInsurance, "HĐ miễn BHXH (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
@@ -40,6 +41,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(CongThuViec, "Công thử việc", "Chấm công", ColumnDataType.Number),
         new(CongChinhThuc, "Công chính thức", "Chấm công", ColumnDataType.Number),
         new(CongHocViec, "Công học việc", "Chấm công", ColumnDataType.Number),
+        new(CongKhongBaoHiem, "Công của ngày KHÔNG đóng BH", "Chấm công", ColumnDataType.Number),
         new(DayHours, "Giờ ban ngày", "Chấm công", ColumnDataType.Number),
         new(NightHours, "Giờ ban đêm", "Chấm công", ColumnDataType.Number),
         new(TotalWorkHours, "Tổng giờ làm (ca chính + tăng ca)", "Chấm công", ColumnDataType.Number),

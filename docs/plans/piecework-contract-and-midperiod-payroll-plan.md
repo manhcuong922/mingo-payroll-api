@@ -11,7 +11,7 @@
 > | Phase 1 — khoán: không BH + thuế 10% | ✅ Xong |
 > | Phase 2 — khoán: hỗ trợ theo tiến độ | ✅ Xong |
 > | Phase 7 — ngưỡng khấu trừ thuế | ✅ Xong |
-> | Phase 5 — lương theo đoạn HĐ | ⬜ Chưa |
+> | Phase 5 — lương theo đoạn HĐ | ✅ Xong |
 > | Phase 6 — phụ lục | ⬜ Chưa |
 
 ## 0. Bối cảnh & quyết định nghiệp vụ
@@ -200,7 +200,7 @@ Chọn **"chỉ có HĐ dân sự"** chứ không phải "có ít nhất một H
 
 ---
 
-## Phase 5 — Tính lương theo từng đoạn hợp đồng trong kỳ
+## Phase 5 — Tính lương theo từng đoạn hợp đồng trong kỳ ✅ ĐÃ XONG
 
 **Vấn đề:** `PickContract` chọn một HĐ đại diện cho cả kỳ ⇒ tháng chuyển thử việc → chính thức bị trả 100% lương cho cả những ngày còn thử việc, và nền đóng BH gồm cả giai đoạn thử việc (HĐ thử việc vốn không đóng BH).
 
@@ -233,6 +233,21 @@ Chọn **"chỉ có HĐ dân sự"** chứ không phải "có ít nhất một H
 
    Nguồn ngày thử việc: HĐ thử việc riêng (`Kind`/`ContractSubtype = Probation`), **hoặc** thoả thuận thử việc ghi trong HĐLĐ qua `Contract.ProbationStartDate` / `ProbationEndDate` — nhánh thứ hai hiện `ResolveCategory` chưa xét, phải bổ sung.
 5. Loại HĐ `Draft` khỏi tập contracts dùng để tính tiền (`PayrollDataCollector.cs:106`): HĐ chưa kích hoạt không được làm căn cứ trả lương (readiness đã yêu cầu HĐ đã ký).
+
+### Đã làm
+
+> ⚠️ **Sửa một điểm sai của kế hoạch (5.1).** Kế hoạch ghi `MUCLUONG` = bình quân theo ngày công của **cả kỳ**, nhưng như vậy sẽ mâu thuẫn với 5.4: nhánh CHÍNH THỨC của `THUNHAP_PHANBO` lấy thẳng `MUCLUONG`, nên nhét bình quân cả kỳ vào đó thì những ngày đã chính thức bị trả THIẾU, rồi `TROCAPTHUVIEC` lại kéo nhánh thử việc xuống lần nữa ⇒ giảm hai lần. Đại số của 5.4 chỉ đúng khi `MUCLUONG` = mức của **đoạn chính thức**. Đã cài theo cách đó; phần "bình quân theo ngày công" vẫn giữ nhưng chỉ **trong cùng một loại đoạn** (nhiều HĐ chính thức khác mức trong kỳ ⇒ bình quân theo trọng số ngày).
+
+- `ContractForDay` — mỗi ngày công quy về HĐ phủ đúng ngày đó, cùng thứ tự ưu tiên với `PickContract` (HĐ đang vận hành trước, rồi bản ký sau) để hai đường không chọn ra hai hợp đồng khác nhau khi khoảng hiệu lực chồng nhau. `ResolveCategory` trước đây dùng `FirstOrDefault` không thứ tự — nay dùng chung một đường.
+- `mucChinhThuc` / `mucThuViec` = bình quân theo trọng số ngày công **trong từng loại đoạn**; `MUCLUONG = mucChinhThuc`, không có ngày chính thức nào ⇒ lùi về mức HĐ đại diện (giữ nguyên hành vi cũ, và giữ `PayrollCollectorProbationSalaryTests` xanh).
+- `contract.troCapThuViec` = `MAX(0, mucThuViec × (1 + hệ_số) − mucChinhThuc)`, cột `TROCAPTHUVIEC` đổi từ Formula (`= PHUCAPLUONG`) sang **Lookup**. Sàn 0 để dữ liệu khai sai (mức thử việc > mức chính thức) không thành số âm ăn ngược vào lương.
+- `attendance.congKhongBaoHiem` + `ProrateByCongCoBaoHiem` cho khối BH và KPCĐ. Chọn chiều **NGƯỢC** ("công KHÔNG có BH", nền = `MAX(0, CONGTINHCOM − khoá)`) thay vì "công CÓ BH" như kế hoạch: chiều thuận thì 0 vừa nghĩa là "kỳ cũ thiếu khoá" vừa nghĩa là "không ngày nào được đóng", phải fallback về `CONGTINHCOM` và sẽ thu BH nhầm cho người có 0 ngày thuộc diện đóng. Chiều ngược thì "thiếu khoá ⇒ 0 ⇒ trừ 0 ⇒ hành vi cũ" đúng tự nhiên.
+- Giai đoạn thử việc ghi TRONG HĐLĐ (`HasProbation` + `ProbationStartDate/EndDate`) nay được `ResolveCategory` nhận, và ngày đó hưởng `ProbationSalary` của chính HĐ đó. Cờ BH vẫn theo hợp đồng ⇒ thử việc trong HĐLĐ vẫn đóng BHXH bắt buộc, đúng luật.
+- Cờ thuế giữ theo HĐ đại diện — ghi chú giới hạn có chủ đích ngay trên `ResolveTaxFlag`.
+- HĐ `Draft` bị loại khỏi truy vấn contracts.
+- **Không cần migration**: cột hệ thống đổi định nghĩa đi qua `UpgradeDefaultFormulaSetAsync`; kỳ cũ dùng `FormulaSnapshotJson` đã đóng băng nên tính lại vẫn ra công thức cũ.
+
+**Test (11 test, xanh):** `PayrollCollectorContractSegmentTests` (7) + `ProbationSegmentPayrollColumnsTests` (4) — trong đó chốt luôn con số CŨ (20tr) bên cạnh số mới (18,5tr) cho kỳ nửa thử việc nửa chính thức, để lần sau ai sửa lại là test đỏ.
 
 **Test:**
 - Thử việc 01–15/07 (`ProbationSalary` 8,5tr) + chính thức 16–31/07 (10tr) ⇒ mức lương bình quân theo công, BH chỉ tính trên công từ 16/07, `CONGTHUVIEC`/`CONGTINHLUONG` tách đúng.
