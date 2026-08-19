@@ -17,4 +17,7 @@ public interface ICompanyPaymentSettingRepository
 
     /// <summary>Tra tên hiển thị của ngân hàng theo mã; null khi mã không có trong danh mục.</summary>
     Task<BankCatalog?> FindBankAsync(string? code, CancellationToken cancellationToken = default);
+
+    /// <summary>Tra tỉnh/TP theo mã; null khi mã không có trong danh mục.</summary>
+    Task<ProvinceCatalog?> FindProvinceAsync(string? code, CancellationToken cancellationToken = default);
 }

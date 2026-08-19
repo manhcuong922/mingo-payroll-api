@@ -77,4 +77,13 @@ public sealed class CompanyPaymentSettingRepository : ICompanyPaymentSettingRepo
             .AsNoTracking()
             .FirstOrDefaultAsync(b => b.Code == code, cancellationToken);
     }
+
+    public async Task<ProvinceCatalog?> FindProvinceAsync(string? code, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+
+        return await _context.ProvinceCatalogs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Code == code, cancellationToken);
+    }
 }

@@ -2,6 +2,7 @@ using FluentValidation;
 using MPS.Application.Features.EmployeeInformation.Commands;
 using MPS.Domain.Constants;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.EmployeeInformation.Validators;
 
@@ -9,8 +10,12 @@ public class EmployeeInformationUpdateCommandValidator : AbstractValidator<Emplo
 {
     public EmployeeInformationUpdateCommandValidator(
         IEmployeeInformationRepository repository,
-        IDepartmentRepository departmentRepository)
+        IDepartmentRepository departmentRepository,
+        ICompanyPaymentSettingRepository bankingRepository)
     {
+        EmployeeBankAccountRules.Apply(
+            this, bankingRepository, x => x.BankCode, x => x.BankBranch, x => x.BankProvinceCode);
+
         RuleFor(x => x.Id)
             .GreaterThan(0).WithMessage("Id must be greater than 0.");
 

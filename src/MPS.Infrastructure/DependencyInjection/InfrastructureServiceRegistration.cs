@@ -124,6 +124,7 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<ICompanyPaymentSettingRepository,
             MPS.Infrastructure.Repositories.Payroll.CompanyPaymentSettingRepository>();
         services.AddScoped<MPS.Application.Features.Payroll.BhxhTaxPayment.Common.BhxhTaxEvidenceUploader>();
+        services.AddScoped<MPS.Application.Features.Payroll.PaymentDocuments.Common.PaymentDocumentContextLoader>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
         services.AddScoped<IPieceWorkSupportBandRepository, PieceWorkSupportBandRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
