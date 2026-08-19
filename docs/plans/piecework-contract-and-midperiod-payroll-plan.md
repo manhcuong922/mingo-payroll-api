@@ -1,6 +1,6 @@
 # Kế hoạch: Hợp đồng khoán việc + xử lý thay đổi hợp đồng giữa tháng
 
-> Trạng thái: **Đang triển khai** · Lập ngày 18/08/2026 · Nguồn: rà soát nghiệp vụ payroll 18/08/2026
+> Trạng thái: **Đã xong toàn bộ 7 phase** (19/08/2026) · Lập ngày 18/08/2026 · Nguồn: rà soát nghiệp vụ payroll 18/08/2026
 > Phạm vi: `mingo-payroll-api` (chính) + `mingo-payroll-ui` (form hợp đồng)
 > Branch: `feat/piecework-contract-and-midperiod-payroll`
 >
@@ -12,7 +12,7 @@
 > | Phase 2 — khoán: hỗ trợ theo tiến độ | ✅ Xong |
 > | Phase 7 — ngưỡng khấu trừ thuế | ✅ Xong |
 > | Phase 5 — lương theo đoạn HĐ | ✅ Xong |
-> | Phase 6 — phụ lục | ⬜ Chưa |
+> | Phase 6 — phụ lục | ✅ Xong |
 
 ## 0. Bối cảnh & quyết định nghiệp vụ
 
@@ -258,11 +258,26 @@ Chọn **"chỉ có HĐ dân sự"** chứ không phải "có ít nhất một H
 
 ---
 
-## Phase 6 — Phụ lục hợp đồng
+## Phase 6 — Phụ lục hợp đồng ✅ ĐÃ XONG
 
 1. **Snapshot phụ cấp theo mốc hiệu lực.** `AppendixApplier.ApplyAllowanceChangesAsync` ghi đè thẳng `ContractAllowances` ⇒ tính lại kỳ **cũ** sẽ ăn phụ cấp **mới** (sai lịch sử, ngược với lý do `[D12]` đã làm cho lương). Thêm `ContractAppendix.AllowanceSnapshotJson` (danh sách `{AllowanceTypeId, Amount, Currency}` sau khi áp) và cho collector đọc snapshot của phụ lục gần nhất có `EffectiveFrom <= đầu kỳ`, giống đường lương.
-2. **Ép `EffectiveFrom` về đầu tháng** cho phụ lục có đổi lương/phụ cấp (`CreateContractAppendixCommandValidator`), kèm thông báo rõ: *"Phụ lục đổi lương áp dụng từ đầu kỳ lương kế tiếp"*. Lý do: quyết định "chỉ áp từ kỳ sau" đã chốt, nhưng hiện HR vẫn ghi được ngày 15 ⇒ NLĐ đọc phụ lục tưởng được trả từ 15 ⇒ tranh chấp.
+2. ~~**Ép `EffectiveFrom` về đầu tháng**~~ — **PO chọn hướng ngược lại (19/08/2026)**: cho ghi ngày giữa tháng và **trả theo đoạn**. Ràng buộc "chỉ áp từ kỳ sau" (01/08/2026) sinh ra vì engine chưa tách được ngày công; Phase 5 đã dựng xong máy móc đó nên nó chỉ còn tạo lệch giữa văn bản đã ký và tiền thực trả.
 3. Cập nhật quy chế lương (ngoài code) — ràng buộc đã ghi trong `PayrollCollectorSalaryAppendixTests`.
+
+### Đã làm
+
+- **Phụ lục đổi lương áp đúng từ ngày hiệu lực.** Phụ lục nạp tới hết kỳ, tra theo NGÀY; kết hợp bình quân theo trọng số ngày công của Phase 5 ⇒ mỗi ngày ăn mức của ngày đó. `[D12]` KHÔNG bị nới lỏng: phụ lục ký sau kỳ cũ có mốc lớn hơn mọi ngày trong kỳ ⇒ không khớp ⇒ rơi về mức đóng băng lúc ký (có test canh).
+- **`ContractAppendix.AllowanceSnapshotBeforeJson`** — ảnh phụ cấp **NGAY TRƯỚC** phụ lục, không phải "sau khi áp" như kế hoạch ghi. Lý do: trạng thái gốc lúc ký hợp đồng mất ngay từ phụ lục đầu tiên (applier ghi đè thẳng), nên lưu "sau" vẫn không tái lập được các kỳ trước phụ lục đầu tiên — phải thêm một ô baseline nữa trên hợp đồng. Lưu "trước" thì một cột tra ngược được toàn bộ lịch sử: phụ cấp tại ngày D = ảnh của phụ lục **cũ nhất** có hiệu lực **sau** ngày D; không có ⇒ trạng thái hiện tại.
+- Ảnh chỉ ghim `{allowanceTypeId, amount, currency}`; `Code` + `ExcludeFromProration` tra **sống** theo Id vì đó là cấu hình danh mục.
+- Phụ cấp tính theo ngày rồi bình quân theo trọng số công (`AllowanceBuckets` — hàm thuần, thay 5 local function đọc thẳng `activeContract`).
+- Migration `20260819110000_AppendixAllowanceSnapshot` chỉ thêm cột, **không backfill**: phụ lục kích hoạt trước bản này không còn nguồn nào dựng lại trạng thái cũ. Ô null ⇒ rơi về trạng thái hiện tại = đúng hành vi cũ.
+- Migration `20260819120000_MarkDraftPeriodsStaleAfterEngineChange` — đánh cờ stale mọi kỳ `Draft` để kế toán tính lại (quyết định PO 19/08/2026). ⚠️ `PayrollPeriod.Status` lưu dạng **số** (`HasConversion<int>`, Draft = 1), khác `Contract.Status` lưu chuỗi tên enum.
+
+**Test (10 test, xanh):** `PayrollCollectorAllowanceHistoryTests` (4) — bình quân theo ngày khi phụ lục đổi phụ cấp giữa tháng; kỳ cũ giữ phụ cấp cũ; không phụ lục ⇒ trạng thái hiện tại; phụ lục không đụng phụ cấp không che lịch sử. `PayrollCollectorSalaryAppendixTests` (4) viết lại theo quyết định mới. `AppendixApplierTests` (+2) — chụp ảnh đúng mức CŨ, và không ghim khi phụ lục không đụng phụ cấp.
+
+### Ngoài kế hoạch — cùng đợt quyết định 19/08/2026
+
+- **Cột "Thưởng dự án" (A4)** mở thành `Input` cho kế toán nhập tay; test cố ý ĐỎ tồn đọng trong `PayrollDataCollectorBugTests` chuyển thành `ProjectBonusColumnTests`. Toàn bộ suite nay xanh.
 
 ---
 
@@ -303,7 +318,7 @@ Chọn **"chỉ có HĐ dân sự"** chứ không phải "có ít nhất một H
 | 4 | Phase 2 | Nghiệp vụ mới, khối lượng lớn nhất |
 | 5 | Phase 7 | Độc lập, ảnh hưởng trực tiếp số thuế của HĐ khoán |
 | 6 | Phase 5 | Chạm engine sâu nhất, cần regression kỹ. Đã chốt đủ quyết định (kể cả 5.4) — không còn chờ PO |
-| 7 | Phase 6 | Ít khẩn cấp, cần PO xác nhận điểm 6.2 |
+| 7 | Phase 6 | PO đã chốt 6.2 ngày 19/08/2026 (cho ngày giữa tháng, trả theo đoạn) |
 
 ## Ràng buộc chung
 
