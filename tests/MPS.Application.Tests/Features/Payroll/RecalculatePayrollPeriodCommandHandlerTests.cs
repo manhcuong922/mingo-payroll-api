@@ -95,6 +95,7 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
                 ComplianceRefs = Array.Empty<PayrollComplianceRef>(),
                 FunctionContext = new PayrollFunctionContext(),
                 ProductivitySnapshotJson = "[]",
+                PieceWorkSupportSnapshotJson = """[{"MinHours":150,"Amount":200000}]""",
             });
 
     [Fact]
@@ -114,6 +115,22 @@ public sealed class RecalculatePayrollPeriodCommandHandlerTests
             It.IsAny<PayrollColumnPlan>(), It.IsAny<PayrollCalcContext>(),
             It.Is<PayrollRow>(r => r.EmployeeInformationId == EmpId)), Times.Once);
         _periods.Verify(p => p.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact(DisplayName = "Tính lại làm mới CẢ snapshot bậc hỗ trợ theo tiến độ, không chỉ hệ số năng suất")]
+    public async Task Recalculate_RefreshesPieceWorkSupportSnapshot()
+    {
+        // Bỏ sót bảng nào ở bước làm mới thì dòng lương tính theo bảng MỚI (collector đọc DB tươi)
+        // trong khi snapshot của kỳ vẫn ghi bảng CŨ ⇒ kế toán đối chiếu "vì sao ra 500k" ra hai đằng.
+        var period = DraftPeriodWithOneEmployee(stale: true);
+        period.PieceWorkSupportSnapshotJson = "[]";
+        _periods.Setup(p => p.GetFullAsync(PeriodId, false, It.IsAny<CancellationToken>())).ReturnsAsync(period);
+        SetupReady(EmpId);
+        SetupCollectFor(EmpId);
+
+        await Sut().Handle(new RecalculatePayrollPeriodCommand(PeriodId), CancellationToken.None);
+
+        period.PieceWorkSupportSnapshotJson.Should().Contain("200000");
     }
 
     [Fact]

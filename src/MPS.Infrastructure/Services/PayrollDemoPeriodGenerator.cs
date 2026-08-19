@@ -104,6 +104,7 @@ public sealed class PayrollDemoPeriodGenerator
             FormulaSetId = formulaSet.Id,
             FormulaSnapshotJson = PayrollColumnSnapshotMapper.Serialize(columns),
             ProductivitySnapshotJson = collection.ProductivitySnapshotJson,
+            PieceWorkSupportSnapshotJson = collection.PieceWorkSupportSnapshotJson,
             PitBracketsSnapshotJson = PayrollJson.Serialize(collection.FunctionContext.PitBrackets),
             CreatedByUserId = userId,
             CreatedAt = now,
