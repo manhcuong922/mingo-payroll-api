@@ -32,6 +32,10 @@ public sealed partial class DatabaseSeeder
             new GradeLevel(1, 36_000_000m, "Giám đốc điều hành — bổ nhiệm mới"),
             new GradeLevel(2, 40_000_000m, "Giám đốc điều hành — đã qua 1 nhiệm kỳ"),
             new GradeLevel(3, 45_000_000m, "Giám đốc điều hành — thâm niên, kiêm nhiệm mảng chiến lược"),
+            // Bậc cao nhất công ty — cố ý VƯỢT trần đóng BHXH/BHYT (20 × mức tham chiếu 2.530.000 =
+            // 50.600.000). Không có bậc nào vượt trần thì nhánh chặn trần của khối bảo hiểm là code
+            // không kiểm được trên dữ liệu thật.
+            new GradeLevel(4, 55_000_000m, "Giám đốc điều hành — kiêm người đại diện theo pháp luật"),
         }),
         ("PGD", "Phó Giám đốc", new[]
         {

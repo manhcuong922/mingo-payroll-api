@@ -166,12 +166,13 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var now = DateTime.UtcNow;
         var generated = 0;
-        // Sinh từ CŨ → MỚI để law-change note kỳ sau so đúng kỳ trước.
-        for (var back = PayrollDemoMonths; back >= 1; back--)
+        // Sinh từ CŨ → MỚI để law-change note kỳ sau so đúng kỳ trước. Trục thời gian NEO CỨNG
+        // (xem DatabaseSeeder.DemoCalendar.cs) để cặp kỳ 06 (luật cũ) ↔ 07 (luật mới) luôn nằm trong
+        // cửa sổ demo, thay vì trượt mất theo ngày chạy seed.
+        for (var index = 0; index < PayrollDemoMonths; index++)
         {
-            var anchor = new DateOnly(now.Year, now.Month, 1).AddMonths(-back);
+            var anchor = DemoPeriodStart(index);
             int year = anchor.Year, month = anchor.Month;
 
             await PreparePayrollMonthDataAsync(year, month, shiftTemplateId.Value, adminId, ct);
@@ -185,10 +186,36 @@ public sealed partial class DatabaseSeeder
                 // Demo: KHÔNG để lỗi sinh kỳ chặn khởi động app (vd thiếu version compliance ở tháng đó).
                 _logger.LogWarning(ex, "Payroll demo: sinh kỳ {Month:D2}/{Year} thất bại — bỏ qua.", month, year);
             }
+
+            // Khoản truy lĩnh/truy thu phải nằm CHEN GIỮA hai kỳ: kỳ nguồn đã chốt (để trỏ FK vào) và
+            // kỳ kế tiếp chưa sinh (để engine còn gom được). Sinh hết mọi kỳ rồi mới thêm thì hai cột
+            // TRUY_LINH/TRUY_THU vĩnh viễn bằng 0 — engine chỉ gom khoản CHƯA ÁP lúc tính kỳ mới.
+            if (index == PayrollDemoMonths - 2) await SeedPayrollAdjustmentCasesAsync(ct);
         }
 
         _logger.LogInformation("Payroll demo: đã sinh {Count}/{Total} kỳ lương.", generated, PayrollDemoMonths);
     }
+
+    /// <summary>
+    /// Điểm đánh giá tháng của dữ liệu demo — RẢI đều trên cả 4 bậc hệ số năng suất
+    /// (<see cref="SeedProductivityCoefficientsAsync"/>: 1.2 / 1.0 / 0.8 / 0.5) thay vì gán cứng 4.0
+    /// cho mọi người.
+    ///
+    /// <para>Gán cứng 4.0 khiến hệ số luôn bằng 1.000 ⇒ ba bậc còn lại của bảng hệ số là cấu hình
+    /// không bao giờ được dùng, và mọi dòng lương chỉ khác nhau ở mức lương bậc.</para>
+    ///
+    /// <para>Xác định theo <c>(mã NV, tháng)</c> nên tái lập được y hệt sau mỗi lần dựng lại DB, mà
+    /// vẫn đổi giữa các tháng như đánh giá thật.</para>
+    /// </summary>
+    private static decimal DemoEvaluationScore(int employeeInformationId, int year, int month) =>
+        Math.Abs(HashCode.Combine(employeeInformationId, year, month)) % 10 switch
+        {
+            0 => 4.70m,   // Xuất sắc  → 1.2
+            1 => 4.30m,   // Tốt       → 1.0
+            8 => 3.00m,   // Khá       → 0.8
+            9 => 2.20m,   // Cần cải thiện → 0.5
+            _ => 3.80m,   // Tốt       → 1.0
+        };
 
     // Chuẩn bị chấm công (đủ ngày công) + đánh giá tháng Approved + hồ sơ chi lương cho MỌI NV trong phạm
     // vi readiness (HĐ non-Cancelled overlap kỳ) → readiness pass để engine sinh được kỳ.
@@ -210,11 +237,16 @@ public sealed partial class DatabaseSeeder
             .Include(e => e.User)
             .Where(e => empIds.Contains(e.Id)).ToListAsync(ct);
 
+        // Ngày nghỉ lễ KHÔNG sinh bản ghi ca chính: đó là ngày nghỉ hưởng nguyên lương, chấm công
+        // "đi làm 8 giờ" vào đó là mô tả sai và còn đẻ ra phụ trội loại ngày không có thật.
+        var holidays = await LoadHolidayDatesAsync(ct);
         var workdays = new List<DateOnly>();
         for (var d = 1; d <= DateTime.DaysInMonth(year, month); d++)
         {
             var day = new DateOnly(year, month, d);
-            if (day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday) workdays.Add(day);
+            if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+            if (holidays.Contains(day)) continue;
+            workdays.Add(day);
         }
 
         var now = DateTime.UtcNow;
@@ -228,8 +260,15 @@ public sealed partial class DatabaseSeeder
                 .AnyAsync(a => a.EmployeeInformationId == emp.Id && a.WorkDate >= periodStart && a.WorkDate <= periodEnd, ct);
             if (!hasAtt)
             {
+                // Chỉ chấm công những ngày hợp đồng THỰC SỰ phủ. Người vào làm hoặc nghỉ việc giữa
+                // tháng mà vẫn có ngày công ở ngoài khoảng hiệu lực là dữ liệu mâu thuẫn với chính
+                // hợp đồng — và làm hỏng phép kiểm "trả lương theo đoạn" (Phase 4–5).
+                var (from, to) = await LoadContractWindowAsync(emp.Id, periodStart, ct);
+                if (from is null) continue;
+
                 foreach (var day in workdays)
                 {
+                    if (day < from || (to is DateOnly last && day > last)) continue;
                     await _context.AttendanceRecords.AddAsync(new AttendanceRecord
                     {
                         EmployeeInformationId = emp.Id,
@@ -263,7 +302,7 @@ public sealed partial class DatabaseSeeder
                         PeriodMonth = month,
                         SubjectRoleIdSnapshot = emp.User?.RoleId ?? SystemRoles.EmployeeId,
                         Source = EvaluationEnums.EvaluationSource.Direct,
-                        FinalScore = 4.0m,
+                        FinalScore = DemoEvaluationScore(emp.Id, year, month),
                         Status = EvaluationEnums.EvaluationStatus.Approved,
                         ApprovedByUserId = adminId,
                         ApprovedAt = now,

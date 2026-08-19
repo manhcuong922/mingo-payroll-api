@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
@@ -58,6 +58,9 @@ public sealed partial class DatabaseSeeder
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
         await SeedDefaultLeaveTypesAsync(cancellationToken);
+        // Ngày nghỉ lễ theo Điều 112 BLLĐ 2019 — nguồn của DayType.PublicHoliday (phụ trội 300%),
+        // của công chuẩn tháng, và của cảnh báo HOL-WARN01. Xem DatabaseSeeder.PublicHolidaysData.cs.
+        await SeedPublicHolidaysAsync(cancellationToken);
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
@@ -70,17 +73,32 @@ public sealed partial class DatabaseSeeder
         // HĐ lao động cho TOÀN BỘ workforce xưởng + văn phòng → payroll bao phủ cả công ty (không chỉ
         // nhóm contract-test). Phải chạy TRƯỚC SeedPayrollAsync — xem DatabaseSeeder.WorkforceContractsData.cs.
         await SeedWorkforceContractsAsync(cancellationToken);
+        // Người phụ thuộc (giảm trừ gia cảnh) — payroll đếm bản ghi này chứ KHÔNG đọc ô khai tay
+        // DependentsNo (#40). Xem DatabaseSeeder.DependentsData.cs.
+        await SeedEmployeeDependentsAsync(cancellationToken);
+        // Phụ cấp trên hợp đồng + phụ lục hiệu lực GIỮA THÁNG + quyết định chấm dứt giữa kỳ — đầu vào
+        // của engine nên phải xong trước khi sinh kỳ. Xem DatabaseSeeder.PayrollCaseData.cs.
+        await SeedContractCaseDataAsync(cancellationToken);
         // Quỹ phép năm cho mọi NV có HĐ — mô phỏng job cấp quỹ 01/01 mà hệ thống thật đã chạy.
         // Phải chạy SAU hợp đồng (cần ngày vào làm để tính thâm niên) — xem
         // DatabaseSeeder.LeaveBalancesData.cs.
         await SeedLeaveBalancesAsync(cancellationToken);
         // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
         // xem DatabaseSeeder.PayrollDemoData.cs.
+        // Chấm công "có chuyện" (tăng ca đủ 4 loại ngày, nghỉ phép/thai sản, đi muộn/vắng/nửa công)
+        // cho nhóm nhân vật case. Phải chạy TRƯỚC payroll: bước chuẩn bị của payroll chỉ sinh chấm
+        // công nền cho người CHƯA có bản ghi nào. Xem DatabaseSeeder.AttendanceCaseData.cs.
+        await SeedAttendanceCasesAsync(cancellationToken);
         await SeedPayrollAsync(cancellationToken);
         // Nhánh NGOẠI LỆ không dựng được qua API nhưng lớp chặn vẫn phải sống (đơn sản xuất thiếu tổ
         // trưởng · hồ sơ đã ký HĐ nhưng chưa có tài khoản). Chạy CUỐI để không ảnh hưởng kỳ lương demo
         // ở trên — xem DatabaseSeeder.LegacyEdgeCaseData.cs.
         await SeedLegacyEdgeCaseDataAsync(cancellationToken);
+        // Các case cố ý làm ĐỎ cổng đủ liệu, đặt ở tháng hiện tại (chưa chốt kỳ) để không chặn 3 kỳ
+        // demo ở trên. Xem DatabaseSeeder.ReadinessBlockersData.cs.
+        await SeedReadinessBlockersAsync(cancellationToken);
+        // Dồn email mọi tài khoản demo về một hòm thư thật — chạy cuối vì các pha trên còn tạo người.
+        await NormalizeDemoEmailsAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)
@@ -98,7 +116,7 @@ public sealed partial class DatabaseSeeder
         var section = _configuration.GetSection("DefaultAdmin");
         var username = section["Username"] ?? "admin";
         var employeeCode = section["EmployeeCode"] ?? "ADMIN001";
-        var email = section["Email"] ?? "admin@mingo.local";
+        var email = section["Email"] ?? DemoEmail("admin");
         var fullName = section["FullName"] ?? "System Administrator";
         var phone = section["PhoneNo"] ?? "0000000000";
         var password = section["Password"];
@@ -146,9 +164,9 @@ public sealed partial class DatabaseSeeder
         // SeedOfficeWorkforceDemoAsync để User.FullName và EmployeeInformation.FullName không lệch.
         var candidates = new[]
         {
-            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: "hr@mingo.local"),
-            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: "accountant@mingo.local"),
-            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: "director@mingo.local"),
+            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: DemoEmail("hr")),
+            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: DemoEmail("accountant")),
+            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: DemoEmail("director")),
         };
 
         var existing = await _context.Users
@@ -361,13 +379,13 @@ public sealed partial class DatabaseSeeder
 
             // Quản đốc (role 5 Planning Manager) — trực thuộc xưởng ⇒ tạo/sửa đơn trong phạm vi xưởng.
             await EnsureStaffAsync(
-                username: $"quandoc_x{idx}", code: $"SX{idx}QD", email: $"quandoc_x{idx}@mingo.local",
+                username: $"quandoc_x{idx}", code: $"SX{idx}QD", email: DemoEmail($"quandoc_x{idx}"),
                 fullName: $"Quản đốc {dept.Name}", roleId: SystemRoles.PlanningManagerId,
                 positionId: positionsByCode["QDX"], departmentId: dept.Id, password, ct);
 
             // Tổ trưởng sản xuất (role 6) — ứng viên Project.ResponsibleUserId của xưởng.
             var (_, leaderEmpId) = await EnsureStaffAsync(
-                username: $"totruong_x{idx}", code: $"SX{idx}TT", email: $"totruong_x{idx}@mingo.local",
+                username: $"totruong_x{idx}", code: $"SX{idx}TT", email: DemoEmail($"totruong_x{idx}"),
                 fullName: $"Tổ trưởng {dept.Name}", roleId: SystemRoles.ProductionTeamLeaderId,
                 positionId: positionsByCode["TTSX"], departmentId: dept.Id, password, ct);
 
@@ -377,7 +395,7 @@ public sealed partial class DatabaseSeeder
                 var posCode = WorkerPositionCycle[w];
                 var posName = ManufacturingPositions.First(p => p.Code == posCode).Name;
                 await EnsureStaffAsync(
-                    username: $"cn_x{idx}_{w + 1}", code: $"SX{idx}W{w + 1}", email: $"cn_x{idx}_{w + 1}@mingo.local",
+                    username: $"cn_x{idx}_{w + 1}", code: $"SX{idx}W{w + 1}", email: DemoEmail($"cn_x{idx}_{w + 1}"),
                     fullName: $"CN {posName} X{idx}.{w + 1}", roleId: SystemRoles.EmployeeId,
                     positionId: positionsByCode[posCode], departmentId: dept.Id, password, ct);
             }
@@ -439,15 +457,15 @@ public sealed partial class DatabaseSeeder
         var seeds = new (string Username, string Code, string Email, string FullName, int RoleId, int PositionId, int DepartmentId)[]
         {
             // Backfill EmployeeInformation cho 3 user cấp công ty đã seed ở SeedDefaultRoleUsersAsync.
-            ("hr",         "HR001",   "hr@mingo.local",         "Phạm Thị Hồng Nhung",
+            ("hr",         "HR001",   DemoEmail("hr"),         "Phạm Thị Hồng Nhung",
                 SystemRoles.HrId,                 posMap["TPHR"], deptMap["HR"]),
-            ("accountant", "ACC001",  "accountant@mingo.local", "Vũ Thị Thu Hà",
+            ("accountant", "ACC001",  DemoEmail("accountant"), "Vũ Thị Thu Hà",
                 SystemRoles.AccountantId,         posMap["KTT"],  deptMap["ACC"]),
-            ("director",   "DIR001",  "director@mingo.local",   "Trần Quang Huy",
+            ("director",   "DIR001",  DemoEmail("director"),   "Trần Quang Huy",
                 SystemRoles.DirectorId,           posMap["GD"],   deptMap["BGD"]),
 
             // Trưởng phòng Kinh doanh — role DepartmentManagerId để hưởng auto-route → HR khi nộp đơn.
-            ("tpkd",       "TPKD001", "tpkd@mingo.local",       "Lê Hoàng Nam",
+            ("tpkd",       "TPKD001", DemoEmail("tpkd"),       "Lê Hoàng Nam",
                 SystemRoles.DepartmentManagerId,  posMap["TPKD"], deptMap["BIZ"]),
         };
 
@@ -585,7 +603,10 @@ public sealed partial class DatabaseSeeder
                 PhoneNo = user.PhoneNo,
                 PositionId = positionId,
                 DepartmentId = deptId,
-                DependentsNo = person?.Dependents ?? 0,
+                // Số suất giảm trừ CÒN hiệu lực hôm nay. Bản ghi chi tiết (thứ payroll thật sự đọc —
+                // xem #40) do SeedEmployeeDependentsAsync sinh từ cùng danh bạ này.
+                DependentsNo = person?.ActiveDependentsOn(DateOnly.FromDateTime(DateTime.UtcNow.Date)) ?? 0,
+                IsUnionMember = person?.IsUnionMember ?? false,
                 // Mã số thuế / số BHXH / số tài khoản ngân hàng — sinh xác định từ user.Id (tái lập
                 // được), để payroll không phải điền chuỗi "DEMO..." vô nghĩa.
                 TaxNo = $"{8_000_000_000L + user.Id}",
@@ -610,6 +631,7 @@ public sealed partial class DatabaseSeeder
                 if (emp.Gender != person.Gender) { emp.Gender = person.Gender; changed = true; }
                 if (emp.Dob != person.Dob) { emp.Dob = person.Dob; changed = true; }
                 if (emp.PhoneNo != person.Phone) { emp.PhoneNo = person.Phone; changed = true; }
+                if (emp.IsUnionMember != person.IsUnionMember) { emp.IsUnionMember = person.IsUnionMember; changed = true; }
                 if (emp.PermanentAddress == "N/A (manufacturing seed)")
                 {
                     emp.PermanentAddress = person.Address;
@@ -732,37 +754,52 @@ public sealed partial class DatabaseSeeder
             obsolete.Count, main.LegalName, affected.Count);
     }
 
+    /// <summary>
+    /// Danh mục phụ cấp mặc định.
+    ///
+    /// <para><c>MEAL</c> / <c>FUEL</c> / <c>PHONE</c> / <c>HOUSING</c> là 4 mã có <b>cột riêng</b>
+    /// trên bảng lương (<c>AllowanceBuckets</c>); mã ngoài 4 mã đó gom vào cột "Khác" để tiền không
+    /// biến mất (#64/[D15]). Trước bản này seed chỉ có 3 mã đầu ⇒ cột "Thuê nhà", "Khác" và "Ngoại
+    /// lệ" luôn bằng 0 trên mọi kỳ.</para>
+    ///
+    /// <para><c>RESP</c> (trách nhiệm) bật <c>ExcludeFromProration</c>: khoản gắn với chức danh, trả
+    /// NGUYÊN bất kể số ngày đi làm — đây là nhánh PRORATE-02 chưa từng có dữ liệu để chạy.</para>
+    /// </summary>
     private async Task SeedDefaultAllowanceTypesAsync(CancellationToken ct)
     {
-        var codes = new[] { "MEAL", "FUEL", "PHONE" };
-        var existing = await _context.AllowanceTypes
-            .AsNoTracking()
-            .Where(a => codes.Contains(a.Code))
-            .Select(a => a.Code)
-            .ToListAsync(ct);
-
-        if (existing.Count == codes.Length)
-        {
-            _logger.LogDebug("AllowanceTypes already seeded; skipping.");
-            return;
-        }
-
         var now = DateTime.UtcNow;
-        var toSeed = new List<AllowanceType>();
-
-        if (!existing.Contains("MEAL"))
-            toSeed.Add(new AllowanceType { Code = "MEAL", Name = "Phụ cấp ăn ca", IsBhxhBase = false, IsTaxable = true, IsActive = true, DefaultAmount = 730_000, CreatedAt = now });
-        if (!existing.Contains("FUEL"))
-            toSeed.Add(new AllowanceType { Code = "FUEL", Name = "Phụ cấp xăng xe", IsBhxhBase = false, IsTaxable = true, IsActive = true, DefaultAmount = null, CreatedAt = now });
-        if (!existing.Contains("PHONE"))
-            toSeed.Add(new AllowanceType { Code = "PHONE", Name = "Phụ cấp điện thoại", IsBhxhBase = false, IsTaxable = true, IsActive = true, DefaultAmount = null, CreatedAt = now });
-
-        if (toSeed.Count > 0)
+        var specs = new[]
         {
-            await _context.AllowanceTypes.AddRangeAsync(toSeed, ct);
-            await _context.SaveChangesAsync(ct);
-            _logger.LogInformation("Seeded {Count} default AllowanceType(s).", toSeed.Count);
+            // Mức ăn ca của công ty. Trần MIỄN THUẾ là đại lượng khác, do Compliance giữ (730k tới
+            // 30/06/2026, 1,2tr từ 01/07/2026 theo NĐ 253/2026) — xem SeedAllowanceExemptThresholds.
+            new AllowanceType { Code = "MEAL",    Name = "Phụ cấp ăn ca",        IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = 1_000_000, ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "FUEL",    Name = "Phụ cấp xăng xe",      IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "PHONE",   Name = "Phụ cấp điện thoại",   IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "HOUSING", Name = "Phụ cấp thuê nhà",     IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "RESP",    Name = "Phụ cấp trách nhiệm",  IsBhxhBase = true,  IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = true,  CreatedAt = now },
+            new AllowanceType { Code = "TOXIC",   Name = "Phụ cấp độc hại",      IsBhxhBase = true,  IsTaxable = true,  IsActive = true, DefaultAmount = 500_000,   ExcludeFromProration = false, CreatedAt = now },
+        };
+
+        var codes = specs.Select(s => s.Code).ToArray();
+        var existing = await _context.AllowanceTypes
+            .Where(a => codes.Contains(a.Code))
+            .ToDictionaryAsync(a => a.Code, StringComparer.OrdinalIgnoreCase, ct);
+
+        var toSeed = specs.Where(s => !existing.ContainsKey(s.Code)).ToList();
+        if (toSeed.Count > 0) await _context.AllowanceTypes.AddRangeAsync(toSeed, ct);
+
+        // Mức ăn ca mặc định từng để 730.000 (bằng trần miễn thuế cũ) — nâng theo trần mới để dữ liệu
+        // demo đi qua được cả hai thời kỳ trần. Chỉ nâng khi đang đúng mức cũ, không đè số HR tự sửa.
+        if (existing.TryGetValue("MEAL", out var meal) && meal.DefaultAmount == 730_000m)
+        {
+            meal.DefaultAmount = 1_000_000m;
+            meal.UpdatedAt = now;
         }
+
+        await _context.SaveChangesAsync(ct);
+        if (toSeed.Count > 0)
+            _logger.LogInformation("Seeded {Count} AllowanceType: {Codes}.",
+                toSeed.Count, string.Join(", ", toSeed.Select(t => t.Code)));
     }
 
     private async Task SeedDefaultComplianceAsync(CancellationToken ct)
