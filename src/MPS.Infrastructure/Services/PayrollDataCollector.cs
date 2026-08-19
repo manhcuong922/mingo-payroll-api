@@ -409,7 +409,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // `DependentsNo = 99` (không bản ghi, không chứng từ) tạo ra 99 suất giảm trừ KHỐNG. Theo
             // `CAC-CASE-XAY-RA` §3.2: "không nhận số nhập tay không có căn cứ". Không có bản ghi ⇒ 0.
             n[DependentsCount] = depCountByEmp.TryGetValue(e.Id, out var dc) ? dc : 0m;
-            n[BonusThuongDuAn] = 0m;
+            // A4 — `bonus.thuongDuAn` đã bỏ: cột THUONGDUAN nay là Input cho kế toán nhập tay
+            // (quyết định PO 19/08/2026), không còn tra field nào. Đổ 0 vào đây chính là thứ khoá
+            // chặt cột ở 0 suốt thời gian qua.
 
             // A4 — đoàn phí công đoàn chỉ thu của ĐOÀN VIÊN; công thức cột PHICONGDOANVIEN nhân cờ
             // này với (tỷ lệ × lương, chặn trần). Không phải đoàn viên ⇒ 0, đúng như trước.

@@ -179,7 +179,13 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.LuongNgayPhep, "Lương ngày phép", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.TangCa, "Tăng ca", GE, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.OtTangCa, money: true);
         Add(Cc.HoaHong, "Hoa hồng", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
-        Add(Cc.ThuongDuAn, "Thưởng dự án", GE, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.BonusThuongDuAn, money: true);
+        // ⭐ A4 — cột này từng khai `Lookup` vào một field mà collector luôn đổ 0, nên nó chết cứng ở
+        // 0 với MỌI dữ liệu đầu vào: kế toán không sửa được (không phải Input), hệ thống cũng không
+        // tra được (không có khái niệm "dự án có thưởng" hay bảng phân bổ thưởng theo NLĐ) ⇒ tiền
+        // thưởng dự án không bao giờ tới tay NLĐ.
+        // Quyết định PO 19/08/2026: mở thành Input để kế toán nhập tay như Thưởng năm / Thưởng khác
+        // ngay cạnh. Dựng nguồn dữ liệu thật là một module riêng, chưa làm.
+        Add(Cc.ThuongDuAn, "Thưởng dự án", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThuongNam, "Thưởng năm", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThuongKhac, "Thưởng khác", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // BS-2 — ca CHÍNH THỨC rơi vào ngày nghỉ tuần/lễ chỉ được trả 100% qua cột Thu nhập (phân bổ
