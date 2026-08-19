@@ -7,6 +7,7 @@ using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Payroll;
+using MPS.Application.Features.Payroll.Common;
 
 namespace MPS.Application.Features.Payroll.Queries;
 
@@ -64,16 +65,8 @@ public sealed class GetMyPayslipDetailQueryHandler
         return new MyPayslipDetailDto(
             sheet,
             header,
-            EffectiveValue(row, PayrollColumnCodes.TongThuNhap),
-            EffectiveValue(row, PayrollColumnCodes.ThucNhan));
-    }
-
-    private static decimal? EffectiveValue(PayrollRow row, string columnCode)
-    {
-        var cell = row.Cells.FirstOrDefault(c =>
-            string.Equals(c.ColumnCode, columnCode, StringComparison.OrdinalIgnoreCase));
-        if (cell is null) return null;
-        return cell.IsOverridden ? cell.OverrideValue : cell.ComputedValue;
+            PayrollCellReader.Value(row, PayrollColumnCodes.TongThuNhap),
+            PayrollCellReader.Value(row, PayrollColumnCodes.ThucNhan));
     }
 
     private static string? LastFour(string? bankNumber)

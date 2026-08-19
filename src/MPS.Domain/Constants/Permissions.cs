@@ -360,6 +360,11 @@ public static class Permissions
     public const string BhxhTaxPaymentReadAll      = "BhxhTaxPayment.Read.All";
     public const string BhxhTaxPaymentRecordAll    = "BhxhTaxPayment.Record.All";
     public const string BhxhTaxPaymentConfirmAll   = "BhxhTaxPayment.Confirm.All";
+
+    // ===== Chứng từ chi trả (lệnh chi lương, UNC nộp BHXH, tờ khai QTT-TNCN) — IDs 272–274 =====
+    public const string PayrollDocumentExportAll     = "PayrollDocument.Export.All";
+    public const string CompanyPaymentSettingReadAll = "CompanyPaymentSetting.Read.All";
+    public const string CompanyPaymentSettingUpdateAll = "CompanyPaymentSetting.Update.All";
 }
 
 public static class PermissionIds
@@ -704,4 +709,9 @@ public static class PermissionIds
     public const int BhxhTaxPaymentReadAll      = 267;
     public const int BhxhTaxPaymentRecordAll    = 268;
     public const int BhxhTaxPaymentConfirmAll   = 269;
+
+    // ===== Chứng từ chi trả — IDs 272–274 =====
+    public const int PayrollDocumentExportAll       = 272;
+    public const int CompanyPaymentSettingReadAll   = 273;
+    public const int CompanyPaymentSettingUpdateAll = 274;
 }

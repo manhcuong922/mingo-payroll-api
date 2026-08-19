@@ -121,6 +121,8 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
         services.AddScoped<IPayrollAdjustmentRepository, PayrollAdjustmentRepository>();
         services.AddScoped<IPaymentObligationRepository, PaymentObligationRepository>();
+        services.AddScoped<ICompanyPaymentSettingRepository,
+            MPS.Infrastructure.Repositories.Payroll.CompanyPaymentSettingRepository>();
         services.AddScoped<MPS.Application.Features.Payroll.BhxhTaxPayment.Common.BhxhTaxEvidenceUploader>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
         services.AddScoped<IPieceWorkSupportBandRepository, PieceWorkSupportBandRepository>();
@@ -146,6 +148,12 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IPayrollFormulaValidator, PayrollFormulaValidator>();
         services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IPayrollExcelExporter,
             MPS.Infrastructure.Services.Payroll.PayrollExcelExporter>();
+
+        // Chứng từ chi trả: biểu mẫu nhúng + bộ điền .xlsx có sẵn. Cả hai đều không giữ state.
+        services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IPaymentTemplateProvider,
+            MPS.Infrastructure.Services.Templates.EmbeddedPaymentTemplateProvider>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IXlsxTemplateFiller,
+            MPS.Infrastructure.Services.Templates.XlsxTemplateFiller>();
         services.AddSingleton<IPayrollLawChangeNoteBuilder, PayrollLawChangeNoteBuilder>();
 
         // Attendance sheet export/import (Excel) — Exporter/Parser singleton (không state), Cache singleton.

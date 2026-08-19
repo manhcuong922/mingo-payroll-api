@@ -24,6 +24,17 @@ public interface IPayrollPeriodRepository
         int employeeInformationId, int limit, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Toàn bộ dòng lương của MỘT năm dương lịch, kèm Cells + PayrollPeriod + EmployeeInformation
+    /// (và User để lấy mã NV). Dùng cho tờ khai quyết toán thuế TNCN — cần cộng dồn cả năm chứ
+    /// không phải N kỳ gần nhất.
+    ///
+    /// <para>Chỉ lấy kỳ khác Draft: kỳ nháp còn sửa được nên không phải số liệu để khai thuế.</para>
+    /// </summary>
+    /// <param name="employeeInformationId">Lọc theo 1 NV; null = mọi NV (xuất hàng loạt).</param>
+    Task<IReadOnlyList<PayrollRow>> GetRowsByYearAsync(
+        int year, int? employeeInformationId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Kỳ lương với DUY NHẤT dòng của 1 NV (nếu có) — kèm ComplianceRefs, Notes, Cells, và
     /// EmployeeInformation + Position của dòng. Dùng cho self-service payslip để tái dùng
     /// PayrollSheetMapper trên payload đã được thu hẹp về 1 row (không load Total + n-1 NV khác).

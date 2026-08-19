@@ -119,6 +119,14 @@ public class AppDbContext : DbContext
     public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence> PaymentObligationEvidences
         => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence>();
 
+    // ===== Chứng từ chi trả (lệnh chi lương, ủy nhiệm chi BHXH) =====
+    public DbSet<Domain.Entities.Payroll.Banking.CompanyPaymentSetting> CompanyPaymentSettings
+        => Set<Domain.Entities.Payroll.Banking.CompanyPaymentSetting>();
+    public DbSet<Domain.Entities.Payroll.Banking.BankCatalog> BankCatalogs
+        => Set<Domain.Entities.Payroll.Banking.BankCatalog>();
+    public DbSet<Domain.Entities.Payroll.Banking.ProvinceCatalog> ProvinceCatalogs
+        => Set<Domain.Entities.Payroll.Banking.ProvinceCatalog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

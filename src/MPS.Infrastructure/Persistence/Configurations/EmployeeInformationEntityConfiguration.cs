@@ -27,6 +27,13 @@ public class EmployeeInformationEntityConfiguration : IEntityTypeConfiguration<E
         builder.Property(e => e.SocialNo).HasMaxLength(50);
         builder.Property(e => e.BankNumber).HasMaxLength(50);
 
+        // Không đặt FK cứng sang BankCatalog/ProvinceCatalog: danh mục do ngân hàng phát hành,
+        // có thể bị gỡ dòng khi ngân hàng cập nhật — khoá cứng sẽ chặn cả việc sửa danh mục.
+        // Tính hợp lệ kiểm ở tầng validator lúc ghi hồ sơ.
+        builder.Property(e => e.BankCode).HasMaxLength(50);
+        builder.Property(e => e.BankBranch).HasMaxLength(200);
+        builder.Property(e => e.BankProvinceCode).HasMaxLength(50);
+
         builder.Property(e => e.GuardianFullName).HasMaxLength(200);
         builder.Property(e => e.GuardianRelationship).HasMaxLength(50);
         builder.Property(e => e.GuardianPhoneNo).HasMaxLength(20);
