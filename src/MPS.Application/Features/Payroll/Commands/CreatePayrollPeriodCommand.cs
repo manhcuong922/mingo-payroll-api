@@ -32,7 +32,6 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
     private readonly IPayrollFieldCatalog _catalog;
     private readonly IPayrollLawChangeNoteBuilder _noteBuilder;
     private readonly IPayrollAdjustmentRepository _adjustments;
-    private readonly IPublicHolidayRepository _holidays;
     private readonly ICurrentUserService _currentUser;
 
     public CreatePayrollPeriodCommandHandler(
@@ -40,7 +39,7 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         IPayrollReadinessChecker readiness, IPayrollDataCollector collector,
         IPayrollCalculator calculator, IColumnDependencyGraph graph, IPayrollFieldCatalog catalog,
         IPayrollLawChangeNoteBuilder noteBuilder, IPayrollAdjustmentRepository adjustments,
-        IPublicHolidayRepository holidays, ICurrentUserService currentUser)
+        ICurrentUserService currentUser)
     {
         _periods = periods;
         _formulaSets = formulaSets;
@@ -51,7 +50,6 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         _catalog = catalog;
         _noteBuilder = noteBuilder;
         _adjustments = adjustments;
-        _holidays = holidays;
         _currentUser = currentUser;
     }
 
@@ -84,13 +82,19 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
 
         // ===== Snapshot params/công chuẩn/payDate + gom liệu =====
         var payDate = new DateOnly(request.Year, request.Month, DateTime.DaysInMonth(request.Year, request.Month));
-        // #59: công chuẩn mặc định phải TRỪ ngày lễ (lễ luật dương lịch cố định + lễ đã nhập DB).
-        // Chỉ nạp lễ khi kế toán KHÔNG tự truyền standardWorkingDays.
+        // ⭐ CC-2026-08 — công chuẩn mặc định = NGÀY CÔNG CHẾ ĐỘ của tháng (mọi ngày trừ T7/CN),
+        // KHÔNG trừ ngày lễ nữa (đảo lại #59/HOL-STD01).
+        //
+        // Lý do: CONGCHUAN là MẪU SỐ của mọi phép chia lương. Trừ lễ ra khiến mẫu số co lại trong
+        // tháng nhiều lễ (tháng Tết còn 17 thay vì 22) ⇒ mỗi ngày nghỉ bị trừ 1/17 thay vì 1/22,
+        // tức cùng một hành vi nghỉ mà tháng Tết bị phạt nặng hơn tháng thường ~30%. Đơn giá ngày
+        // công phải ổn định giữa các tháng.
+        //
+        // Bù lại, ngày lễ được ghi nhận là NGÀY CÔNG HƯỞNG LƯƠNG ở tử số (Đ.112 BLLĐ — nghỉ lễ
+        // hưởng nguyên lương), xem `PayrollDataCollector` mục "bù công ngày lễ". Hai vế đi cùng
+        // nhau: chỉ đổi mẫu số mà quên tử số ⇒ NLĐ mất trắng lương những ngày lễ.
         var standardDays = request.StandardWorkingDays
-            ?? PayrollWorkingDays.CountStandardWorkingDays(request.Year, request.Month,
-                PayrollWorkingDays.HolidayDatesInMonth(
-                    await _holidays.GetByYearAsync(request.Year, includeInactive: false, ct),
-                    request.Year, request.Month));
+            ?? PayrollWorkingDays.CountWeekdays(request.Year, request.Month);
 
         var collection = await _collector.CollectAsync(
             new PayrollCollectionRequest(request.Year, request.Month, payDate, standardDays, readyIds), ct);

@@ -64,10 +64,23 @@ public static class DefaultPayrollFormulaSet
         //
         // Trừ đi thay vì nhân trực tiếp "công CÓ bảo hiểm" là có chủ đích: kỳ lương cũ thiếu khoá ⇒
         // `ToFields` điền 0 ⇒ trừ 0 ⇒ nền đóng vẫn nguyên như trước. Xem `PayrollFieldKeys.CongKhongBaoHiem`.
+        //
+        // ⭐ CC-2026-08 — tử số đổi từ `CONGTINHCOM` sang `CONGHUONGLUONG` (đã gồm CÔNG NGÀY LỄ).
+        // Bắt buộc: công chuẩn nay KHÔNG trừ lễ nên mẫu số to lên; giữ tử số là công đi làm thật thì
+        // nền đóng BHXH tụt đúng bằng tỉ lệ ngày lễ của tháng (tháng Tết ~23%) ⇒ đóng thiếu BH.
+        // `CONGTINHCOM` vẫn dành riêng cho tiền cơm (nghỉ lễ ở nhà không ăn cơm ca).
+        //
+        // Fallback về `CONGTINHCOM` khi khoá mới = 0: kỳ lương chốt TRƯỚC bản sửa này không có khoá
+        // ⇒ `ToFields` điền 0 ⇒ không fallback thì nền đóng của kỳ cũ tụt về 0.
+        var congHuongLuong = N.If(
+            N.Cmp(">", N.Field(Fk.CongHuongLuong), N.Const(0m)),
+            N.Field(Fk.CongHuongLuong),
+            N.Col(Cc.CongTinhCom));
+
         FormulaNode ProrateByCongCoBaoHiem(FormulaNode value) =>
             N.Mul(N.Div(value, N.Col(Cc.CongChuan)),
                 N.Func(Fn.Max,
-                    N.Sub(N.Col(Cc.CongTinhCom), N.Field(Fk.CongKhongBaoHiem)),
+                    N.Sub(congHuongLuong, N.Field(Fk.CongKhongBaoHiem)),
                     N.Const(0m)));
 
         FormulaNode Bh(string rateField, string capField) =>
@@ -112,6 +125,11 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.CongThuViec, "Công thử việc", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongThuViec);
         Add(Cc.CongTinhLuong, "Công chính thức", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongChinhThuc);
         Add(Cc.CongHocViec, "Công học việc", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongHocViec);
+        // ⭐ CC-2026-08 — cột ĐỐI CHIẾU: công chuẩn không còn trừ ngày lễ, bù lại ngày lễ được cộng
+        // vào công hưởng lương. Không có cột này thì kế toán nhìn bảng sẽ không hiểu vì sao NV nghỉ
+        // Tết vẫn đủ công. Không công thức nào đọc cột này.
+        Add(Cc.CongLe, "Công ngày lễ", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongLe,
+            editable: false);
         // Phase 2 — tổng giờ làm (ca chính + tăng ca thực tế): căn cứ xếp bậc "Hỗ trợ theo tiến độ"
         // của HĐ khoán. Để kế toán đối chiếu vì sao ra mốc đó; không tham gia công thức nào khác.
         Add(Cc.TongGioLam, "Tổng giờ làm", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.TotalWorkHours);

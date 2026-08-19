@@ -88,6 +88,28 @@ public static class PayrollFieldKeys
     /// ⇒ phải fallback và sẽ thu BH nhầm cho người có 0 ngày được đóng.</para>
     /// </summary>
     public const string CongKhongBaoHiem = "attendance.congKhongBaoHiem";
+
+    /// <summary>
+    /// ⭐ CC-2026-08 — số công NGÀY LỄ được cộng tự động (Đ.112 BLLĐ: nghỉ lễ hưởng nguyên lương).
+    /// Chỉ để kế toán ĐỐI CHIẾU vì sao tổng công khớp công chuẩn dù NLĐ nghỉ lễ; KHÔNG cột công
+    /// thức nào chia cho khoá này.
+    /// </summary>
+    public const string CongLe = "attendance.congLe";
+
+    /// <summary>
+    /// ⭐ CC-2026-08 — TỔNG công HƯỞNG LƯƠNG của kỳ = công đi làm thật + công ngày lễ được cộng
+    /// (= <c>CONGCHINHTHUC + CONGTHUVIEC + CONGHOCVIEC</c>). Là mẫu số đúng cho nền đóng BH.
+    ///
+    /// <para>⚠️ KHÁC <see cref="CongTinhCom"/>: cơm chỉ tính ngày ĐI LÀM THẬT (nghỉ lễ ở nhà không
+    /// ăn cơm ca) nên `CONGTINHCOM` cố ý KHÔNG gồm công lễ. Trước CC-2026-08 hai khái niệm này
+    /// trùng nhau nên dùng chung một khoá; nay phải tách, nếu không nền đóng BHXH sẽ tụt đúng bằng
+    /// tỉ lệ ngày lễ (tháng Tết ~23%) vì mẫu số công chuẩn to lên mà tử số giữ nguyên.</para>
+    ///
+    /// <para>Kỳ lương cũ thiếu khoá ⇒ <c>ToFields</c> điền 0 ⇒ công thức tự lùi về `CONGTINHCOM`,
+    /// giữ nguyên số đã chốt. Xem `DefaultPayrollFormulaSet.ProrateByCongCoBaoHiem`.</para>
+    /// </summary>
+    public const string CongHuongLuong = "attendance.congHuongLuong";
+
     public const string DayHours = "attendance.dayHours";
     public const string NightHours = "attendance.nightHours";
     public const string AbsentDays = "attendance.absentDays";

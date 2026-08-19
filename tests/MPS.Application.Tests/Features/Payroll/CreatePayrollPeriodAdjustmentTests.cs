@@ -29,7 +29,6 @@ public sealed class CreatePayrollPeriodAdjustmentTests
     private readonly Mock<IPayrollDataCollector> _collector = new();
     private readonly Mock<IPayrollLawChangeNoteBuilder> _noteBuilder = new();
     private readonly Mock<IPayrollAdjustmentRepository> _adjustments = new();
-    private readonly Mock<IPublicHolidayRepository> _holidays = new();
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private readonly ColumnDependencyGraph _graph = new();
@@ -112,7 +111,7 @@ public sealed class CreatePayrollPeriodAdjustmentTests
     private CreatePayrollPeriodCommandHandler Sut() => new(
         _periods.Object, _formulaSets.Object, _readiness.Object, _collector.Object,
         new PayrollCalculator(new FormulaEvaluator(new FormulaFunctionRegistry()), _graph),
-        _graph, _catalog, _noteBuilder.Object, _adjustments.Object, _holidays.Object, _currentUser.Object);
+        _graph, _catalog, _noteBuilder.Object, _adjustments.Object, _currentUser.Object);
 
     private async Task<PayrollRow> CreateAndGetEmployeeRowAsync()
     {

@@ -23,6 +23,12 @@ public static class PayrollColumnCodes
     public const string CongTinhLuong = "CONGTINHLUONG"; // công chính thức
     public const string CongHocViec = "CONGHOCVIEC";
 
+    /// <summary>
+    /// CC-2026-08 — công ngày lễ được cộng tự động (Đ.112 BLLĐ). Cột ĐỐI CHIẾU: giải thích vì sao
+    /// tổng công vẫn khớp công chuẩn dù NLĐ nghỉ lễ. Không cột nào chia cho cột này.
+    /// </summary>
+    public const string CongLe = "CONGLE";
+
     /// <summary>Phase 2 — tổng giờ làm trong kỳ (ca chính + tăng ca), căn cứ xếp bậc hỗ trợ HĐ khoán.</summary>
     public const string TongGioLam = "TONGGIOLAM";
 

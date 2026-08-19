@@ -38,9 +38,6 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
     private enum CongCategory { Official, Probation, Apprentice }
 
-    private static readonly IReadOnlyDictionary<DateOnly, DayType> EmptyDayTypes =
-        new Dictionary<DateOnly, DayType>();
-
     public async Task<PayrollCollectionResult> CollectAsync(PayrollCollectionRequest req, CancellationToken ct)
     {
         var periodStart = new DateOnly(req.Year, req.Month, 1);
@@ -260,11 +257,20 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
             // ⭐ BS-2: loại ngày cần cho CẢ giờ thường (phụ trội nghỉ tuần/lễ) lẫn OT — resolve 1 lần
             // cho cả kỳ, dùng chung, tránh gọi 2 lượt.
-            var dayTypeByDate = records.Count > 0 || ots.Count > 0
-                ? await _dayTypeResolver.ResolveRangeAsync(e.Id, periodStart, periodEnd, ct)
-                : EmptyDayTypes;
+            //
+            // ⭐ CC-2026-08 — resolve VÔ ĐIỀU KIỆN, không còn bỏ qua khi NV không có chấm công/đơn OT:
+            // công ngày lễ nay được cộng tự động nên NV nghỉ trọn tháng Tết (0 bản ghi chấm công)
+            // vẫn phải biết những ngày nào là ngày lễ để hưởng lương.
+            var dayTypeByDate = await _dayTypeResolver.ResolveRangeAsync(e.Id, periodStart, periodEnd, ct);
 
             decimal congCom = 0, congThuViec = 0, congChinhThuc = 0, congHocViec = 0, dayHours = 0, nightHours = 0;
+            // ⭐ CC-2026-08 — tổng trọng số công đã ghi nhận theo TỪNG NGÀY. Là căn cứ chống độn công
+            // khi bù công ngày lễ bên dưới: phải cộng dồn theo ngày chứ không kiểm tra "ngày này đã
+            // có bản ghi chưa", vì 1 ngày có thể có NHIỀU bản ghi (unique index là bộ ba
+            // Employee+WorkDate+ShiftTemplate ⇒ ca xoay 2 ca/ngày) và `HalfDay` chỉ mang 0.5 công.
+            var weightByDate = new Dictionary<DateOnly, decimal>();
+            // ⭐ CC-2026-08 — công ngày lễ được cộng tự động, tách riêng để kế toán đối chiếu.
+            decimal congLe = 0;
             decimal weeklyRestHours = 0, holidayHours = 0;
             // ⭐ Phase 5 — tiền lương cộng dồn theo TRỌNG SỐ NGÀY của từng đoạn HĐ, để chia ra mức
             // bình quân của riêng đoạn chính thức và riêng đoạn thử việc.
@@ -288,6 +294,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 if (weight > 0)
                 {
                     congCom += weight;
+                    weightByDate[r.WorkDate] = weightByDate.GetValueOrDefault(r.WorkDate) + weight;
 
                     // ⭐ Phase 5 — mọi thứ của một ngày công đều quy về HỢP ĐỒNG PHỦ ĐÚNG NGÀY ĐÓ,
                     // không còn dùng chung một HĐ đại diện cho cả kỳ: tháng chuyển thử việc → chính
@@ -331,6 +338,69 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                         holidayHours += r.DayHours + r.NightHours; break;
                 }
             }
+
+            // ===== ⭐ CC-2026-08 — BÙ CÔNG NGÀY LỄ =====
+            //
+            // Đ.112 BLLĐ: ngày nghỉ lễ là ngày HƯỞNG NGUYÊN LƯƠNG. Công chuẩn nay không trừ lễ khỏi
+            // mẫu số nữa (xem `CreatePayrollPeriodCommand`), nên ngày lễ phải xuất hiện ở TỬ SỐ như
+            // một ngày công thật — nếu không, NLĐ mất trắng lương những ngày lễ (tháng Tết ~23%).
+            //
+            // Bù theo PHẦN CÒN THIẾU của ngày (`1 − trọng số đã ghi nhận`), KHÔNG phải "ngày này
+            // chưa có bản ghi thì cộng 1":
+            //   • đi làm trọn ca ngày lễ  → đã có 1.0 ⇒ bù 0  (giữ 300%, không độn thành 2 công)
+            //   • làm nửa ca (HalfDay)    → đã có 0.5 ⇒ bù 0.5 (nửa công làm + nửa công lễ)
+            //   • xếp 2 ca cùng ngày lễ   → đã có 2.0 ⇒ bù 0  (không làm nặng thêm)
+            //   • nghỉ lễ ở nhà           → chưa có gì ⇒ bù 1.0
+            //   • đơn phép có lương trùng lễ → resolver ưu tiên `PublicHoliday` nên `DayWeight` trả 0
+            //     ⇒ bù 1.0. Đây cũng là bản vá cho lỗi cũ: ngày đó trước đây mất trắng công.
+            //
+            // KHÔNG đụng `workSegments` (sẽ sinh phụ trội 200% cho người nằm nhà), KHÔNG đụng
+            // `dayHours/nightHours/totalWorkHours` (sai trần OT + sai bậc hỗ trợ HĐ khoán), KHÔNG
+            // đụng `congCom` (nghỉ lễ ở nhà không ăn cơm ca).
+            //
+            // Quyết định PO 19/08/2026: áp dụng cho MỌI loại hợp đồng, và KHÔNG đòi NLĐ phải có ngày
+            // công nào trong kỳ — chỉ cần hợp đồng còn hiệu lực phủ ngày lễ đó.
+            foreach (var (leDate, leType) in dayTypeByDate)
+            {
+                if (leType != DayType.PublicHoliday) continue;
+                // Ngày lễ rơi vào T7/CN không nằm trong mẫu số (công chuẩn chỉ đếm T2–T6) nên cộng
+                // vào tử số sẽ đẩy tổng công vượt công chuẩn ⇒ trả thừa lương.
+                if (leDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+                // #25 — NV vào/nghỉ giữa tháng không được hưởng ngày lễ nằm ngoài kỳ hiệu lực HĐ.
+                if (!IsCoveredByContract(empContracts, leDate)) continue;
+
+                var buLe = 1m - weightByDate.GetValueOrDefault(leDate);
+                if (buLe <= 0m) continue;
+
+                congLe += buLe;
+
+                var leContract = ContractForDay(empContracts, leDate) ?? activeContract;
+                switch (ResolveCategory(leContract, leDate))
+                {
+                    case CongCategory.Probation:
+                        congThuViec += buLe;
+                        luongThuViecTheoCong += buLe * SalaryForDay(leContract, leDate);
+                        break;
+                    case CongCategory.Apprentice:
+                        congHocViec += buLe;
+                        break;
+                    default:
+                        congChinhThuc += buLe;
+                        luongChinhThucTheoCong += buLe * SalaryForDay(leContract, leDate);
+                        break;
+                }
+
+                if (leContract is not null && !HasAnyInsurance(leContract)) congKhongBaoHiem += buLe;
+
+                phuCapTheoCong += AllowanceBuckets
+                    .From(AllowanceLinesFor(leContract, leDate))
+                    .Scale(buLe);
+            }
+
+            // ⭐ CC-2026-08 — tổng công HƯỞNG LƯƠNG (đã gồm công lễ) = mẫu số đúng cho nền đóng BH.
+            // Bằng `congCom + congLe` theo cấu tạo, nhưng cộng lại từ 3 loại công cho tường minh
+            // rằng đây chính là tử số mà THU_NHAP_PHANBO đang dùng.
+            var congHuongLuong = congChinhThuc + congThuViec + congHocViec;
 
             // ⭐ Phase 5 — cột "Mức lương" mang mức của ĐOẠN CHÍNH THỨC, không phải bình quân cả kỳ:
             // nhánh chính thức của THU_NHAP_PHANBO lấy thẳng cột này, còn phần chênh của những ngày
@@ -388,8 +458,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // ⭐ Phase 6 — phụ cấp BÌNH QUÂN theo trọng số ngày công (phụ lục đổi phụ cấp có hiệu
             // lực giữa tháng thì nửa đầu / nửa sau ăn hai mức khác nhau, giống mức lương ở Phase 5).
             // Không có ngày công nào để cân ⇒ lấy trạng thái tại cuối kỳ, giữ nguyên hành vi cũ.
-            var phuCap = congCom > 0
-                ? phuCapTheoCong.Divide(congCom)
+            //
+            // ⭐ CC-2026-08 — mẫu số phải là `congHuongLuong` chứ không còn `congCom`: vòng bù công
+            // ngày lễ ở trên đã cộng phụ cấp của những ngày lễ vào `phuCapTheoCong`, chia lại cho
+            // riêng công đi làm thật sẽ thổi phồng mức bình quân đúng bằng tỉ lệ ngày lễ.
+            var phuCap = congHuongLuong > 0
+                ? phuCapTheoCong.Divide(congHuongLuong)
                 : AllowanceBuckets.From(AllowanceLinesFor(activeContract, periodEnd));
 
             var inputs = new PayrollEmployeeInputs { EmployeeInformationId = e.Id };
@@ -425,6 +499,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractAllowanceNgoaiLe] = phuCap.NgoaiLe;
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
+            n[CongLe] = congLe;
+            n[CongHuongLuong] = congHuongLuong;
             n[CongThuViec] = congThuViec;
             n[CongChinhThuc] = congChinhThuc;
             n[CongHocViec] = congHocViec;
