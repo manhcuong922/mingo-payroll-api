@@ -77,6 +77,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(BhtnNldRate, "Tỷ lệ BHTN – NLĐ", "Compliance", ColumnDataType.Percent),
         new(KpcdRate, "Tỷ lệ KPCĐ – DN", "Compliance", ColumnDataType.Percent),
         new(UnionDuesRate, "Tỷ lệ đoàn phí – NLĐ", "Compliance", ColumnDataType.Percent),
+        new(ShortTermFlatRate, "Tỷ lệ thuế khoán (HĐ < 3 tháng)", "Compliance", ColumnDataType.Percent),
 
         // Compliance — trần + giảm trừ
         new(BhxhBhytCap, "Trần đóng BHXH", "Compliance", ColumnDataType.Money),
@@ -86,6 +87,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(PersonalDeduction, "Giảm trừ bản thân", "Compliance", ColumnDataType.Money),
         new(DependentDeduction, "Giảm trừ mỗi người phụ thuộc", "Compliance", ColumnDataType.Money),
         new(MealExemptThreshold, "Mức cơm miễn thuế tối đa", "Compliance", ColumnDataType.Money),
+        new(ShortTermTaxExemptIncome, "Ngưỡng khấu trừ thuế khoán / lần chi trả", "Compliance", ColumnDataType.Money),
     };
 
     private static readonly Dictionary<string, PayrollFieldDescriptor> ByKey =

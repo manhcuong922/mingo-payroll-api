@@ -870,7 +870,7 @@ public sealed partial class DatabaseSeeder
             new() { Code = "NQ-110-2025", DocumentType = LegalDocumentTypes.NghiQuyet, DocumentNumber = "110/2025/UBTVQH15", Title = "Biểu thuế TNCN lũy tiến từng phần", IssuedBy = "UBTVQH", IssuedDate = new DateOnly(2025, 12, 1), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "ND-293-2025", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "293/2025/NĐ-CP", Title = "Lương tối thiểu vùng 2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2025, 12, 20), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "TT-26-2016", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "26/2016/TT-BLĐTBXH", Title = "Ngưỡng phụ cấp ăn ca 730,000 (hết hiệu lực 15/06/2025)", IssuedBy = "Bộ LĐTBXH", IssuedDate = new DateOnly(2016, 9, 1), EffectiveDate = new DateOnly(2016, 10, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
-            new() { Code = "ND-253-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "253/2026/NĐ-CP", Title = "Ngưỡng phụ cấp ăn ca/ăn trưa miễn thuế 1,200,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 30), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "ND-253-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "253/2026/NĐ-CP", Title = "Ngưỡng phụ cấp ăn ca/ăn trưa miễn thuế 1,200,000 + ngưỡng khấu trừ thuế khoán 10% lên 5,000,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 30), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "BLLD-2019", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "(không số)", Title = "Bộ luật Lao động 2019", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2019, 11, 20), EffectiveDate = new DateOnly(2021, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
         };
 
@@ -1029,11 +1029,13 @@ public sealed partial class DatabaseSeeder
             },
         };
 
-        // Row 2: current active (2026-01-01, IsActive=true — ValidFrom <= seedDate 2026-06-12)
+        // Row 2: bản của kỳ tính thuế 2026 (2026-01-01) — KHÔNG còn là bản đang áp dụng kể từ khi có
+        // row3 (01/07/2026). Vẫn giữ để kỳ lương trả TRƯỚC 01/07/2026 tính lại ra đúng ngưỡng 2tr cũ:
+        // GetActiveAtAsync lọc `ValidFrom <= ngày trả` nên tự chọn đúng bản theo thời điểm.
         var row2 = new PitRegulationVersion
         {
             ValidFrom = new DateOnly(2026, 1, 1),
-            IsActive = true,
+            IsActive = false,
             IsArchived = false,
             PersonalDeductionAmount = 15_500_000m,
             DependentDeductionAmount = 6_200_000m,
@@ -1053,9 +1055,40 @@ public sealed partial class DatabaseSeeder
             },
         };
 
-        await _context.PitRegulationVersions.AddRangeAsync(new[] { row1, row2 }, ct);
+        // Row 3: ⭐ Phase 7 — current active (2026-07-01, IsActive=true; ValidFrom đã ở QUÁ KHỨ so với
+        // ngày chạy seed). NĐ 253/2026/NĐ-CP nâng NGƯỠNG khấu trừ thuế khoán 10% mỗi lần chi trả từ
+        // 2.000.000 lên 5.000.000; giảm trừ gia cảnh + biểu luỹ tiến giữ nguyên như row2.
+        //
+        // Phải là bản MỚI chứ không sửa tại chỗ row2: kỳ lương trả trước 01/07/2026 tính lại vẫn
+        // phải ra ngưỡng 2tr của luật cũ. Cờ IsActive bật ngay tại seed, không chờ
+        // ComplianceActivationJob — xem lý do ở SeedLaborLawConstantsAsync.
+        var row3 = new PitRegulationVersion
+        {
+            ValidFrom = new DateOnly(2026, 7, 1),
+            IsActive = true,
+            IsArchived = false,
+            PersonalDeductionAmount = 15_500_000m,
+            DependentDeductionAmount = 6_200_000m,
+            ShortTermContractMaxMonths = 3,
+            ShortTermFlatRatePercent = 10.00m,
+            ShortTermTaxExemptMonthlyIncome = 5_000_000m,
+            LegalReference = "NĐ 253/2026/NĐ-CP — ngưỡng khấu trừ thuế khoán 10% lên 5.000.000đ/lần chi trả từ 01/07/2026",
+            CreatedAt = now,
+            CreatedByUserId = adminId,
+            Brackets = new List<PitBracket>
+            {
+                new() { Order = 1, LowerBound = 0m,            UpperBound = 10_000_000m,  Rate = 0.0500m },
+                new() { Order = 2, LowerBound = 10_000_000m,   UpperBound = 30_000_000m,  Rate = 0.1000m },
+                new() { Order = 3, LowerBound = 30_000_000m,   UpperBound = 60_000_000m,  Rate = 0.2000m },
+                new() { Order = 4, LowerBound = 60_000_000m,   UpperBound = 100_000_000m, Rate = 0.3000m },
+                new() { Order = 5, LowerBound = 100_000_000m,  UpperBound = null,          Rate = 0.3500m },
+            },
+        };
+
+        await _context.PitRegulationVersions.AddRangeAsync(new[] { row1, row2, row3 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 2 PitRegulationVersion rows (row1 IsActive=false historical, row2 IsActive=true current).");
+        _logger.LogInformation(
+            "Seeded 3 PitRegulationVersion rows (row1/row2 IsActive=false historical, row3 IsActive=true current từ 01/07/2026).");
 
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.PitRegulation, row2.Id,
@@ -1065,6 +1098,10 @@ public sealed partial class DatabaseSeeder
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.PitRegulation, row1.Id,
             new[] { "LUAT-TNCN-109-2025" },
+            legalDocumentIdsByCode, adminId, now, ct);
+        await LinkLegalDocumentsAsync(
+            ComplianceEntityTypes.PitRegulation, row3.Id,
+            new[] { "LUAT-TNCN-109-2025", "ND-253-2026" },
             legalDocumentIdsByCode, adminId, now, ct);
     }
 

@@ -10,7 +10,7 @@
 > | Phase 3 — readiness cho HĐ dân sự | ✅ Xong |
 > | Phase 1 — khoán: không BH + thuế 10% | ✅ Xong |
 > | Phase 2 — khoán: hỗ trợ theo tiến độ | ✅ Xong |
-> | Phase 7 — ngưỡng khấu trừ thuế | ⬜ Chưa |
+> | Phase 7 — ngưỡng khấu trừ thuế | ✅ Xong |
 > | Phase 5 — lương theo đoạn HĐ | ⬜ Chưa |
 > | Phase 6 — phụ lục | ⬜ Chưa |
 
@@ -251,7 +251,7 @@ Chọn **"chỉ có HĐ dân sự"** chứ không phải "có ít nhất một H
 
 ---
 
-## Phase 7 — Thuế khoán: nối compliance + ngưỡng khấu trừ
+## Phase 7 — Thuế khoán: nối compliance + ngưỡng khấu trừ ✅ ĐÃ XONG
 
 **Vấn đề:** tỷ lệ 10% đang hardcode `N.Const(0.10m)`; `PitRegulationVersion.ShortTermFlatRatePercent` / `ShortTermTaxExemptMonthlyIncome` có API CRUD đầy đủ nhưng **không cột nào đọc**; seed đang để **2.000.000đ** (`DatabaseSeeder.cs:1042`) trong khi từ 01/07/2026 ngưỡng là **5.000.000đ** (NĐ 253/2026).
 
@@ -264,7 +264,17 @@ Chọn **"chỉ có HĐ dân sự"** chứ không phải "có ít nhất một H
 3. Version PIT mới `ValidFrom = 01/07/2026`, `ShortTermTaxExemptMonthlyIncome = 5.000.000`, `LegalReference = "NĐ 253/2026/NĐ-CP"` — seed + migration backfill theo mẫu `20260810160000_BackfillOvertimeTaxExemptionCompliance.cs`.
 4. Cam kết 08/CK-TNCN: bổ sung ghi chú trên UI hợp đồng rằng chọn `TaxPolicy.Exempt` = đã nhận bản cam kết.
 
-**Test:** tổng thu nhập 4.9tr + cờ `x` ⇒ thuế 0; 5tr ⇒ 500k; kỳ cũ (snapshot thiếu 2 field) ⇒ vẫn 10% không ngưỡng.
+### Đã làm
+
+- 2 field `compliance.shortTermFlatRate` / `compliance.shortTermTaxExemptIncome` + nhãn trong `PayrollFieldCatalog`; collector đổ từ `pit` snapshot của **ngày trả** (tỷ lệ chia 100 như mọi tỷ lệ khác — Compliance lưu `10.00` chứ không phải `0.10`).
+- `THUETNCN` nhánh `Khoan10`: `IF(TONGTHUNHAP < ngưỡng, 0, TONGTHUNHAP × tỷ_lệ)`, tỷ lệ fallback `0.10` khi field = 0. Nhánh `Khoan20` **không** áp ngưỡng (cá nhân không cư trú, Đ.25.1.a). Dùng `<` vì điều khoản viết "từ 5tr trở lên thì khấu trừ" — đúng 5tr vẫn khấu trừ.
+- **Không cần migration formula set**: `UpgradeDefaultFormulaSetAsync` đồng bộ `FormulaJson` của cột `IsSystem` vào DB đang chạy; kỳ cũ giữ snapshot đã đóng băng.
+- `PitRegulationVersion` mới `ValidFrom = 01/07/2026`, ngưỡng 5.000.000, `IsActive = true` (row 2026-01-01 hạ cờ). **Bản mới chứ không sửa tại chỗ**: `GetActiveAtAsync` lọc `ValidFrom <= ngày trả` nên kỳ trả trước 01/07/2026 tính lại vẫn ra ngưỡng 2tr cũ.
+- Migration `20260819100000_PitFlatTaxThresholdFiveMillion` — backfill prod theo khuôn `BackfillOvertimeTaxExemptionCompliance`: chỉ chạy khi bảng đã có dữ liệu + chưa có bản 01/07/2026; hạ cờ `IsActive` TRƯỚC khi chèn (unique index lọc); **copy cả bảng con `PitBrackets`** (thiếu bậc ⇒ thuế luỹ tiến của mọi HĐLĐ ra 0); link `LegalDocument` theo BR-15.
+- UI: nhãn `TaxPolicy.Exempt` đổi thành "Miễn khấu trừ (cam kết 08/CK-TNCN / hiệp định song phương)" + dòng nhắc hiện ngay khi chọn; màn hình PitRegulation đổi nhãn "Lương miễn thuế dưới" → "Ngưỡng khấu trừ mỗi lần chi trả" và mặc định bản mới 5tr.
+- 2 field mới đăng ký trong `PayrollExcelConstantCatalog` (`TYLE_THUE_KHOAN`, `NGUONG_KHAUTRU_KHOAN`) — là hằng số của kỳ nên nằm hàng tham số, không nhân bản thành cột phụ trợ mỗi NV.
+
+**Test (10 test, xanh):** `FlatRateTaxThresholdFormulaTests` (7) — dưới ngưỡng ⇒ 0; đúng 5tr ⇒ 500k; trên ngưỡng tính 10% TOÀN BỘ (không trừ phần dưới ngưỡng); tỷ lệ lấy từ Compliance (5% ⇒ 500k/10tr); kỳ cũ thiếu 2 khoá ⇒ vẫn 10% không ngưỡng; `Khoan20` không có ngưỡng; luỹ tiến không bị chạm. `PayrollCollectorFlatTaxComplianceTests` (3) — tỷ lệ đổ xuống dạng phân số 0.10 (không phải 10), ngưỡng lấy đúng bản luật, đổi bản luật ⇒ số mới đi thẳng vào kỳ.
 
 ---
 

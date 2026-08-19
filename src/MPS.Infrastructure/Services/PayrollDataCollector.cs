@@ -377,6 +377,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[PersonalDeduction] = pit.PersonalDeductionAmount;
             n[DependentDeduction] = pit.DependentDeductionAmount;
             n[MealExemptThreshold] = mealExempt;
+            // ⭐ Phase 7 — thuế khoán nay đọc từ bản luật đang hiệu lực tại NGÀY TRẢ: tỷ lệ (lưu dạng
+            // phần trăm ⇒ chia 100 như mọi tỷ lệ khác) + ngưỡng khấu trừ mỗi lần chi trả.
+            n[ShortTermFlatRate] = pit.ShortTermFlatRatePercent / 100m;
+            n[ShortTermTaxExemptIncome] = pit.ShortTermTaxExemptMonthlyIncome;
 
             result.Add(inputs);
         }

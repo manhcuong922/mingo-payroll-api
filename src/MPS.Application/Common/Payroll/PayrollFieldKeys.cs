@@ -134,6 +134,17 @@ public static class PayrollFieldKeys
     /// <summary>Tỷ lệ ĐOÀN PHÍ công đoàn NLĐ đóng (QĐ 1908/QĐ-TLĐ: 1% lương đóng BHXH).</summary>
     public const string UnionDuesRate = "compliance.unionDuesRate";
 
+    /// <summary>
+    /// ⭐ Phase 7 — tỷ lệ khấu trừ THUẾ KHOÁN của cá nhân cư trú không ký HĐLĐ / ký dưới 3 tháng
+    /// (TT 111/2013 Đ.25.1.i), lấy từ <c>PitRegulationVersion.ShortTermFlatRatePercent</c> và đã
+    /// chia 100 (10.00% ⇒ 0.10) như mọi tỷ lệ khác trong nhóm này.
+    ///
+    /// <para>⚠️ Kỳ lương cũ thiếu khoá ⇒ <c>ToFields</c> điền 0, mà tỷ lệ 0 sẽ XOÁ SẠCH thuế khoán
+    /// (khác các khoá "thiếu ⇒ 0 ⇒ giữ hành vi cũ" thông thường). Vì vậy công thức THUETNCN
+    /// fallback về hằng số 0.10 khi trường này = 0.</para>
+    /// </summary>
+    public const string ShortTermFlatRate = "compliance.shortTermFlatRate";
+
     // ===== Compliance — trần + giảm trừ + ngưỡng =====
     public const string BhxhBhytCap = "compliance.bhxhBhytCap";
 
@@ -155,4 +166,13 @@ public static class PayrollFieldKeys
     public const string PersonalDeduction = "compliance.personalDeduction";
     public const string DependentDeduction = "compliance.dependentDeduction";
     public const string MealExemptThreshold = "compliance.mealExemptThreshold";
+
+    /// <summary>
+    /// ⭐ Phase 7 — NGƯỠNG khấu trừ thuế khoán mỗi lần chi trả (TT 111/2013 Đ.25.1.i; NĐ 253/2026
+    /// nâng 2.000.000đ → 5.000.000đ từ 01/07/2026). Tổng thu nhập DƯỚI ngưỡng ⇒ không khấu trừ.
+    /// Bảng lương chi 1 lần/tháng nên "mỗi lần chi trả" = tổng thu nhập của kỳ.
+    ///
+    /// <para>Kỳ lương cũ thiếu khoá ⇒ 0 ⇒ không thu nhập nào dưới ngưỡng ⇒ khấu trừ như trước ✅</para>
+    /// </summary>
+    public const string ShortTermTaxExemptIncome = "compliance.shortTermTaxExemptIncome";
 }

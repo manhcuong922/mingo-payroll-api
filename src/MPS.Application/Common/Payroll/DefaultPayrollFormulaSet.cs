@@ -258,12 +258,30 @@ public static class DefaultPayrollFormulaSet
             formula: N.Func(Fn.Max,
                 N.Sub(N.Sub(N.Sub(N.Col(Cc.Tnct), N.Col(Cc.CongBhNld)), N.Col(Cc.GtNpt)), N.Col(Cc.GtBanThan)),
                 N.Const(0m)));
+        // Phase 7 — thuế KHOÁN của cá nhân cư trú không ký HĐLĐ / ký dưới 3 tháng (TT 111/2013
+        // Đ.25.1.i): tỷ lệ + ngưỡng khấu trừ lấy từ Compliance thay vì hằng số, để đổi luật là sửa
+        // trên màn hình PitRegulation chứ không phải deploy lại.
+        //
+        // • Tỷ lệ: kỳ lương cũ thiếu khoá ⇒ 0, mà 0 sẽ XOÁ SẠCH thuế khoán ⇒ fallback về 0.10 —
+        //   đây là ngoại lệ có chủ đích của quy ước "thiếu khoá ⇒ 0 ⇒ giữ hành vi cũ".
+        // • Ngưỡng: NĐ 253/2026 nâng 2.000.000 → 5.000.000 mỗi lần chi trả; bảng lương chi 1
+        //   lần/tháng nên so với TỔNG THU NHẬP của kỳ. Dùng `<` chứ không `<=` vì điều khoản viết
+        //   "từ 5.000.000 trở lên thì khấu trừ". Ngưỡng = 0 (kỳ cũ) ⇒ không dòng nào lọt ⇒ hành vi cũ.
+        // • Ngưỡng KHÔNG áp cho nhánh 20%: mức đó dành cho cá nhân KHÔNG cư trú (Đ.25.1.a), không
+        //   kèm ngưỡng miễn nào.
+        var flatRate = N.If(N.Cmp(">", N.Field(Fk.ShortTermFlatRate), N.Const(0m)),
+            N.Field(Fk.ShortTermFlatRate),
+            N.Const(0.10m));
+        var flatTax = N.If(
+            N.Cmp("<", N.Col(Cc.TongThuNhap), N.Field(Fk.ShortTermTaxExemptIncome)),
+            N.Const(0m),
+            N.Mul(N.Col(Cc.TongThuNhap), flatRate));
         Add(Cc.ThueTncn, "Thuế TNCN", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             rounding: RoundingMode.ToThreeDecimals,
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.Khoan20)),
                 N.Mul(N.Col(Cc.TongThuNhap), N.Const(0.20m)),
                 N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.Khoan10)),
-                    N.Mul(N.Col(Cc.TongThuNhap), N.Const(0.10m)),
+                    flatTax,
                     N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.CamKet)),
                         N.Const(0m),
                         N.Func(Fn.ProgressiveTax, N.Col(Cc.Tntt))))));
