@@ -2822,6 +2822,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AllowanceSnapshotBeforeJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("AppendixNo")
                         .IsRequired()
                         .HasMaxLength(50)

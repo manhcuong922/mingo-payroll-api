@@ -91,10 +91,28 @@ public sealed class AppendixApplier
             appendix.SalaryCurrencySnapshot = contract.SalaryCurrencySnapshot;
         }
 
+        // ⭐ Phase 6 — chụp ảnh phụ cấp NGAY TRƯỚC khi ghi đè. `ApplyAllowanceChangesAsync` sửa thẳng
+        // `ContractAllowances` nên trạng thái cũ mất vĩnh viễn; không có ảnh này thì tính lại một kỳ
+        // lương CŨ sẽ ăn phụ cấp MỚI — sai lịch sử, ngược với lý do đã làm [D12] cho lương.
+        // Chỉ chụp khi phụ lục THỰC SỰ đụng phụ cấp, để không ghim vô ích lên mọi phụ lục.
+        if (change.AddAllowances.Count > 0 || change.UpdateAllowances.Count > 0 || change.RemoveAllowanceTypeIds.Count > 0)
+            appendix.AllowanceSnapshotBeforeJson = SerializeAllowances(contractAllowances);
+
         await ApplyAllowanceChangesAsync(contract, contractAllowances, change, nowUtc, cancellationToken);
 
         contract.UpdatedAt = nowUtc;
     }
+
+    /// <summary>
+    /// Ảnh phụ cấp đủ để dựng lại con số của kỳ lương: mã loại + số tiền + đơn vị. Cố ý KHÔNG ghim
+    /// <c>Code</c>/<c>ExcludeFromProration</c> của <c>AllowanceType</c> — đó là cấu hình danh mục,
+    /// tra sống theo Id để một lần sửa danh mục áp cho mọi kỳ tính lại.
+    /// </summary>
+    private static string SerializeAllowances(IEnumerable<ContractAllowance> allowances) =>
+        MPS.Application.Common.Payroll.PayrollJson.Serialize(allowances
+            .Select(a => new ContractAllowanceSnapshot(a.AllowanceTypeId, a.Amount, a.Currency))
+            .OrderBy(a => a.AllowanceTypeId)
+            .ToList());
 
     private async Task ApplyAllowanceChangesAsync(
         Domain.Entities.Contract contract,

@@ -338,5 +338,57 @@ public sealed class AppendixApplierTests
     };
 
     /// <summary>Phụ lục trống để nhận mức lương đóng băng khi test đổi bậc lương ([D12]).</summary>
+    /// <summary>
+    /// ⭐ Phase 6 — phụ lục có đụng phụ cấp phải chụp ảnh trạng thái NGAY TRƯỚC khi ghi đè. Không có
+    /// ảnh này thì trạng thái cũ mất vĩnh viễn (applier sửa thẳng ContractAllowances) và tính lại
+    /// một kỳ lương CŨ sẽ ăn phụ cấp MỚI — sai lịch sử.
+    /// </summary>
+    [Fact]
+    public async Task AllowanceChange_Snapshots_State_Before_Applying()
+    {
+        var contract = NewContract();
+        var allowances = new List<ContractAllowance>
+        {
+            new() { AllowanceTypeId = 10, Amount = 1_000_000m, Currency = "VND" },
+        };
+        var lookup = new Mock<IContractLookupReader>();
+        lookup.Setup(l => l.GetActiveAllowanceTypeIdsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { 10 });
+
+        var appendix = Appendix();
+        var change = new AppendixChangeSet
+        {
+            UpdateAllowances = new[] { new AppendixAllowanceChange(10, 3_000_000m, Currency: "VND", Note: null) },
+        };
+
+        await new AppendixApplier(lookup.Object)
+            .ApplyAsync(contract, allowances, appendix, change, NowUtc, CancellationToken.None);
+
+        allowances[0].Amount.Should().Be(3_000_000m, "phụ cấp hiện tại đã đổi");
+
+        var before = MPS.Application.Common.Payroll.PayrollJson
+            .Deserialize<List<ContractAllowanceSnapshot>>(appendix.AllowanceSnapshotBeforeJson!);
+        before.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new ContractAllowanceSnapshot(10, 1_000_000m, "VND"),
+                "ảnh phải là mức CŨ 1tr, không phải mức mới");
+    }
+
+    /// <summary>Phụ lục không đụng phụ cấp thì không ghim ảnh — tra lịch sử bỏ qua nó.</summary>
+    [Fact]
+    public async Task NonAllowanceChange_DoesNotSnapshot()
+    {
+        var appendix = Appendix();
+
+        await new AppendixApplier(Mock.Of<IContractLookupReader>()).ApplyAsync(
+            NewContract(),
+            new List<ContractAllowance> { new() { AllowanceTypeId = 10, Amount = 1_000_000m, Currency = "VND" } },
+            appendix,
+            new AppendixChangeSet { JobDescription = "Tech Lead" },
+            NowUtc,
+            CancellationToken.None);
+
+        appendix.AllowanceSnapshotBeforeJson.Should().BeNull();
+    }
+
     private static Domain.Entities.ContractAppendix Appendix() => new() { EffectiveFrom = NowUtc };
 }

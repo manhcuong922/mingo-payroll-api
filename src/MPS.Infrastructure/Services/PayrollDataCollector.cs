@@ -4,6 +4,7 @@ using MPS.Application.Common.Interfaces.Payroll;
 using MPS.Application.Common.Payroll;
 using MPS.Application.Common.Payroll.Formula;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
+using MPS.Application.Features.ContractAppendix.Common;
 using MPS.Application.Features.Payroll.Common;
 using MPS.Domain.Entities;
 using MPS.Domain.Entities.Payroll;
@@ -39,16 +40,6 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
     private static readonly IReadOnlyDictionary<DateOnly, DayType> EmptyDayTypes =
         new Dictionary<DateOnly, DayType>();
-
-    // #64/[D15] — 4 mã có cột riêng trên bảng lương; mọi mã khác gom vào cột "Khác" (AllowanceOther).
-    private static readonly HashSet<string> HardcodedAllowanceCodes =
-        new(StringComparer.OrdinalIgnoreCase) { "HOUSING", "PHONE", "FUEL", "MEAL" };
-
-    /// <summary>
-    /// PRORATE-02 — cơm phải tách riêng khỏi khối "ngoại lệ" chung: tiền cơm luôn ở lại cột
-    /// <c>COM</c> (dù khai ngoại lệ hay không) để giữ suất miễn thuế cơm <c>MIN(COM, ngưỡng)</c>.
-    /// </summary>
-    private const string MealCode = "MEAL";
 
     public async Task<PayrollCollectionResult> CollectAsync(PayrollCollectionRequest req, CancellationToken ct)
     {
@@ -133,6 +124,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         // Vẫn lấy tới HẾT kỳ (không phải "hiệu lực từ trước đầu kỳ"): tính lại một kỳ CŨ vẫn ra
         // đúng mức của thời điểm đó vì phụ lục ký sau kỳ đó có mốc lớn hơn mọi ngày trong kỳ.
         var contractIds = contracts.Select(c => c.Id).ToList();
+        var periodStartUtc = periodStart.ToDateTime(TimeOnly.MinValue);
         var periodEndUtc = periodEnd.ToDateTime(TimeOnly.MaxValue);
         var salaryChangesByContract = (await _db.ContractAppendices.AsNoTracking()
             .Where(a => contractIds.Contains(a.ContractId)
@@ -147,6 +139,32 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 g => g.Select(a => (From: DateOnly.FromDateTime(a.EffectiveFrom), Amount: a.SalaryAmountSnapshot!.Value))
                     .OrderByDescending(x => x.From)
                     .ToList());
+
+        // ⭐ Phase 6 — ảnh phụ cấp LỊCH SỬ. `AppendixApplier` ghi đè thẳng `ContractAllowances` nên
+        // trạng thái cũ mất vĩnh viễn; mỗi phụ lục có đụng phụ cấp lưu lại ảnh NGAY TRƯỚC nó.
+        // Phụ cấp tại ngày D = ảnh của phụ lục CŨ NHẤT có hiệu lực SAU ngày D; không có ⇒ trạng thái
+        // hiện tại của hợp đồng. Vì vậy chỉ phụ lục hiệu lực SAU đầu kỳ mới che được ngày nào đó.
+        var allowanceSnapshotsByContract = (await _db.ContractAppendices.AsNoTracking()
+            .Where(a => contractIds.Contains(a.ContractId)
+                && a.Status == ContractEnums.AppendixStatus.Active
+                && a.AllowanceSnapshotBeforeJson != null
+                && a.EffectiveFrom > periodStartUtc)
+            .Select(a => new { a.ContractId, a.EffectiveFrom, a.AllowanceSnapshotBeforeJson })
+            .ToListAsync(ct))
+            .GroupBy(a => a.ContractId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(a => (
+                        From: DateOnly.FromDateTime(a.EffectiveFrom),
+                        Lines: PayrollJson.Deserialize<List<ContractAllowanceSnapshot>>(a.AllowanceSnapshotBeforeJson!)
+                               ?? new List<ContractAllowanceSnapshot>()))
+                    .OrderBy(x => x.From)
+                    .ToList());
+
+        // Cấu hình danh mục (mã + cờ ngoại lệ) tra SỐNG theo Id: ảnh lịch sử chỉ ghim số tiền, nên
+        // sửa danh mục một lần là áp cho mọi kỳ tính lại.
+        var allowanceTypesById = await _db.AllowanceTypes.AsNoTracking()
+            .ToDictionaryAsync(t => t.Id, t => new { t.Code, t.ExcludeFromProration }, ct);
 
         // ⭐ A1 — chỉ lấy bản ghi chấm công CA CHÍNH (`OvertimeRequestId == null`).
         // HR chấm công 2 lần cho ngày có tăng ca (một cho ca chính, một cho ca OT) đúng như hệ thống
@@ -206,6 +224,27 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         // ⭐ Phase 5 — mức lương áp cho MỘT NGÀY công. Ngày rơi vào giai đoạn thử việc thoả thuận
         // ngay trong HĐLĐ thì hưởng `ProbationSalary` của chính HĐ đó (Điều 26 BLLĐ 2019); HĐ thử
         // việc RIÊNG đã được `ResolveContractSalary` xử lý sẵn.
+        // ⭐ Phase 6 — phụ cấp áp cho MỘT NGÀY, cùng quy tắc mốc hiệu lực với lương.
+        AllowanceLine ToAllowanceLine(int allowanceTypeId, decimal amount) =>
+            allowanceTypesById.TryGetValue(allowanceTypeId, out var t)
+                ? new AllowanceLine(t.Code, t.ExcludeFromProration, amount)
+                // Loại phụ cấp đã bị xoá khỏi danh mục: tiền KHÔNG được biến mất, để rơi vào cột
+                // "Khác" như phụ cấp mã lạ (#64/[D15]).
+                : new AllowanceLine(string.Empty, false, amount);
+
+        IEnumerable<AllowanceLine> AllowanceLinesFor(Contract? c, DateOnly day)
+        {
+            if (c is null) return Array.Empty<AllowanceLine>();
+
+            if (allowanceSnapshotsByContract.TryGetValue(c.Id, out var snapshots))
+                foreach (var snap in snapshots) // đã sắp tăng dần theo mốc
+                    if (snap.From > day)
+                        return snap.Lines.Select(l => ToAllowanceLine(l.AllowanceTypeId, l.Amount));
+
+            return c.ContractAllowances.Select(a =>
+                new AllowanceLine(a.AllowanceType.Code, a.AllowanceType.ExcludeFromProration, a.Amount));
+        }
+
         decimal SalaryForDay(Contract? c, DateOnly day) =>
             c is null ? 0m
             : IsProbationDayInLaborContract(c, day) ? c.ProbationSalary ?? SalaryOfContract(c, day)
@@ -230,6 +269,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // ⭐ Phase 5 — tiền lương cộng dồn theo TRỌNG SỐ NGÀY của từng đoạn HĐ, để chia ra mức
             // bình quân của riêng đoạn chính thức và riêng đoạn thử việc.
             decimal luongChinhThucTheoCong = 0, luongThuViecTheoCong = 0, congKhongBaoHiem = 0;
+            // ⭐ Phase 6 — phụ cấp cũng cộng dồn theo trọng số ngày (phụ lục đổi phụ cấp giữa tháng).
+            var phuCapTheoCong = new AllowanceBuckets();
             var workSegments = new List<RegularHoursPremiumCalculator.WorkDaySegment>(records.Count);
 
             foreach (var r in records)
@@ -270,6 +311,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                     // Ngày thuộc HĐ không đóng bảo hiểm nào (điển hình: HĐ thử việc riêng) không
                     // được vào nền đóng BH của kỳ.
                     if (dayContract is not null && !HasAnyInsurance(dayContract)) congKhongBaoHiem += weight;
+
+                    phuCapTheoCong += AllowanceBuckets
+                        .From(AllowanceLinesFor(dayContract, r.WorkDate))
+                        .Scale(weight);
                 }
                 dayHours += r.DayHours;
                 nightHours += r.NightHours;
@@ -340,32 +385,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 ? Math.Max(0m, mucThuViec * (1m + coefficient) - mucChinhThuc)
                 : 0m;
 
-            decimal AllowanceByCode(string code) =>
-                activeContract?.ContractAllowances.Where(a => a.AllowanceType.Code == code).Sum(a => a.Amount) ?? 0m;
-
-            // #64/[D15] — phụ cấp mã KHÁC 4 mã cứng (HOUSING/PHONE/FUEL/MEAL) trước đây RƠI mất khỏi
-            // bảng lương (không cột nào nhận). Gom về cột "Khác" để tiền vào Thu nhập, không biến mất.
-            decimal AllowanceOther() =>
-                activeContract?.ContractAllowances
-                    .Where(a => !HardcodedAllowanceCodes.Contains(a.AllowanceType.Code))
-                    .Sum(a => a.Amount) ?? 0m;
-
-            // PRORATE-02 — tổng phụ cấp khai NGOẠI LỆ (`AllowanceType.ExcludeFromProration`), TRỪ cơm.
-            // Số này được trừ khỏi nền chia theo công rồi cộng nguyên trở lại ở cột Thu nhập, nên cột
-            // gốc (Thuê nhà / Điện thoại / Xăng xe / Khác) vẫn hiện đủ số tiền ghi trong hợp đồng.
-            decimal AllowanceExcludedFromProration() =>
-                activeContract?.ContractAllowances
-                    .Where(a => a.AllowanceType.ExcludeFromProration
-                        && !string.Equals(a.AllowanceType.Code, MealCode, StringComparison.OrdinalIgnoreCase))
-                    .Sum(a => a.Amount) ?? 0m;
-
-            // Cơm tách 2 phần: phần thường (chia theo công) và phần khai ngoại lệ (cộng nguyên) —
-            // cả hai cùng đổ về cột COM nên suất cơm miễn thuế vẫn tính trên tổng.
-            decimal MealBy(bool excluded) =>
-                activeContract?.ContractAllowances
-                    .Where(a => string.Equals(a.AllowanceType.Code, MealCode, StringComparison.OrdinalIgnoreCase)
-                        && a.AllowanceType.ExcludeFromProration == excluded)
-                    .Sum(a => a.Amount) ?? 0m;
+            // ⭐ Phase 6 — phụ cấp BÌNH QUÂN theo trọng số ngày công (phụ lục đổi phụ cấp có hiệu
+            // lực giữa tháng thì nửa đầu / nửa sau ăn hai mức khác nhau, giống mức lương ở Phase 5).
+            // Không có ngày công nào để cân ⇒ lấy trạng thái tại cuối kỳ, giữ nguyên hành vi cũ.
+            var phuCap = congCom > 0
+                ? phuCapTheoCong.Divide(congCom)
+                : AllowanceBuckets.From(AllowanceLinesFor(activeContract, periodEnd));
 
             var inputs = new PayrollEmployeeInputs { EmployeeInformationId = e.Id };
             var n = inputs.Numbers; var t = inputs.Texts;
@@ -391,13 +416,13 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
             n[ContractMucLuong] = mucLuong;
             n[ContractTroCapThuViec] = troCapThuViec;
-            n[ContractAllowanceThueNha] = AllowanceByCode("HOUSING");
-            n[ContractAllowanceDienThoai] = AllowanceByCode("PHONE");
-            n[ContractAllowanceXangXe] = AllowanceByCode("FUEL");
-            n[ContractAllowanceCom] = MealBy(excluded: false);
-            n[ContractAllowanceComNgoaiLe] = MealBy(excluded: true);
-            n[ContractAllowanceKhac] = AllowanceOther();
-            n[ContractAllowanceNgoaiLe] = AllowanceExcludedFromProration();
+            n[ContractAllowanceThueNha] = phuCap.ThueNha;
+            n[ContractAllowanceDienThoai] = phuCap.DienThoai;
+            n[ContractAllowanceXangXe] = phuCap.XangXe;
+            n[ContractAllowanceCom] = phuCap.Com;
+            n[ContractAllowanceComNgoaiLe] = phuCap.ComNgoaiLe;
+            n[ContractAllowanceKhac] = phuCap.Khac;
+            n[ContractAllowanceNgoaiLe] = phuCap.NgoaiLe;
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
             n[CongThuViec] = congThuViec;
