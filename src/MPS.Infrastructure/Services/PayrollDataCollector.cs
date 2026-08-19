@@ -122,21 +122,31 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             .ToListAsync(ct);
         var contractsByEmp = contracts.GroupBy(c => c.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
 
-        // [D12] — phụ lục ĐÃ KÍCH HOẠT có đổi lương: mỗi cái là một mốc lương mới của hợp đồng.
-        // Chỉ lấy phụ lục có hiệu lực KHÔNG MUỘN HƠN đầu kỳ để kỳ cũ giữ nguyên mức lương cũ.
+        // [D12] — phụ lục ĐÃ KÍCH HOẠT có đổi lương: mỗi cái là một MỐC LƯƠNG mới của hợp đồng, tra
+        // theo NGÀY chứ không theo kỳ.
+        //
+        // ⭐ Phase 6 — quyết định PO 19/08/2026 ĐẢO quyết định 01/08/2026: phụ lục hiệu lực giữa
+        // tháng nay được trả đúng từ ngày ghi trên phụ lục, thay vì hoãn sang kỳ sau. Lý do hoãn
+        // trước đây là engine chưa tách được ngày công theo đoạn — Phase 5 đã dựng xong máy móc đó,
+        // nên ràng buộc cũ chỉ còn tạo lệch giữa văn bản đã ký và tiền thực trả.
+        //
+        // Vẫn lấy tới HẾT kỳ (không phải "hiệu lực từ trước đầu kỳ"): tính lại một kỳ CŨ vẫn ra
+        // đúng mức của thời điểm đó vì phụ lục ký sau kỳ đó có mốc lớn hơn mọi ngày trong kỳ.
         var contractIds = contracts.Select(c => c.Id).ToList();
-        var periodStartUtc = periodStart.ToDateTime(TimeOnly.MinValue);
+        var periodEndUtc = periodEnd.ToDateTime(TimeOnly.MaxValue);
         var salaryChangesByContract = (await _db.ContractAppendices.AsNoTracking()
             .Where(a => contractIds.Contains(a.ContractId)
                 && a.Status == ContractEnums.AppendixStatus.Active
                 && a.SalaryAmountSnapshot != null
-                && a.EffectiveFrom <= periodStartUtc)
+                && a.EffectiveFrom <= periodEndUtc)
             .Select(a => new { a.ContractId, a.EffectiveFrom, a.SalaryAmountSnapshot })
             .ToListAsync(ct))
             .GroupBy(a => a.ContractId)
             .ToDictionary(
                 g => g.Key,
-                g => g.OrderByDescending(a => a.EffectiveFrom).First().SalaryAmountSnapshot!.Value);
+                g => g.Select(a => (From: DateOnly.FromDateTime(a.EffectiveFrom), Amount: a.SalaryAmountSnapshot!.Value))
+                    .OrderByDescending(x => x.From)
+                    .ToList());
 
         // ⭐ A1 — chỉ lấy bản ghi chấm công CA CHÍNH (`OvertimeRequestId == null`).
         // HR chấm công 2 lần cho ngày có tăng ca (một cho ca chính, một cho ca OT) đúng như hệ thống
@@ -182,18 +192,24 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var monthLabel = $"{req.Month:D2}/{req.Year}";
         var result = new List<PayrollEmployeeInputs>();
 
-        // [D12] — mức lương của một HĐ: phụ lục đổi lương (hiệu lực từ trước đầu kỳ) thắng mức đóng
-        // băng lúc ký. Nhờ vậy tính lại kỳ CŨ vẫn ra đúng mức lương của thời điểm đó.
-        decimal SalaryOfContract(Contract c) =>
-            salaryChangesByContract.TryGetValue(c.Id, out var changed) ? changed : ResolveContractSalary(c);
+        // [D12] — mức lương của một HĐ TẠI MỘT NGÀY: phụ lục gần nhất đã có hiệu lực tính tới ngày
+        // đó thắng mức đóng băng lúc ký. Danh sách đã sắp giảm dần theo mốc nên phần tử khớp đầu
+        // tiên chính là phụ lục mới nhất còn hiệu lực.
+        decimal SalaryOfContract(Contract c, DateOnly day)
+        {
+            if (salaryChangesByContract.TryGetValue(c.Id, out var changes))
+                foreach (var change in changes)
+                    if (change.From <= day) return change.Amount;
+            return ResolveContractSalary(c);
+        }
 
         // ⭐ Phase 5 — mức lương áp cho MỘT NGÀY công. Ngày rơi vào giai đoạn thử việc thoả thuận
         // ngay trong HĐLĐ thì hưởng `ProbationSalary` của chính HĐ đó (Điều 26 BLLĐ 2019); HĐ thử
         // việc RIÊNG đã được `ResolveContractSalary` xử lý sẵn.
         decimal SalaryForDay(Contract? c, DateOnly day) =>
             c is null ? 0m
-            : IsProbationDayInLaborContract(c, day) ? c.ProbationSalary ?? SalaryOfContract(c)
-            : SalaryOfContract(c);
+            : IsProbationDayInLaborContract(c, day) ? c.ProbationSalary ?? SalaryOfContract(c, day)
+            : SalaryOfContract(c, day);
 
         foreach (var e in employees)
         {
@@ -278,7 +294,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             //
             // Không có ngày công chính thức nào (kỳ toàn thử việc / không chấm công) ⇒ lùi về mức
             // của HĐ đại diện, giữ nguyên hành vi trước Phase 5.
-            var mucLuongHopDong = activeContract is null ? 0m : SalaryOfContract(activeContract);
+            // Không có ngày công nào để cân: lấy mức tại CUỐI KỲ — mốc mới nhất đã có hiệu lực.
+            var mucLuongHopDong = activeContract is null ? 0m : SalaryOfContract(activeContract, periodEnd);
             var mucChinhThuc = congChinhThuc > 0 ? luongChinhThucTheoCong / congChinhThuc : mucLuongHopDong;
             var mucThuViec = congThuViec > 0 ? luongThuViecTheoCong / congThuViec : mucChinhThuc;
             var mucLuong = mucChinhThuc;
