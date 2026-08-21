@@ -25,6 +25,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(ContractNoSocialInsurance, "HĐ miễn BHXH (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
         new(ContractNoHealthInsurance, "HĐ miễn BHYT (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
         new(ContractNoUnemploymentInsurance, "HĐ miễn BHTN (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
+        new(ContractUnionFundExempt, "HĐ miễn KPCĐ (1 = miễn)", "Hợp đồng", ColumnDataType.Number),
         new(ContractAllowanceThueNha, "Phụ cấp thuê nhà (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceDienThoai, "Phụ cấp điện thoại (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceXangXe, "Phụ cấp xăng xe (HĐ)", "Hợp đồng", ColumnDataType.Money),

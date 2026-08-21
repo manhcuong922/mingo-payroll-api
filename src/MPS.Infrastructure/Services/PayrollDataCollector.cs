@@ -487,6 +487,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractNoSocialInsurance] = activeContract is not null && !activeContract.SocialInsuranceFlag ? 1m : 0m;
             n[ContractNoHealthInsurance] = activeContract is not null && !activeContract.HealthInsuranceFlag ? 1m : 0m;
             n[ContractNoUnemploymentInsurance] = activeContract is not null && !activeContract.UnemploymentInsuranceFlag ? 1m : 0m;
+            n[ContractUnionFundExempt] = activeContract is not null && activeContract.UnionFundExemptFlag ? 1m : 0m;
 
             n[ContractMucLuong] = mucLuong;
             n[ContractTroCapThuViec] = troCapThuViec;

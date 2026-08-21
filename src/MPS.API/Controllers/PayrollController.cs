@@ -23,6 +23,23 @@ public class PayrollController : ControllerBase
         [FromQuery] int year, [FromQuery] int month, CancellationToken ct)
         => Ok(await _mediator.Send(new GetPayrollReadinessQuery(year, month), ct));
 
+    /// <summary>
+    /// TẠM TÍNH bảng lương của tháng bằng dữ liệu có ĐẾN THỜI ĐIỂM GỌI — không phải đợi hết tháng.
+    ///
+    /// <para>Chỉ đọc tuyệt đối: chạy đúng engine của kỳ thật nhưng không ghi gì xuống DB, không
+    /// chiếm chỗ kỳ lương của tháng, gọi lại bao nhiêu lần cũng được. Cổng đủ liệu ở đây là CẢNH
+    /// BÁO chứ không chặn — xem <c>GetPayrollPreviewQuery</c> để biết vì sao con số không bằng
+    /// "lương nửa tháng" theo trực giác.</para>
+    /// </summary>
+    [HttpGet("periods/preview")]
+    [HasPermission(Permissions.PayrollReadAll)]
+    public async Task<IActionResult> GetPreview(
+        [FromQuery] int year, [FromQuery] int month,
+        [FromQuery] int? formulaSetId, [FromQuery] decimal? standardWorkingDays,
+        CancellationToken ct)
+        => Ok(await _mediator.Send(
+            new GetPayrollPreviewQuery(year, month, formulaSetId, standardWorkingDays), ct));
+
     [HttpGet("periods")]
     [HasPermission(Permissions.PayrollReadAll)]
     public async Task<IActionResult> GetPeriods(

@@ -97,6 +97,10 @@ public sealed partial class DatabaseSeeder
         // Các case cố ý làm ĐỎ cổng đủ liệu, đặt ở tháng hiện tại (chưa chốt kỳ) để không chặn 3 kỳ
         // demo ở trên. Xem DatabaseSeeder.ReadinessBlockersData.cs.
         await SeedReadinessBlockersAsync(cancellationToken);
+        // Hồ sơ ngân hàng của NV (ngân hàng/chi nhánh/tỉnh) + cấu hình chi trả cấp công ty — đầu vào
+        // của lệnh chi lương VPBank và UNC nộp BHXH. Chạy sau MỌI pha tạo người để không sót ai —
+        // xem DatabaseSeeder.EmployeeBankAccountsData.cs.
+        await SeedEmployeeBankAccountsAsync(cancellationToken);
         // Dồn email mọi tài khoản demo về một hòm thư thật — chạy cuối vì các pha trên còn tạo người.
         await NormalizeDemoEmailsAsync(cancellationToken);
     }

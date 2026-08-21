@@ -125,78 +125,13 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
             .GroupBy(a => a.EmployeeInformationId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<PayrollAdjustment>)g.ToList());
 
-        // ===== Tính từng dòng nhân viên =====
-        var ordered = collection.Employees
-            .OrderBy(e => e.Texts.GetValueOrDefault(PayrollFieldKeys.EmployeeCode, string.Empty))
-            .ToList();
+        // ===== Tính từng dòng nhân viên + dòng tổng =====
+        // Dùng chung với màn hình TẠM TÍNH giữa tháng — xem PayrollPeriodComposer.
+        var composition = PayrollPeriodComposer.Compose(
+            period, collection, plan, _calculator, _catalog, pendingByEmp, userId, now);
 
-        var employeeRows = new List<PayrollRow>();
-        var order = 0;
-        foreach (var inputs in ordered)
-        {
-            var row = new PayrollRow
-            {
-                RowType = PayrollRowType.Employee,
-                EmployeeInformationId = inputs.EmployeeInformationId,
-                DisplayOrder = order++,
-            };
-
-            var pending = pendingByEmp.GetValueOrDefault(inputs.EmployeeInformationId);
-
-            // Truy lĩnh (+) áp trọn ngay ở lượt tính đầu; truy thu (−) cần biết THỰC NHẬN trước khi
-            // trừ (không để âm) nên chỉ chốt ở lượt hai.
-            inputs.Numbers[PayrollFieldKeys.TruyLinh] =
-                pending is null ? 0m : PayrollAdjustmentApplier.SumPositives(pending);
-            inputs.Numbers[PayrollFieldKeys.TruyThu] = 0m;
-
-            var ctx = new PayrollCalcContext
-            {
-                Fields = inputs.ToFields(_catalog),
-                FunctionContext = collection.FunctionContext,
-            };
-            _calculator.ComputeAll(plan, ctx, row);
-
-            if (pending is not null)
-            {
-                var netBeforeClawback = EffectiveNumber(row, PayrollColumnCodes.ThucNhan);
-                var applyPlan = PayrollAdjustmentApplier.Build(pending, netBeforeClawback, now);
-
-                foreach (var a in applyPlan.Applied) a.AppliedPeriod = period;
-                foreach (var c in applyPlan.Carried)
-                {
-                    c.AppliedPeriod = period;
-                    _adjustments.Add(c);
-                }
-
-                if (applyPlan.TruyThu != 0m)
-                {
-                    inputs.Numbers[PayrollFieldKeys.TruyThu] = applyPlan.TruyThu;
-                    ctx = new PayrollCalcContext
-                    {
-                        Fields = inputs.ToFields(_catalog),
-                        FunctionContext = collection.FunctionContext,
-                    };
-                    _calculator.ComputeAll(plan, ctx, row);
-                }
-            }
-
-            // #44 — sàn 0: sau khi đã chốt truy lĩnh/truy thu, thực nhận vẫn có thể âm (BH tính
-            // trên MUC_LUONG nguyên trong khi thu nhập chia theo công chuẩn). Kẹp về 0 và đẩy
-            // phần thiếu sang kỳ sau, đúng nguyên tắc đã áp cho truy thu.
-            var shortfall = PayrollNetFloor.Apply(row, period, userId, now);
-            if (shortfall is not null) _adjustments.Add(shortfall);
-
-            // Snapshot SAU khi đã chốt số truy lĩnh/truy thu — recompute sau này tái lập đúng số.
-            row.InputSnapshotJson = inputs.ToSnapshotJson();
-
-            employeeRows.Add(row);
-            period.Rows.Add(row);
-        }
-
-        // ===== Dòng tổng =====
-        var totalRow = new PayrollRow { RowType = PayrollRowType.Total, DisplayOrder = order };
-        _calculator.ComputeTotals(plan, employeeRows, totalRow);
-        period.Rows.Add(totalRow);
+        foreach (var adjustment in composition.CarriedAdjustments) _adjustments.Add(adjustment);
+        foreach (var adjustment in composition.ShortfallAdjustments) _adjustments.Add(adjustment);
 
         // ===== Ghi chú: trần/ngưỡng + thay đổi luật so kỳ trước =====
         var previous = await _periods.GetPreviousAsync(request.Year, request.Month, ct);
@@ -210,12 +145,5 @@ public sealed class CreatePayrollPeriodCommandHandler : IRequestHandler<CreatePa
         // period qua navigation) được EF resolve FK và lưu cùng lượt — không có trạng thái nửa vời
         // "kỳ đã có cột truy lĩnh nhưng khoản vẫn chưa đánh dấu áp".
         return await _periods.AddAsync(period, ct);
-    }
-
-    private static decimal EffectiveNumber(PayrollRow row, string columnCode)
-    {
-        var cell = row.Cells.FirstOrDefault(c => c.ColumnCode == columnCode);
-        if (cell is null) return 0m;
-        return (cell.IsOverridden ? cell.OverrideValue : cell.ComputedValue) ?? 0m;
     }
 }

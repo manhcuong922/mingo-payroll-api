@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces.Payroll;
+using MPS.Application.Common.Payroll;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Enums.Contract;
@@ -88,13 +89,13 @@ public sealed class PayrollReadinessChecker : IPayrollReadinessChecker
         foreach (var e in employees.OrderBy(e => e.Code))
         {
             var missing = new List<string>();
-            if (!signedContractEmp.Contains(e.Id)) missing.Add("Chưa có hợp đồng đã ký hiệu lực trong kỳ");
-            if (!hasAttendance.Contains(e.Id)) missing.Add("Chưa có dữ liệu chấm công trong kỳ");
-            if (hasPendingOt.Contains(e.Id)) missing.Add("Còn đơn tăng ca chưa duyệt xong");
+            if (!signedContractEmp.Contains(e.Id)) missing.Add(PayrollReadinessBlockers.NoSignedContract);
+            if (!hasAttendance.Contains(e.Id)) missing.Add(PayrollReadinessBlockers.NoAttendance);
+            if (hasPendingOt.Contains(e.Id)) missing.Add(PayrollReadinessBlockers.PendingOvertime);
             if (!civilOnlyEmp.Contains(e.Id)
                 && (!e.UserId.HasValue || !hasApprovedEval.Contains(e.UserId.Value)))
-                missing.Add("Chưa có bảng đánh giá tháng được duyệt");
-            if (string.IsNullOrWhiteSpace(e.BankNumber) || string.IsNullOrWhiteSpace(e.TaxNo)) missing.Add("Hồ sơ chi lương thiếu (số TK / mã số thuế)");
+                missing.Add(PayrollReadinessBlockers.NoApprovedEvaluation);
+            if (string.IsNullOrWhiteSpace(e.BankNumber) || string.IsNullOrWhiteSpace(e.TaxNo)) missing.Add(PayrollReadinessBlockers.IncompletePaymentProfile);
             result.Add(new PayrollEmployeeReadiness(e.Id, e.Code ?? string.Empty, e.FullName, missing) { Warnings = warnings });
         }
         return result;

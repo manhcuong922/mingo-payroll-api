@@ -655,9 +655,26 @@ public class ContractRepository : IContractRepository
         return all.Count;
     }
 
+    /// <summary>
+    /// Chép trường vô hướng từ bản DETACHED (handler đã dựng bằng <c>ContractBuilder.ApplyUpdate</c>)
+    /// sang entity đang được EF theo dõi.
+    ///
+    /// <para>⚠️ Danh sách này là VIẾT TAY. Quên một trường mà <c>UpdateContractCommand</c> nhận vào
+    /// thì thay đổi bị nuốt IM LẶNG — API vẫn trả 200 "đã cập nhật" còn DB giữ nguyên giá trị cũ,
+    /// không lỗi, không log. Đã dính đúng kiểu đó với <c>Kind</c> / <c>TaxPolicy</c> /
+    /// <c>UnionFundExemptFlag</c>: HR tick "Miễn trích KPCĐ" rồi lưu, mở lại vẫn thấy "DN trích".
+    /// Thêm trường mới vào lệnh sửa thì PHẢI thêm vào đây (test
+    /// <c>UpdateDraftPersistsAllEditableFieldsTests</c> canh chừng).</para>
+    ///
+    /// <para>Cố ý KHÔNG chép: <c>Id</c>, <c>Status</c>, <c>ConvertedFromDefiniteFlag</c>,
+    /// <c>SignedAt</c>/<c>SignedPlace</c>, <c>ArchivedAt</c>, <c>ProbationResultNotifiedAt</c>,
+    /// <c>ProbationCancelledByParty</c> và khối Created* — lệnh sửa không nhận chúng, đó là trạng
+    /// thái do các luồng khác (kích hoạt, ký, chấm dứt, job) làm chủ.</para>
+    /// </summary>
     private static void ApplyScalarFields(Domain.Entities.Contract tracked, Domain.Entities.Contract source)
     {
         tracked.ContractNo = source.ContractNo;
+        tracked.Kind = source.Kind;
         tracked.ContractCategory = source.ContractCategory;
         tracked.ContractSubtype = source.ContractSubtype;
         tracked.Form = source.Form;
@@ -680,6 +697,8 @@ public class ContractRepository : IContractRepository
         tracked.SocialInsuranceFlag = source.SocialInsuranceFlag;
         tracked.HealthInsuranceFlag = source.HealthInsuranceFlag;
         tracked.UnemploymentInsuranceFlag = source.UnemploymentInsuranceFlag;
+        tracked.UnionFundExemptFlag = source.UnionFundExemptFlag;
+        tracked.TaxPolicy = source.TaxPolicy;
         tracked.TrainingPolicy = source.TrainingPolicy;
         tracked.ConfidentialityClause = source.ConfidentialityClause;
         tracked.TemplateId = source.TemplateId;

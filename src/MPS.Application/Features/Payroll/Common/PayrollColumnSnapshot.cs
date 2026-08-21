@@ -72,4 +72,19 @@ public static class PayrollWorkingDays
         return count;
     }
 
+    /// <summary>
+    /// Số ngày T2–T6 từ ĐẦU THÁNG đến hết <paramref name="through"/> — dùng cho màn hình tạm tính
+    /// giữa tháng để nói rõ "đã trôi qua N/M ngày công". Đây KHÔNG phải mẫu số của phép chia lương:
+    /// mẫu số vẫn là công chuẩn cả tháng (xem <see cref="CountWeekdays"/>).
+    /// </summary>
+    public static int CountWeekdaysThrough(DateOnly through)
+    {
+        var count = 0;
+        for (var d = 1; d <= through.Day; d++)
+        {
+            var dow = new DateOnly(through.Year, through.Month, d).DayOfWeek;
+            if (dow != DayOfWeek.Saturday && dow != DayOfWeek.Sunday) count++;
+        }
+        return count;
+    }
 }

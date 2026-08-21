@@ -265,9 +265,15 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.NldBhtn, "BHTN – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
                 UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnNldRate, Fk.BhtnCap))));
+        // KPCĐ có HAI tầng chặn, cố ý giống hệt 3 cột BH ở trên (bản sửa A7):
+        //   · công tắc HĐ  — sự thật ghi trong hợp đồng (`Contract.UnionFundExemptFlag`);
+        //   · cờ FLAGBH    — kênh đè tay theo kỳ ([D23]), vd thai sản.
+        // Trước đây chỉ có tầng cờ, mà cờ được suy theo thứ tự ưu tiên nên HĐ "chỉ đóng BHYT" ra
+        // `x2` và không bao giờ chạm nhánh `x` ⇒ tick "miễn KPCĐ" bị bỏ qua, vẫn trích đủ 2%.
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
-                N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m))));
+                UnlessExempt(Fk.ContractUnionFundExempt,
+                    N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m)))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,

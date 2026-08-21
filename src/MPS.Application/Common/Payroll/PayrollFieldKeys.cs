@@ -54,6 +54,21 @@ public static class PayrollFieldKeys
     public const string ContractNoSocialInsurance = "contract.noSocialInsurance";
     public const string ContractNoHealthInsurance = "contract.noHealthInsurance";
     public const string ContractNoUnemploymentInsurance = "contract.noUnemploymentInsurance";
+
+    /// <summary>
+    /// HĐ được MIỄN trích KPCĐ (1 = miễn) — nguồn là <c>Contract.UnionFundExemptFlag</c>.
+    ///
+    /// <para>Trước bản này, "miễn KPCĐ" chỉ đi tới bảng lương qua cờ thô <c>FLAGBH</c>, mà cờ đó
+    /// được suy ra theo thứ tự ưu tiên: HĐ chỉ đóng BHYT trả về <c>x2</c> và <b>không bao giờ</b>
+    /// tới nhánh <c>x</c> (không KPCĐ). Kết quả: HĐ tick "chỉ BHYT" + "miễn KPCĐ" vẫn bị trích 2%
+    /// KPCĐ — đúng 1/8 tổ hợp công tắc BH bị rò. Tách công tắc riêng ở tầng HĐ (giống 3 khoá miễn
+    /// BH ở trên) để sự thật ghi trong hợp đồng không phụ thuộc vào việc cờ thô có biểu diễn nổi
+    /// tổ hợp đó hay không.</para>
+    ///
+    /// <para>Ngữ nghĩa "MIỄN" (1 = miễn) vì lý do y hệt 3 khoá trên: kỳ lương cũ không có khoá này
+    /// trong snapshot ⇒ đọc lên 0 ⇒ không miễn ⇒ giữ nguyên số KPCĐ đã chốt.</para>
+    /// </summary>
+    public const string ContractUnionFundExempt = "contract.unionFundExempt";
     public const string ContractAllowanceThueNha = "contract.allowanceThueNha";
     public const string ContractAllowanceDienThoai = "contract.allowanceDienThoai";
     public const string ContractAllowanceXangXe = "contract.allowanceXangXe";
