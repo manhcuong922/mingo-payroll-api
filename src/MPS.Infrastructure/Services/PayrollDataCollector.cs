@@ -677,7 +677,10 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             if (!otAttendanceByOtId.TryGetValue(ot.Id, out var attendance)) continue;
 
             var (actualStart, actualEnd) = ClampToApprovedWindow(ot, attendance);
-            if (actualEnd <= actualStart) continue;
+            // ClampToApprovedWindow trả (OtStartTime, OtStartTime) khi chấm công không overlap khung
+            // đơn duyệt. Với OT vắt nửa đêm, end < start theo TimeOnly (VD 02:00 < 22:00) là ĐÚNG chiều
+            // thời gian — không phải rỗng.
+            if (actualStart == actualEnd) continue;
 
             // Case 5 — resolve loại-ngày cho CẢ ngày đăng ký (D) và ngày kế (D+1): OT vắt nửa đêm sang
             // ngày lễ/nghỉ phải tính hệ số theo đúng ngày lịch của từng phần giờ.
@@ -745,27 +748,33 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     }
 
     /// <summary>
-    /// Cap giờ chấm công thật về trong khung đã đăng ký (OtStartTime..OtEndTime) — nhân viên quét
-    /// trễ hơn giờ duyệt không được tính thêm; quét sớm hơn giờ duyệt (checkout OT trước dự kiến)
-    /// tự nhiên đã ít hơn nên không cần cap riêng cho đầu ra.
+    /// Cap giờ chấm công thật về trong khung đã đăng ký (OtStartTime..OtEndTime) cho CẢ 2 chiều —
+    /// nhân viên quét sớm/muộn ngoài giờ duyệt đều không được tính thêm.
+    ///
+    /// <para>Chuẩn hoá qua <c>DateTime</c> (có ngày) để so đúng cả case OT vắt nửa đêm — dùng
+    /// <c>TimeOnly</c> sẽ bỏ mất ngày và cho kết quả sai chiều thời gian (02:00 &lt; 22:00). Cùng
+    /// pattern với <c>FaceCheckinCommandHandler.RecordOvertimeAttendanceAsync</c>.</para>
+    ///
+    /// <para>Chấm công hoàn toàn ngoài khung đơn duyệt ⇒ trả về khung 0-length
+    /// (<c>OtStartTime</c>, <c>OtStartTime</c>) để caller skip đơn.</para>
     /// </summary>
     private static (TimeOnly Start, TimeOnly End) ClampToApprovedWindow(
         Domain.Entities.Attendance.OvertimeRequest ot,
         Domain.Entities.Attendance.AttendanceRecord attendance)
     {
-        var actualStart = TimeOnly.FromDateTime(attendance.CheckInAt!.Value);
-        var actualEnd = TimeOnly.FromDateTime(attendance.CheckOutAt!.Value);
+        var otStartAt = ot.WorkDate.ToDateTime(ot.OtStartTime);
+        var otEndAt = ot.OtEndTime <= ot.OtStartTime
+            ? ot.WorkDate.AddDays(1).ToDateTime(ot.OtEndTime)
+            : ot.WorkDate.ToDateTime(ot.OtEndTime);
 
-        // OT vắt nửa đêm (OtEndTime <= OtStartTime): so trực tiếp TimeOnly sẽ sai (23:00 > 01:00 dù
-        // đúng thứ tự thời gian) — coi actualEnd luôn hợp lệ, chỉ cap actualStart về không sớm hơn
-        // giờ đăng ký khi cùng ngày lịch (OtEndTime > OtStartTime).
-        if (ot.OtEndTime > ot.OtStartTime)
-        {
-            if (actualStart < ot.OtStartTime) actualStart = ot.OtStartTime;
-            if (actualEnd > ot.OtEndTime) actualEnd = ot.OtEndTime;
-        }
+        var effectiveStartAt = attendance.CheckInAt!.Value > otStartAt
+            ? attendance.CheckInAt!.Value : otStartAt;
+        var effectiveEndAt = attendance.CheckOutAt!.Value < otEndAt
+            ? attendance.CheckOutAt!.Value : otEndAt;
 
-        return (actualStart, actualEnd);
+        if (effectiveEndAt <= effectiveStartAt) return (ot.OtStartTime, ot.OtStartTime);
+
+        return (TimeOnly.FromDateTime(effectiveStartAt), TimeOnly.FromDateTime(effectiveEndAt));
     }
 
     private async Task<DayType> ResolveDayTypeAsync(
