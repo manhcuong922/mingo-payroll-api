@@ -405,7 +405,7 @@ public sealed partial class DatabaseSeeder
             eiNam, partyId, hrUserId, posBe,
             "Thợ mộc — gia công, lắp ráp khung tranh gỗ", "Hà Nội",
             today.AddDays(30), today.AddDays(30).AddYears(1),
-            gradeIds["MOC-2"], 25_000_000m);
+            gradeIds["MOC-2"], 7_200_000m);
 
         // #2 ACTIVE Indefinite cho Nam (chính) — test phụ lục + termination
         var activeNamInd = NewTestContract("HDLD-ACTIVE-NAM-IND",
@@ -413,7 +413,7 @@ public sealed partial class DatabaseSeeder
             eiNam, partyId, hrUserId, posBe,
             "Thợ mộc bậc cao — khung tranh cao cấp", "Hà Nội",
             Utc(2024, 1, 1), null,
-            gradeIds["MOC-3"], 35_000_000m,
+            gradeIds["MOC-3"], 8_000_000m,
             signedAt: Utc(2024, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2023, 12, 25), updatedAt: Utc(2024, 1, 1));
 
@@ -424,7 +424,7 @@ public sealed partial class DatabaseSeeder
             eiNam, partyId, hrUserId, posBe,
             "Thợ mộc Bậc 1", "Hà Nội",
             Utc(2022, 1, 1), Utc(2022, 12, 31),
-            gradeIds["MOC-1"], 15_000_000m,
+            gradeIds["MOC-1"], 6_500_000m,
             signedAt: Utc(2022, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2021, 12, 15), updatedAt: Utc(2022, 12, 31));
         var namHist2 = NewTestContract("HDLD-NAM-HIST-DEF-2",
@@ -432,7 +432,7 @@ public sealed partial class DatabaseSeeder
             eiNam, partyId, hrUserId, posBe,
             "Thợ mộc Bậc 2", "Hà Nội",
             Utc(2023, 1, 1), Utc(2023, 12, 31),
-            gradeIds["MOC-2"], 25_000_000m,
+            gradeIds["MOC-2"], 7_200_000m,
             signedAt: Utc(2023, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2022, 12, 15), updatedAt: Utc(2023, 12, 31));
 
@@ -442,7 +442,7 @@ public sealed partial class DatabaseSeeder
             eiHoa, partyId, hrUserId, posLead,
             "Tổ trưởng — quản lý tổ sản xuất 5 người", "TP.HCM",
             Utc(2023, 6, 1), null,
-            gradeIds["TOTR-1"], 50_000_000m,
+            gradeIds["TOTR-1"], 7_200_000m,
             signedAt: Utc(2023, 6, 1), signedPlace: "TP.HCM",
             createdAt: Utc(2023, 5, 28));
 
@@ -452,12 +452,12 @@ public sealed partial class DatabaseSeeder
             eiLinh, partyId, hrUserId, posBe,
             "Thợ mộc — thử việc 2 tháng", "Hà Nội",
             today.AddDays(15), today.AddMonths(3),
-            gradeIds["MOC-1"], 15_000_000m,
+            gradeIds["MOC-1"], 6_500_000m,
             subtype: ContractEnums.ContractSubtype.Probation);
         draftLinhProb.HasProbation = true;
         draftLinhProb.ProbationStartDate = today.AddDays(15);
         draftLinhProb.ProbationEndDate = today.AddDays(75);
-        draftLinhProb.ProbationSalary = 13_000_000m; // ~87% của 15M ≥ 85% (Điều 26)
+        draftLinhProb.ProbationSalary = 5_700_000m; // ~88% của 6,5tr ≥ 85% (Điều 26) và ≥ LTT vùng I
         draftLinhProb.ProbationResultStatus = ContractEnums.ProbationResultStatus.InProgress;
 
         // #7 ACTIVE Definite 24m cho Linh — test termination 30-day notice rule
@@ -466,7 +466,7 @@ public sealed partial class DatabaseSeeder
             eiLinh, partyId, hrUserId, posBe,
             "Thợ mộc Bậc 2", "Hà Nội",
             today.AddDays(-180), today.AddDays(-180).AddYears(2),
-            gradeIds["MOC-2"], 25_000_000m,
+            gradeIds["MOC-2"], 7_200_000m,
             signedAt: today.AddDays(-180), signedPlace: "Hà Nội",
             createdAt: today.AddDays(-185));
 
@@ -476,7 +476,7 @@ public sealed partial class DatabaseSeeder
             eiMai, partyId, hrUserId, posFe,
             "Thợ sơn Bậc 2 — đơn ngắn hạn", "Hà Nội",
             today.AddMonths(-2), today.AddMonths(4),
-            gradeIds["SON-2"], 22_000_000m,
+            gradeIds["SON-2"], 7_300_000m,
             signedAt: today.AddMonths(-2), signedPlace: "Hà Nội",
             createdAt: today.AddMonths(-2).AddDays(-5));
 
@@ -486,7 +486,7 @@ public sealed partial class DatabaseSeeder
             eiCuong, partyId, hrUserId, posFe,
             "Thợ sơn (HĐ bị hủy do Cường rút lời)", "Hà Nội",
             Utc(2026, 1, 1), Utc(2026, 12, 31),
-            gradeIds["SON-2"], 22_000_000m,
+            gradeIds["SON-2"], 7_300_000m,
             createdAt: Utc(2025, 12, 20), updatedAt: Utc(2025, 12, 22));
 
         // #10 TERMINATED cho Cường — view termination flow
@@ -495,7 +495,7 @@ public sealed partial class DatabaseSeeder
             eiCuong, partyId, hrUserId, posFe,
             "Thợ sơn (đã chấm dứt theo Điều 34 k.1)", "Hà Nội",
             Utc(2024, 1, 1), Utc(2025, 12, 31),
-            gradeIds["SON-2"], 22_000_000m,
+            gradeIds["SON-2"], 7_300_000m,
             signedAt: Utc(2024, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2023, 12, 20), updatedAt: Utc(2025, 12, 31));
 
@@ -505,7 +505,7 @@ public sealed partial class DatabaseSeeder
             eiCuong, partyId, hrUserId, posFe,
             "Thợ sơn(HĐ cũ 2014 — đã archive sau 10 năm chấm dứt)", "Hà Nội",
             Utc(2014, 1, 1), Utc(2015, 12, 31),
-            gradeIds["MOC-99"], 10_000_000m,
+            gradeIds["MOC-99"], 6_000_000m,
             workingTimeJson: "{}",
             signedAt: Utc(2014, 1, 1), signedPlace: "Hà Nội",
             createdAt: Utc(2013, 12, 20), updatedAt: Utc(2015, 12, 31));
@@ -517,7 +517,7 @@ public sealed partial class DatabaseSeeder
             eiMai, partyId, hrUserId, posFe,
             "Thợ sơn(HĐ Expired 2014 — chờ archive job)", "Hà Nội",
             today.AddYears(-12), today.AddYears(-11),
-            gradeIds["SON-2"], 18_000_000m,
+            gradeIds["SON-2"], 6_000_000m,
             workingTimeJson: "{}",
             signedAt: today.AddYears(-12), signedPlace: "Hà Nội",
             createdAt: today.AddYears(-12), updatedAt: today.AddYears(-11));
@@ -529,7 +529,7 @@ public sealed partial class DatabaseSeeder
             "Thợ mộc Bậc 2 (HĐ Định hạn hết hạn 45 ngày trước, vẫn Active → AutoConvertJob sẽ chuyển thành Indefinite)",
             "TP.HCM",
             today.AddYears(-2), today.AddDays(-45),
-            gradeIds["MOC-2"], 25_000_000m,
+            gradeIds["MOC-2"], 7_200_000m,
             signedAt: today.AddYears(-2), signedPlace: "TP.HCM",
             createdAt: today.AddYears(-2).AddDays(-5));
 
@@ -539,7 +539,7 @@ public sealed partial class DatabaseSeeder
             eiTuan, partyId, hrUserId, posBe,
             "Thợ mộc Bậc 1 (HĐ Định hạn parent — hết hạn 2 ngày trước, đã có HĐ con)", "TP.HCM",
             today.AddYears(-1), today.AddDays(-2),
-            gradeIds["MOC-1"], 15_000_000m,
+            gradeIds["MOC-1"], 6_500_000m,
             signedAt: today.AddYears(-1), signedPlace: "TP.HCM",
             createdAt: today.AddYears(-1).AddDays(-3));
 
@@ -549,7 +549,7 @@ public sealed partial class DatabaseSeeder
             eiTuan, partyId, hrUserId, posBe,
             "Thợ mộc Bậc 2 (HĐ mới sau khi #14 hết hạn)", "TP.HCM",
             Utc(2024, 8, 15), Utc(2026, 8, 15),
-            gradeIds["MOC-2"], 25_000_000m,
+            gradeIds["MOC-2"], 7_200_000m,
             signedAt: Utc(2024, 8, 15), signedPlace: "TP.HCM",
             createdAt: Utc(2024, 8, 10));
         expireChild.ParentContract = expireParent; // EF tự resolve ParentContractId khi save
