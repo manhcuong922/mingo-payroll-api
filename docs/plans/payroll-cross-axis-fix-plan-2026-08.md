@@ -110,10 +110,16 @@ Tức doanh nghiệp đang **nộp thừa** cho cơ quan BHXH, sửa xong là n�
 vụ truy thu với NLĐ; ngược lại nếu kỳ đã chốt thì phần thừa phải xử lý ngoài hệ thống (điều chỉnh
 D02-LT), hệ thống **không tự sửa kỳ đã chốt**.
 
-**Quyết định cần PO chốt**: `KPCD` cũng dùng `ProrateByCongCoBaoHiem(MUCLUONG)` nhưng truyền
-`cap = 0` (không trần). QĐ 1908 tính KPCĐ trên quỹ tiền lương làm căn cứ đóng BHXH — tức **có
-trần**. Nhưng đó là một thay đổi nghiệp vụ riêng, không thuộc X1; mặc định **giữ nguyên hành vi
-hiện tại** để bản sửa không lén đổi thêm một thứ nữa.
+**✅ Đã chốt và đã sửa (X6, 23/08/2026)**: `KPCD` trước đây truyền `cap = 0` (không trần) và dùng
+nền chưa kẹp trần. Luật Công đoàn 50/2024/QH15 (hiệu lực 01/07/2025): KPCĐ = 2% **quỹ tiền lương làm
+căn cứ đóng BHXH bắt buộc** — cụm đó đã bao hàm trần 20 lần mức tham chiếu ⇒ tối đa **936.000đ**/
+người/tháng, từ 01/07/2026 là **1.012.000đ**. Nay dùng CHUNG trần và CHUNG nền với BHXH.
+
+Cổng lùi cho kỳ cũ phải là `ContractMucLuongCapBhxh` (chỉ có từ X1), **không** phải `BhxhBhytCap` —
+khoá trần đã tồn tại từ lâu nên có mặt cả trong snapshot cũ; lấy nó làm điều kiện thì kỳ cũ cũng bị
+áp trần, tức bản sửa hồi tố.
+
+Phạm vi đo được: **3 ô / 1 người** (Giám đốc) — KPCĐ giảm 173.333 / 132.363 / 288.000đ.
 
 ---
 
@@ -305,6 +311,7 @@ trước mà chưa có `NenPhuCapLuong` thì sẽ phải sửa lại chính fiel
 | 3 | **X3** đoàn phí | **chỉ công thức** | ❌ không | ✅ **có** (khoản treo nợ cũ) | — |
 | 4 | **X4** trần tiền nhà | **chỉ công thức** | ❌ không | không | nên có X2 (`allowanceMienThue`) |
 | 5 | **X5** guard OT | validator | ❌ không | không | — |
+| 6 | **X6** trần KPCĐ | **chỉ công thức** | ❌ không | không | cần X1 (`mucLuongCapBhxh` làm cổng lùi) |
 
 X3 và X5 **độc lập hoàn toàn** — làm song song được, và X3 là bản sửa rẻ nhất (một cây công thức)
 mà phạm vi rộng nhất (16 dòng / 6 người). Nếu phải chọn một thứ làm trước để thấy giá trị ngay,

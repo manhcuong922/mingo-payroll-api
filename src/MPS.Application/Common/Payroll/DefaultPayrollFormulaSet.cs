@@ -295,14 +295,32 @@ public static class DefaultPayrollFormulaSet
         //   · cờ FLAGBH    — kênh đè tay theo kỳ ([D23]), vd thai sản.
         // Trước đây chỉ có tầng cờ, mà cờ được suy theo thứ tự ưu tiên nên HĐ "chỉ đóng BHYT" ra
         // `x2` và không bao giờ chạm nhánh `x` ⇒ tick "miễn KPCĐ" bị bỏ qua, vẫn trích đủ 2%.
-        // ⚠️ KPCĐ CỐ Ý không dùng nền đã kẹp trần của X1: nó truyền `cap = 0` (không áp trần) từ
-        // trước tới nay. QĐ 1908 tính KPCĐ trên quỹ tiền lương làm căn cứ đóng BHXH — tức CÓ trần —
-        // nên đây có thể là một lỗi riêng, nhưng sửa là đổi số của một cột khác, ngoài phạm vi X1.
-        // Giữ nguyên hành vi hiện tại cho tới khi PO chốt.
+        // ⭐ X6 (PO chốt 23/08/2026) — KPCĐ CÓ TRẦN, dùng chung trần và chung nền với BHXH.
+        //
+        // Luật Công đoàn 50/2024/QH15 (hiệu lực 01/07/2025): KPCĐ = 2% **quỹ tiền lương làm căn cứ
+        // đóng BHXH bắt buộc**. "Làm căn cứ đóng BHXH" đã bao hàm trần 20 lần mức tham chiếu — chính
+        // là trần mà 7 cột bảo hiểm đang dùng ⇒ mức KPCĐ tối đa 46.800.000 × 2% = 936.000đ/người/
+        // tháng (từ 01/07/2026: 50.600.000 × 2% = 1.012.000đ).
+        //
+        // Trước đây cột này truyền `cap = 0` (KHÔNG áp trần) nên người lương trên trần bị trích vượt.
+        // Nó cũng là cột DUY NHẤT còn dùng nền chưa kẹp trần theo ngày sau bản sửa X1 — nay thống
+        // nhất luôn, vì cùng một định nghĩa "quỹ tiền lương làm căn cứ đóng BHXH" thì không thể có
+        // hai cách tính.
+        //
+        // Cổng lùi cho kỳ cũ dùng chính field của X1 chứ không dùng trần: khoá `BhxhBhytCap` đã tồn
+        // tại từ lâu nên có mặt trong cả snapshot cũ — lấy nó làm điều kiện thì kỳ cũ cũng bị áp
+        // trần, tức bản sửa hồi tố. `ContractMucLuongCapBhxh` mới có từ X1, vắng mặt ở kỳ cũ, nên
+        // dùng nó làm cổng thì kỳ cũ giữ nguyên `cap = 0` như trước.
+        var kpcdCap = N.If(N.Cmp(">", N.Field(Fk.ContractMucLuongCapBhxh), N.Const(0m)),
+            N.Field(Fk.BhxhBhytCap),
+            N.Const(0m));
+
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
                 UnlessExempt(Fk.ContractUnionFundExempt,
-                    N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(nenDongBh), N.Field(Fk.KpcdRate), N.Const(0m)))));
+                    N.Func(Fn.InsuranceWithCap,
+                        ProrateByCongCoBaoHiem(CappedBase(Fk.ContractMucLuongCapBhxh)),
+                        N.Field(Fk.KpcdRate), kpcdCap))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,

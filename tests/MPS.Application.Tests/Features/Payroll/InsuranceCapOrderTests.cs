@@ -32,6 +32,7 @@ public sealed class InsuranceCapOrderTests
     private const decimal Salary = 55_000_000m;
     private const decimal BhxhNldRate = 0.08m;
     private const decimal BhxhDnRate = 0.175m;
+    private const decimal KpcdRate = 0.02m;
 
     private static decimal Cell(PayrollRow row, string code) =>
         row.Cells.Single(c => c.ColumnCode == code).ComputedValue ?? 0m;
@@ -60,6 +61,7 @@ public sealed class InsuranceCapOrderTests
                 [PayrollFieldKeys.ContractMucLuongCapBhxh] = cappedBase,
                 [PayrollFieldKeys.BhxhNldRate] = BhxhNldRate,
                 [PayrollFieldKeys.BhxhDnRate] = BhxhDnRate,
+                [PayrollFieldKeys.KpcdRate] = KpcdRate,
                 [PayrollFieldKeys.BhxhBhytCap] = Cap,
                 [PayrollFieldKeys.BhtnCap] = 106_200_000m,
                 [PayrollFieldKeys.PersonalDeduction] = 15_500_000m,
@@ -133,6 +135,51 @@ public sealed class InsuranceCapOrderTests
 
         Cell(fixedRow, PayrollColumnCodes.NldBhxh).Should().Be(Cell(legacyRow, PayrollColumnCodes.NldBhxh),
             "chỉ một trục biến động thì engine cũ vốn đã đúng — bản sửa không được đổi số ở đây");
+    }
+
+    // ===== X6 — KPCĐ dùng chung trần và chung nền với BHXH =====
+
+    /// <summary>
+    /// Luật Công đoàn 50/2024/QH15: KPCĐ = 2% <b>quỹ tiền lương làm căn cứ đóng BHXH</b>. Cụm đó đã
+    /// bao hàm trần 20 lần mức tham chiếu ⇒ tối đa 46.800.000 × 2% = 936.000đ/người/tháng. Trước bản
+    /// sửa, cột này truyền <c>cap = 0</c> (không áp trần) nên người lương trên trần bị trích vượt.
+    /// </summary>
+    [Fact(DisplayName = "X6 — KPCĐ chặn trần: người trên trần chỉ trích tối đa 2% × trần")]
+    public void UnionFundFee_IsCappedLikeInsurance()
+    {
+        var row = Compute(congChuan: 23m, congLam: 23m, cappedBase: Cap);
+
+        Cell(row, PayrollColumnCodes.Kpcd)
+            .Should().Be(Cap * KpcdRate, "quỹ tiền lương làm căn cứ đóng BHXH đã bị trần chặn");
+        Cell(row, PayrollColumnCodes.Kpcd).Should().Be(936_000m);
+    }
+
+    [Fact(DisplayName = "X6 — KPCĐ dùng CHUNG nền với BHXH, không còn hai cách tính")]
+    public void UnionFundFee_SharesTheInsuranceBase()
+    {
+        // Tháng thiếu công của người trên trần: nền đóng = trần × 8/22.
+        var row = Compute(congChuan: 22m, congLam: 8m, cappedBase: Cap);
+
+        var nenTuBhxh = Cell(row, PayrollColumnCodes.NldBhxh) / BhxhNldRate;
+        var nenTuKpcd = Cell(row, PayrollColumnCodes.Kpcd) / KpcdRate;
+
+        nenTuKpcd.Should().BeApproximately(nenTuBhxh, 15m,
+            "cùng một định nghĩa 'quỹ tiền lương làm căn cứ đóng BHXH' thì không thể có hai cách tính");
+    }
+
+    /// <summary>
+    /// Cổng lùi phải là <c>ContractMucLuongCapBhxh</c> (chỉ có từ X1), KHÔNG phải <c>BhxhBhytCap</c>
+    /// — khoá trần đã tồn tại từ lâu nên có mặt cả trong snapshot cũ; lấy nó làm điều kiện thì kỳ cũ
+    /// cũng bị áp trần, tức bản sửa hồi tố.
+    /// </summary>
+    [Fact(DisplayName = "X6 — snapshot kỳ CŨ: KPCĐ vẫn KHÔNG trần, giữ nguyên số cũ")]
+    public void UnionFundFee_LegacySnapshotStaysUncapped()
+    {
+        var legacy = Compute(congChuan: 23m, congLam: 23m, cappedBase: 0m);
+
+        Cell(legacy, PayrollColumnCodes.Kpcd)
+            .Should().Be(Salary * KpcdRate, "kỳ tạo trước bản sửa vẫn trích trên nguyên lương 55tr");
+        Cell(legacy, PayrollColumnCodes.Kpcd).Should().BeGreaterThan(Cap * KpcdRate);
     }
 
     [Fact(DisplayName = "Đối chứng — lương dưới trần: bản sửa không đụng tới số")]
