@@ -42,16 +42,34 @@ public sealed partial class DatabaseSeeder
     private static readonly IReadOnlyDictionary<string, (string Code, decimal Amount)[]> AllowancesByPosition =
         new Dictionary<string, (string, decimal)[]>(StringComparer.OrdinalIgnoreCase)
         {
-            ["THOCAT"]  = new[] { ("MEAL", 1_000_000m) },
-            ["THOGHEP"] = new[] { ("MEAL", 1_000_000m) },
-            ["THOSON"]  = new[] { ("MEAL", 1_000_000m) },
-            ["THOHT"]   = new[] { ("MEAL", 1_000_000m) },
-            ["KCS"]     = new[] { ("MEAL", 1_000_000m) },
-            ["TTSX"]    = new[] { ("MEAL", 1_000_000m), ("FUEL", 400_000m) },
-            ["QDX"]     = new[] { ("MEAL", 1_000_000m), ("FUEL", 600_000m), ("PHONE", 300_000m) },
+            // ⭐ X2c — UNIFORM (trang phục, IsTaxable = false) cấp cho toàn bộ khối trực tiếp sản xuất.
+            // Mã ngoài 4 mã có cột riêng ⇒ rơi vào cột "Khác" [D15] và bị cộng vào TNCT như khoản chịu
+            // thuế, dù danh mục khai MIỄN. Đây là dữ liệu để lộ việc engine không đọc `IsTaxable`.
+            ["THOCAT"]  = new[] { ("MEAL", 1_000_000m), ("UNIFORM", 400_000m) },
+            ["THOGHEP"] = new[] { ("MEAL", 1_000_000m), ("UNIFORM", 400_000m) },
+            ["THOSON"]  = new[] { ("MEAL", 1_000_000m), ("UNIFORM", 400_000m) },
+            ["THOHT"]   = new[] { ("MEAL", 1_000_000m), ("UNIFORM", 400_000m) },
+            ["KCS"]     = new[] { ("MEAL", 1_000_000m), ("UNIFORM", 400_000m) },
+            // ⭐ X2b — phụ cấp TRÁCH NHIỆM của tổ trưởng. `totruong_x1` là người DUY NHẤT có đơn tăng ca
+            // trong dữ liệu demo, nên đây là chỗ duy nhất quan sát được: đơn giá giờ của khối tăng ca
+            // (`PayrollDataCollector.hourlyRate`) chỉ chia từ MUCLUONG, bỏ qua phụ cấp lương gắn với
+            // công việc mà NĐ 145/2020 Đ.55.1 tính vào "tiền lương thực trả theo công việc".
+            ["TTSX"]    = new[] { ("MEAL", 1_000_000m), ("FUEL", 400_000m), ("RESP", 800_000m), ("UNIFORM", 400_000m) },
+            ["QDX"]     = new[] { ("MEAL", 1_000_000m), ("FUEL", 600_000m), ("PHONE", 300_000m), ("RESP", 1_500_000m) },
             ["TPHR"]    = new[] { ("MEAL", 1_000_000m), ("PHONE", 400_000m) },
             ["KTT"]     = new[] { ("MEAL", 1_000_000m), ("PHONE", 400_000m) },
-            ["TPKD"]    = new[] { ("MEAL", 1_000_000m), ("PHONE", 400_000m), ("FUEL", 600_000m) },
+            // ⭐ X2c + X4 — Trưởng phòng Kinh doanh: công tác phí khoán (MIỄN thuế) + thuê nhà 9tr.
+            //
+            // Thuê nhà cố ý VƯỢT trần "≤ 15% tổng TNCT chưa gồm tiền nhà". Đo trên dữ liệu seed: nền
+            // TNCT chưa gồm nhà của TPKD ≈ 38,8–42,9tr tuỳ kỳ (mức lương 20tr cộng "Trợ cấp lương
+            // chính" = lương × hệ số năng suất, nên tổng thu nhập lớn hơn mức lương nhiều), ⇒ trần
+            // ≈ 5,8–6,4tr. Mức 5tr ban đầu KHÔNG vượt trần nên case không nổ; 9tr vượt ở CẢ BA kỳ kể
+            // cả kỳ có hệ số năng suất thấp nhất.
+            //
+            // Đối chứng chiều ngược lại đã có sẵn: Giám đốc hưởng HOUSING 8tr trên nền TNCT ~65tr
+            // ⇒ trần ~9,8tr ⇒ KHÔNG vượt, engine tính đúng.
+            ["TPKD"]    = new[] { ("MEAL", 1_000_000m), ("PHONE", 400_000m), ("FUEL", 600_000m),
+                                  ("PERDIEM", 2_000_000m), ("HOUSING", 9_000_000m) },
             // ⭐ C13 — phụ cấp trách nhiệm (RESP) bật ExcludeFromProration: trả NGUYÊN không chia theo
             // ngày công; cộng với thuê nhà (HOUSING, cột riêng) đẩy tổng thu nhập lên bậc thuế cao nhất.
             ["GD"]      = new[] { ("MEAL", 1_000_000m), ("PHONE", 500_000m), ("RESP", 10_000_000m), ("HOUSING", 8_000_000m) },
@@ -83,6 +101,9 @@ public sealed partial class DatabaseSeeder
     {
         await SeedWorkforceAllowancesAsync(ct);
         await SeedCaseAppendicesAsync(ct);
+        // ⭐ X1b — phụ lục nâng bậc Giám đốc vắt qua trần đóng BH (xem DatabaseSeeder.CrossAxisCaseData.cs).
+        // Phải chạy TRƯỚC khi sinh kỳ lương, giống mọi phụ lục khác: mốc hiệu lực là đầu vào của engine.
+        await SeedTopEarnerRaiseAppendixAsync(ct);
         await SeedCaseTerminationAsync(ct);
     }
 

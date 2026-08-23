@@ -316,7 +316,6 @@ public sealed partial class DatabaseSeeder
         {
             // Ban Giám đốc
             new() { Code = "GD", Name = "Giám đốc", Description = "Điều hành chung toàn công ty." },
-            new() { Code = "PGD", Name = "Phó Giám đốc", Description = "Hỗ trợ Giám đốc điều hành." },
 
             // Phòng Nhân sự
             new() { Code = "TPHR", Name = "Trưởng phòng Nhân sự", Description = "Quản lý phòng Nhân sự." },
@@ -768,6 +767,13 @@ public sealed partial class DatabaseSeeder
     ///
     /// <para><c>RESP</c> (trách nhiệm) bật <c>ExcludeFromProration</c>: khoản gắn với chức danh, trả
     /// NGUYÊN bất kể số ngày đi làm — đây là nhánh PRORATE-02 chưa từng có dữ liệu để chạy.</para>
+    ///
+    /// <para>⭐ X2c — <c>PERDIEM</c> và <c>UNIFORM</c> là hai mã đầu tiên khai <c>IsTaxable = false</c>.
+    /// Trước bản này MỌI mã trong danh mục đều chịu thuế, nên cờ <c>IsTaxable</c> chưa từng có giá trị
+    /// <c>false</c> nào để lộ ra việc bảng lương KHÔNG đọc cờ đó: cột <c>TNCT</c> chỉ trừ đúng
+    /// <c>DIEN_THOAI</c> + <c>COM_MIENTHUE</c> + khối tăng ca/phụ trội, nên công tác phí khoán và tiền
+    /// trang phục — hai khoản luật cho miễn — vẫn bị đánh thuế đủ. Xem
+    /// <c>DatabaseSeeder.CrossAxisCaseData.cs</c>.</para>
     /// </summary>
     private async Task SeedDefaultAllowanceTypesAsync(CancellationToken ct)
     {
@@ -782,6 +788,13 @@ public sealed partial class DatabaseSeeder
             new AllowanceType { Code = "HOUSING", Name = "Phụ cấp thuê nhà",     IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = false, CreatedAt = now },
             new AllowanceType { Code = "RESP",    Name = "Phụ cấp trách nhiệm",  IsBhxhBase = true,  IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = true,  CreatedAt = now },
             new AllowanceType { Code = "TOXIC",   Name = "Phụ cấp độc hại",      IsBhxhBase = true,  IsTaxable = true,  IsActive = true, DefaultAmount = 500_000,   ExcludeFromProration = false, CreatedAt = now },
+            // ⭐ X2c — hai khoản MIỄN thuế TNCN (IsTaxable = false), cũng không vào căn cứ đóng BHXH.
+            // Công tác phí khoán trả theo chuyến nên bật ExcludeFromProration: đi công tác nửa tháng
+            // vẫn nhận đủ mức khoán, không chia theo ngày công.
+            new AllowanceType { Code = "PERDIEM", Name = "Công tác phí khoán",   IsBhxhBase = false, IsTaxable = false, IsActive = true, DefaultAmount = null,      ExcludeFromProration = true,  CreatedAt = now },
+            // Trang phục: trần miễn thuế 5.000.000đ/năm ⇒ 416.667đ/tháng; công ty chi 400.000đ/tháng
+            // nên nằm TRỌN trong ngưỡng miễn — không dính nhánh "phần vượt chịu thuế".
+            new AllowanceType { Code = "UNIFORM", Name = "Phụ cấp trang phục",   IsBhxhBase = false, IsTaxable = false, IsActive = true, DefaultAmount = 400_000,   ExcludeFromProration = false, CreatedAt = now },
         };
 
         var codes = specs.Select(s => s.Code).ToArray();

@@ -63,7 +63,17 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var usernames = new[] { "totruong_x1", "cn_x1_3", "cn_x1_4", "cn_x2_3", "cn_x2_4", "cn_x2_5", "cn_x3_5" };
+        // ⭐ X1a — "director" có mặt trong danh sách này để chấm công của Giám đốc do lớp case dựng
+        // (có ngày nghỉ ốm), thay vì để `PreparePayrollMonthDataAsync` điền đủ công cho cả tháng.
+        // Hai đường loại trừ nhau: lớp prepare chỉ điền khi nhân viên CHƯA có bản ghi nào trong kỳ.
+        //
+        // Giám đốc là người DUY NHẤT của công ty có mức lương vượt trần đóng BHXH (GD-4 = 55tr so với
+        // trần 46,8tr / 50,6tr), nên case "vượt trần × thiếu công" không có chỗ nào khác để đặt. Việc
+        // duyệt đơn trong dữ liệu demo đều do tài khoản admin thực hiện nên kịch bản duyệt không đổi.
+        var usernames = new[]
+        {
+            "totruong_x1", "cn_x1_3", "cn_x1_4", "cn_x2_3", "cn_x2_4", "cn_x2_5", "cn_x3_5", "director",
+        };
         var emps = await _context.EmployeeInformations.AsNoTracking()
             .Where(e => e.User != null && usernames.Contains(e.User.Username))
             .Select(e => new { e.Id, e.UserId, Username = e.User!.Username })
@@ -89,6 +99,32 @@ public sealed partial class DatabaseSeeder
             leaveTypeIds, adminId, ct);
         await EnsureLeaveRequestAsync(emps, "cn_x2_4", "UNPAID", DemoDay(1, 22), DemoDay(1, 23),
             isPaid: false, "Nghỉ không hưởng lương do việc gia đình, đã hết quỹ phép trong tháng.",
+            leaveTypeIds, adminId, ct);
+
+        // ⭐ X1a — NGHỈ ỐM 14 NGÀY LÀM VIỆC của người có lương TRÊN TRẦN đóng BHXH (Giám đốc, GD-4 =
+        // 55tr sau phụ lục X1b; trần kỳ 06/2026 = 46,8tr). Ghép đúng hai trục mà bộ seed cũ luôn tách
+        // rời nhau: "vượt trần" và "không đủ công".
+        //
+        // Vì sao lộ lỗi. Khối bảo hiểm tính
+        // MIN(MUCLUONG × công/công_chuẩn, trần) × tỷ_lệ — nền bị CHIA TRƯỚC rồi mới gặp trần,
+        // nên với người nghỉ nhiều ngày thì trần gần như không bao giờ chạm tới. Đúng luật: trần chặn
+        // mức lương THÁNG, chia theo ngày là bước sau.
+        //
+        // Số kỳ vọng (công chuẩn 06/2026 = 22 ngày, nghỉ 14 ⇒ còn 8 công):
+        // engine lấy nền 55.000.000 × 8/22 = 20.000.000đ (không chạm trần);
+        // đúng phải là MIN(55.000.000; 46.800.000) × 8/22 = 17.018.182đ.
+        // Chênh nền 2.981.818đ ⇒ BHXH NLĐ 8% thu thừa 238.545đ, DN 17,5% (gộp HT 14% +
+        // ỐĐ-TS 3% + TNLĐ-BNN 0,5%) thừa 521.818đ.
+        //
+        // Cùng bộ dữ liệu này phục vụ case B3 — nghỉ ốm ≥ 14 ngày làm việc thì tháng đó
+        // KHÔNG đóng BHXH (QĐ 595): 14 là đúng ngưỡng, nên nó vừa là mốc biên "14 hay 13" vừa là
+        // bằng chứng hệ thống hiện vẫn thu bảo hiểm theo tỷ lệ công thay vì miễn cả tháng.
+        //
+        // ⚠️ Khoảng 08→25 của kỳ giữa cho đúng 14 ngày làm việc với trục demo mặc định (06/2026 bắt
+        // đầu vào thứ Hai). Đổi `Seed:DemoAnchorMonth` thì số ngày lệch đi — case vẫn còn ý nghĩa
+        // (nghỉ dài ngày + trên trần) nhưng các con số kỳ vọng ở trên phải tính lại.
+        await EnsureLeaveRequestAsync(emps, "director", "SICK", DemoDay(1, 8), DemoDay(1, 25),
+            isPaid: false, "Nghỉ ốm dài ngày có giấy ra viện — hưởng chế độ ốm đau do quỹ BHXH chi trả.",
             leaveTypeIds, adminId, ct);
 
         await SeedCaseMonthAttendanceAsync(emps, holidays, shiftId.Value, nightShiftId, adminId, ct);
@@ -380,8 +416,38 @@ public sealed partial class DatabaseSeeder
     private async Task SeedOvertimeCasesAsync(
         IReadOnlyDictionary<string, (int Id, int? UserId)> emps, int adminId, CancellationToken ct)
     {
-        if (!emps.TryGetValue("totruong_x1", out var leader)) return;
+        var byPerson = new List<(string Username, List<OvertimeCase> Cases)>();
 
+        if (emps.ContainsKey("totruong_x1")) byPerson.Add(("totruong_x1", BuildLeaderOvertimeCases()));
+
+        // ⭐ X5 — ĐƠN TĂNG CA TRÊN HỢP ĐỒNG DÂN SỰ. `cn_x2_3` ký hợp đồng KHOÁN VIỆC (case C7), tức
+        // quan hệ dân sự không có khái niệm "làm thêm giờ" của BLLĐ — vậy mà không handler nào trong
+        // `Features/Attendance/OvertimeRequest/` đọc `ContractKind`, nên đơn vẫn tạo và duyệt được,
+        // rồi tiền chảy vào cột TANG_CA theo hệ số 150%/200% như người làm công ăn lương.
+        //
+        // Đây cũng là mâu thuẫn với quyết định đặt tên "Hỗ trợ theo tiến độ" (không dùng chữ
+        // "lương"/"thưởng" cho hợp đồng dân sự) — chứng từ vẫn in ra chữ "Tăng ca".
+        if (emps.ContainsKey("cn_x2_3"))
+        {
+            byPerson.Add(("cn_x2_3", new List<OvertimeCase>
+            {
+                new(1, 9, OvertimeDayKind.Workday, new TimeOnly(18, 0), new TimeOnly(21, 0),
+                    "Chạy nốt lô khung gấp — kê tăng ca dù đang là hợp đồng khoán việc"),
+                new(2, 21, OvertimeDayKind.WeeklyRest, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Làm bù ngày Chủ nhật theo yêu cầu quản đốc"),
+            }));
+        }
+
+        var added = 0;
+        foreach (var (username, cases) in byPerson)
+            added += await SeedOvertimeCasesForAsync(emps[username], cases, adminId, ct);
+
+        if (added > 0) _logger.LogInformation("Seeded {Count} ca tăng ca (thường / nghỉ tuần / lễ / đêm).", added);
+    }
+
+    /// <summary>Bộ tăng ca của tổ trưởng xưởng 1 — phủ đủ 4 loại ngày + ca vắt nửa đêm cuối tháng.</summary>
+    private static List<OvertimeCase> BuildLeaderOvertimeCases()
+    {
         var cases = new List<OvertimeCase>
         {
             // Kỳ cũ nhất có 01/5 — tăng ca NGÀY LỄ hưởng ít nhất 300% (Điều 98 k.1 điểm c).
@@ -404,6 +470,19 @@ public sealed partial class DatabaseSeeder
                 "Trực lò sấy qua đêm cuối tháng"));
         }
 
+        return cases;
+    }
+
+    /// <summary>
+    /// Ghi đơn tăng ca đã duyệt + bản ghi chấm công của chính ca đó cho MỘT người.
+    /// Idempotent theo (nhân viên, ngày làm việc).
+    /// </summary>
+    private async Task<int> SeedOvertimeCasesForAsync(
+        (int Id, int? UserId) leader,
+        IReadOnlyList<OvertimeCase> cases,
+        int adminId,
+        CancellationToken ct)
+    {
         var now = DateTime.UtcNow;
         var added = 0;
         foreach (var c in cases)
@@ -463,7 +542,7 @@ public sealed partial class DatabaseSeeder
             added++;
         }
 
-        if (added > 0) _logger.LogInformation("Seeded {Count} ca tăng ca (thường / nghỉ tuần / lễ / đêm).", added);
+        return added;
     }
 
     /// <summary>Quy ngày tăng ca về đúng loại ngày mà kịch bản cần (quyết định hệ số 150/200/300%).</summary>

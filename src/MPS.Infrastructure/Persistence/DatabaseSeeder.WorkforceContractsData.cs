@@ -43,8 +43,17 @@ public sealed partial class DatabaseSeeder
         ("KCS",     "KCS-2",     "Nhân viên KCS"),
         ("TPHR",    "TPHR-2",    "Trưởng phòng Nhân sự"),
         ("KTT",     "KTT-2",     "Kế toán trưởng"),
-        // ⭐ C13 — bậc vượt trần đóng BHXH/BHYT (50,6tr). Xem DatabaseSeeder.SalaryGradesData.cs.
-        ("GD",      "GD-4",      "Giám đốc"),
+        // ⭐ C13 + X1a/X1b — hợp đồng NỀN của Giám đốc khởi điểm ở GD-3 (45tr, DƯỚI trần 46,8tr của
+        // kỳ 05), phụ lục X1b nâng lên GD-4 (55tr, VƯỢT cả hai mốc trần) hiệu lực 16/05/2026.
+        //
+        // Vì sao buộc phải là Giám đốc. Case X1 đòi một người có mức lương THÁNG vượt
+        // trần đóng BHXH. Toàn bộ thang bậc công ty chỉ có GD-4 (55tr) vượt mốc 50,6tr — bậc cao thứ
+        // nhì là KTT-3/TPHR-3 = 25tr, cách trần hơn gấp đôi. Không có chức danh nào khác gánh được
+        // case này mà không phải bịa ra một vị trí không tồn tại trong công ty.
+        //
+        // Độ phủ C13 không mất. Kỳ 06 và 07 Giám đốc ở GD-4 nguyên bậc; riêng kỳ 07 đủ
+        // công nên nền đóng = ĐÚNG BẰNG trần mới 50,6tr — nhánh "chạm trần" vẫn có dữ liệu sạch.
+        ("GD",      "GD-3",      "Giám đốc"),
         ("TPKD",    "TPKD-2",    "Trưởng phòng Kinh doanh"),
     };
 
@@ -121,9 +130,10 @@ public sealed partial class DatabaseSeeder
         new("cn_x1_6", "PT", ContractEnums.ContractKind.LaborPartTime, null,
             ToPeriod: 2, ToDay: 0,
             JobNote: "làm bán thời gian 4 giờ/ngày"),
-        new("cn_x3_6", "DT", ContractEnums.ContractKind.VocationalTraining, null,
-            FromPeriod: 0, FromDay: 1, ToPeriod: 2, ToDay: 0, SalaryPercent: 0.70m,
-            JobNote: "học nghề đóng khung tại xưởng, hưởng phụ cấp học nghề"),
+        // ⚠️ ĐÃ BỎ case "DT" (ContractKind.VocationalTraining) của cn_x3_6 — công ty KHÔNG ký hợp đồng
+        // đào tạo nghề, nên dữ liệu demo không được mô tả một loại quan hệ lao động không tồn tại.
+        // cn_x3_6 nay nhận hợp đồng NỀN (LaborFullTime, vô thời hạn) như phần còn lại của xưởng.
+        // Enum + nhánh `CongCategory.Apprentice` trong engine giữ nguyên: đó là code, không phải dữ liệu.
         new("cn_x2_6", "DV", ContractEnums.ContractKind.Service, null,
             FromPeriod: 0, FromDay: 1, ToPeriod: 2, ToDay: 0,
             JobNote: "cung cấp dịch vụ đóng gói theo đơn hàng"),

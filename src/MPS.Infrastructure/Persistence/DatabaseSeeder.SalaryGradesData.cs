@@ -37,12 +37,6 @@ public sealed partial class DatabaseSeeder
             // không kiểm được trên dữ liệu thật.
             new GradeLevel(4, 55_000_000m, "Giám đốc điều hành — kiêm người đại diện theo pháp luật"),
         }),
-        ("PGD", "Phó Giám đốc", new[]
-        {
-            new GradeLevel(1, 28_000_000m, "Phó Giám đốc — bổ nhiệm mới"),
-            new GradeLevel(2, 31_000_000m, "Phó Giám đốc — phụ trách 1 khối"),
-            new GradeLevel(3, 34_000_000m, "Phó Giám đốc — phụ trách nhiều khối"),
-        }),
         ("TPHR", "Trưởng phòng Nhân sự", new[]
         {
             new GradeLevel(1, 20_000_000m, "Trưởng phòng mới bổ nhiệm"),
