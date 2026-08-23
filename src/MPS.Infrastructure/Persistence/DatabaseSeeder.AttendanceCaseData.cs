@@ -420,13 +420,18 @@ public sealed partial class DatabaseSeeder
 
         if (emps.ContainsKey("totruong_x1")) byPerson.Add(("totruong_x1", BuildLeaderOvertimeCases()));
 
-        // ⭐ X5 — ĐƠN TĂNG CA TRÊN HỢP ĐỒNG DÂN SỰ. `cn_x2_3` ký hợp đồng KHOÁN VIỆC (case C7), tức
-        // quan hệ dân sự không có khái niệm "làm thêm giờ" của BLLĐ — vậy mà không handler nào trong
-        // `Features/Attendance/OvertimeRequest/` đọc `ContractKind`, nên đơn vẫn tạo và duyệt được,
-        // rồi tiền chảy vào cột TANG_CA theo hệ số 150%/200% như người làm công ăn lương.
+        // ⭐ X5 — ĐƠN TĂNG CA TRÊN HỢP ĐỒNG DÂN SỰ, nay là DỮ LIỆU LỊCH SỬ. `cn_x2_3` ký hợp đồng
+        // KHOÁN VIỆC (case C7) — quan hệ dân sự không có khái niệm "làm thêm giờ" của BLLĐ. Trước
+        // bản sửa X5, không handler nào trong `Features/Attendance/OvertimeRequest/` đọc
+        // `ContractKind` nên đơn vẫn tạo và duyệt được, rồi tiền chảy vào cột TANG_CA theo hệ số
+        // 150%/200% như người làm công ăn lương — mâu thuẫn với chính quyết định đặt tên "Hỗ trợ
+        // theo tiến độ" (chứng từ HĐ dân sự không mang chữ "lương"/"thưởng").
         //
-        // Đây cũng là mâu thuẫn với quyết định đặt tên "Hỗ trợ theo tiến độ" (không dùng chữ
-        // "lương"/"thưởng" cho hợp đồng dân sự) — chứng từ vẫn in ra chữ "Tăng ca".
+        // GIỮ LẠI hai đơn này có chủ đích, dù `OvertimeContractKindGuard` nay đã chặn: seed ghi
+        // thẳng qua repository nên không đi qua guard, đúng như những đơn đã tồn tại trong DB thật
+        // trước ngày guard ra đời. Chúng chứng minh guard KHÔNG hồi tố — tiền của đơn cũ vẫn nguyên,
+        // hệ thống không tự ý xoá dữ liệu lịch sử. Muốn kiểm chính guard thì thử tạo đơn MỚI cho
+        // `cn_x2_3` qua API: phải bị từ chối với mã `OT_CIVIL_CONTRACT`.
         if (emps.ContainsKey("cn_x2_3"))
         {
             byPerson.Add(("cn_x2_3", new List<OvertimeCase>

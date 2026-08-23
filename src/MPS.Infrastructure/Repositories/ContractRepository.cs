@@ -443,6 +443,17 @@ public class ContractRepository : IContractRepository
                         && (c.Status == ContractStatus.Active
                             || c.Status == ContractStatus.PendingTermination), cancellationToken);
 
+    public async Task<IReadOnlyList<ContractKind>> GetActiveContractKindsAsync(
+        int employeeInformationId, CancellationToken cancellationToken = default) =>
+        await _context.Contracts
+            .AsNoTracking()
+            .Where(c => c.EmployeeInformationId == employeeInformationId
+                        && (c.Status == ContractStatus.Active
+                            || c.Status == ContractStatus.PendingTermination))
+            .Select(c => c.Kind)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithActiveContractsAsync(
         IReadOnlyCollection<int> employeeInformationIds,
         CancellationToken cancellationToken = default)

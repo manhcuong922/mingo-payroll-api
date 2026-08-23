@@ -100,6 +100,12 @@ public class CreateOvertimeRequestCommandHandler : IRequestHandler<CreateOvertim
             throw new DomainValidationException(
                 "CONTRACT_NOT_ACTIVE: Nhân viên không còn hợp đồng lao động hiệu lực — không thể đăng ký OT.");
 
+        // 1b'. X5 — quan hệ DÂN SỰ (khoán việc / dịch vụ / cộng tác viên) không có khái niệm làm
+        // thêm giờ. Chặn ở tầng TẠO ĐƠN chứ không ở tầng tính lương: để đơn đi tới bảng lương rồi
+        // mới bỏ tiền là đã phát hành chứng từ mang chữ "Tăng ca" cho một quan hệ không phải lao động.
+        OvertimeContractKindGuard.EnsureLaborRelationship(
+            await _contracts.GetActiveContractKindsAsync(employeeId, cancellationToken));
+
         // 1c. Case 4 — chặn ngày quá xa trong tương lai (quá khứ vẫn cho phép: truy lĩnh [D3]).
         OvertimeWorkDateGuard.EnsureNotTooFarInFuture(request.WorkDate, _clock.UtcNow);
 
