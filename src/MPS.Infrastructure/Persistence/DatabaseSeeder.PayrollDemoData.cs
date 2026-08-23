@@ -204,11 +204,20 @@ public sealed partial class DatabaseSeeder
     /// <para>Gán cứng 4.0 khiến hệ số luôn bằng 1.000 ⇒ ba bậc còn lại của bảng hệ số là cấu hình
     /// không bao giờ được dùng, và mọi dòng lương chỉ khác nhau ở mức lương bậc.</para>
     ///
-    /// <para>Xác định theo <c>(mã NV, tháng)</c> nên tái lập được y hệt sau mỗi lần dựng lại DB, mà
-    /// vẫn đổi giữa các tháng như đánh giá thật.</para>
+    /// <para>Xác định theo <c>(mã NV, năm, tháng)</c> nên tái lập được y hệt sau mỗi lần dựng lại DB,
+    /// mà vẫn đổi giữa các tháng như đánh giá thật.</para>
+    ///
+    /// <para>⚠️ <b>KHÔNG dùng <c>HashCode.Combine</c> ở đây.</b> .NET random hoá hạt giống của nó theo
+    /// từng TIẾN TRÌNH (chống tấn công băm), nên mỗi lần chạy seed ra một bộ điểm khác — đúng phần
+    /// mà chú thích trên hứa là "tái lập được". Hậu quả không hiển nhiên: điểm đổi ⇒ bậc hệ số năng
+    /// suất đổi (0,5 / 0,8 / 1,0 / 1,2) ⇒ cột "Trợ cấp lương chính" đổi ⇒ tổng thu nhập, thuế TNCN
+    /// và thực nhận của cả kỳ đổi theo. Từng làm lệch 10.000.000đ tổng thu nhập của một dòng lương
+    /// giữa hai lần dựng DB, khiến việc đối chiếu số trở nên vô nghĩa.</para>
+    ///
+    /// <para>Thay bằng băm SỐ HỌC thuần: cùng đầu vào ⇒ cùng đầu ra, ở mọi tiến trình, mọi máy.</para>
     /// </summary>
-    private static decimal DemoEvaluationScore(int employeeInformationId, int year, int month) =>
-        Math.Abs(HashCode.Combine(employeeInformationId, year, month)) % 10 switch
+    internal static decimal DemoEvaluationScore(int employeeInformationId, int year, int month) =>
+        StableBucket(employeeInformationId, year, month) switch
         {
             0 => 4.70m,   // Xuất sắc  → 1.2
             1 => 4.30m,   // Tốt       → 1.0
@@ -216,6 +225,19 @@ public sealed partial class DatabaseSeeder
             9 => 2.20m,   // Cần cải thiện → 0.5
             _ => 3.80m,   // Tốt       → 1.0
         };
+
+    /// <summary>
+    /// Băm ba số nguyên về một ô 0–9, ổn định tuyệt đối giữa các lần chạy. Ba hằng số là số nguyên
+    /// tố lớn quen dùng cho hàm băm không gian — chỉ cần trộn đều, không cần chất lượng mật mã.
+    /// </summary>
+    private static int StableBucket(int a, int b, int c)
+    {
+        unchecked
+        {
+            var mixed = (uint)a * 73_856_093u ^ (uint)b * 19_349_663u ^ (uint)c * 83_492_791u;
+            return (int)(mixed % 10u);
+        }
+    }
 
     // Chuẩn bị chấm công (đủ ngày công) + đánh giá tháng Approved + hồ sơ chi lương cho MỌI NV trong phạm
     // vi readiness (HĐ non-Cancelled overlap kỳ) → readiness pass để engine sinh được kỳ.
