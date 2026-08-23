@@ -83,16 +83,32 @@ public static class DefaultPayrollFormulaSet
                     N.Sub(congHuongLuong, N.Field(Fk.CongKhongBaoHiem)),
                     N.Const(0m)));
 
-        FormulaNode Bh(string rateField, string capField) =>
-            BhWithCap(rateField, N.Field(capField));
+        FormulaNode Bh(string rateField, string capField, string cappedField) =>
+            BhWithCap(rateField, N.Field(capField), cappedField);
 
         // ⭐ X2a — nền đóng BH là "tiền lương + phụ cấp lương" (QĐ 595, Đ.30.2), không phải mỗi mức
         // lương. Trước đây phụ cấp độc hại / trách nhiệm đã tick "tính vào nền BHXH" trong danh mục
         // vẫn đứng ngoài ⇒ đóng THIẾU. Kỳ lương cũ không có khoá này ⇒ cộng 0 ⇒ giữ nguyên số cũ.
         var nenDongBh = N.Add(N.Col(Cc.MucLuong), N.Field(Fk.ContractAllowanceNenPhuCapLuong));
 
-        FormulaNode BhWithCap(string rateField, FormulaNode capNode) =>
-            N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(nenDongBh), N.Field(rateField), capNode);
+        // ⭐ X1 — TRẦN CHẶN MỨC LƯƠNG THÁNG, chia theo ngày công là bước SAU (QĐ 595). Trước đây thứ
+        // tự bị đảo: `MIN(nền_đã_chia, trần)`. Đứng riêng một trục thì không lộ — người đủ công,
+        // lương không đổi vẫn ra nền đúng bằng trần. Ghép thêm trục thứ hai mới sai:
+        //   · thiếu công — GĐ lương 55tr nghỉ ốm còn 8/22 công: engine chia trước ra nền 20tr, thấy
+        //     chưa chạm trần 46,8tr nên thu đủ trên 20tr. Đúng ra 46,8tr × 8/22 = 17.018.182đ.
+        //   · nâng bậc giữa kỳ — 45tr→55tr từ 16/05: engine bình quân ra 49.761.905 rồi mới kẹp còn
+        //     46.800.000. Đúng ra kẹp TỪNG ĐOẠN rồi bình quân: (11×45tr + 10×46,8tr)/21 = 45.857.143đ.
+        // Cả hai đều thu THỪA. Không thể sửa bằng cách đảo `MIN` ra ngoài ngay tại đây: cột MUCLUONG
+        // đã là bình quân, thông tin từng đoạn lương đã mất. Nền phải được kẹp trần TỪ TẦNG NGÀY ở
+        // collector rồi mới bình quân — đó là ba khoá `contract.mucLuongCap*`.
+        //
+        // Thiếu khoá (kỳ lương tạo TRƯỚC bản sửa) ⇒ 0 ⇒ lùi về nền cũ ⇒ số giữ nguyên.
+        FormulaNode CappedBase(string cappedField) =>
+            N.If(N.Cmp(">", N.Field(cappedField), N.Const(0m)), N.Field(cappedField), nenDongBh);
+
+        FormulaNode BhWithCap(string rateField, FormulaNode capNode, string cappedField) =>
+            N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(CappedBase(cappedField)),
+                N.Field(rateField), capNode);
 
         // ⭐ D3 — BHYT có trần RIÊNG (hệ số trần BHYT trên màn hình cấu hình BHXH), trước đây bị bỏ
         // qua và dùng chung trần BHXH nên admin sửa ô đó không có tác dụng gì.
@@ -254,27 +270,31 @@ public static class DefaultPayrollFormulaSet
 
         Add(Cc.DnBhxh, "BHXH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhDnRate, Fk.BhxhBhytCap))));
+                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhDnRate, Fk.BhxhBhytCap, Fk.ContractMucLuongCapBhxh))));
         Add(Cc.NldBhxh, "BHXH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhNldRate, Fk.BhxhBhytCap))));
+                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhNldRate, Fk.BhxhBhytCap, Fk.ContractMucLuongCapBhxh))));
         Add(Cc.DnBhyt, "BHYT – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBh,
-                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytDnRate, bhytCap))));
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytDnRate, bhytCap, Fk.ContractMucLuongCapBhyt))));
         Add(Cc.NldBhyt, "BHYT – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBh,
-                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytNldRate, bhytCap))));
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytNldRate, bhytCap, Fk.ContractMucLuongCapBhyt))));
         Add(Cc.DnBhtn, "BHTN – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnDnRate, Fk.BhtnCap))));
+                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnDnRate, Fk.BhtnCap, Fk.ContractMucLuongCapBhtn))));
         Add(Cc.NldBhtn, "BHTN – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnNldRate, Fk.BhtnCap))));
+                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnNldRate, Fk.BhtnCap, Fk.ContractMucLuongCapBhtn))));
         // KPCĐ có HAI tầng chặn, cố ý giống hệt 3 cột BH ở trên (bản sửa A7):
         //   · công tắc HĐ  — sự thật ghi trong hợp đồng (`Contract.UnionFundExemptFlag`);
         //   · cờ FLAGBH    — kênh đè tay theo kỳ ([D23]), vd thai sản.
         // Trước đây chỉ có tầng cờ, mà cờ được suy theo thứ tự ưu tiên nên HĐ "chỉ đóng BHYT" ra
         // `x2` và không bao giờ chạm nhánh `x` ⇒ tick "miễn KPCĐ" bị bỏ qua, vẫn trích đủ 2%.
+        // ⚠️ KPCĐ CỐ Ý không dùng nền đã kẹp trần của X1: nó truyền `cap = 0` (không áp trần) từ
+        // trước tới nay. QĐ 1908 tính KPCĐ trên quỹ tiền lương làm căn cứ đóng BHXH — tức CÓ trần —
+        // nên đây có thể là một lỗi riêng, nhưng sửa là đổi số của một cột khác, ngoài phạm vi X1.
+        // Giữ nguyên hành vi hiện tại cho tới khi PO chốt.
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
                 UnlessExempt(Fk.ContractUnionFundExempt,

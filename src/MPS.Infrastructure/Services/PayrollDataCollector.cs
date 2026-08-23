@@ -278,6 +278,23 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // ⭐ Phase 5 — tiền lương cộng dồn theo TRỌNG SỐ NGÀY của từng đoạn HĐ, để chia ra mức
             // bình quân của riêng đoạn chính thức và riêng đoạn thử việc.
             decimal luongChinhThucTheoCong = 0, luongThuViecTheoCong = 0, congKhongBaoHiem = 0;
+            // ⭐ X1 — nền đóng BH cộng dồn theo ngày, ĐÃ KẸP TRẦN NGAY TẠI NGÀY. Phải cộng riêng ba
+            // quỹ vì ba trần khác nhau. Kẹp ở đây thay vì ở công thức là bắt buộc: cột MUCLUONG đã
+            // là bình quân của các đoạn lương trong kỳ, mà MIN không giao hoán với phép bình quân —
+            // tháng nâng bậc giữa kỳ kẹp sau khi bình quân sẽ ra số khác kẹp từng đoạn rồi bình quân.
+            decimal nenBhxhTheoCong = 0, nenBhytTheoCong = 0, nenBhtnTheoCong = 0;
+
+            // Trần = 0 nghĩa là KHÔNG áp trần — cùng quy ước với hàm BH_CO_TRAN trên bảng công thức.
+            // BHYT thiếu trần riêng thì dùng chung trần BHXH, giống nhánh fallback bên công thức.
+            static decimal CapAt(decimal nen, decimal tran) => tran > 0m && nen > tran ? tran : nen;
+
+            void AccrueCappedBase(Contract? c, DateOnly day, decimal weight, AllowanceBuckets buckets)
+            {
+                var nenNgay = SalaryForDay(c, day) + buckets.NenPhuCapLuong;
+                nenBhxhTheoCong += weight * CapAt(nenNgay, bhxhBhytCap);
+                nenBhytTheoCong += weight * CapAt(nenNgay, bhytCap > 0m ? bhytCap : bhxhBhytCap);
+                nenBhtnTheoCong += weight * CapAt(nenNgay, bhtnCap);
+            }
             // ⭐ Phase 6 — phụ cấp cũng cộng dồn theo trọng số ngày (phụ lục đổi phụ cấp giữa tháng).
             var phuCapTheoCong = new AllowanceBuckets();
             var workSegments = new List<RegularHoursPremiumCalculator.WorkDaySegment>(records.Count);
@@ -303,6 +320,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                     // không còn dùng chung một HĐ đại diện cho cả kỳ: tháng chuyển thử việc → chính
                     // thức trước đây được trả 100% mức chính thức cho cả những ngày còn thử việc.
                     var dayContract = ContractForDay(empContracts, r.WorkDate) ?? activeContract;
+                    var dayBuckets = AllowanceBuckets.From(AllowanceLinesFor(dayContract, r.WorkDate));
                     switch (ResolveCategory(dayContract, r.WorkDate))
                     {
                         case CongCategory.Probation:
@@ -315,6 +333,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                         default:
                             congChinhThuc += weight;
                             luongChinhThucTheoCong += weight * SalaryForDay(dayContract, r.WorkDate);
+                            AccrueCappedBase(dayContract, r.WorkDate, weight, dayBuckets);
                             break;
                     }
 
@@ -322,9 +341,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                     // được vào nền đóng BH của kỳ.
                     if (dayContract is not null && !HasAnyInsurance(dayContract)) congKhongBaoHiem += weight;
 
-                    phuCapTheoCong += AllowanceBuckets
-                        .From(AllowanceLinesFor(dayContract, r.WorkDate))
-                        .Scale(weight);
+                    phuCapTheoCong += dayBuckets.Scale(weight);
                 }
                 dayHours += r.DayHours;
                 nightHours += r.NightHours;
@@ -378,6 +395,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 congLe += buLe;
 
                 var leContract = ContractForDay(empContracts, leDate) ?? activeContract;
+                var leBuckets = AllowanceBuckets.From(AllowanceLinesFor(leContract, leDate));
                 switch (ResolveCategory(leContract, leDate))
                 {
                     case CongCategory.Probation:
@@ -390,14 +408,13 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                     default:
                         congChinhThuc += buLe;
                         luongChinhThucTheoCong += buLe * SalaryForDay(leContract, leDate);
+                        AccrueCappedBase(leContract, leDate, buLe, leBuckets);
                         break;
                 }
 
                 if (leContract is not null && !HasAnyInsurance(leContract)) congKhongBaoHiem += buLe;
 
-                phuCapTheoCong += AllowanceBuckets
-                    .From(AllowanceLinesFor(leContract, leDate))
-                    .Scale(buLe);
+                phuCapTheoCong += leBuckets.Scale(buLe);
             }
 
             // ⭐ CC-2026-08 — tổng công HƯỞNG LƯƠNG (đã gồm công lễ) = mẫu số đúng cho nền đóng BH.
@@ -512,6 +529,21 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractAllowanceNgoaiLe] = phuCap.NgoaiLe;
             n[ContractAllowanceNenPhuCapLuong] = phuCap.NenPhuCapLuong;
             n[ContractAllowanceMienThue] = phuCap.TongMienThue;
+
+            // ⭐ X1 — nền đóng đã kẹp trần, bình quân trên đúng tập ngày công CHÍNH THỨC (cùng mẫu số
+            // với `mucChinhThuc`) để cắm thẳng vào chỗ `MUCLUONG + phụ cấp lương` trên bảng công thức.
+            // Kỳ không có ngày công chính thức nào ⇒ lùi về mức của HĐ đại diện tại cuối kỳ, kẹp
+            // trần một lần — giữ đúng cách `mucChinhThuc` đang lùi.
+            var nenCuoiKy = mucLuongHopDong + phuCap.NenPhuCapLuong;
+            n[ContractMucLuongCapBhxh] = congChinhThuc > 0
+                ? nenBhxhTheoCong / congChinhThuc
+                : CapAt(nenCuoiKy, bhxhBhytCap);
+            n[ContractMucLuongCapBhyt] = congChinhThuc > 0
+                ? nenBhytTheoCong / congChinhThuc
+                : CapAt(nenCuoiKy, bhytCap > 0m ? bhytCap : bhxhBhytCap);
+            n[ContractMucLuongCapBhtn] = congChinhThuc > 0
+                ? nenBhtnTheoCong / congChinhThuc
+                : CapAt(nenCuoiKy, bhtnCap);
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
             n[CongLe] = congLe;

@@ -36,7 +36,7 @@ public sealed partial class DatabaseSeeder
     /// </summary>
     private const string TopEarnerUsername = "director";
 
-    /// <summary>Phụ lục nâng bậc Giám đốc GD-3 → GD-4, hiệu lực giữa kỳ 05 (case X1b).</summary>
+    /// <summary>Phụ lục nâng bậc Giám đốc GD-1 → GD-4, hiệu lực giữa kỳ 05 (case X1b).</summary>
     private const string TopEarnerRaiseAppendixNo = "PL-X1B-NANGBAC-GD";
 
     /// <summary>Bậc lương đích của phụ lục X1b — bậc duy nhất của công ty vượt cả hai mốc trần.</summary>
@@ -45,20 +45,24 @@ public sealed partial class DatabaseSeeder
     /// <summary>
     /// ⭐ X1b — <b>Trần đóng BH bị áp SAU khi đã bình quân mức lương cả kỳ.</b>
     ///
-    /// <para>Giám đốc hưởng GD-3 (45.000.000đ — dưới trần 46.800.000đ của kỳ 05) đến hết 15/05/2026,
-    /// từ 16/05 lên GD-4 (55.000.000đ — trên cả trần cũ lẫn trần mới 50.600.000đ).
-    /// <c>PayrollDataCollector</c> gộp hai đoạn thành một <c>mucChinhThuc</c> bình quân trọng số ngày
-    /// công rồi mới đưa qua <c>BH_CO_TRAN</c>, tức <c>MIN(bình_quân, trần)</c>; đúng luật thì trần chặn
-    /// MỨC LƯƠNG THÁNG của từng đoạn, cắt xong mới bình quân.</para>
+    /// <para>Giám đốc hưởng GD-1 (36.000.000đ) đến hết 15/05/2026, từ 16/05 lên GD-4 (55.000.000đ).
+    /// Nền đóng BH là LƯƠNG CỘNG PHỤ CẤP LƯƠNG, mà Giám đốc có phụ cấp trách nhiệm <c>RESP</c>
+    /// 10.000.000đ mang cờ "tính vào nền BHXH" ⇒ hai đoạn VẮT QUA trần 46.800.000đ của kỳ 05:
+    /// nửa đầu 46tr (dưới trần), nửa sau 65tr (trên trần).</para>
+    ///
+    /// <para>Đúng luật thì trần chặn MỨC LƯƠNG THÁNG của TỪNG ĐOẠN, cắt xong mới bình quân theo ngày
+    /// công. Engine cũ làm ngược — bình quân cả kỳ rồi mới đưa qua <c>BH_CO_TRAN</c>, tức
+    /// <c>MIN(bình_quân, trần)</c> — mà <c>MIN</c> không giao hoán với phép bình quân.</para>
     ///
     /// <para><b>Số kỳ vọng</b> (công chuẩn 05/2026 = 21 ngày, trong đó 01/05 là ngày lễ được bù công;
     /// 16–17/05 rơi vào T7/CN nên đoạn mức mới bắt đầu tính công từ 18/05):
     /// <list type="bullet">
-    ///   <item>11 công ở mức 45tr + 10 công ở mức 55tr ⇒ bình quân = 1.045tr / 21 =
-    ///     <b>49.761.905đ</b>, engine cắt còn <b>46.800.000đ</b>.</item>
-    ///   <item>Cắt trần từng đoạn: (11 × 45.000.000 + 10 × 46.800.000) / 21 = <b>45.857.143đ</b>.</item>
-    ///   <item>Chênh nền đóng <b>942.857đ</b> ⇒ BHXH NLĐ 8% lệch <b>75.429đ</b>, DN 17,5% (gộp HT 14%
-    ///     + ỐĐ-TS 3% + TNLĐ-BNN 0,5%) lệch <b>165.000đ</b> — engine thu THỪA.</item>
+    ///   <item>Kẹp trần từng đoạn rồi bình quân: (11 × 46.000.000 + 10 × 46.800.000) / 21 =
+    ///     <b>46.380.952đ</b> — số ĐÚNG.</item>
+    ///   <item>Bình quân rồi mới kẹp: (11 × 36tr + 10 × 55tr)/21 + 10tr = 55.047.619 ⇒ cắt còn
+    ///     <b>46.800.000đ</b> — số SAI của engine cũ.</item>
+    ///   <item>Chênh nền đóng <b>419.048đ</b> ⇒ BHXH NLĐ 8% lệch <b>33.524đ</b>, DN 17,5% (gộp HT 14%
+    ///     + ỐĐ-TS 3% + TNLĐ-BNN 0,5%) lệch <b>73.333đ</b> — engine cũ thu THỪA.</item>
     /// </list></para>
     ///
     /// <para>Kỳ 06 và 07 Giám đốc ở GD-4 nguyên bậc; kỳ 07 đủ công nên nền đóng = ĐÚNG BẰNG trần mới

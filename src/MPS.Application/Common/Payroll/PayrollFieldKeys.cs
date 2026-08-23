@@ -101,6 +101,26 @@ public static class PayrollFieldKeys
     /// </summary>
     public const string ContractAllowanceMienThue = "contract.allowanceMienThue";
 
+    // ===== X1 — mức lương tháng ĐÃ KẸP TRẦN, bình quân theo ngày công =====
+    /// <summary>
+    /// Nền đóng bảo hiểm của một tháng, kẹp trần Ở TẦNG NGÀY rồi mới bình quân theo trọng số ngày
+    /// công chính thức: <c>Σ MIN(lương(ngày) + phụ cấp lương(ngày), trần) × trọng số ⁄ Σ trọng số</c>.
+    ///
+    /// <para><b>Vì sao phải kẹp trước khi bình quân.</b> Trần chặn MỨC LƯƠNG THÁNG (QĐ 595); chia
+    /// theo ngày công và bình quân các đoạn lương là bước SAU. Engine trước đây làm ngược — bình
+    /// quân/chia xong mới so trần — mà <c>MIN</c> không giao hoán với phép bình quân, nên tháng nâng
+    /// bậc giữa kỳ hoặc tháng thiếu công của người lương trên trần đều ra nền đóng SAI (thu thừa).
+    /// </para>
+    ///
+    /// <para>Ba quỹ ba trần khác nhau nên phải ba khoá. Kỳ lương cũ thiếu khoá ⇒ 0 ⇒ công thức lùi
+    /// về <c>MUCLUONG + phụ cấp lương</c> như trước ⇒ số giữ nguyên.</para>
+    /// </summary>
+    public const string ContractMucLuongCapBhxh = "contract.mucLuongCapBhxh";
+    /// <inheritdoc cref="ContractMucLuongCapBhxh"/>
+    public const string ContractMucLuongCapBhyt = "contract.mucLuongCapBhyt";
+    /// <inheritdoc cref="ContractMucLuongCapBhxh"/>
+    public const string ContractMucLuongCapBhtn = "contract.mucLuongCapBhtn";
+
     // ===== Chấm công =====
     public const string CongChuan = "period.congChuan";
     public const string CongTinhCom = "attendance.congTinhCom";

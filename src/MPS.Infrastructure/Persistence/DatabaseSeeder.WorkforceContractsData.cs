@@ -43,8 +43,16 @@ public sealed partial class DatabaseSeeder
         ("KCS",     "KCS-2",     "Nhân viên KCS"),
         ("TPHR",    "TPHR-2",    "Trưởng phòng Nhân sự"),
         ("KTT",     "KTT-2",     "Kế toán trưởng"),
-        // ⭐ C13 + X1a/X1b — hợp đồng NỀN của Giám đốc khởi điểm ở GD-3 (45tr, DƯỚI trần 46,8tr của
-        // kỳ 05), phụ lục X1b nâng lên GD-4 (55tr, VƯỢT cả hai mốc trần) hiệu lực 16/05/2026.
+        // ⭐ C13 + X1a/X1b — hợp đồng NỀN của Giám đốc khởi điểm ở GD-1, phụ lục X1b nâng lên GD-4
+        // (55tr) hiệu lực 16/05/2026.
+        //
+        // ⚠️ Vì sao GD-1 (36tr) chứ không phải GD-3 (45tr) như thiết kế ban đầu. Nền đóng BHXH là
+        // LƯƠNG CỘNG PHỤ CẤP LƯƠNG (bản sửa X2), mà Giám đốc có phụ cấp trách nhiệm 10tr mang cờ
+        // "tính vào nền BHXH". Với GD-3 thì CẢ HAI nửa tháng đều vượt trần (45+10 và 55+10 đều >
+        // 46,8tr) ⇒ bình quân ra đúng bằng trần dù kẹp trước hay kẹp sau, và case X1b không nổ.
+        // GD-1 cho nửa đầu 36+10 = 46tr — DƯỚI trần — nên hai nửa VẮT QUA trần đúng như case cần:
+        //   kẹp từng đoạn rồi bình quân  = (11×46tr + 10×46,8tr)/21 = 46.380.952  ← đúng luật
+        //   bình quân rồi mới kẹp        = MIN((11×36tr+10×55tr)/21 + 10tr, 46,8tr) = 46.800.000
         //
         // Vì sao buộc phải là Giám đốc. Case X1 đòi một người có mức lương THÁNG vượt
         // trần đóng BHXH. Toàn bộ thang bậc công ty chỉ có GD-4 (55tr) vượt mốc 50,6tr — bậc cao thứ
@@ -53,7 +61,7 @@ public sealed partial class DatabaseSeeder
         //
         // Độ phủ C13 không mất. Kỳ 06 và 07 Giám đốc ở GD-4 nguyên bậc; riêng kỳ 07 đủ
         // công nên nền đóng = ĐÚNG BẰNG trần mới 50,6tr — nhánh "chạm trần" vẫn có dữ liệu sạch.
-        ("GD",      "GD-3",      "Giám đốc"),
+        ("GD",      "GD-1",      "Giám đốc"),
         ("TPKD",    "TPKD-2",    "Trưởng phòng Kinh doanh"),
     };
 
