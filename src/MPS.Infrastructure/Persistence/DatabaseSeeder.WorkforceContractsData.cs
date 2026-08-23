@@ -86,6 +86,12 @@ public sealed partial class DatabaseSeeder
         bool HasProbationClause = false,
         int ProbationPeriod = 0,
         bool UnionFundExempt = false,
+        /// <summary>
+        /// ⭐ X7 — TẮT RIÊNG BHXH nhưng GIỮ BHYT và BHTN. Đây là ca người đã đóng BHXH ở nơi khác
+        /// (HĐ full-time công ty kia) hoặc người hưởng lương hưu quay lại làm — vẫn tham gia BHYT
+        /// tại đơn vị. Ghi đè mặc định của metadata loại HĐ.
+        /// </summary>
+        bool SocialInsuranceOff = false,
         string? JobNote = null);
 
     private static readonly WorkforceCaseSpec[] WorkforceCaseSpecs =
@@ -133,6 +139,18 @@ public sealed partial class DatabaseSeeder
             ContractEnums.ContractCategory.Definite,
             ToPeriod: 2, ToDay: 0, UnionFundExempt: true,
             JobNote: "HĐ xác định thời hạn 24 tháng, đơn vị được miễn trích KPCĐ theo văn bản riêng"),
+
+        // ── C16 / X7: HĐLĐ TẮT RIÊNG BHXH, vẫn đóng BHYT + BHTN ──
+        // NLĐ đã tham gia BHXH bắt buộc ở một đơn vị khác (QĐ 595: chỉ đóng BHXH ở nơi ký HĐ đầu
+        // tiên) nhưng vẫn đóng BHYT/BHTN tại đây. Là ĐOÀN VIÊN công đoàn.
+        //
+        // Đây là ca bẫy dấu của X7 và KHÔNG có cờ nào cứu được: `ResolveInsuranceFlag` chỉ trả về
+        // `x2` khi BHYT bật mà BHXH VÀ BHTN đều tắt; tắt mỗi BHXH thì không khớp nhánh nào và rơi
+        // xuống `x3` — "đóng đầy đủ". Cờ nói CÓ, thực tế BHXH = 0. Trước bản sửa X7, KPCĐ và đoàn
+        // phí đều thu đủ trên người này dù không có quỹ tiền lương làm căn cứ đóng BHXH nào.
+        new("cn_x3_6", "C16", ContractEnums.ContractKind.LaborFullTime,
+            SocialInsuranceOff: true,
+            JobNote: "đã tham gia BHXH bắt buộc tại đơn vị khác; tại đây chỉ đóng BHYT + BHTN"),
 
         // ── Phủ nốt các loại hợp đồng còn lại ──
         new("cn_x1_6", "PT", ContractEnums.ContractKind.LaborPartTime, null,
@@ -321,7 +339,7 @@ public sealed partial class DatabaseSeeder
             // Chế độ BH + thuế lấy từ metadata của loại hợp đồng — cùng nguồn luồng tạo HĐ thật dùng.
             // Loại UserChoice (bán thời gian, đào tạo nghề, dịch vụ, CTV) không có mặc định: theo
             // QĐ 595 người làm dưới 14 ngày/tháng và người ký HĐ dân sự không thuộc diện đóng.
-            SocialInsuranceFlag = meta.DefaultSocialInsurance ?? false,
+            SocialInsuranceFlag = !spec.SocialInsuranceOff && (meta.DefaultSocialInsurance ?? false),
             HealthInsuranceFlag = meta.DefaultHealthInsurance ?? false,
             UnemploymentInsuranceFlag = meta.DefaultUnemploymentInsurance ?? false,
             UnionFundExemptFlag = spec.UnionFundExempt,

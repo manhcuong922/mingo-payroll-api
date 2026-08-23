@@ -121,6 +121,28 @@ khoá trần đã tồn tại từ lâu nên có mặt cả trong snapshot cũ; 
 
 Phạm vi đo được: **3 ô / 1 người** (Giám đốc) — KPCĐ giảm 173.333 / 132.363 / 288.000đ.
 
+**✅ X7 — hệ quả thứ hai của cùng một câu luật (PO bổ sung 23/08/2026).** Nếu KPCĐ và đoàn phí đều
+thu trên *"quỹ tiền lương làm căn cứ đóng BHXH"* thì **không có căn cứ đóng BHXH ⇒ cả hai đều bằng
+0**. Hai chỗ trước đây không tôn trọng điều này:
+
+| Ca | Cờ BH ra gì | BHXH | KPCĐ / đoàn phí trước sửa |
+|---|---|---|---|
+| Cờ `x2` — chỉ đóng BHYT | `x2` | 0 | **vẫn thu** (tập cờ thiếu `x2`) |
+| HĐ tắt riêng BHXH, giữ BHYT + BHTN | **`x3` "đóng đầy đủ"** | 0 | **vẫn thu** (cờ không cứu được) |
+
+Ca thứ hai nguy hiểm hơn: `ResolveInsuranceFlag` chỉ trả `x2` khi BHYT bật mà BHXH **và** BHTN đều
+tắt; tắt mỗi BHXH thì không khớp nhánh nào và rơi xuống `x3`. **Cờ nói CÓ, thực tế BHXH = 0.** Chỉ
+công tắc `ContractNoSocialInsurance` của hợp đồng mới bắt được — nên cả hai cột nay có thêm tầng đó.
+
+Seed bổ sung case `C16` (`cn_x3_6` — đã tham gia BHXH ở đơn vị khác, tại đây chỉ đóng BHYT + BHTN,
+là đoàn viên). Đo trên DB: cờ `x3`, BHXH 0, BHYT 105.000, BHTN 70.000, **KPCĐ 0, đoàn phí 0**.
+Quét toàn bảng: 0 dòng còn thu KPCĐ hoặc đoàn phí khi BHXH = 0; 74 dòng có đóng BHXH vẫn trích
+KPCĐ bình thường.
+
+**KPCĐ KHÔNG nhân cờ đoàn viên** — nghĩa vụ của DOANH NGHIỆP với tổ chức công đoàn, trích trên quỹ
+lương của MỌI người lao động kể cả người không tham gia công đoàn. Code vốn đã đúng; đã ghi chú tại
+chỗ để không ai "sửa" thành nhân cờ đoàn viên cho giống cột đoàn phí.
+
 ---
 
 ## 2. X2 — dựng khái niệm "phụ cấp lương" (một chỗ sửa, đóng 3 case)

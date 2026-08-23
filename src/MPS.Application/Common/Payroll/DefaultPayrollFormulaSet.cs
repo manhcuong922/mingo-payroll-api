@@ -252,7 +252,14 @@ public static class DefaultPayrollFormulaSet
         // ===== Khối F — bảo hiểm =====
         var noBh = new[] { InsuranceFlags.NoInsurance, InsuranceFlags.Maternity };
         var noBhOrHealthOnly = new[] { InsuranceFlags.NoInsurance, InsuranceFlags.Maternity, InsuranceFlags.HealthOnly };
-        var noUnion = new[] { InsuranceFlags.NoUnion, InsuranceFlags.NoInsurance, InsuranceFlags.Maternity };
+        // ⭐ X7 — KPCĐ và đoàn phí đều thu trên "quỹ tiền lương làm căn cứ đóng BHXH" (Luật Công đoàn
+        // 50/2024 Đ.30 cho KPCĐ, QĐ 1908 Đ.23 cho đoàn phí). Không có căn cứ đóng BHXH ⇒ không có gì
+        // để nhân tỷ lệ ⇒ cả hai đều bằng 0. Tập cờ vì thế phải là tập cờ CẮT BHXH cộng thêm `x`
+        // (cờ đè tay nói riêng về công đoàn), chứ không phải một tập tự chế.
+        //
+        // Trước đây tập này thiếu `x2` (chỉ đóng BHYT) nên hợp đồng tắt riêng BHXH mà giữ BHYT ra
+        // BHXH = 0 nhưng KPCĐ và đoàn phí vẫn thu đủ.
+        var noUnion = noBhOrHealthOnly.Append(InsuranceFlags.NoUnion).ToArray();
 
         // ⭐ A7 — mỗi cột BH nhân thêm CÔNG TẮC RIÊNG của hợp đồng (1/0).
         //
@@ -315,12 +322,21 @@ public static class DefaultPayrollFormulaSet
             N.Field(Fk.BhxhBhytCap),
             N.Const(0m));
 
+        // ⚠️ Tầng CÔNG TẮC BHXH của hợp đồng là bắt buộc, cờ không thay thế được: hợp đồng tắt BHXH
+        // mà vẫn bật BHYT **và** BHTN thì `ResolveInsuranceFlag` không khớp nhánh nào và trả về `x3`
+        // — "đóng đầy đủ". Cờ nói có, thực tế BHXH = 0. Chỉ công tắc mới bắt được ca đó.
+        //
+        // KPCĐ KHÔNG nhân cờ đoàn viên: đây là nghĩa vụ của DOANH NGHIỆP với tổ chức công đoàn, trích
+        // trên quỹ lương của MỌI người lao động — kể cả người không tham gia công đoàn. Khác hẳn đoàn
+        // phí (nghĩa vụ cá nhân của đoàn viên). Giữ nguyên như trước, ghi ra đây để không ai "sửa"
+        // thành nhân cờ đoàn viên cho giống cột dưới.
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
-                UnlessExempt(Fk.ContractUnionFundExempt,
-                    N.Func(Fn.InsuranceWithCap,
-                        ProrateByCongCoBaoHiem(CappedBase(Fk.ContractMucLuongCapBhxh)),
-                        N.Field(Fk.KpcdRate), kpcdCap))));
+                UnlessExempt(Fk.ContractNoSocialInsurance,
+                    UnlessExempt(Fk.ContractUnionFundExempt,
+                        N.Func(Fn.InsuranceWithCap,
+                            ProrateByCongCoBaoHiem(CappedBase(Fk.ContractMucLuongCapBhxh)),
+                            N.Field(Fk.KpcdRate), kpcdCap)))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
@@ -464,11 +480,15 @@ public static class DefaultPayrollFormulaSet
         // tắc đó là "miễn trích KPCĐ" — nghĩa vụ của DOANH NGHIỆP. Đoàn phí là nghĩa vụ của NGƯỜI
         // LAO ĐỘNG và đã có cổng riêng đúng tầng của nó là cờ đoàn viên trên hồ sơ NV. Gộp hai thứ
         // vào nhau là lẫn hai nghĩa vụ khác nhau.
+        //
+        // ⭐ X7 — tầng thứ BA: công tắc BHXH của hợp đồng. Cờ không thay thế được vì HĐ tắt BHXH mà
+        // vẫn bật BHYT + BHTN sẽ ra cờ `x3` ("đóng đầy đủ") dù BHXH thực tế = 0.
         Add(Cc.PhiCongDoanVien, "Phí công đoàn viên", GH, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
-                N.If(N.Cmp(">", congCoBaoHiem, N.Const(0m)),
-                    N.Mul(unionDuesCapped, N.Field(Fk.UnionMember)),
-                    N.Const(0m))));
+                UnlessExempt(Fk.ContractNoSocialInsurance,
+                    N.If(N.Cmp(">", congCoBaoHiem, N.Const(0m)),
+                        N.Mul(unionDuesCapped, N.Field(Fk.UnionMember)),
+                        N.Const(0m)))));
         Add(Cc.ChiKhac, "Chi khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // BS-5 — 2 cột truy lĩnh / truy thu, seed từ field do handler tạo kỳ gom sẵn (mặc định 0 khi
         // NV không có khoản chưa áp). Dấu: TRUY_LINH dương (+); TRUY_THU âm (−) — cộng đại số vào THUCNHAN.

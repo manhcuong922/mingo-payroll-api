@@ -89,13 +89,24 @@ public sealed class KpcdContractExemptTests
             .Should().Be(0m, $"HĐ ghi miễn KPCĐ nhưng cờ BH của kỳ là '{flag}'");
     }
 
-    [Theory(DisplayName = "HĐ KHÔNG miễn ⇒ vẫn trích KPCĐ ở các cờ còn đóng bảo hiểm")]
-    [InlineData(InsuranceFlags.Full)]
-    [InlineData(InsuranceFlags.HealthOnly)]
-    public void NonExemptContract_StillPaysUnionFund(string flag)
+    [Fact(DisplayName = "HĐ KHÔNG miễn, đóng đủ BHXH ⇒ vẫn trích KPCĐ")]
+    public void NonExemptContract_StillPaysUnionFund()
     {
-        Cell(Compute(unionFundExempt: false, flag), PayrollColumnCodes.Kpcd)
+        Cell(Compute(unionFundExempt: false, InsuranceFlags.Full), PayrollColumnCodes.Kpcd)
             .Should().Be(ExpectedKpcd, "không có căn cứ miễn thì DN vẫn nộp KPCĐ theo Luật Công đoàn");
+    }
+
+    /// <summary>
+    /// ⭐ X7 — cờ <c>x2</c> ĐÃ CHUYỂN NHÓM. Test này trước đây khẳng định "x2 vẫn trích KPCĐ", đọc cờ
+    /// đó là "còn đóng bảo hiểm". Sai: <c>x2</c> là CHỈ đóng BHYT, tức KHÔNG đóng BHXH — mà Luật Công
+    /// đoàn 50/2024 Đ.30 tính KPCĐ trên "quỹ tiền lương làm căn cứ đóng BHXH bắt buộc". Không có căn
+    /// cứ đóng BHXH thì không có gì để nhân 2%.
+    /// </summary>
+    [Fact(DisplayName = "X7 · Cờ x2 (chỉ đóng BHYT) ⇒ KHÔNG trích KPCĐ dù HĐ không miễn")]
+    public void HealthOnlyFlag_PaysNoUnionFund()
+    {
+        Cell(Compute(unionFundExempt: false, InsuranceFlags.HealthOnly), PayrollColumnCodes.Kpcd)
+            .Should().Be(0m, "không đóng BHXH thì không có quỹ tiền lương làm căn cứ trích KPCĐ");
     }
 
     /// <summary>
