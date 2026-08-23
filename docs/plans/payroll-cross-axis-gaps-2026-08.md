@@ -3,8 +3,9 @@
 > Rà 23/08/2026. Phạm vi: các ô sinh ra khi **nhân tích Descartes** các trục nghiệp vụ, tức chỗ mà
 > từng trục đứng riêng thì engine tính đúng nhưng ghép hai trục lại mới sai.
 >
-> **Trạng thái: ĐÃ KIỂM CHỨNG.** Mọi con số dưới đây đo trực tiếp trên DB `MPS_XAxis` dựng từ seed
-> mới (3 kỳ lương 05–07/2026 do chính engine sinh), không phải tính tay.
+> **Trạng thái: ĐÃ KIỂM CHỨNG — chạy lại lần 2 ngày 23/08/2026 trên DB dựng mới hoàn toàn.**
+> Mọi con số dưới đây đo trực tiếp trên `MPS_XAxis` (drop → migrate → seed lại từ commit `6c70059`,
+> 3 kỳ lương 05–07/2026 do chính engine sinh), không phải tính tay. **5/5 case tái hiện đúng.**
 >
 > Đã loại khỏi phạm vi theo quyết định PO: nhóm B4–B9 (min-wage ở tầng HĐ, thuế 10% sau chấm dứt HĐ,
 > trợ cấp thôi việc, giảm trừ y tế/giáo dục, trần bồi thường 30%, part-time × BHXH); toàn bộ nhóm
@@ -152,7 +153,12 @@ cấp lương gắn với công việc vào "tiền lương thực trả theo c�
 | 06 | 956.534 | 1.059.943 | **103.409đ** |
 | 07 | 971.250 | 1.076.250 | **105.000đ** |
 
-Lỗi lan sang cả `PHUTROI_NGAYNGHI` và `PHUCAP_DEM` vì cùng nhân từ `hourlyRate`.
+Lỗi **về nguyên tắc** lan sang cả `PHUTROI_NGAYNGHI` và `PHUCAP_DEM` vì cùng nhân từ `hourlyRate`.
+Nhưng đo trên seed hiện tại thì **không quan sát được**: hai cột đó chỉ sinh giá trị cho giờ công
+THƯỜNG rơi vào ngày nghỉ/lễ hoặc ca đêm (`RegularHoursPremiumCalculator`), mà hai người duy nhất có
+chúng — `cn_x2_5` (phụ trội 383k–525k) và `cn_x3_5` (phụ cấp đêm 1,8–1,89tr) — đều **không** có phụ
+cấp `IsBhxhBase = true`. ⚠️ **Lỗ hổng phủ sóng seed**: ô "phụ cấp lương × ca thường ngày nghỉ/đêm"
+chưa có ai đứng. Muốn khoá nhánh này phải gắn `RESP` cho `cn_x2_5` hoặc `cn_x3_5`.
 
 #### X2c — TNCT chỉ trừ đúng 2 khoản miễn thuế
 
@@ -195,6 +201,21 @@ thu theo QĐ 1908 là *tiền lương làm căn cứ đóng BHXH* — bằng 0 �
 `cn_x1_6` là bằng chứng mạnh nhất: cờ `x1` nói thẳng **"không tính bảo hiểm"**, engine tôn trọng ở cả
 7 cột BH, riêng đoàn phí vẫn thu đều 70.000đ/tháng.
 
+**Phạm vi ảnh hưởng đo trên toàn bộ 96 dòng lương** — quét mọi ô có `PHICONGDOANVIEN > 0` trong khi
+`CONG_BH_NLD = 0`:
+
+| Người | Cờ BH | Kỳ dính | Đoàn phí / kỳ |
+|---|---|---|---|
+| `cn_x1_4` | x3 (thai sản trọn tháng) | 07 | 65.000 |
+| `cn_x1_6` | **x1** | 05, 06, 07 | 70.000 |
+| `cn_x2_3` | **x1** (khoán việc) | 05, 06, 07 | 63.000 |
+| `cn_x2_5` | **x1** | 05, 06, 07 | 22.050 |
+| `cn_x2_6` | **x1** | 05, 06, 07 | 70.000 |
+| `cn_x3_4` | **x1** | 05, 06, 07 | 39.000 |
+
+⇒ **16 dòng lương / 6 người / 857.150đ** thu sai chỉ trong 3 kỳ demo. Đây là case có phạm vi rộng
+nhất trong cả 5 case, không phải case nhỏ nhất như xếp hạng ban đầu gợi ý.
+
 **Hậu quả dây chuyền đã bắt được trong DB** — `cn_x1_4` kỳ 07:
 
 ```
@@ -213,18 +234,27 @@ Cột `THUENHA` vào thẳng `THUNHAP` → `TNCT`, không có bước kẹp *"�
 
 `tpkd`, `HOUSING` 9.000.000:
 
-| Kỳ | Tiền nhà | TNCT | Trần 15% | **Phần vượt vẫn bị đánh thuế** | Thuế TNCN |
-|---|---|---|---|---|---|
-| 05 | 9.000.000 | 41.822.381 | 4.923.357 | **4.076.643** | 1.302.238 |
-| 06 | 9.000.000 | 51.870.000 | 6.430.500 | **2.569.500** | 2.307.000 |
-| 07 | 9.000.000 | 51.600.000 | 6.390.000 | **2.610.000** | 2.280.000 |
+| Kỳ | Tiền nhà | TNCT | TNCT chưa gồm nhà | Trần 15% | **Phần vượt vẫn bị đánh thuế** | Thuế TNCN |
+|---|---|---|---|---|---|---|
+| 05 | 9.000.000 | 51.822.381 | 42.822.381 | 6.423.357 | **2.576.643** | 2.302.238 |
+| 06 | 9.000.000 | 51.870.000 | 42.870.000 | 6.430.500 | **2.569.500** | 2.307.000 |
+| 07 | 9.000.000 | 51.600.000 | 42.600.000 | 6.390.000 | **2.610.000** | 2.280.000 |
 
 > ⚠️ Vòng seed đầu đặt 5.000.000 và case **không nổ**: nền TNCT chưa gồm nhà của `tpkd` là 38,8–42,9tr
 > (mức lương 20tr cộng "Trợ cấp lương chính" = lương × hệ số năng suất), nên trần ≈ 5,8–6,4tr > 5tr.
 > Đã nâng lên 9tr để vượt ở cả ba kỳ kể cả kỳ có hệ số năng suất thấp nhất.
 >
-> Đối chứng chiều ngược lại có sẵn: Giám đốc hưởng `HOUSING` 8tr trên nền TNCT ~65tr ⇒ trần ~9,8tr ⇒
-> không vượt, engine tính đúng.
+> **Đối chứng — và một ô liên trục nữa lộ ra ở đây.** Giám đốc hưởng `HOUSING` 8.000.000:
+>
+> | Kỳ | TNCT | TNCT chưa gồm nhà | Trần 15% | Vượt trần? |
+> |---|---|---|---|---|
+> | 05 | 107.793.810 | 99.793.810 | 14.969.072 | ❌ không |
+> | 06 | 42.590.909 | 34.590.909 | **5.188.636** | ✅ **vượt 2.811.364** |
+> | 07 | 100.500.000 | 92.500.000 | 13.875.000 | ❌ không |
+>
+> Kỳ 06 là kỳ Giám đốc nghỉ ốm 14 ngày. Thu nhập tụt ⇒ trần 15% tụt theo ⇒ tiền nhà cố định 8tr
+> vượt trần. Tức **X1a × X4**: cùng một mức phụ cấp nhà, tháng đủ công thì đúng, tháng nghỉ dài thì
+> sai. Đây là ô mà chỉ tích Descartes mới lộ, không trục nào đứng riêng thấy được.
 
 ---
 
@@ -316,3 +346,46 @@ dotnet run --project src/MPS.API --no-launch-profile   # chờ log "Payroll demo
 | 3 | **X3** | 🟠 | Thu tiền của người đang nghỉ chế độ, còn ghi nợ treo | Thêm hai tầng chặn cho `PHICONGDOANVIEN` giống 7 cột BH |
 | 4 | **X4** | 🟠 | Thuế thu **thừa** trên ~2,6tr/tháng | Kẹp trần tiền nhà trước khi vào TNCT |
 | 5 | **X5** | 🟡 | Rủi ro pháp lý | Guard `ContractKind` ở tầng tạo/duyệt đơn OT |
+
+---
+
+## 6. Nhật ký chạy lần 2 — 23/08/2026
+
+Quy trình: `DROP DATABASE MPS_XAxis` → `dotnet run --project src/MPS.API` (migrate + seed từ đầu) →
+dừng tiến trình → truy vấn thẳng bằng `sqlcmd`. Seed sinh **96 dòng lương × 61 cột = 5.856 ô**.
+
+| # | Kiểm chứng | Kết quả |
+|---|---|---|
+| X0 | 19 chức danh / 59 bậc / 0 mã `PGD` / 0 role `Deputy*` | ✅ khớp |
+| X0 | `VocationalTraining` = 0 hợp đồng | ✅ khớp |
+| X0 | `PERDIEM` + `UNIFORM` tồn tại, `IsTaxable = 0` | ✅ khớp |
+| X0 | Phụ lục `PL-X1B-NANGBAC-GD`, hiệu lực 16/05/2026, `Active`, 55.000.000 | ✅ khớp |
+| X1a | Giám đốc kỳ 06: nền engine 20.000.000 vs đúng 17.018.182 | 🔴 tái hiện |
+| X1b | Giám đốc kỳ 05: nền engine 46.800.000 vs đúng 45.857.143 | 🔴 tái hiện |
+| X1 đối chứng | Giám đốc kỳ 07: nền = 50.600.000 = đúng bằng trần | ✅ engine đúng |
+| X2a | `cn_x3_1`: nền 6.300.000, `TOXIC` 500k đứng ngoài, cả 3 kỳ | 🔴 tái hiện |
+| X2b | `totruong_x1`: `TANGCA` 528.571 / 956.534 / 971.250 | 🔴 tái hiện |
+| X2c | `tpkd` `PERDIEM` 2tr + 15 người `UNIFORM` 400k đều bị tính thuế | 🔴 tái hiện |
+| X3 | 16 dòng / 6 người bị thu đoàn phí khi BH NLĐ = 0 | 🟠 tái hiện, **rộng hơn dự kiến** |
+| X3 | `cn_x1_4` kỳ 07: `PayrollAdjustments −65.000`, `AppliedPeriodId = NULL` | 🟠 tái hiện |
+| X4 | `tpkd` vượt trần 15% cả 3 kỳ (2,57–2,61tr/kỳ) | 🟠 tái hiện |
+| X4+X1a | Giám đốc vượt trần tiền nhà **chỉ ở kỳ 06** (kỳ nghỉ ốm) | 🟠 **ô mới lộ ra** |
+| X5 | 2 đơn OT `Approved` trên HĐ `PieceWork`, tiền vào `TANGCA` | 🟡 tái hiện |
+
+### Đối chứng phụ (engine làm đúng — không cần sửa)
+
+| Kiểm chứng | Kết quả |
+|---|---|
+| Quét cả 80 dòng có đóng BHXH: nền = `MIN(mức lương, trần) × công/công chuẩn` | **70 đúng / 10 lệch**, trong đó 8 lệch ≤ 5đ do làm tròn, 1 là `cn_x2_1` thử việc trọn kỳ (`CONGTINHLUONG = 0` nhưng công thử việc vẫn có BH — engine **đúng**), còn lại **duy nhất `director` kỳ 06 lệch thật** |
+| Miễn thuế OT theo NĐ 253/2026 | `CL_GLT` = 352.381 (kỳ 05) → 430.966 (kỳ 06) → **971.250 = trọn `TANGCA`** (kỳ 07) ✅ mốc 01/07 đúng |
+| Truy lĩnh / truy thu kỳ 06 → gom vào kỳ 07 | `cn_x3_5` +1.250.000, `cn_x1_3` −680.000, cả hai `AppliedPeriodId = 3` ✅ |
+
+### ⚠️ Lỗ hổng phủ sóng seed còn lại
+
+| Cột | Số ô khác 0 / 96 | Vấn đề |
+|---|---|---|
+| `LUONGNGAYPHEP` | **0** | X2d — cột Input thuần, engine không sinh; phải test ở tầng `PayrollCalculator` hoặc qua `EditPayrollCellCommand` |
+| `PHUTROI_NGAYNGHI` | 3 (`cn_x2_5`) | người có phụ trội **không** có phụ cấp `IsBhxhBase` ⇒ nhánh X2b trên cột này chưa kiểm chứng được |
+| `PHUCAP_DEM` | 3 (`cn_x3_5`) | như trên |
+
+Muốn khoá nốt hai nhánh cuối: gắn `RESP` cho `cn_x2_5` hoặc `cn_x3_5`.

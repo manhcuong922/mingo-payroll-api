@@ -2,9 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities;
-using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Employee;
-using AttendanceEnums = MPS.Domain.Enums.Attendance;
 using ContractEnums = MPS.Domain.Enums.Contract;
 
 namespace MPS.Infrastructure.Persistence;
@@ -20,8 +18,8 @@ namespace MPS.Infrastructure.Persistence;
 /// <c>LegacyEdgeCaseData</c> phải đẩy ra tận 9 tháng trước.</para>
 ///
 /// <para><b>Mục tiêu.</b> Bấm "Tạo kỳ lương" cho tháng hiện tại là thấy ngay bảng chặn liệt kê
-/// nhiều lý do khác nhau (R1 đơn tăng ca chưa duyệt xong + R4 hợp đồng còn Draft), thay vì đúng một
-/// lý do như trước — người dùng hiểu được cổng này kiểm gì.</para>
+/// lý do cụ thể (R4 hợp đồng còn Draft) chứ không phải một lỗi chung chung — người dùng hiểu được
+/// cổng này kiểm gì.</para>
 ///
 /// <para>Chạy CUỐI <c>SeedAsync</c>, sau khi ba kỳ demo đã sinh xong. Idempotent theo mã hợp đồng /
 /// CCCD / (nhân viên, ngày) và tự bỏ qua nếu tháng đó đã có kỳ lương.</para>
@@ -55,44 +53,15 @@ public sealed partial class DatabaseSeeder
         var party = await GetCompanyContractPartyAsync(ct);
         if (adminId == 0 || party is null) return;
 
-        await SeedPendingOvertimeBlockerAsync(month, adminId, ct);
         await SeedDraftContractBlockerAsync(month, party.Id, adminId, ct);
     }
 
-    // ===== R1: còn đơn tăng ca chưa duyệt xong =====
-    private async Task SeedPendingOvertimeBlockerAsync(DateOnly month, int adminId, CancellationToken ct)
-    {
-        var empId = await _context.EmployeeInformations.AsNoTracking()
-            .Where(e => e.User != null && e.User.Username == "cn_x3_5")
-            .Select(e => (int?)e.Id).FirstOrDefaultAsync(ct);
-        if (empId is null) return;
-
-        var day = NearestWorkday(month.AddDays(9));
-        if (await _context.OvertimeRequests.AsNoTracking()
-                .AnyAsync(o => o.EmployeeInformationId == empId && o.WorkDate == day, ct)) return;
-
-        await _context.OvertimeRequests.AddAsync(new OvertimeRequest
-        {
-            EmployeeInformationId = empId.Value,
-            WorkDate = day,
-            OtStartTime = new TimeOnly(18, 0),
-            OtEndTime = new TimeOnly(21, 0),
-            OtHours = 3m,
-            OtDayHours = 3m,
-            OtNightHours = 0m,
-            // Tổ trưởng đã chuyển tiếp, quản đốc CHƯA duyệt cuối ⇒ cổng đủ liệu chặn kỳ này.
-            Status = AttendanceEnums.OtRequestStatus.PendingApprover,
-            ApproverRoute = AttendanceEnums.OvertimeApproverRoute.DepartmentManager,
-            Reason = "Tăng ca hoàn thiện đơn hàng cuối tháng",
-            PmReviewedByUserId = adminId,
-            PmReviewedAt = Utc(day.AddDays(-1)),
-            PmReviewNote = "Đồng ý, chuyển quản đốc duyệt.",
-            CreatedAt = Utc(day.AddDays(-2)),
-            CreatedByUserId = adminId,
-        }, ct);
-        await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 1 đơn tăng ca chờ duyệt ngày {Day:dd/MM/yyyy} (chặn kỳ lương tháng đó).", day);
-    }
+    // ===== R1 — ĐÃ GỠ =====
+    // Trước đây seed 1 đơn tăng ca `PendingApprover` ngày 10 của tháng hiện tại cho `cn_x3_5`
+    // (Cao Văn Đạt) để cổng đủ liệu có thêm một lý do chặn. Gỡ theo quyết định PO 23/08/2026:
+    // `cn_x3_5` đã gánh phụ cấp làm đêm + khoản truy lĩnh kỳ 06, thêm đơn treo làm hồ sơ người này
+    // rối mà không thêm giá trị test. Cổng đủ liệu vẫn được kiểm qua R4 (hợp đồng còn Draft) —
+    // bảng chặn còn 1 lý do thay vì 2.
 
     // ===== R4: hợp đồng còn Draft — hồ sơ đã nhập nhưng chưa kích hoạt =====
     private async Task SeedDraftContractBlockerAsync(DateOnly month, int partyId, int adminId, CancellationToken ct)

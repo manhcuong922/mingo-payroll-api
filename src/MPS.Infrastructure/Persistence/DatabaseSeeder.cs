@@ -925,6 +925,8 @@ public sealed partial class DatabaseSeeder
             new() { Code = "ND-293-2025", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "293/2025/NĐ-CP", Title = "Lương tối thiểu vùng 2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2025, 12, 20), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "TT-26-2016", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "26/2016/TT-BLĐTBXH", Title = "Ngưỡng phụ cấp ăn ca 730,000 (hết hiệu lực 15/06/2025)", IssuedBy = "Bộ LĐTBXH", IssuedDate = new DateOnly(2016, 9, 1), EffectiveDate = new DateOnly(2016, 10, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "ND-253-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "253/2026/NĐ-CP", Title = "Ngưỡng phụ cấp ăn ca/ăn trưa miễn thuế 1,200,000 + ngưỡng khấu trừ thuế khoán 10% lên 5,000,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 30), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "TT-111-2013", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "111/2013/TT-BTC", Title = "Hướng dẫn Luật Thuế TNCN — khoán điện thoại/xăng xe theo mức chi thực tế", IssuedBy = "Bộ Tài chính", IssuedDate = new DateOnly(2013, 8, 15), EffectiveDate = new DateOnly(2013, 10, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "NQ-954-2020", DocumentType = LegalDocumentTypes.NghiQuyet, DocumentNumber = "954/2020/UBTVQH14", Title = "Giảm trừ gia cảnh 11,000,000 / 4,400,000 (áp dụng từ kỳ tính thuế 2020)", IssuedBy = "UBTVQH", IssuedDate = new DateOnly(2020, 6, 2), EffectiveDate = new DateOnly(2020, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "BLLD-2019", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "(không số)", Title = "Bộ luật Lao động 2019", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2019, 11, 20), EffectiveDate = new DateOnly(2021, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
         };
 
@@ -1058,6 +1060,12 @@ public sealed partial class DatabaseSeeder
         }
 
         // Row 1: historical (2020-01-01, IsActive=false)
+        //
+        // ⚠️ ValidFrom 01/01/2020 SỚM HƠN ngày NQ 954/2020/UBTVQH14 có hiệu lực (01/07/2020) — và
+        // đó là ĐÚNG, đừng "sửa" thành 01/07: Điều 2 của Nghị quyết ghi rõ áp dụng **từ kỳ tính thuế
+        // năm 2020**, tức hồi tố về đầu năm. `ValidFrom` ở đây là ngày ÁP DỤNG của mốc giảm trừ,
+        // không phải ngày hiệu lực của văn bản. Đây là ngoại lệ DUY NHẤT trong toàn bộ dữ liệu
+        // compliance; mọi version khác đều có ValidFrom >= hiệu lực văn bản căn cứ.
         var row1 = new PitRegulationVersion
         {
             ValidFrom = new DateOnly(2020, 1, 1),
@@ -1148,10 +1156,12 @@ public sealed partial class DatabaseSeeder
             ComplianceEntityTypes.PitRegulation, row2.Id,
             new[] { "LUAT-TNCN-109-2025", "NQ-110-2025" },
             legalDocumentIdsByCode, adminId, now, ct);
-        // Row1 (historical pre-2026) — link bộ luật TNCN cũ áp dụng tại thời điểm đó để tuân thủ BR-15
+        // Row1 (historical pre-2026) — căn cứ ĐÚNG của mốc 11tr/4,4tr là NQ 954/2020/UBTVQH14.
+        // Trước đây link `LUAT-TNCN-109-2025`, tức gắn cho bản CŨ chính văn bản đã THAY THẾ nó
+        // (hiệu lực 01/01/2026, sau ValidFrom của row1 6 năm) — trái hẳn với chú thích ngay trên.
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.PitRegulation, row1.Id,
-            new[] { "LUAT-TNCN-109-2025" },
+            new[] { "NQ-954-2020" },
             legalDocumentIdsByCode, adminId, now, ct);
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.PitRegulation, row3.Id,
@@ -1302,13 +1312,15 @@ public sealed partial class DatabaseSeeder
         }
 
         // BR-15: mỗi version phải liên kết >=1 LegalDocument.
-        var thresholds = new List<(AllowanceExemptThresholdVersion Version, string LegalDocCode)>();
+        var thresholds = new List<(AllowanceExemptThresholdVersion Version, string[] LegalDocCodes)>();
 
         if (allowanceTypes.TryGetValue("MEAL", out var meal))
         {
             thresholds.Add((new AllowanceExemptThresholdVersion
             {
-                ValidFrom = new DateOnly(2016, 1, 1),
+                // Hiệu lực ĐÚNG BẰNG ngày TT 26/2016/TT-BLĐTBXH có hiệu lực (15/10/2016). Trước
+                // đây đặt 01/01/2016 — sớm hơn văn bản căn cứ 9,5 tháng, tức mốc luật tự bịa.
+                ValidFrom = new DateOnly(2016, 10, 15),
                 IsActive = false,
                 IsArchived = false,
                 AllowanceTypeId = meal.Id,
@@ -1319,7 +1331,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 26/2016/TT-BLĐTBXH + TT 111/2013/TT-BTC (hết hiệu lực 15/06/2025)",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "TT-26-2016"));
+            }, new[] { "TT-26-2016", "TT-111-2013" }));
             thresholds.Add((new AllowanceExemptThresholdVersion
             {
                 ValidFrom = new DateOnly(2026, 7, 1),
@@ -1333,7 +1345,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "NĐ 253/2026/NĐ-CP — ngưỡng mới 1,200,000 từ 01/07/2026",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "ND-253-2026"));
+            }, new[] { "ND-253-2026" }));
         }
 
         if (allowanceTypes.TryGetValue("FUEL", out var fuel))
@@ -1350,7 +1362,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 111/2013/TT-BTC",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "TT-26-2016"));
+            }, new[] { "TT-111-2013" }));
 
         if (allowanceTypes.TryGetValue("PHONE", out var phone))
             thresholds.Add((new AllowanceExemptThresholdVersion
@@ -1366,7 +1378,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 111/2013/TT-BTC",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "TT-26-2016"));
+            }, new[] { "TT-111-2013" }));
 
         if (thresholds.Count > 0)
         {
@@ -1374,11 +1386,11 @@ public sealed partial class DatabaseSeeder
             await _context.SaveChangesAsync(ct);
             _logger.LogInformation("Seeded {Count} AllowanceExemptThreshold rows.", thresholds.Count);
 
-            foreach (var (version, legalDocCode) in thresholds)
+            foreach (var (version, legalDocCodes) in thresholds)
             {
                 await LinkLegalDocumentsAsync(
                     ComplianceEntityTypes.AllowanceExemptThreshold, version.Id,
-                    new[] { legalDocCode },
+                    legalDocCodes,
                     legalDocumentIdsByCode, adminId, now, ct);
             }
         }
