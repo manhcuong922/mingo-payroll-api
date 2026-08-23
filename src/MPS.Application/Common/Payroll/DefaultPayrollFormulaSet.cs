@@ -77,11 +77,15 @@ public static class DefaultPayrollFormulaSet
             N.Field(Fk.CongHuongLuong),
             N.Col(Cc.CongTinhCom));
 
+        // Số công THUỘC DIỆN ĐÓNG của kỳ. Tách thành biến riêng vì ngoài việc chia nền đóng, nó còn
+        // là căn cứ trả lời câu "tháng này có tiền lương làm căn cứ đóng BHXH hay không" — thứ mà
+        // đoàn phí cần (xem cột PHICONGDOANVIEN).
+        var congCoBaoHiem = N.Func(Fn.Max,
+            N.Sub(congHuongLuong, N.Field(Fk.CongKhongBaoHiem)),
+            N.Const(0m));
+
         FormulaNode ProrateByCongCoBaoHiem(FormulaNode value) =>
-            N.Mul(N.Div(value, N.Col(Cc.CongChuan)),
-                N.Func(Fn.Max,
-                    N.Sub(congHuongLuong, N.Field(Fk.CongKhongBaoHiem)),
-                    N.Const(0m)));
+            N.Mul(N.Div(value, N.Col(Cc.CongChuan)), congCoBaoHiem);
 
         FormulaNode Bh(string rateField, string capField, string cappedField) =>
             BhWithCap(rateField, N.Field(capField), cappedField);
@@ -386,12 +390,36 @@ public static class DefaultPayrollFormulaSet
         // mẫu 08/2023 (PayrollGoldenReconciliationTests): 14.641.000 × 2% = 292.820 đúng bằng cột
         // đoàn phí trên file, prorate vào sẽ lệch.
         var unionDuesRaw = N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.UnionDuesRate));
+        var unionDuesCapped = N.If(N.Cmp(">", N.Field(Fk.UnionDuesCap), N.Const(0m)),
+            N.Func(Fn.Min, unionDuesRaw, N.Field(Fk.UnionDuesCap)),
+            unionDuesRaw);
+
+        // ⭐ X3 — đoàn phí thu trên TIỀN LƯƠNG LÀM CĂN CỨ ĐÓNG BHXH (QĐ 1908 Đ.23). Tháng nào không
+        // có căn cứ đó thì không có đoàn phí. Cột này trước đây không có tầng chặn nào — cứ là đoàn
+        // viên là thu, bất kể tình trạng của kỳ. Hai chỗ rò đo được trên dữ liệu thật:
+        //
+        //   · cờ BH nói KHÔNG — `x` (miễn phí công đoàn), `x1` (không tính bảo hiểm), `TS` (thai
+        //     sản). Cả 7 cột bảo hiểm đều tôn trọng, riêng đoàn phí vẫn thu đều. Người part-time có
+        //     HĐ ghi rõ không tham gia bảo hiểm vẫn bị trừ 70.000đ/tháng.
+        //
+        //   · KHÔNG CÓ NGÀY CÔNG NÀO thuộc diện đóng — nghỉ thai sản / nghỉ không lương trọn tháng.
+        //     Cờ vẫn là `x3` nên tầng trên không cứu được. Hậu quả dây chuyền bắt được trên DB:
+        //     thu nhập 0 → vẫn trừ đoàn phí → thực nhận âm → `PayrollNetFloor` kẹp về 0 và GHI NỢ
+        //     treo sang kỳ sau; người nghỉ đẻ đi làm lại bị đòi đoàn phí của chính tháng nghỉ đẻ.
+        //
+        // Tầng thứ hai là chặn NHỊ PHÂN, cố ý KHÔNG phải `ProrateByCong`: có ngày công đóng BH thì
+        // thu đủ đoàn phí tháng, không có ngày nào thì thôi. Đoàn phí là khoản đóng theo THÁNG —
+        // xem ghi chú ngay trên và bài đối chiếu file lương thật 08/2023.
+        //
+        // ⚠️ CỐ Ý không thêm tầng `UnlessExempt(ContractUnionFundExempt)` như 7 cột BH và KPCĐ: công
+        // tắc đó là "miễn trích KPCĐ" — nghĩa vụ của DOANH NGHIỆP. Đoàn phí là nghĩa vụ của NGƯỜI
+        // LAO ĐỘNG và đã có cổng riêng đúng tầng của nó là cờ đoàn viên trên hồ sơ NV. Gộp hai thứ
+        // vào nhau là lẫn hai nghĩa vụ khác nhau.
         Add(Cc.PhiCongDoanVien, "Phí công đoàn viên", GH, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: N.Mul(
-                N.If(N.Cmp(">", N.Field(Fk.UnionDuesCap), N.Const(0m)),
-                    N.Func(Fn.Min, unionDuesRaw, N.Field(Fk.UnionDuesCap)),
-                    unionDuesRaw),
-                N.Field(Fk.UnionMember)));
+            formula: SkipIfFlag(Cc.FlagBh, noUnion,
+                N.If(N.Cmp(">", congCoBaoHiem, N.Const(0m)),
+                    N.Mul(unionDuesCapped, N.Field(Fk.UnionMember)),
+                    N.Const(0m))));
         Add(Cc.ChiKhac, "Chi khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // BS-5 — 2 cột truy lĩnh / truy thu, seed từ field do handler tạo kỳ gom sẵn (mặc định 0 khi
         // NV không có khoản chưa áp). Dấu: TRUY_LINH dương (+); TRUY_THU âm (−) — cộng đại số vào THUCNHAN.
