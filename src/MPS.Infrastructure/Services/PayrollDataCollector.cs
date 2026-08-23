@@ -600,6 +600,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // phần trăm ⇒ chia 100 như mọi tỷ lệ khác) + ngưỡng khấu trừ mỗi lần chi trả.
             n[ShortTermFlatRate] = pit.ShortTermFlatRatePercent / 100m;
             n[ShortTermTaxExemptIncome] = pit.ShortTermTaxExemptMonthlyIncome;
+            // ⭐ X4 — đổi sang PHÂN SỐ cho khớp cách công thức dùng (0.15 chứ không phải 15). Giữ
+            // nguyên 0 khi luật chưa khai: 0 nghĩa là KHÔNG áp trần, xem `PayrollFieldKeys.HousingExemptRate`.
+            n[HousingExemptRate] = pit.HousingExemptRatePercent / 100m;
 
             result.Add(inputs);
         }

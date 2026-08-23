@@ -248,7 +248,7 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
         VersionId: 1, ValidFrom: new DateOnly(2026, 1, 1),
         PersonalDeductionAmount: 11_000_000m, DependentDeductionAmount: 4_400_000m,
         ShortTermContractMaxMonths: 3, ShortTermFlatRatePercent: 10m,
-        ShortTermTaxExemptMonthlyIncome: 2_000_000m,
+        ShortTermTaxExemptMonthlyIncome: 2_000_000m, HousingExemptRatePercent: 15m,
         Brackets: new[] { new PitBracketSnapshot(1, 0m, 5_000_000m, 5m) },
         LegalReference: "test");
 

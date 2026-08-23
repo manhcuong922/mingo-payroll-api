@@ -79,6 +79,7 @@ public sealed record PitRegulationDto(
     int ShortTermContractMaxMonths,
     decimal ShortTermFlatRatePercent,
     decimal ShortTermTaxExemptMonthlyIncome,
+    decimal HousingExemptRatePercent,
     IReadOnlyList<PitBracketDto> Brackets,
     string LegalReference,
     string? Note,

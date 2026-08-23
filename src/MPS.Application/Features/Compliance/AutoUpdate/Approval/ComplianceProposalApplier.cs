@@ -185,6 +185,7 @@ public sealed class ComplianceProposalApplier
             active.ShortTermContractMaxMonths,
             active.ShortTermFlatRatePercent,
             active.ShortTermTaxExemptMonthlyIncome,
+            active.HousingExemptRatePercent,
             brackets, legalRef, note, legalDocIds), ct);
     }
 

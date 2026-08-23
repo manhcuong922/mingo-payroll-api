@@ -280,4 +280,14 @@ public static class PayrollFieldKeys
     /// <para>Kỳ lương cũ thiếu khoá ⇒ 0 ⇒ không thu nhập nào dưới ngưỡng ⇒ khấu trừ như trước ✅</para>
     /// </summary>
     public const string ShortTermTaxExemptIncome = "compliance.shortTermTaxExemptIncome";
+
+    /// <summary>
+    /// ⭐ X4 — tỷ lệ trần tiền thuê nhà do DN trả thay (TT 111/2013 Đ.11.1), dạng PHÂN SỐ (0.15 = 15%).
+    /// Trần tính trên tổng thu nhập chịu thuế CHƯA GỒM tiền nhà; phần vượt được MIỄN thuế.
+    ///
+    /// <para>⚠️ Quy ước NGƯỢC với phần lớn field khác: ở đây <b>0 = KHÔNG áp trần</b>, giống
+    /// <c>BH_CO_TRAN</c>. Nếu hiểu 0 là "trần bằng 0" thì kỳ lương cũ (thiếu khoá ⇒ 0) sẽ miễn thuế
+    /// TOÀN BỘ tiền nhà — ngược hẳn với nguyên tắc "thiếu khoá ⇒ giữ nguyên hành vi cũ".</para>
+    /// </summary>
+    public const string HousingExemptRate = "compliance.housingExemptRate";
 }

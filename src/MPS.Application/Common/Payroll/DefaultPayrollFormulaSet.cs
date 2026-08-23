@@ -329,15 +329,46 @@ public static class DefaultPayrollFormulaSet
             formula: N.Func(Fn.Min, N.Col(Cc.Com), N.Field(Fk.MealExemptThreshold)));
         // BS-2 — phụ trội ngày nghỉ/lễ + phụ cấp đêm là phần trả CAO HƠN mức ngày thường do làm đêm/
         // làm thêm ⇒ MIỄN thuế TNCN (Đ.3 TT111/2013), trừ khỏi TNCT giống cột "Tăng ca miễn thuế".
+        // ⭐ X4 — TIỀN THUÊ NHÀ do DN trả thay chỉ tính vào thu nhập chịu thuế TỐI ĐA 15% tổng thu
+        // nhập chịu thuế CHƯA GỒM tiền nhà (TT 111/2013 Đ.11.1); phần vượt được MIỄN. Bước kẹp này
+        // trước đây không tồn tại — tiền nhà chảy thẳng vào thu nhập rồi vào TNCT, đánh thuế đủ.
+        //
+        // Nền tính trần = mọi khoản chịu thuế TRỪ chính tiền nhà. Viết lại từ các số hạng của TNCT
+        // thay vì lấy `TNCT − THUENHA` vì TNCT phụ thuộc ngược lại vào cột này (vòng lặp).
+        var nenTranNha = N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
+            N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)),
+            N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)),
+            N.Add(N.Field(Fk.ContractAllowanceMienThue), N.Col(Cc.ThueNha)));
+
+        // ⚠️ Tỷ lệ = 0 nghĩa là KHÔNG áp trần — quy ước của `BH_CO_TRAN`, KHÔNG phải quy ước "thiếu
+        // khoá ⇒ 0" thông thường. Hiểu 0 là "trần bằng 0" thì kỳ lương cũ sẽ miễn thuế TOÀN BỘ tiền
+        // nhà, tức bản sửa tự ý xoá thuế của mọi kỳ cũ. Phải chặn ngay ở nhánh ngoài cùng.
+        // ⚠️ Nền phải SÀN 0 trước khi nhân tỷ lệ. Người nghỉ trọn tháng có thu nhập 0 nhưng vẫn bị trừ
+        // phụ cấp miễn thuế ⇒ nền âm ⇒ trần âm ⇒ `0 − trần_âm` ra số DƯƠNG, tức sinh ra "tiền nhà
+        // vượt trần" từ hư không cho người không hề hưởng tiền nhà. Đo được: một dòng lệch 60.000đ.
+        Add(Cc.NhaVuotTran, "Tiền nhà vượt trần (miễn thuế)", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
+            formula: N.If(N.Cmp(">", N.Field(Fk.HousingExemptRate), N.Const(0m)),
+                N.Func(Fn.Max,
+                    N.Sub(N.Col(Cc.ThueNha),
+                        N.Mul(N.Func(Fn.Max, nenTranNha, N.Const(0m)), N.Field(Fk.HousingExemptRate))),
+                    N.Const(0m)),
+                N.Const(0m)));
+
         // ⭐ X2c — trừ thêm các phụ cấp đã tick "không chịu thuế" trong danh mục (công tác phí khoán,
         // trang phục…). Trước đây chỉ 2 mã có cột riêng được miễn, mọi mã khác rơi vào cột "Khác" và
         // bị đánh thuế đủ. Cơm KHÔNG nằm trong tổng này — đã có `ANTRUA` với ngưỡng riêng.
         // Kỳ lương cũ thiếu khoá ⇒ trừ 0 ⇒ thuế giữ nguyên.
+        // SÀN 0: thu nhập chịu thuế không thể âm. Người nghỉ trọn tháng có tổng thu nhập 0, nhưng
+        // các khoản miễn thuế vẫn mang giá trị NGUYÊN THÁNG của hợp đồng (không chia theo công) nên
+        // phép trừ đẩy cột này xuống âm — vô nghĩa trên phiếu lương, và là mồi cho lỗi dấu ở bất kỳ
+        // cột nào tính tiếp từ đây.
         Add(Cc.Tnct, "Thu nhập chịu thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
+            formula: N.Func(Fn.Max, N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
                 N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)),
                 N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)),
-                N.Field(Fk.ContractAllowanceMienThue)));
+                N.Field(Fk.ContractAllowanceMienThue)),
+                N.Col(Cc.NhaVuotTran)),
+                N.Const(0m)));
         Add(Cc.Tntt, "Thu nhập tính thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Max,
                 N.Sub(N.Sub(N.Sub(N.Col(Cc.Tnct), N.Col(Cc.CongBhNld)), N.Col(Cc.GtNpt)), N.Col(Cc.GtBanThan)),

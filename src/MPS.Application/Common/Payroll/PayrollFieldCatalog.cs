@@ -97,6 +97,7 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(PersonalDeduction, "Giảm trừ bản thân", "Compliance", ColumnDataType.Money),
         new(DependentDeduction, "Giảm trừ mỗi người phụ thuộc", "Compliance", ColumnDataType.Money),
         new(MealExemptThreshold, "Mức cơm miễn thuế tối đa", "Compliance", ColumnDataType.Money),
+        new(HousingExemptRate, "Tỷ lệ trần tiền thuê nhà chịu thuế", "Compliance", ColumnDataType.Number),
         new(ShortTermTaxExemptIncome, "Ngưỡng khấu trừ thuế khoán / lần chi trả", "Compliance", ColumnDataType.Money),
     };
 

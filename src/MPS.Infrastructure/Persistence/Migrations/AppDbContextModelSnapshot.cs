@@ -2344,6 +2344,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("DependentDeductionAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("HousingExemptRatePercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(15.00m);
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")

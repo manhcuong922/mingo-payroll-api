@@ -92,6 +92,13 @@ public static class PayrollColumnCodes
     public const string GtBanThan = "GT_BT";
     public const string ChenhLechLtg = "CL_GLT";
     public const string ComMienThue = "ANTRUA";
+
+    /// <summary>
+    /// ⭐ X4 — phần tiền thuê nhà VƯỢT trần 15% ⇒ được MIỄN thuế TNCN, trừ khỏi thu nhập chịu thuế.
+    /// Có cột riêng chứ không tính chìm trong TNCT, cùng lý do với "Cơm miễn thuế": kế toán phải
+    /// giải trình được vì sao thu nhập chịu thuế thấp hơn tổng thu nhập.
+    /// </summary>
+    public const string NhaVuotTran = "NHA_VUOTTRAN";
     public const string Tnct = "TNCT";
     public const string Tntt = "TNTT";
     public const string ThueTncn = "THUETNCN";
