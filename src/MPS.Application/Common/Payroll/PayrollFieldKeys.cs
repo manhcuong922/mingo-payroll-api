@@ -85,6 +85,22 @@ public static class PayrollFieldKeys
     /// <summary>Phần tiền cơm khai ngoại lệ — cộng thẳng vào cột COM, không qua bước chia theo công.</summary>
     public const string ContractAllowanceComNgoaiLe = "contract.allowanceComNgoaiLe";
 
+    // ===== X2 — hai tổng phái sinh đọc theo CỜ của `AllowanceType`, không theo mã =====
+    /// <summary>
+    /// Tổng phụ cấp mang cờ <c>IsBhxhBase</c> ("phụ cấp lương"): vào NỀN ĐÓNG BHXH (QĐ 595) và vào
+    /// ĐƠN GIÁ GIỜ làm thêm (NĐ 145/2020 Đ.55.1 — "tiền lương thực trả theo công việc").
+    ///
+    /// <para>Kỳ lương tạo TRƯỚC bản sửa X2 không có khoá này ⇒ <c>ToFields</c> điền 0 ⇒ cộng 0 ⇒
+    /// nền đóng và đơn giá giờ giữ nguyên số cũ. Đây là quy ước chung của mọi field thêm sau.</para>
+    /// </summary>
+    public const string ContractAllowanceNenPhuCapLuong = "contract.allowanceNenPhuCapLuong";
+    /// <summary>
+    /// Tổng phụ cấp mang cờ <c>IsTaxable = false</c> (công tác phí khoán, trang phục…), TRỪ cơm —
+    /// cơm đã có đường miễn thuế riêng kèm ngưỡng qua cột <c>ANTRUA</c>. Bị trừ khỏi thu nhập chịu
+    /// thuế. Kỳ cũ thiếu khoá ⇒ 0 ⇒ trừ 0 ⇒ thuế giữ nguyên.
+    /// </summary>
+    public const string ContractAllowanceMienThue = "contract.allowanceMienThue";
+
     // ===== Chấm công =====
     public const string CongChuan = "period.congChuan";
     public const string CongTinhCom = "attendance.congTinhCom";

@@ -86,8 +86,13 @@ public static class DefaultPayrollFormulaSet
         FormulaNode Bh(string rateField, string capField) =>
             BhWithCap(rateField, N.Field(capField));
 
+        // ⭐ X2a — nền đóng BH là "tiền lương + phụ cấp lương" (QĐ 595, Đ.30.2), không phải mỗi mức
+        // lương. Trước đây phụ cấp độc hại / trách nhiệm đã tick "tính vào nền BHXH" trong danh mục
+        // vẫn đứng ngoài ⇒ đóng THIẾU. Kỳ lương cũ không có khoá này ⇒ cộng 0 ⇒ giữ nguyên số cũ.
+        var nenDongBh = N.Add(N.Col(Cc.MucLuong), N.Field(Fk.ContractAllowanceNenPhuCapLuong));
+
         FormulaNode BhWithCap(string rateField, FormulaNode capNode) =>
-            N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(N.Col(Cc.MucLuong)), N.Field(rateField), capNode);
+            N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(nenDongBh), N.Field(rateField), capNode);
 
         // ⭐ D3 — BHYT có trần RIÊNG (hệ số trần BHYT trên màn hình cấu hình BHXH), trước đây bị bỏ
         // qua và dùng chung trần BHXH nên admin sửa ô đó không có tác dụng gì.
@@ -273,7 +278,7 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: SkipIfFlag(Cc.FlagBh, noUnion,
                 UnlessExempt(Fk.ContractUnionFundExempt,
-                    N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m)))));
+                    N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(nenDongBh), N.Field(Fk.KpcdRate), N.Const(0m)))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
@@ -300,10 +305,15 @@ public static class DefaultPayrollFormulaSet
             formula: N.Func(Fn.Min, N.Col(Cc.Com), N.Field(Fk.MealExemptThreshold)));
         // BS-2 — phụ trội ngày nghỉ/lễ + phụ cấp đêm là phần trả CAO HƠN mức ngày thường do làm đêm/
         // làm thêm ⇒ MIỄN thuế TNCN (Đ.3 TT111/2013), trừ khỏi TNCT giống cột "Tăng ca miễn thuế".
+        // ⭐ X2c — trừ thêm các phụ cấp đã tick "không chịu thuế" trong danh mục (công tác phí khoán,
+        // trang phục…). Trước đây chỉ 2 mã có cột riêng được miễn, mọi mã khác rơi vào cột "Khác" và
+        // bị đánh thuế đủ. Cơm KHÔNG nằm trong tổng này — đã có `ANTRUA` với ngưỡng riêng.
+        // Kỳ lương cũ thiếu khoá ⇒ trừ 0 ⇒ thuế giữ nguyên.
         Add(Cc.Tnct, "Thu nhập chịu thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
+            formula: N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
                 N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)),
-                N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)));
+                N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)),
+                N.Field(Fk.ContractAllowanceMienThue)));
         Add(Cc.Tntt, "Thu nhập tính thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Max,
                 N.Sub(N.Sub(N.Sub(N.Col(Cc.Tnct), N.Col(Cc.CongBhNld)), N.Col(Cc.GtNpt)), N.Col(Cc.GtBanThan)),

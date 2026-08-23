@@ -161,7 +161,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         // Cấu hình danh mục (mã + cờ ngoại lệ) tra SỐNG theo Id: ảnh lịch sử chỉ ghim số tiền, nên
         // sửa danh mục một lần là áp cho mọi kỳ tính lại.
         var allowanceTypesById = await _db.AllowanceTypes.AsNoTracking()
-            .ToDictionaryAsync(t => t.Id, t => new { t.Code, t.ExcludeFromProration }, ct);
+            .ToDictionaryAsync(t => t.Id, t => new { t.Code, t.ExcludeFromProration, t.IsBhxhBase, t.IsTaxable }, ct);
 
         // ⭐ A1 — chỉ lấy bản ghi chấm công CA CHÍNH (`OvertimeRequestId == null`).
         // HR chấm công 2 lần cho ngày có tăng ca (một cho ca chính, một cho ca OT) đúng như hệ thống
@@ -224,10 +224,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         // ⭐ Phase 6 — phụ cấp áp cho MỘT NGÀY, cùng quy tắc mốc hiệu lực với lương.
         AllowanceLine ToAllowanceLine(int allowanceTypeId, decimal amount) =>
             allowanceTypesById.TryGetValue(allowanceTypeId, out var t)
-                ? new AllowanceLine(t.Code, t.ExcludeFromProration, amount)
+                ? new AllowanceLine(t.Code, t.ExcludeFromProration, amount, t.IsBhxhBase, t.IsTaxable)
                 // Loại phụ cấp đã bị xoá khỏi danh mục: tiền KHÔNG được biến mất, để rơi vào cột
-                // "Khác" như phụ cấp mã lạ (#64/[D15]).
-                : new AllowanceLine(string.Empty, false, amount);
+                // "Khác" như phụ cấp mã lạ (#64/[D15]). Không tra được cấu hình ⇒ giả định BẤT LỢI
+                // cho việc miễn: không phải phụ cấp lương, và CHỊU thuế — không tự cho miễn dựa trên
+                // một bản ghi danh mục đã biến mất.
+                : new AllowanceLine(string.Empty, false, amount, IsBhxhBase: false, IsTaxable: true);
 
         IEnumerable<AllowanceLine> AllowanceLinesFor(Contract? c, DateOnly day)
         {
@@ -238,8 +240,9 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                     if (snap.From > day)
                         return snap.Lines.Select(l => ToAllowanceLine(l.AllowanceTypeId, l.Amount));
 
-            return c.ContractAllowances.Select(a =>
-                new AllowanceLine(a.AllowanceType.Code, a.AllowanceType.ExcludeFromProration, a.Amount));
+            return c.ContractAllowances.Select(a => new AllowanceLine(
+                a.AllowanceType.Code, a.AllowanceType.ExcludeFromProration, a.Amount,
+                a.AllowanceType.IsBhxhBase, a.AllowanceType.IsTaxable));
         }
 
         decimal SalaryForDay(Contract? c, DateOnly day) =>
@@ -402,6 +405,20 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // rằng đây chính là tử số mà THU_NHAP_PHANBO đang dùng.
             var congHuongLuong = congChinhThuc + congThuViec + congHocViec;
 
+            // ⭐ Phase 6 — phụ cấp BÌNH QUÂN theo trọng số ngày công (phụ lục đổi phụ cấp có hiệu
+            // lực giữa tháng thì nửa đầu / nửa sau ăn hai mức khác nhau, giống mức lương ở Phase 5).
+            // Không có ngày công nào để cân ⇒ lấy trạng thái tại cuối kỳ, giữ nguyên hành vi cũ.
+            //
+            // ⭐ CC-2026-08 — mẫu số phải là `congHuongLuong` chứ không còn `congCom`: vòng bù công
+            // ngày lễ ở trên đã cộng phụ cấp của những ngày lễ vào `phuCapTheoCong`, chia lại cho
+            // riêng công đi làm thật sẽ thổi phồng mức bình quân đúng bằng tỉ lệ ngày lễ.
+            var phuCap = congHuongLuong > 0
+                ? phuCapTheoCong.Divide(congHuongLuong)
+                : AllowanceBuckets.From(AllowanceLinesFor(activeContract, periodEnd));
+            // ⚠️ Khối phụ cấp phải tính TRƯỚC mức lương/đơn giá giờ: từ bản sửa X2, đơn giá giờ làm
+            // thêm cần `phuCap.NenPhuCapLuong`.
+
+
             // ⭐ Phase 5 — cột "Mức lương" mang mức của ĐOẠN CHÍNH THỨC, không phải bình quân cả kỳ:
             // nhánh chính thức của THU_NHAP_PHANBO lấy thẳng cột này, còn phần chênh của những ngày
             // thử việc được bù riêng qua `contract.troCapThuViec` bên dưới. Nhiều HĐ chính thức
@@ -414,8 +431,14 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             var mucChinhThuc = congChinhThuc > 0 ? luongChinhThucTheoCong / congChinhThuc : mucLuongHopDong;
             var mucThuViec = congThuViec > 0 ? luongThuViecTheoCong / congThuViec : mucChinhThuc;
             var mucLuong = mucChinhThuc;
+            // ⭐ X2b — đơn giá giờ làm thêm tính trên "tiền lương thực trả theo công việc" (NĐ
+            // 145/2020 Đ.55.1), tức lương cộng PHỤ CẤP LƯƠNG gắn với công việc (trách nhiệm, độc
+            // hại…). Trước đây chỉ lấy lương cơ bản ⇒ tổ trưởng có phụ cấp trách nhiệm bị trả thiếu
+            // tiền tăng ca. Đơn giá này còn nuôi cả phụ trội ngày nghỉ/lễ và phụ cấp đêm (BS-2) nên
+            // bản sửa lan sang cả ba khoản — đúng ý, cả ba đều là phái sinh của cùng một đơn giá.
+            var mucLuongTinhGio = mucLuong + phuCap.NenPhuCapLuong;
             var hourlyRate = req.StandardWorkingDays > 0 && labor.StandardWorkingHoursPerDay > 0
-                ? mucLuong / (req.StandardWorkingDays * labor.StandardWorkingHoursPerDay) : 0m;
+                ? mucLuongTinhGio / (req.StandardWorkingDays * labor.StandardWorkingHoursPerDay) : 0m;
 
             // ⭐ BS-2: hệ số OT theo LOẠI NGÀY (Đ.98) — trước đây dùng cứng 1.5/2.0 cho mọi ngày, bỏ qua
             // cuối tuần (200%) và lễ (300%) ⇒ ai tăng ca ngày lễ bị trả thiếu. Với ngày THƯỜNG, hệ số động
@@ -455,17 +478,6 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 ? Math.Max(0m, mucThuViec * (1m + coefficient) - mucChinhThuc)
                 : 0m;
 
-            // ⭐ Phase 6 — phụ cấp BÌNH QUÂN theo trọng số ngày công (phụ lục đổi phụ cấp có hiệu
-            // lực giữa tháng thì nửa đầu / nửa sau ăn hai mức khác nhau, giống mức lương ở Phase 5).
-            // Không có ngày công nào để cân ⇒ lấy trạng thái tại cuối kỳ, giữ nguyên hành vi cũ.
-            //
-            // ⭐ CC-2026-08 — mẫu số phải là `congHuongLuong` chứ không còn `congCom`: vòng bù công
-            // ngày lễ ở trên đã cộng phụ cấp của những ngày lễ vào `phuCapTheoCong`, chia lại cho
-            // riêng công đi làm thật sẽ thổi phồng mức bình quân đúng bằng tỉ lệ ngày lễ.
-            var phuCap = congHuongLuong > 0
-                ? phuCapTheoCong.Divide(congHuongLuong)
-                : AllowanceBuckets.From(AllowanceLinesFor(activeContract, periodEnd));
-
             var inputs = new PayrollEmployeeInputs { EmployeeInformationId = e.Id };
             var n = inputs.Numbers; var t = inputs.Texts;
 
@@ -498,6 +510,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[ContractAllowanceComNgoaiLe] = phuCap.ComNgoaiLe;
             n[ContractAllowanceKhac] = phuCap.Khac;
             n[ContractAllowanceNgoaiLe] = phuCap.NgoaiLe;
+            n[ContractAllowanceNenPhuCapLuong] = phuCap.NenPhuCapLuong;
+            n[ContractAllowanceMienThue] = phuCap.TongMienThue;
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
             n[CongLe] = congLe;

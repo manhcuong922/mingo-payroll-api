@@ -32,6 +32,8 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(ContractAllowanceCom, "Phụ cấp cơm/ăn ca (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceKhac, "Phụ cấp khác (HĐ, mã ngoài 4 cột cứng)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceNgoaiLe, "Phụ cấp ngoại lệ — trả nguyên, không chia theo công (HĐ)", "Hợp đồng", ColumnDataType.Money),
+        new(ContractAllowanceNenPhuCapLuong, "Phụ cấp lương (vào nền BHXH + đơn giá giờ)", "Hợp đồng", ColumnDataType.Money),
+        new(ContractAllowanceMienThue, "Phụ cấp miễn thuế TNCN (trừ cơm)", "Hợp đồng", ColumnDataType.Money),
         new(ContractAllowanceComNgoaiLe, "Phụ cấp cơm ngoại lệ — trả nguyên (HĐ)", "Hợp đồng", ColumnDataType.Money),
         new(ContractIsPieceWork, "HĐ khoán việc (1 = khoán)", "Hợp đồng", ColumnDataType.Number),
         new(PieceWorkSupport, "Hỗ trợ theo tiến độ (HĐ khoán)", "Hợp đồng", ColumnDataType.Money),
