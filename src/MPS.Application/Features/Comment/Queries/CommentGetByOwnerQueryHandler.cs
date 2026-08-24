@@ -42,7 +42,7 @@ public class CommentGetByOwnerQueryHandler : IRequestHandler<CommentGetByOwnerQu
 
         var items = await _comments.GetByOwnerAsync(request.OwnerType, request.OwnerId, ct);
         return items.Select(c => new CommentDto(
-            c.Id, c.OwnerType.ToString(), c.OwnerId, c.Content, c.AuthorUserId, c.AuthorUser?.Username, c.CreatedAt))
+            c.Id, c.OwnerType.ToString(), c.OwnerId, c.Content, c.AuthorUserId, c.AuthorUser?.FullName, c.CreatedAt))
             .ToList();
     }
 
