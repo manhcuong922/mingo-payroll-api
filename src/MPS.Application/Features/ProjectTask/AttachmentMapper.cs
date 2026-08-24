@@ -20,6 +20,6 @@ internal static class AttachmentMapper
             a.SizeBytes,
             a.Note,
             downloadUrl,
-            a.UploadedBy?.Username,
+            a.UploadedBy?.FullName,
             a.UploadedAt);
 }
