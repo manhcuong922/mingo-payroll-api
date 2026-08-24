@@ -29,6 +29,13 @@ public static class PayrollColumnCodes
     /// </summary>
     public const string CongLe = "CONGLE";
 
+    /// <summary>
+    /// BH-14 — SỐ NGÀY làm việc có hưởng lương của kỳ (đếm theo ngày, nửa buổi vẫn tính 1 ngày).
+    /// Cột ĐỐI CHIẾU: dưới 14 ngày thì cả khối bảo hiểm về 0 theo QĐ 595 Đ.42, không có cột này thì
+    /// kế toán nhìn bảng không hiểu vì sao dòng đó không bị trừ bảo hiểm.
+    /// </summary>
+    public const string SoNgayCongHl = "SONGAYCONGHL";
+
     /// <summary>Phase 2 — tổng giờ làm trong kỳ (ca chính + tăng ca), căn cứ xếp bậc hỗ trợ HĐ khoán.</summary>
     public const string TongGioLam = "TONGGIOLAM";
 

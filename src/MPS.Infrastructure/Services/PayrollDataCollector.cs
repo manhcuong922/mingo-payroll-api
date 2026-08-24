@@ -6,6 +6,7 @@ using MPS.Application.Common.Payroll.Formula;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Application.Features.ContractAppendix.Common;
 using MPS.Application.Features.Payroll.Common;
+using MPS.Domain.Constants;
 using MPS.Domain.Entities;
 using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Enums.Attendance;
@@ -23,17 +24,20 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     private readonly IComplianceLookupService _compliance;
     private readonly IDayTypeResolver _dayTypeResolver;
     private readonly IOvertimeMultiplierCalculator _otMultiplier;
+    private readonly IClock _clock;
 
     public PayrollDataCollector(
         AppDbContext db,
         IComplianceLookupService compliance,
         IDayTypeResolver dayTypeResolver,
-        IOvertimeMultiplierCalculator otMultiplier)
+        IOvertimeMultiplierCalculator otMultiplier,
+        IClock clock)
     {
         _db = db;
         _compliance = compliance;
         _dayTypeResolver = dayTypeResolver;
         _otMultiplier = otMultiplier;
+        _clock = clock;
     }
 
     private enum CongCategory { Official, Probation, Apprentice }
@@ -43,6 +47,18 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         var periodStart = new DateOnly(req.Year, req.Month, 1);
         var periodEnd = new DateOnly(req.Year, req.Month, DateTime.DaysInMonth(req.Year, req.Month));
         var empIds = req.EmployeeInformationIds;
+
+        // ⭐ BH-14 — ngưỡng 14 ngày công là phán quyết của CẢ THÁNG, giữa tháng chưa kết luận được.
+        // Màn hình TẠM TÍNH giữa tháng dùng chung collector này: không có cổng dưới đây thì từ mùng 1
+        // đến khoảng ngày 20 hàng tháng, CẢ CÔNG TY hiện bảo hiểm = 0 (chưa ai kịp đủ 14 ngày) ⇒
+        // thực nhận tạm tính cao giả, kế toán lại báo là lỗi mới.
+        //
+        // Tháng chưa xong ⇒ giữ nguyên cách thu cũ (chia theo ngày công) — kết quả gần với số cuối
+        // cùng hơn là 0đ, vì người đang đi làm bình thường gần như chắc chắn sẽ đủ công.
+        // KHÔNG phải là sự lệch giữa tạm tính và kỳ thật: hết tháng thì cả hai đường đều áp cổng
+        // này và ra cùng con số.
+        var monthComplete =
+            DateOnly.FromDateTime(_clock.UtcNow.AddHours(7)) > periodEnd;
 
         // ===== Compliance snapshots (dùng chung mọi NV) =====
         // ⭐ [Mục 3] Thuế TNCN + giảm trừ + ngưỡng cơm CỐ Ý giữ tra tại một mốc PayDate: biểu thuế
@@ -422,6 +438,55 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // rằng đây chính là tử số mà THU_NHAP_PHANBO đang dùng.
             var congHuongLuong = congChinhThuc + congThuViec + congHocViec;
 
+            // ⭐ BH-14 (QĐ 595 Đ.42) — SỐ NGÀY trong kỳ mà NLĐ thật sự có công hưởng lương. Dưới
+            // ngưỡng thì tháng đó KHÔNG thuộc diện đóng BHXH/BHYT/BHTN, chứ không phải đóng theo tỷ lệ
+            // ngày công như engine vẫn làm từ trước tới nay.
+            //
+            // Vì sao phải đếm riêng, không dùng lại `congHuongLuong`: khoá kia là tổng TRỌNG SỐ công
+            // (nửa buổi = 0,5), còn ngưỡng luật đếm NGÀY — đi làm nửa buổi vẫn là một ngày có làm
+            // việc và có hưởng lương. So ngưỡng bằng tổng trọng số sẽ miễn BH oan cho người hay đi
+            // làm nửa buổi.
+            //
+            // "Có công hưởng lương" đo đúng bằng thứ engine ĐÃ TRẢ ở hai vòng lặp trên:
+            //   · ngày có trọng số công > 0 — đi làm, nửa buổi, phép CÓ lương; kể cả T7/CN, vì ngày
+            //     nghỉ tuần mà vẫn đi làm thì vẫn là ngày có làm việc và có hưởng lương (và ca xoay thì
+            //     ngày nghỉ tuần rơi vào giữa tuần, lọc theo thứ là đếm sai);
+            //   · ngày lễ được cộng công tự động — cùng điều kiện với vòng bù lễ (không rơi T7/CN,
+            //     nằm trong kỳ hiệu lực HĐ). BẮT BUỘC phải tính: tháng Tết chỉ có ~13 ngày đi làm
+            //     thật, bỏ lễ ra là miễn BH oan cho cả công ty.
+            //   · Nghỉ phép có lương mà HR KHÔNG chấm công ⇒ không có trọng số ⇒ không được đếm —
+            //     đúng, vì chính engine cũng không trả lương ngày đó.
+            //
+            // ⚠️ Đây là chiều LÀM ("có ≥ 14 ngày công thì đóng") — cách cơ quan BHXH đối chiếu, và phủ
+            // luôn ca VÀO/NGHỈ VIỆC giữa tháng. Luật viết theo chiều NGHỈ ("nghỉ không lương ≥ 14 ngày
+            // làm việc thì không đóng"). Hai chiều TRÙNG nhau với tuần làm việc 5 ngày (22–23 ngày công
+            // /tháng — đúng cấu hình công chuẩn T2–T6 của hệ thống), nhưng LỆCH nhau nếu doanh nghiệp
+            // chuyển sang tuần 6 ngày: 26 ngày công, nghỉ 13 ⇒ luật bắt đóng (13 < 14) còn chiều làm
+            // này cho miễn (13 < 14). Đổi sang tuần 6 ngày thì phải quay lại chốt tiêu chí này.
+            var soNgayCongHuongLuong = 0;
+            for (var d = periodStart; d <= periodEnd; d = d.AddDays(1))
+            {
+                if (!IsCoveredByContract(empContracts, d)) continue;
+
+                if (weightByDate.GetValueOrDefault(d) > 0m)
+                {
+                    soNgayCongHuongLuong++;
+                    continue;
+                }
+
+                var dayTypeOfDay = dayTypeByDate.GetValueOrDefault(d, DayType.Normal);
+                if (dayTypeOfDay == DayType.PublicHoliday
+                    && d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+                    soNgayCongHuongLuong++;
+            }
+
+            // Cờ mang nghĩa MIỄN (1 = miễn) — xem `PayrollFieldKeys.MienBhThieuNgayCong`: kỳ lương
+            // chốt trước bản sửa này không có khoá ⇒ 0 ⇒ không miễn ai ⇒ số cũ giữ nguyên.
+            var mienBhThieuNgayCong =
+                monthComplete
+                && soNgayCongHuongLuong < LaborLawConstants.InsuranceEligibility.MinPaidWorkingDaysPerMonth
+                    ? 1m : 0m;
+
             // ⭐ Phase 6 — phụ cấp BÌNH QUÂN theo trọng số ngày công (phụ lục đổi phụ cấp có hiệu
             // lực giữa tháng thì nửa đầu / nửa sau ăn hai mức khác nhau, giống mức lương ở Phase 5).
             // Không có ngày công nào để cân ⇒ lấy trạng thái tại cuối kỳ, giữ nguyên hành vi cũ.
@@ -548,6 +613,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             n[CongTinhCom] = congCom;
             n[CongLe] = congLe;
             n[CongHuongLuong] = congHuongLuong;
+            n[SoNgayCongHuongLuong] = soNgayCongHuongLuong;
+            n[MienBhThieuNgayCong] = mienBhThieuNgayCong;
             n[CongThuViec] = congThuViec;
             n[CongChinhThuc] = congChinhThuc;
             n[CongHocViec] = congHocViec;

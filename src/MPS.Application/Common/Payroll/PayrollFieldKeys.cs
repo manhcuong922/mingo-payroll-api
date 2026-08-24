@@ -161,6 +161,31 @@ public static class PayrollFieldKeys
     /// </summary>
     public const string CongHuongLuong = "attendance.congHuongLuong";
 
+    /// <summary>
+    /// Số NGÀY LÀM VIỆC trong kỳ mà NLĐ thật sự có hưởng lương (đi làm, nửa buổi, phép có lương,
+    /// ngày lễ được cộng công tự động), tính trong phạm vi hiệu lực hợp đồng.
+    ///
+    /// <para>⚠️ Đếm theo NGÀY, KHÁC hẳn <see cref="CongHuongLuong"/> vốn là tổng TRỌNG SỐ công:
+    /// ngưỡng 14 ngày của QĐ 595 đếm ngày làm việc, nên đi làm nửa buổi (0,5 công) vẫn là MỘT ngày.
+    /// Dùng nhầm khoá kia sẽ miễn BH oan cho người hay đi làm nửa buổi.</para>
+    ///
+    /// <para>Chỉ để kế toán ĐỐI CHIẾU vì sao dòng này bị miễn bảo hiểm; cổng cắt thật nằm ở
+    /// <see cref="MienBhThieuNgayCong"/>.</para>
+    /// </summary>
+    public const string SoNgayCongHuongLuong = "attendance.soNgayCongHuongLuong";
+
+    /// <summary>
+    /// Cờ MIỄN đóng BHXH/BHYT/BHTN (+ KPCĐ, đoàn phí) của cả tháng vì không đủ ngày công
+    /// (QĐ 595 Đ.42) — <c>1 = miễn</c>, <c>0 = đóng bình thường</c>.
+    ///
+    /// <para>⚠️ Cố ý mang ngữ nghĩa "MIỄN" chứ không phải "đủ điều kiện đóng", cùng lý do với
+    /// <see cref="CongKhongBaoHiem"/> và ba khoá <c>contract.no*Insurance</c>: kỳ lương cũ không có
+    /// khoá này ⇒ <c>ToFields</c> điền 0 ⇒ nhân với <c>(1 − 0)</c> ⇒ giữ nguyên số đã chốt. Nếu để
+    /// chiều thuận ("số ngày công"), kỳ cũ sẽ đọc ra 0 ngày ⇒ 0 &lt; 14 ⇒ <b>xoá sạch bảo hiểm của
+    /// mọi kỳ đã chốt</b> ngay lần tính lại đầu tiên.</para>
+    /// </summary>
+    public const string MienBhThieuNgayCong = "attendance.mienBhThieuNgayCong";
+
     public const string DayHours = "attendance.dayHours";
     public const string NightHours = "attendance.nightHours";
     public const string AbsentDays = "attendance.absentDays";

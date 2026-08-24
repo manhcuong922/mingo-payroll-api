@@ -116,9 +116,14 @@ public sealed partial class DatabaseSeeder
         // Chênh nền 2.981.818đ ⇒ BHXH NLĐ 8% thu thừa 238.545đ, DN 17,5% (gộp HT 14% +
         // ỐĐ-TS 3% + TNLĐ-BNN 0,5%) thừa 521.818đ.
         //
-        // Cùng bộ dữ liệu này phục vụ case B3 — nghỉ ốm ≥ 14 ngày làm việc thì tháng đó
-        // KHÔNG đóng BHXH (QĐ 595): 14 là đúng ngưỡng, nên nó vừa là mốc biên "14 hay 13" vừa là
-        // bằng chứng hệ thống hiện vẫn thu bảo hiểm theo tỷ lệ công thay vì miễn cả tháng.
+        // ⚠️ CẬP NHẬT 24/08/2026 — case B3 (nghỉ ≥ 14 ngày thì tháng đó KHÔNG đóng BHXH, QĐ 595
+        // Đ.42) ĐÃ ĐƯỢC CÀI: xem `PayrollDataCollector` (khoá `attendance.mienBhThieuNgayCong`) và
+        // `PayrollCollectorInsuranceMinDaysTests`. Hệ quả với chính bộ dữ liệu này: Giám đốc chỉ còn 8
+        // ngày công ⇒ kỳ 06/2026 của NV này nay MIỄN toàn bộ bảo hiểm, nên nó không còn minh hoạ
+        // được trục "vượt trần + thiếu công" ở trên nữa — các con số kỳ vọng trong khối ghi chú này
+        // giờ chỉ còn đúng ở tầng đơn vị (`InsuranceCapOrderTests`, nơi nạp thừa số trực tiếp).
+        // Muốn giữ cả hai trục trên dữ liệu seed thì phải TÁCH thành hai NV: một người trên trần nghỉ
+        // ÍT ngày (≥ 14 ngày công ⇒ vẫn đóng, minh hoạ trần), một người nghỉ DÀI (minh hoạ miễn).
         //
         // ⚠️ Khoảng 08→25 của kỳ giữa cho đúng 14 ngày làm việc với trục demo mặc định (06/2026 bắt
         // đầu vào thứ Hai). Đổi `Seed:DemoAnchorMonth` thì số ngày lệch đi — case vẫn còn ý nghĩa

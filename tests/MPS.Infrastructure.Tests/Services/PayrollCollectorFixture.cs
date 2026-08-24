@@ -164,24 +164,34 @@ internal static class PayrollCollectorFixture
 
     /// <summary>Chạy collector trên <paramref name="db"/> và trả input của NV duy nhất.</summary>
     public static async Task<PayrollEmployeeInputs> CollectAsync(
-        AppDbContext db, IComplianceLookupService? compliance = null) =>
-        (await CollectFullAsync(db, compliance)).Employees.Single();
+        AppDbContext db, IComplianceLookupService? compliance = null, IClock? clock = null) =>
+        (await CollectFullAsync(db, compliance, clock)).Employees.Single();
 
     /// <summary>
     /// Như <see cref="CollectAsync"/> nhưng trả TOÀN BỘ kết quả — cần cho các test đọc
     /// <c>ComplianceRefs</c> / <c>ComplianceNotes</c> chứ không chỉ số của nhân viên.
     /// </summary>
     public static async Task<PayrollCollectionResult> CollectFullAsync(
-        AppDbContext db, IComplianceLookupService? compliance = null)
+        AppDbContext db, IComplianceLookupService? compliance = null, IClock? clock = null)
     {
         var lookup = compliance ?? new FakeComplianceLookup();
         var collector = new PayrollDataCollector(
-            db, lookup, new DayTypeResolver(db), new OvertimeMultiplierCalculator(lookup));
+            db, lookup, new DayTypeResolver(db), new OvertimeMultiplierCalculator(lookup),
+            // Kỳ của fixture là 07/2026; đồng hồ đặt sau đó để tháng được coi là ĐÃ KẾT THÚC — cổng
+            // BH-14 chỉ phán quyết khi tháng xong (xem `PayrollDataCollector.monthComplete`).
+            clock ?? new FixedClock(new DateTime(Year, Month + 1, 5, 3, 0, 0, DateTimeKind.Utc)));
 
         return await collector.CollectAsync(
             new PayrollCollectionRequest(Year, Month, PayDate, StandardDays, new[] { EmpId }),
             CancellationToken.None);
     }
+}
+
+/// <summary>Đồng hồ cố định — để cổng "tháng đã kết thúc" của BH-14 không phụ thuộc ngày chạy test.</summary>
+internal sealed class FixedClock : IClock
+{
+    public FixedClock(DateTime utcNow) => UtcNow = utcNow;
+    public DateTime UtcNow { get; }
 }
 
 /// <summary>Số liệu compliance cố định — tách khỏi DB để test đo đúng logic của collector.</summary>

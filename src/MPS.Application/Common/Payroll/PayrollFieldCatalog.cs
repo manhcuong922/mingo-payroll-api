@@ -50,6 +50,8 @@ public sealed class PayrollFieldCatalog : IPayrollFieldCatalog
         new(CongKhongBaoHiem, "Công của ngày KHÔNG đóng BH", "Chấm công", ColumnDataType.Number),
         new(CongLe, "Công ngày lễ (hưởng lương, không đi làm)", "Chấm công", ColumnDataType.Number),
         new(CongHuongLuong, "Tổng công hưởng lương (gồm công lễ)", "Chấm công", ColumnDataType.Number),
+        new(SoNgayCongHuongLuong, "Số ngày công hưởng lương (đếm theo NGÀY)", "Chấm công", ColumnDataType.Number),
+        new(MienBhThieuNgayCong, "Miễn BH do dưới 14 ngày công (1 = miễn)", "Chấm công", ColumnDataType.Number),
         new(DayHours, "Giờ ban ngày", "Chấm công", ColumnDataType.Number),
         new(NightHours, "Giờ ban đêm", "Chấm công", ColumnDataType.Number),
         new(TotalWorkHours, "Tổng giờ làm (ca chính + tăng ca)", "Chấm công", ColumnDataType.Number),
