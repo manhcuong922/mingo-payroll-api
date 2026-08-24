@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Interfaces.Payroll;
 using MPS.Application.Common.Payroll;
@@ -194,6 +194,24 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 && a.OvertimeRequestId == null)
             .ToListAsync(ct)).GroupBy(a => a.EmployeeInformationId).ToDictionary(g => g.Key, g => g.ToList());
 
+        // ⭐ CONG-HOUR-2026-08 — ngày công nay chia theo GIỜ THỰC / GIỜ ĐƯỢC PHÂN nên phải biết ca
+        // của từng bản ghi dài bao nhiêu. Nạp một lượt cho cả kỳ thay vì Include theo record.
+        var shiftById = await _db.ShiftTemplates.AsNoTracking()
+            .Select(s => new { s.Id, s.StandardHours, s.StandardDays })
+            .ToDictionaryAsync(s => s.Id, s => (s.StandardHours, s.StandardDays), ct);
+
+        // ⭐ CONG-HOUR-2026-08 — ngày có đơn đi muộn/về sớm ĐÃ DUYỆT được hưởng TRỌN công của ca
+        // (quyết định PO 24/08/2026), bất kể giờ thực tế thiếu bao nhiêu. Đơn luôn gắn NGÀY BẮT ĐẦU
+        // ca nên khoá tra cũng là ngày bắt đầu — ca đêm vắt sang hôm sau không cần đơn thứ hai.
+        var excusedDays = (await _db.LateEarlyRequests.AsNoTracking()
+            .Where(l => empIds.Contains(l.EmployeeInformationId)
+                && l.WorkDate >= periodStart && l.WorkDate <= periodEnd
+                && l.Status == LateEarlyRequestStatus.Approved)
+            .Select(l => new { l.EmployeeInformationId, l.WorkDate })
+            .ToListAsync(ct))
+            .Select(l => (l.EmployeeInformationId, l.WorkDate))
+            .ToHashSet();
+
         var otByEmp = (await _db.OvertimeRequests.AsNoTracking()
             .Where(o => empIds.Contains(o.EmployeeInformationId) && o.WorkDate >= periodStart && o.WorkDate <= periodEnd
                 && o.Status == OtRequestStatus.Approved)
@@ -326,7 +344,17 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 // ngày công được trả (xem DayWeight).
                 var dayType = dayTypeByDate.GetValueOrDefault(r.WorkDate, DayType.Normal);
 
-                var weight = DayWeight(r.Status, dayType);
+                var (shiftHours, shiftDays) = r.ShiftTemplateId is int shiftId
+                    && shiftById.TryGetValue(shiftId, out var shiftInfo)
+                        ? shiftInfo
+                        : (0m, 1m);
+
+                var weight = DayWeight(
+                    r, dayType,
+                    hasApprovedLateEarly: excusedDays.Contains((e.Id, r.WorkDate)),
+                    shiftStandardHours: shiftHours,
+                    shiftStandardDays: shiftDays,
+                    fallbackHoursPerDay: laborTimeline.For(r.WorkDate).StandardWorkingHoursPerDay);
                 if (weight > 0)
                 {
                     congCom += weight;
@@ -746,13 +774,70 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
     /// <c>PaidLeaveDay</c> khi có đơn nghỉ Approved với <c>IsPaid = true</c>. Nhờ đó nghỉ KHÔNG
     /// lương vẫn giữ trọng số 0, đúng nghiệp vụ.</para>
     /// </summary>
-    private static decimal DayWeight(AttendanceStatus status, DayType dayType) => status switch
+    /// <summary>
+    /// ⭐ CONG-HOUR-2026-08 — TRỌNG SỐ CÔNG CỦA MỘT BẢN GHI CHẤM CÔNG = giờ làm THỰC / giờ ĐƯỢC PHÂN
+    /// của chính ca đó, kẹp trần 1 ca và làm tròn 2 chữ số thập phân.
+    ///
+    /// <para>Trước bản này trọng số chỉ đọc <see cref="AttendanceStatus"/> — vốn chỉ biểu diễn được
+    /// 1 / 0,5 / 0 — nên giờ làm thật KHÔNG hề tham gia vào lương dù `DayHours`/`NightHours` đã có
+    /// sẵn trên bản ghi. Hai lỗ hổng đo được:</para>
+    /// <list type="bullet">
+    ///   <item>Ngưỡng nửa công là 240 phút (`AttendanceGraceDefaults.HalfDayThresholdMinutes`) tính
+    ///     trên phút MUỘN chứ không trên giờ LÀM, nên đi muộn 3h59 của ca 8h vẫn ra `Late` ⇒ ăn
+    ///     TRỌN 1 công dù chỉ làm 4h01. Ca 4h thì ngưỡng đó dài bằng cả ca ⇒ không bao giờ chạm.</item>
+    ///   <item>Ngược lại, muộn 6' + về sớm 6' (thiếu 12 phút) rơi vào nhánh "vừa muộn vừa sớm" ⇒
+    ///     `HalfDay` ⇒ mất NỬA ngày lương. Cùng một sự việc "không đủ ca" mà chế tài chênh nhau
+    ///     nhiều lần theo hướng vô lý.</item>
+    /// </list>
+    ///
+    /// <para>Mẫu số là <c>ShiftTemplate.StandardHours</c> — giờ chuẩn ĐÃ TRỪ nghỉ giữa ca của đúng ca
+    /// được phân, không phải giờ chuẩn của luật: ca sáng 4h làm 3h ra 0,75 công, ca 8h làm 4h ra 0,5
+    /// công. Nhân thêm <c>StandardDays</c> để ca được cấu hình chỉ tính nửa công vẫn ra nửa công
+    /// (mọi ca đang seed đều là 1,00 nên hiện không đổi số nào).</para>
+    ///
+    /// <para>Ba nhánh KHÔNG đi qua giờ, giữ nguyên như cũ:</para>
+    /// <list type="bullet">
+    ///   <item><paramref name="hasApprovedLateEarly"/> — ngày có đơn đi muộn/về sớm đã duyệt hưởng
+    ///     TRỌN công của ca (quyết định PO 24/08/2026). Approver là người chịu trách nhiệm về phần
+    ///     giờ được miễn, engine không trừ thêm lần nữa.</item>
+    ///   <item><see cref="AttendanceStatus.OnLeave"/> — nghỉ có lương không có giờ chấm nào để chia.</item>
+    ///   <item>Ca không tra được (bản ghi mất `ShiftTemplateId`, hoặc ca khai `StandardHours` ≤ 0) —
+    ///     lùi về giờ chuẩn/ngày của luật lao động; vẫn không tra được thì trả 0 thay vì tự cho
+    ///     đủ công, vì đó là dữ liệu hỏng chứ không phải bằng chứng đã đi làm.</item>
+    /// </list>
+    ///
+    /// <para>⚠️ Bản ghi KHÔNG có giờ (quên chấm ra ⇒ `AttendanceHourCalculator` trả 0, hoặc HR nhập
+    /// tay thiếu giờ) nay ra 0 công. CỐ Ý không fallback về 1 công: chính "có check-in là đủ công"
+    /// là lỗ hổng đang sửa. Hệ quả vận hành: HR phải sửa chấm công trước khi chốt kỳ.</para>
+    /// </summary>
+    private static decimal DayWeight(
+        Domain.Entities.Attendance.AttendanceRecord record,
+        DayType dayType,
+        bool hasApprovedLateEarly,
+        decimal shiftStandardHours,
+        decimal shiftStandardDays,
+        decimal fallbackHoursPerDay)
     {
-        AttendanceStatus.Present or AttendanceStatus.Late or AttendanceStatus.EarlyLeave => 1.0m,
-        AttendanceStatus.HalfDay => 0.5m,
-        AttendanceStatus.OnLeave when dayType == DayType.PaidLeaveDay => 1.0m,
-        _ => 0m,
-    };
+        if (record.Status == AttendanceStatus.OnLeave)
+            return dayType == DayType.PaidLeaveDay ? shiftStandardDays : 0m;
+
+        if (record.Status == AttendanceStatus.Absent)
+            return 0m;
+
+        if (hasApprovedLateEarly)
+            return shiftStandardDays;
+
+        var assigned = shiftStandardHours > 0m ? shiftStandardHours : fallbackHoursPerDay;
+        if (assigned <= 0m) return 0m;
+
+        var worked = record.DayHours + record.NightHours;
+        if (worked <= 0m) return 0m;
+
+        var ratio = worked / assigned;
+        if (ratio > 1m) ratio = 1m;
+
+        return Math.Round(ratio * shiftStandardDays, 2, MidpointRounding.AwayFromZero);
+    }
 
     private static Contract? PickContract(List<Contract> contracts, DateOnly start, DateOnly end)
     {

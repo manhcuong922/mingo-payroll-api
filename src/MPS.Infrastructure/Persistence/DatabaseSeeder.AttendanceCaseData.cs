@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MPS.Domain.Constants;
 using MPS.Domain.Entities.Attendance;
@@ -215,6 +215,13 @@ public sealed partial class DatabaseSeeder
                      ShiftStart, new TimeOnly(12, 0), 4m, "Làm nửa ca buổi sáng")),
             (26, new(AttendanceEnums.AttendanceStatus.Present,
                      new TimeOnly(9, 15), ShiftEnd, 8m, "Máy chấm công lỗi — đã có phiếu điều chỉnh được duyệt")),
+            // ⭐ CONG-HOUR-2026-08 — ngày thiếu giờ mà KHÔNG có đơn nào: chốt 5,5/8 giờ ⇒ 0,69 công.
+            // Cố ý để `Status = Present` (không phải `Late`) vì vòng seed đơn từ bên dưới tự sinh đơn
+            // Approved cho MỌI ngày Late/EarlyLeave — để `Late` thì ngày này lại được miễn trọn công
+            // và kịch bản "làm thiếu giờ thì mất công theo tỷ lệ" không còn dữ liệu nào minh hoạ.
+            (22, new(AttendanceEnums.AttendanceStatus.Present,
+                     new TimeOnly(10, 30), ShiftEnd, 5.5m,
+                     "Đi muộn 2,5 tiếng không có đơn — chỉ được tính 0,69 công")),
         };
 
         // Dồn về ngày làm việc gần nhất có thể làm hai mốc trùng nhau (khi trục demo đổi) — giữ mốc

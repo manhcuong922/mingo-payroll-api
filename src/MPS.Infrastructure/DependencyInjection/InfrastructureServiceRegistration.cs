@@ -169,9 +169,6 @@ public static class InfrastructureServiceRegistration
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
-        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
-        // BS-8: trừ thật vào quỹ phép năm khi approver bật DeductFromLeaveBalance.
-        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLeaveDeduction>();
         // Đọc tổng số phút trễ/sớm đã Approved cho (NV, ngày) — dùng bởi calculator + recalc.
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyExcuseResolver>();
         // Recompute giờ công cho bản ghi chấm công sau khi duyệt đơn đi trễ/về sớm.

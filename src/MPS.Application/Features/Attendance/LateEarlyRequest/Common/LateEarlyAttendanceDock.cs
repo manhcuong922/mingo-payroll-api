@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Features.Attendance.Common;
 using MPS.Domain.Interfaces.Attendance;
@@ -12,8 +12,11 @@ namespace MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 /// duyệt trễ/sớm (fix bug "chấm công xong 1 ca vẫn bị mất nửa giờ công dù đã có đơn").
 ///
 /// Idempotent: recalc luôn tính lại từ nguồn (CheckIn/Out + shift + excused) nên gọi nhiều
-/// lần cho cùng ngày không cộng dồn. Cờ <c>DeductFromLeaveBalance</c> không ảnh hưởng ở đây:
-/// nó chỉ quyết định có trừ quỹ phép năm hay không (xem <see cref="LateEarlyLeaveDeduction"/>).
+/// lần cho cùng ngày không cộng dồn.
+///
+/// ⭐ LATE-EARLY-2026-08 — giờ công recompute ở đây KHÔNG còn là căn cứ tính công của ngày: đơn
+/// Approved cho ngày nào thì ngày đó hưởng trọn công của ca (xem <c>PayrollDataCollector.DayWeight</c>).
+/// Số giờ vẫn phải đúng vì nó là căn cứ của trần OT, bậc hỗ trợ HĐ khoán và báo cáo chấm công.
 ///
 /// Nếu bản ghi chấm công chưa tồn tại (approve trước khi NV chấm công) → bỏ qua; khi bản ghi
 /// được TẠO sau, các handler chấm công cũng gọi <see cref="LateEarlyExcuseResolver"/> để
