@@ -29,6 +29,16 @@ public sealed class FinalizePayrollPeriodCommandHandler : IRequestHandler<Finali
         if (period.Status != PayrollPeriodStatus.Draft)
             throw new ConflictException("Chỉ chốt được kỳ đang ở trạng thái Nháp.");
 
+        // Cờ SỐ LIỆU CŨ (BS-6) là cảnh báo "nguồn đã đổi sau lượt tính gần nhất" — duyệt đơn, sửa
+        // chấm công, ký phụ lục… Chốt đè lên cờ này là chốt một bảng lương đã biết chắc là sai:
+        // số tiền trên bảng không còn khớp nguồn, mà kỳ Finalized thì bất biến ⇒ phần chênh chỉ còn
+        // đường đi vòng qua truy lĩnh/truy thu kỳ sau. Chặn ở đây rẻ hơn nhiều so với đi bù sau.
+        if (period.IsStale)
+            throw new ConflictException(
+                $"Kỳ lương {period.PeriodMonth:D2}/{period.PeriodYear} đang được đánh dấu SỐ LIỆU CŨ"
+                + (string.IsNullOrWhiteSpace(period.StaleReason) ? "" : $" ({period.StaleReason})")
+                + ". Hãy bấm Tính lại để cập nhật theo số liệu mới nhất trước khi chốt kỳ.");
+
         period.Status = PayrollPeriodStatus.Finalized;
         period.UpdatedAt = DateTime.UtcNow;
         period.UpdatedByUserId = userId;

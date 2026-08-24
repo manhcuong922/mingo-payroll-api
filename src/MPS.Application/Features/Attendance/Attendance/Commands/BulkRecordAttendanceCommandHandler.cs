@@ -8,6 +8,7 @@ using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using AttendanceRecordEntity = MPS.Domain.Entities.Attendance.AttendanceRecord;
 using AttendanceSettingEntity = MPS.Domain.Entities.Attendance.AttendanceSetting;
 
@@ -31,6 +32,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly LateEarlyExcuseResolver _excuseResolver;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
     private readonly IClock _clock;
 
     public BulkRecordAttendanceCommandHandler(
@@ -44,6 +46,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         IComplianceLookupService complianceLookup,
         IAttendanceEditLockChecker lockChecker,
         LateEarlyExcuseResolver excuseResolver,
+        IPayrollSourceChangeHandler payrollChange,
         IClock clock)
     {
         _repository = repository;
@@ -56,6 +59,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         _complianceLookup = complianceLookup;
         _lockChecker = lockChecker;
         _excuseResolver = excuseResolver;
+        _payrollChange = payrollChange;
         _clock = clock;
     }
 
@@ -76,6 +80,9 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
         var created = 0;
         var updated = 0;
         var failed = 0;
+        // NV thật sự được ghi/sửa trong batch — chỉ báo payroll cho những người này, không cho cả
+        // roster (row lỗi không đổi số liệu nên không được kéo theo capture).
+        var touched = new HashSet<int>();
         var items = new List<BulkRecordAttendanceItemResult>(request.Records.Count);
 
         foreach (var row in request.Records)
@@ -147,6 +154,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                     };
                     await _repository.AddAsync(entity, cancellationToken);
                     created++;
+                    touched.Add(row.EmployeeInformationId);
                     items.Add(new BulkRecordAttendanceItemResult(row.EmployeeInformationId, row.ShiftTemplateId, true, "Created", null));
                 }
                 else
@@ -163,6 +171,7 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                     existing.UpdatedByUserId = userId;
                     await _repository.UpdateAsync(existing, cancellationToken);
                     updated++;
+                    touched.Add(row.EmployeeInformationId);
                     items.Add(new BulkRecordAttendanceItemResult(row.EmployeeInformationId, row.ShiftTemplateId, true, "Updated", null));
                 }
             }
@@ -177,6 +186,14 @@ public class BulkRecordAttendanceCommandHandler : IRequestHandler<BulkRecordAtte
                 items.Add(new BulkRecordAttendanceItemResult(row.EmployeeInformationId, row.ShiftTemplateId, false, "Failed", ex.Message));
             }
         }
+
+        // BS-6 + BS-5: chấm công roster đổi ngày công của cả loạt NV → kỳ Draft mark stale, kỳ
+        // Finalized capture chênh lệch cho đúng những NV vừa đổi.
+        if (touched.Count > 0)
+            await _payrollChange.OnSourceChangedAsync(
+                new[] { (request.WorkDate.Year, request.WorkDate.Month) },
+                touched.ToList(),
+                $"Chấm công hàng loạt ngày {request.WorkDate:dd/MM/yyyy}", cancellationToken);
 
         return new BulkRecordAttendanceResult(created, updated, failed, items);
     }

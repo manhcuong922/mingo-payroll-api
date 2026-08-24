@@ -7,6 +7,7 @@ using MPS.Application.Features.Attendance.LateEarlyRequest.Common;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Attendance.Attendance.Commands;
 
@@ -20,6 +21,7 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly LateEarlyExcuseResolver _excuseResolver;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
     private readonly IClock _clock;
 
     public UpdateAttendanceByIdCommandHandler(
@@ -31,6 +33,7 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         IComplianceLookupService complianceLookup,
         IAttendanceEditLockChecker lockChecker,
         LateEarlyExcuseResolver excuseResolver,
+        IPayrollSourceChangeHandler payrollChange,
         IClock clock)
     {
         _repository = repository;
@@ -41,6 +44,7 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         _complianceLookup = complianceLookup;
         _lockChecker = lockChecker;
         _excuseResolver = excuseResolver;
+        _payrollChange = payrollChange;
         _clock = clock;
     }
 
@@ -114,7 +118,16 @@ public class UpdateAttendanceByIdCommandHandler : IRequestHandler<UpdateAttendan
         existing.UpdatedAt = _clock.UtcNow;
         existing.UpdatedByUserId = userId;
 
-        return await _repository.UpdateAsync(existing, cancellationToken);
+        var updated = await _repository.UpdateAsync(existing, cancellationToken);
+
+        // BS-6 + BS-5: sửa chấm công (kể cả bản ghi ca OT — nhánh SplitHoursWithoutShift ở dưới) đổi
+        // số liệu nguồn của kỳ → kỳ Draft mark stale, kỳ Finalized capture chênh lệch.
+        if (updated)
+            await _payrollChange.OnSourceChangedAsync(
+                existing.WorkDate.Year, existing.WorkDate.Month, existing.EmployeeInformationId,
+                $"Sửa chấm công ngày {existing.WorkDate:dd/MM/yyyy}", cancellationToken);
+
+        return updated;
     }
 
     /// <summary>Chỉ dùng cho OT record (không có shift → không có break, không cap khung ca).</summary>

@@ -10,6 +10,7 @@ using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using MPS.Application.Settings;
 // 'ShiftTemplate' trùng tên với namespace Features.Attendance.ShiftTemplate → alias cho rõ.
 using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
@@ -37,6 +38,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     private readonly IEmployeeDayOffChecker _dayOffChecker;
     private readonly IOvertimeRequestRepository _overtimeRepository;
     private readonly LateEarlyExcuseResolver _excuseResolver;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
     private readonly IClock _clock;
     private readonly ILogger<FaceCheckinCommandHandler> _logger;
     private readonly AttendanceCheckinSettings _checkinSettings;
@@ -53,6 +55,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         IEmployeeDayOffChecker dayOffChecker,
         IOvertimeRequestRepository overtimeRepository,
         LateEarlyExcuseResolver excuseResolver,
+        IPayrollSourceChangeHandler payrollChange,
         IClock clock,
         ILogger<FaceCheckinCommandHandler> logger,
         IOptions<AttendanceCheckinSettings> checkinSettings)
@@ -68,6 +71,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         _dayOffChecker = dayOffChecker;
         _overtimeRepository = overtimeRepository;
         _excuseResolver = excuseResolver;
+        _payrollChange = payrollChange;
         _clock = clock;
         _logger = logger;
         _checkinSettings = checkinSettings.Value;
@@ -249,6 +253,11 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             };
 
             var newId = await _attendanceRepository.AddAsync(record, cancellationToken);
+
+            await NotifyPayrollAsync(
+                employeeInformationId, workDate,
+                $"Chấm công vào ca ngày {workDate:dd/MM/yyyy}", cancellationToken);
+
             return new FaceCheckinResultDto(
                 Success: true,
                 CheckinType: FaceCheckinType.Checkin,
@@ -333,6 +342,12 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         await RecordActualOvertimeIfAnyAsync(
             employeeInformationId, workDate, chosen.EndAt, localTime, updateUserId, cancellationToken);
 
+        // Đặt SAU `RecordActualOvertimeIfAnyAsync` để một lần báo phủ cả giờ ca chính lẫn bản ghi OT
+        // vừa sinh — chính bản ghi OT đó mới là thứ làm tiền tăng ca phát sinh.
+        await NotifyPayrollAsync(
+            employeeInformationId, workDate,
+            $"Chấm công tan ca ngày {workDate:dd/MM/yyyy}", cancellationToken);
+
         return new FaceCheckinResultDto(
             Success: true,
             CheckinType: FaceCheckinType.Checkout,
@@ -416,6 +431,22 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         };
         await _attendanceRepository.AddAsync(record, cancellationToken);
     }
+
+    /// <summary>
+    /// BS-6 + BS-5 — báo cho bảng lương biết ngày công/giờ OT của NV vừa đổi: kỳ Draft mark stale,
+    /// kỳ Finalized capture chênh lệch thành khoản truy lĩnh/truy thu.
+    ///
+    /// <para>Quét mặt là NGUỒN chính của số liệu công. Trước đây chỉ các bước DUYỆT ĐƠN mới báo, nên
+    /// tiền OT — vốn chỉ phát sinh khi bản ghi chấm công OT ra đời, tức luôn SAU khi duyệt đơn — không
+    /// bao giờ tới được cổng truy lĩnh.</para>
+    ///
+    /// <para>Best-effort như mọi call-site khác: service tự nuốt lỗi + log, không được phép làm hỏng
+    /// thao tác chấm công của NLĐ đang đứng trước camera.</para>
+    /// </summary>
+    private Task NotifyPayrollAsync(
+        int employeeInformationId, DateOnly workDate, string reason, CancellationToken ct) =>
+        _payrollChange.OnSourceChangedAsync(
+            workDate.Year, workDate.Month, employeeInformationId, reason, ct);
 
     private static FaceCheckinResultDto Fail(string message) =>
         new(false, FaceCheckinType.Failed, null, message, null, null, null, null);

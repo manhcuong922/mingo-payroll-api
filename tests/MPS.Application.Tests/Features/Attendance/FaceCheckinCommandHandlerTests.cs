@@ -12,6 +12,7 @@ using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using Xunit;
 
 namespace MPS.Application.Tests.Features.Attendance;
@@ -43,6 +44,7 @@ public sealed class FaceCheckinCommandHandlerTests
         return mock;
     }
     private readonly Mock<IClock> _clock = new();
+    private readonly Mock<IPayrollSourceChangeHandler> _payrollChange = new();
     private readonly Mock<ILogger<FaceCheckinCommandHandler>> _logger = new();
 
     private AttendanceCheckinSettings _checkinSettings = new();
@@ -59,6 +61,7 @@ public sealed class FaceCheckinCommandHandlerTests
         _dayOffChecker.Object,
         _overtimeRepository.Object,
         new LateEarlyExcuseResolver(_lateEarlyRepository.Object),
+        _payrollChange.Object,
         _clock.Object,
         _logger.Object,
         Microsoft.Extensions.Options.Options.Create(_checkinSettings));

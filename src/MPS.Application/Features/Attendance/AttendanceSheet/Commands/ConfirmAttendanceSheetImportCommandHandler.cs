@@ -6,6 +6,7 @@ using MPS.Application.Features.Attendance.AttendanceSheet.Common;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Attendance.AttendanceSheet.Commands;
 
@@ -16,17 +17,20 @@ public sealed class ConfirmAttendanceSheetImportCommandHandler
     private readonly IAttendanceRecordRepository _records;
     private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
 
     public ConfirmAttendanceSheetImportCommandHandler(
         IAttendanceSheetImportCache cache,
         IAttendanceRecordRepository records,
         IAttendanceEditLockChecker lockChecker,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPayrollSourceChangeHandler payrollChange)
     {
         _cache = cache;
         _records = records;
         _lockChecker = lockChecker;
         _currentUser = currentUser;
+        _payrollChange = payrollChange;
     }
 
     public async Task<AttendanceSheetImportConfirmResultDto> Handle(
@@ -48,6 +52,19 @@ public sealed class ConfirmAttendanceSheetImportCommandHandler
 
         // Re-check lock per date (state có thể đổi giữa Preview và Confirm)
         var lockCache = new Dictionary<DateOnly, bool>();
+
+        // NV thật sự được ghi/sửa, gom THEO THÁNG: file import có thể vắt qua 2 tháng, mà mỗi tháng
+        // là một kỳ lương riêng — báo đúng NV cho đúng kỳ, không rải cả danh sách sang tháng không
+        // liên quan (capture chạy trên NV nào thì ghi đè khoản chờ của NV đó).
+        var touchedByMonth = new Dictionary<(int Year, int Month), HashSet<int>>();
+
+        void MarkTouched(DateOnly workDate, int employeeInformationId)
+        {
+            var key = (workDate.Year, workDate.Month);
+            if (!touchedByMonth.TryGetValue(key, out var emps))
+                touchedByMonth[key] = emps = new HashSet<int>();
+            emps.Add(employeeInformationId);
+        }
 
         var now = DateTime.UtcNow;
         foreach (var cell in entry.ResolvedCells)
@@ -97,6 +114,7 @@ public sealed class ConfirmAttendanceSheetImportCommandHandler
                 };
                 await _records.AddAsync(entity, ct);
                 applied++;
+                MarkTouched(cell.WorkDate, cell.EmployeeInformationId);
             }
             else
             {
@@ -105,8 +123,16 @@ public sealed class ConfirmAttendanceSheetImportCommandHandler
                 existing.UpdatedByUserId = userId;
                 await _records.UpdateAsync(existing, ct);
                 applied++;
+                MarkTouched(cell.WorkDate, cell.EmployeeInformationId);
             }
         }
+
+        // BS-6 + BS-5: import bảng công ghi đè trạng thái ngày công của cả bảng → kỳ Draft mark
+        // stale, kỳ Finalized capture chênh lệch cho từng NV bị đổi.
+        foreach (var ((year, month), emps) in touchedByMonth)
+            await _payrollChange.OnSourceChangedAsync(
+                new[] { (year, month) }, emps.ToList(),
+                $"Import bảng chấm công tháng {month:D2}/{year}", ct);
 
         // Invalidate cache sau khi apply xong
         _cache.Remove(request.PreviewId);
