@@ -128,4 +128,46 @@ public class BhxhRemittanceTemplateShapeTests
         text.Should().NotContain("HIM LAM");
         text.Should().NotContain("1020110000102717");
     }
+
+    [Fact]
+    public void DienDuMuoiO_ThiCa20OTrenBanInDeuCoCacheDung()
+    {
+        // Chốt lớp bảo vệ cuối: bản in chạy bằng công thức nên trình xem KHÔNG tự tính lại
+        // (xem trước của trình duyệt/Drive, LibreOffice mặc định) chỉ đọc cache. Cache còn 0
+        // là kế toán mang ra ngân hàng tờ ủy nhiệm chi trắng số tiền.
+        var filler = new XlsxTemplateFiller();
+        var edits = WrittenCells
+            .Select(cell => cell == BhxhRemittanceFormCells.AmountFigures
+                ? XlsxCellEdit.OfNumber(BhxhRemittanceFormCells.DataSheet, cell, 76_189_773m)
+                : XlsxCellEdit.OfText(BhxhRemittanceFormCells.DataSheet, cell, $"gia-tri-{cell}"))
+            .ToArray();
+
+        using var template = Templates.Open(PaymentTemplateKind.BhxhRemittanceOrder);
+        var result = filler.Fill(template, edits);
+
+        using var ms = new MemoryStream(result);
+        using var doc = SpreadsheetDocument.Open(ms, false);
+
+        var formulaCells = OpenSheet(doc, BhxhRemittanceFormCells.FormSheet)
+            .Worksheet.Descendants<Cell>()
+            .Where(c => c.CellFormula is not null)
+            .ToList();
+
+        formulaCells.Should().HaveCount(WrittenCells.Length * 2);
+
+        foreach (var cell in formulaCells)
+        {
+            cell.CellValue?.InnerText.Should().NotBeNullOrEmpty(
+                "ô {0} (={1}) phải có cache sau khi điền", cell.CellReference?.Value, cell.CellFormula!.Text);
+
+            cell.CellValue!.InnerText.Should().NotBe("0",
+                "ô {0} (={1}) còn cache 0 của biểu mẫu gốc", cell.CellReference?.Value, cell.CellFormula!.Text);
+        }
+
+        // Ô tiền phải giữ KIỂU SỐ để còn ăn định dạng phân tách hàng nghìn của biểu mẫu.
+        formulaCells
+            .Where(c => c.CellFormula!.Text.EndsWith(
+                $"!${BhxhRemittanceFormCells.AmountFigures[..1]}${BhxhRemittanceFormCells.AmountFigures[1..]}"))
+            .Should().OnlyContain(c => c.CellValue!.InnerText == "76189773" && c.DataType == null);
+    }
 }
