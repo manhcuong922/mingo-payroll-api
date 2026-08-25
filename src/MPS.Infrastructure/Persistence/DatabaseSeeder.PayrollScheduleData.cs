@@ -124,7 +124,7 @@ public sealed partial class DatabaseSeeder
     }
 
     /// <summary>
-    /// Bốn nhân viên cùng đăng ký WFH 23–25/08/2026. Ngày Chủ nhật không có phân ca nên đơn vẫn
+    /// Bảy nhân viên cùng đăng ký WFH 23–25/08/2026. Ngày Chủ nhật không có phân ca nên đơn vẫn
     /// giữ khoảng 23–25 nhưng chỉ tự sinh công cho các ngày làm việc đã được phân ca (24 và 25).
     /// Đây chính là hành vi của <c>WfhRequestRepository.ApproveAsync</c>, không ghi cứng kết quả lương.
     /// </summary>
@@ -132,7 +132,11 @@ public sealed partial class DatabaseSeeder
     {
         var start = DemoCurrentMonth.AddDays(22);
         var end = DemoCurrentMonth.AddDays(24);
-        var usernames = new[] { "hr", "accountant", "cn_x1_2", "cn_x3_3" };
+        var usernames = new[]
+        {
+            "hr", "accountant", "cn_x1_2", "cn_x3_3",
+            "employee1", "employee2", "employee4",
+        };
 
         return SeedWfhCasesAsync(
             start, end, usernames,

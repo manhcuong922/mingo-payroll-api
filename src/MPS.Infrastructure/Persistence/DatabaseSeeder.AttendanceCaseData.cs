@@ -68,8 +68,11 @@ public sealed partial class DatabaseSeeder
         var usernames = new[]
         {
             "totruong_x1", "totruong_x2", "totruong_x3",
-            "quandoc_x1", "quandoc_x2",
+            "quandoc_x1", "quandoc_x2", "quandoc_x3",
             "cn_x1_3", "cn_x1_4", "cn_x2_3", "cn_x2_4", "cn_x2_5", "cn_x3_5", "cn_x3_6",
+            // Nhóm hồ sơ vận hành bổ sung: dùng để rải OT/ngày lễ/đơn từ cho nhiều người thay vì
+            // dồn mọi biến thể vào một nhân viên case. Đây đều là hồ sơ + HĐ thật của seed gốc.
+            "employee1", "employee2", "employee4", "employee6",
             "director",
         };
         var emps = await _context.EmployeeInformations.AsNoTracking()
@@ -103,6 +106,28 @@ public sealed partial class DatabaseSeeder
             leaveTypeIds, adminId, ct);
         await EnsureLeaveRequestAsync(emps, "cn_x3_6", "ANNUAL", DemoDay(2, 27), DemoDay(2, 27),
             isPaid: true, "Nghỉ phép năm một ngày để làm thủ tục hành chính cá nhân.",
+            leaveTypeIds, adminId, ct);
+
+        // Dữ liệu đơn từ bổ sung ở các kỳ lân cận. Mỗi đơn đều được dựng trước attendance để ngày
+        // tương ứng trở thành OnLeave; kỳ 08 được lớp PreparePayrollMonthDataAsync đối chiếu lại đơn
+        // khi sinh dữ liệu tạm tính.
+        await EnsureLeaveRequestAsync(emps, "totruong_x1", "ANNUAL", DemoDay(1, 8), DemoDay(1, 9),
+            isPaid: true, "Nghỉ phép năm hai ngày để đưa gia đình đi khám định kỳ.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "cn_x2_3", "UNPAID", DemoDay(1, 22), DemoDay(1, 22),
+            isPaid: false, "Nghỉ một ngày không hưởng lương để giải quyết việc gia đình đột xuất.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "employee1", "SICK", DemoDay(1, 15), DemoDay(1, 16),
+            isPaid: false, "Nghỉ ốm hai ngày có giấy khám bệnh và bàn giao công việc cho nhóm.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "employee2", "ANNUAL", DemoCurrentMonth.AddDays(2), DemoCurrentMonth.AddDays(3),
+            isPaid: true, "Nghỉ phép năm hai ngày đầu tháng, đã đăng ký và được HR phê duyệt.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "employee4", "UNPAID", DemoCurrentMonth.AddDays(9), DemoCurrentMonth.AddDays(9),
+            isPaid: false, "Nghỉ không hưởng lương một ngày để hoàn tất thủ tục nhà ở.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "employee6", "SICK", DemoCurrentMonth.AddDays(16), DemoCurrentMonth.AddDays(17),
+            isPaid: false, "Nghỉ ốm hai ngày theo chỉ định điều trị ngoại trú.",
             leaveTypeIds, adminId, ct);
 
         // ⭐ X1a — NGHỈ ỐM 14 NGÀY LÀM VIỆC của người có lương TRÊN TRẦN đóng BHXH (Giám đốc, GD-4 =
@@ -148,6 +173,18 @@ public sealed partial class DatabaseSeeder
             leaveTypeIds, adminId, ct);
 
         await SeedCaseMonthAttendanceAsync(emps, holidays, shiftId.Value, adminId, ct);
+        // Kỳ 05 không sinh bảng lương demo nhưng chứa ngày lễ 01/05 dùng để kiểm tra OT/phụ trội.
+        // Vẫn dựng bảng phân ca thật để mọi attendance ngày lễ có đủ chuỗi schedule -> assignment.
+        var firstCaseMonth = DemoPeriodStart(0);
+        var firstCaseWorkdays = Enumerable.Range(1, DateTime.DaysInMonth(firstCaseMonth.Year, firstCaseMonth.Month))
+            .Select(day => new DateOnly(firstCaseMonth.Year, firstCaseMonth.Month, day))
+            .Where(day => day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday
+                && !holidays.Contains(day))
+            .ToArray();
+        await EnsurePayrollMonthScheduleAsync(firstCaseMonth, EndOfMonth(firstCaseMonth), shiftId.Value,
+            adminId, emps.Values.Select(e => e.Id).ToArray(), firstCaseWorkdays, ct);
+        await ReconcileCurrentMonthApprovedLeaveAttendanceAsync(emps.Values.Select(e => e.Id).ToHashSet(), ct);
+        await ReconcileSeededAttendanceAssignmentsAsync(emps.Values.Select(e => e.Id).ToHashSet(), adminId, ct);
         await SeedOvertimeCasesAsync(emps, adminId, ct);
         await SeedLateEarlyAndAdjustmentCasesAsync(emps, adminId, ct);
         await SeedNamedEvaluationScoresAsync(adminId, ct);
@@ -183,11 +220,6 @@ public sealed partial class DatabaseSeeder
             foreach (var username in emps.Keys)
             {
                 var empId = emps[username].Id;
-                var already = await _context.AttendanceRecords.AsNoTracking()
-                    .AnyAsync(a => a.EmployeeInformationId == empId
-                        && a.WorkDate >= monthStart && a.WorkDate <= EndOfMonth(monthStart), ct);
-                if (already) continue;
-
                 // HĐ khoán có khối lượng giao theo lô nên làm cả thứ Bảy — đây là thứ đẩy tổng giờ
                 // vượt mốc 200h của bậc hỗ trợ theo tiến độ; người làm công ăn lương thì không.
                 var includeSaturday = username.Equals("cn_x2_5", StringComparison.OrdinalIgnoreCase);
@@ -207,7 +239,45 @@ public sealed partial class DatabaseSeeder
     private Dictionary<string, Dictionary<DateOnly, SpecialDay>> BuildSpecialDays(int periodIndex)
     {
         var result = new Dictionary<string, Dictionary<DateOnly, SpecialDay>>(StringComparer.OrdinalIgnoreCase);
-        if (periodIndex != 2) return result;   // toàn bộ kịch bản "tháng xấu" đặt ở kỳ demo chính 07/2026
+
+        // Tháng 05: nhiều nhân viên có CA CHÍNH Fulltime vào ngày Quốc tế Lao động. Đây không phải
+        // đơn OT; collector phải trả đủ quyền nghỉ lễ + phần phụ trội làm việc ngày lễ.
+        if (periodIndex == 0)
+        {
+            var holiday = DemoDay(0, 1);
+            foreach (var username in new[] { "totruong_x2", "cn_x2_3", "employee2" })
+                result[username] = new Dictionary<DateOnly, SpecialDay>
+                {
+                    [holiday] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                        "Ca Fulltime trực vận hành ngày Quốc tế Lao động, không phải đơn tăng ca."),
+                };
+            return result;
+        }
+
+        // Tháng 06: ca chính ngày nghỉ tuần cho nhiều bộ phận. Dữ liệu có attendance + assignment
+        // FULLTIME riêng để phụ trội ngày nghỉ không bị tạo từ một dòng công rơi tự do.
+        if (periodIndex == 1)
+        {
+            var saturday = DemoDay(1, 13);
+            while (saturday.DayOfWeek != DayOfWeek.Saturday) saturday = saturday.AddDays(1);
+            var juneSunday = DemoDay(1, 14);
+            while (juneSunday.DayOfWeek != DayOfWeek.Sunday) juneSunday = juneSunday.AddDays(1);
+
+            result["cn_x2_3"] = new Dictionary<DateOnly, SpecialDay>
+            {
+                [saturday] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                    "Ca Fulltime xử lý bảo trì dây chuyền vào ngày nghỉ tuần."),
+            };
+            foreach (var username in new[] { "totruong_x1", "quandoc_x3" })
+                result[username] = new Dictionary<DateOnly, SpecialDay>
+                {
+                    [juneSunday] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                        "Ca Fulltime trực điều phối sản xuất Chủ nhật theo lịch đã công bố."),
+                };
+            return result;
+        }
+
+        if (periodIndex != 2) return result;
 
         // ⭐ C12 — một tháng có đủ mọi sự cố chấm công.
         var badMonth = new (int Day, SpecialDay Spec)[]
@@ -239,6 +309,31 @@ public sealed partial class DatabaseSeeder
         foreach (var (day, spec) in badMonth) days.TryAdd(NearestWorkday(DemoDay(2, day)), spec);
 
         result["cn_x1_3"] = days;
+
+        // Dữ liệu vận hành tháng 07: rải thêm ca chính cuối tuần cho nhóm nhân viên văn phòng/kỹ
+        // thuật không thuộc 27 dòng oracle. Mỗi ngày sẽ đi qua AddMonthAttendanceAsync rồi được
+        // EnsurePayrollMonthScheduleAsync/ReconcileSeededAttendanceAssignmentsAsync nối vào bảng
+        // phân ca thật; tuyệt đối không mô tả những ca này như đơn OT.
+        result["employee1"] = new Dictionary<DateOnly, SpecialDay>
+        {
+            [DemoDay(2, 4)] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                "Ca Fulltime thứ Bảy hỗ trợ kiểm kê kho đầu tháng theo lịch điều động."),
+        };
+        result["employee2"] = new Dictionary<DateOnly, SpecialDay>
+        {
+            [DemoDay(2, 5)] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                "Ca Fulltime Chủ nhật trực đối soát chứng từ và bàn giao số liệu tuần."),
+        };
+        result["employee4"] = new Dictionary<DateOnly, SpecialDay>
+        {
+            [DemoDay(2, 25)] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                "Ca Fulltime thứ Bảy hỗ trợ bảo trì hệ thống cuối tháng theo kế hoạch."),
+        };
+        result["employee6"] = new Dictionary<DateOnly, SpecialDay>
+        {
+            [DemoDay(2, 26)] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                "Ca Fulltime Chủ nhật trực vận hành và xử lý công việc tồn cuối kỳ."),
+        };
 
         // ⭐ REST-RESP — giờ làm THƯỜNG vào Chủ nhật (không phải OT) của tổ trưởng có phụ cấp trách
         // nhiệm IsBhxhBase. Đây là nhánh còn thiếu trong ma trận cũ: phụ trội ngày nghỉ phải dùng đơn
@@ -279,11 +374,20 @@ public sealed partial class DatabaseSeeder
         var leaveDays = await LoadApprovedLeaveDaysAsync(empId, monthStart, ct);
         var now = DateTime.UtcNow;
         var end = EndOfMonth(monthStart);
+        var existingMainRecords = (await _context.AttendanceRecords
+                .Where(a => a.EmployeeInformationId == empId
+                    && a.WorkDate >= monthStart && a.WorkDate <= end
+                    && a.ShiftTemplateId == shiftId
+                    && a.OvertimeRequestId == null)
+                .ToListAsync(ct))
+            .GroupBy(a => a.WorkDate)
+            .ToDictionary(g => g.Key, g => g.First());
 
         for (var day = monthStart; day <= end; day = day.AddDays(1))
         {
             if (day < from || (to is DateOnly last && day > last)) continue;
-            if (holidays.Contains(day)) continue;
+            // Ngày lễ mặc định nghỉ; chỉ sinh attendance khi có SpecialDay mô tả một ca chính thật.
+            if (holidays.Contains(day) && !specials.ContainsKey(day)) continue;
 
             // Ngày cuối tuần chỉ được sinh khi có lịch nghiệp vụ rõ ràng: HĐ khoán làm thứ Bảy hoặc
             // một SpecialDay đã khai. Nhờ đó ca Chủ nhật REST-RESP có đủ attendance rồi lớp schedule
@@ -303,6 +407,23 @@ public sealed partial class DatabaseSeeder
             TimeOnly? checkOut = onLeave ? null : special?.CheckOut ?? ShiftEnd;
             var hours = onLeave ? 0m : special?.DayHours ?? 8m;
             if (status == AttendanceEnums.AttendanceStatus.Absent) { checkIn = null; checkOut = null; hours = 0m; }
+
+            // Seeder bổ sung phải chạy được trên DB đã có. Ngày nền bình thường giữ nguyên; riêng
+            // ngày vừa có đơn hoặc kịch bản đặc biệt thì reconcile bản ghi cũ thay vì bỏ cả tháng.
+            if (existingMainRecords.TryGetValue(day, out var existing))
+            {
+                if (onLeave || special is not null)
+                {
+                    existing.Status = status;
+                    existing.DayHours = hours;
+                    existing.NightHours = 0m;
+                    existing.CheckInAt = checkIn is TimeOnly existingIn ? day.ToDateTime(existingIn) : null;
+                    existing.CheckOutAt = checkOut is TimeOnly existingOut ? day.ToDateTime(existingOut) : null;
+                    existing.Notes = onLeave ? "Nghỉ theo đơn đã duyệt" : special?.Note;
+                    existing.UpdatedAt = now;
+                }
+                continue;
+            }
 
             await _context.AttendanceRecords.AddAsync(new AttendanceRecord
             {
@@ -361,6 +482,114 @@ public sealed partial class DatabaseSeeder
             for (var d = r.StartDate; d <= r.EndDate; d = d.AddDays(1))
                 if (d >= monthStart && d <= end) days.Add(d);
         return days;
+    }
+
+    /// <summary>
+    /// Kỳ hiện tại đã có thể được seed tạm tính ở một lần chạy trước. Khi bổ sung đơn nghỉ sau đó,
+    /// không tạo attendance giả mới nhưng phải đổi những dòng ca chính đã tồn tại sang OnLeave.
+    /// DB sạch vẫn được <c>PreparePayrollMonthDataAsync</c> tạo đúng ngay từ đơn đã duyệt.
+    /// </summary>
+    private async Task ReconcileCurrentMonthApprovedLeaveAttendanceAsync(
+        IReadOnlySet<int> employeeIds, CancellationToken ct)
+    {
+        var monthStart = DemoCurrentMonth;
+        var monthEnd = EndOfMonth(monthStart);
+        var approvedRanges = await _context.LeaveRequests.AsNoTracking()
+            .Where(r => employeeIds.Contains(r.EmployeeInformationId)
+                && r.Status == AttendanceEnums.LeaveRequestStatus.Approved
+                && r.StartDate <= monthEnd && r.EndDate >= monthStart)
+            .Select(r => new { r.EmployeeInformationId, r.StartDate, r.EndDate })
+            .ToListAsync(ct);
+        if (approvedRanges.Count == 0) return;
+
+        var leaveKeys = new HashSet<(int EmployeeId, DateOnly WorkDate)>();
+        foreach (var request in approvedRanges)
+            for (var day = request.StartDate < monthStart ? monthStart : request.StartDate;
+                 day <= (request.EndDate > monthEnd ? monthEnd : request.EndDate);
+                 day = day.AddDays(1))
+                leaveKeys.Add((request.EmployeeInformationId, day));
+
+        var records = await _context.AttendanceRecords
+            .Where(a => employeeIds.Contains(a.EmployeeInformationId)
+                && a.WorkDate >= monthStart && a.WorkDate <= monthEnd
+                && a.ShiftTemplateId != null && a.OvertimeRequestId == null)
+            .ToListAsync(ct);
+        var now = DateTime.UtcNow;
+        foreach (var record in records.Where(a => leaveKeys.Contains((a.EmployeeInformationId, a.WorkDate))))
+        {
+            record.Status = AttendanceEnums.AttendanceStatus.OnLeave;
+            record.DayHours = 0m;
+            record.NightHours = 0m;
+            record.CheckInAt = null;
+            record.CheckOutAt = null;
+            record.Notes = "Nghỉ theo đơn đã duyệt";
+            record.UpdatedAt = now;
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Khi bổ sung kịch bản vào DB đã seed từ trước, attendance ngày lễ/ngày nghỉ có thể được thêm
+    /// sau lần bảng phân ca tháng đã dựng. Bù assignment vào đúng ScheduleTemplate hiện hữu; DB mới
+    /// chưa có schedule thì bỏ qua để <c>EnsurePayrollMonthScheduleAsync</c> tạo liên kết ở bước sau.
+    /// </summary>
+    private async Task ReconcileSeededAttendanceAssignmentsAsync(
+        IReadOnlySet<int> employeeIds, int adminId, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var months = Enumerable.Range(0, PayrollDemoMonths).Select(DemoPeriodStart)
+            .Append(DemoCurrentMonth)
+            .Distinct()
+            .ToArray();
+        foreach (var monthStart in months)
+        {
+            var monthEnd = EndOfMonth(monthStart);
+            var scheduleName = $"{PayrollSchedulePrefix} {monthStart:MM/yyyy}";
+            var scheduleId = await _context.ScheduleTemplates.AsNoTracking()
+                .Where(s => s.Name == scheduleName)
+                .Select(s => (int?)s.Id)
+                .FirstOrDefaultAsync(ct);
+            if (scheduleId is null) continue;
+
+            var attendanceKeys = (await _context.AttendanceRecords.AsNoTracking()
+                    .Where(a => employeeIds.Contains(a.EmployeeInformationId)
+                        && a.WorkDate >= monthStart && a.WorkDate <= monthEnd
+                        && a.ShiftTemplateId != null && a.OvertimeRequestId == null)
+                    .Select(a => new
+                    {
+                        EmployeeId = a.EmployeeInformationId,
+                        a.WorkDate,
+                        ShiftId = a.ShiftTemplateId!.Value,
+                    })
+                    .ToListAsync(ct))
+                .Select(a => (a.EmployeeId, a.WorkDate, a.ShiftId))
+                .ToHashSet();
+
+            var existing = (await _context.EmployeeShiftAssignments.AsNoTracking()
+                    .Where(a => employeeIds.Contains(a.EmployeeInformationId)
+                        && a.WorkDate >= monthStart && a.WorkDate <= monthEnd)
+                    .Select(a => new { EmployeeId = a.EmployeeInformationId, a.WorkDate, ShiftId = a.ShiftTemplateId })
+                    .ToListAsync(ct))
+                .Select(a => (a.EmployeeId, a.WorkDate, a.ShiftId))
+                .ToHashSet();
+
+            var missing = attendanceKeys.Where(k => !existing.Contains(k))
+                .Select(k => new EmployeeShiftAssignment
+                {
+                    EmployeeInformationId = k.EmployeeId,
+                    WorkDate = k.WorkDate,
+                    ShiftTemplateId = k.ShiftId,
+                    ScheduleTemplateId = scheduleId.Value,
+                    CreatedAt = now,
+                    CreatedByUserId = adminId,
+                })
+                .ToList();
+            if (missing.Count > 0)
+                await _context.EmployeeShiftAssignments.AddRangeAsync(missing, ct);
+        }
+
+        await _context.SaveChangesAsync(ct);
     }
 
     // ===== Đơn nghỉ =====
@@ -446,6 +675,8 @@ public sealed partial class DatabaseSeeder
         if (emps.ContainsKey("totruong_x1"))
             byPerson.Add(("totruong_x1", new List<OvertimeCase>
             {
+                new(0, 1, OvertimeDayKind.Holiday, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Trực xử lý kế hoạch giao hàng ngày Quốc tế Lao động"),
                 new(2, 9, OvertimeDayKind.Workday, new TimeOnly(17, 30), new TimeOnly(19, 30),
                     "Hoàn thiện đóng gói lô hàng giao sáng hôm sau"),
             }));
@@ -471,6 +702,50 @@ public sealed partial class DatabaseSeeder
                     "Trực xử lý đơn hàng xuất khẩu ngày Quốc tế Lao động"),
                 new(2, 22, OvertimeDayKind.Workday, new TimeOnly(17, 30), new TimeOnly(19, 30),
                     "Hoàn thiện kiểm tra chất lượng trước khi bàn giao"),
+            }));
+
+        if (emps.ContainsKey("quandoc_x3"))
+            byPerson.Add(("quandoc_x3", new List<OvertimeCase>
+            {
+                new(0, 1, OvertimeDayKind.Holiday, new TimeOnly(13, 0), new TimeOnly(17, 0),
+                    "Giám sát chạy thử dây chuyền sau bảo trì trong ngày Quốc tế Lao động"),
+            }));
+
+        if (emps.ContainsKey("employee1"))
+            byPerson.Add(("employee1", new List<OvertimeCase>
+            {
+                new(0, 1, OvertimeDayKind.Holiday, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Hỗ trợ kiểm kê kho nguyên liệu trong ngày Quốc tế Lao động"),
+                new(1, 18, OvertimeDayKind.Workday, new TimeOnly(17, 30), new TimeOnly(19, 30),
+                    "Hoàn tất biên bản nghiệm thu cuối ngày theo yêu cầu khách hàng"),
+            }));
+
+        if (emps.ContainsKey("cn_x2_4"))
+            byPerson.Add(("cn_x2_4", new List<OvertimeCase>
+            {
+                new(1, 20, OvertimeDayKind.Saturday, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Tăng ca sáng thứ Bảy hoàn thiện lô hàng cần bàn giao sớm"),
+            }));
+
+        if (emps.ContainsKey("employee4"))
+            byPerson.Add(("employee4", new List<OvertimeCase>
+            {
+                new(1, 27, OvertimeDayKind.Saturday, new TimeOnly(8, 0), new TimeOnly(11, 0),
+                    "Tăng ca thứ Bảy đối chiếu số liệu sản xuất cuối tháng"),
+            }));
+
+        if (emps.ContainsKey("quandoc_x1"))
+            byPerson.Add(("quandoc_x1", new List<OvertimeCase>
+            {
+                new(1, 7, OvertimeDayKind.Sunday, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Điều phối khắc phục sự cố máy móc vào Chủ nhật"),
+            }));
+
+        if (emps.ContainsKey("employee6"))
+            byPerson.Add(("employee6", new List<OvertimeCase>
+            {
+                new(1, 28, OvertimeDayKind.Sunday, new TimeOnly(13, 0), new TimeOnly(17, 0),
+                    "Hỗ trợ kiểm định chất lượng lô hàng vào Chủ nhật"),
             }));
 
         var added = 0;

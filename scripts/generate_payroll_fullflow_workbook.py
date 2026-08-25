@@ -416,6 +416,68 @@ def build_workbook() -> None:
     style_sheet(coverage, [6, 58, 32, 18, 28])
     coverage.sheet_view.showGridLines = False
 
+    operations = wb.create_sheet("Dữ liệu vận hành bổ sung")
+    operations.append([
+        "STT", "Nhân viên", "Thời gian", "Nghiệp vụ", "Dữ liệu liên kết bắt buộc",
+        "Kết quả cần quan sát", "Thuộc case oracle T07",
+    ])
+    operation_rows = [
+        ("SX1TT - Bùi Văn Thành", "01/05/2026", "OT ngày lễ 4 giờ",
+         "Đơn OT Approved + chấm công OT 08:00-12:00", "Tiền OT hệ số ngày lễ; không vào căn cứ BH", "C9"),
+        ("SX3QD - Trương Văn Khánh", "01/05/2026", "OT ngày lễ 4 giờ",
+         "Đơn OT Approved + chấm công OT 13:00-17:00", "Tiền OT hệ số ngày lễ; không vào căn cứ BH", "WFH07"),
+        ("SX3W6 - Lương Thị Bích Ngọc", "01/05/2026", "OT ngày lễ 4 giờ",
+         "Đơn OT Approved + chấm công OT 08:00-12:00", "Tiền OT hệ số ngày lễ; không vào căn cứ BH", "TAX10+OT"),
+        ("EMPT001 - Nguyễn Văn Nam", "01/05/2026", "OT ngày lễ 4 giờ",
+         "Đơn OT Approved + chấm công OT 08:00-12:00", "Dòng vận hành bổ sung có OT ngày lễ thật", "Bổ sung"),
+        ("SX2TT - Vũ Đình Phúc", "01/05/2026", "Ca chính ngày lễ",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Công ngày lễ và phụ trội ca chính; không phải OT", "REST+OT-T7"),
+        ("SX2W3 - Trịnh Văn Bình", "01/05/2026", "Ca chính ngày lễ",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Công ngày lễ và phụ trội ca chính; không phải OT", "C7"),
+        ("EMPT002 - Trần Thị Hoa", "01/05/2026", "Ca chính ngày lễ",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Dòng vận hành bổ sung làm ca chính ngày lễ", "Bổ sung"),
+        ("SX2W4 - Đặng Thị Hương", "20/06/2026", "OT thứ Bảy 4 giờ",
+         "Đơn OT Approved + chấm công OT 08:00-12:00", "OT ngày nghỉ tuần tách khỏi ca chính", "C11"),
+        ("EMPT004 - Phạm Thị Linh", "27/06/2026", "OT thứ Bảy 3 giờ",
+         "Đơn OT Approved + chấm công OT 08:00-11:00", "Dòng vận hành bổ sung có OT thứ Bảy", "Bổ sung"),
+        ("BH13 - Đỗ Mạnh Cường", "07/06/2026", "OT Chủ nhật 4 giờ",
+         "Đơn OT Approved + chấm công OT 08:00-12:00", "OT ngày nghỉ tuần trước kỳ nghỉ ốm tháng 07", "BH13"),
+        ("EMPT006 - Vũ Thị Mai", "28/06/2026", "OT Chủ nhật 4 giờ",
+         "Đơn OT Approved + chấm công OT 13:00-17:00", "Dòng vận hành bổ sung có OT Chủ nhật", "Bổ sung"),
+        ("SX1TT - Bùi Văn Thành", "14/06/2026", "Ca chính Chủ nhật",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Phụ trội ca chính ngày nghỉ; không phải OT", "C9"),
+        ("SX2W3 - Trịnh Văn Bình", "13/06/2026", "Ca chính thứ Bảy",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Phụ trội ca chính ngày nghỉ; không phải OT", "C7"),
+        ("SX3QD - Trương Văn Khánh", "14/06/2026", "Ca chính Chủ nhật",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Phụ trội ca chính ngày nghỉ; không phải OT", "WFH07"),
+        ("EMPT001 - Nguyễn Văn Nam", "04/07/2026", "Ca chính thứ Bảy",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Ca điều động kiểm kê kho cuối tuần; không phải OT", "Bổ sung"),
+        ("EMPT002 - Trần Thị Hoa", "05/07/2026", "Ca chính Chủ nhật",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Ca trực đối soát chứng từ cuối tuần; không phải OT", "Bổ sung"),
+        ("EMPT004 - Phạm Thị Linh", "25/07/2026", "Ca chính thứ Bảy",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Ca hỗ trợ bảo trì cuối tháng; không phải OT", "Bổ sung"),
+        ("EMPT006 - Vũ Thị Mai", "26/07/2026", "Ca chính Chủ nhật",
+         "Phân ca FULLTIME + chấm công 08:00-17:00", "Ca trực vận hành cuối kỳ; không phải OT", "Bổ sung"),
+        ("SX1TT - Bùi Văn Thành", "08-09/06/2026", "Phép năm có lương",
+         "Đơn Approved + quỹ phép + phân ca + OnLeave", "Hưởng lương nhưng không tính tiền ăn ca", "C9"),
+        ("SX2W3 - Trịnh Văn Bình", "22/06/2026", "Nghỉ không lương",
+         "Đơn Approved + phân ca + OnLeave", "Giảm công hưởng lương; không tự biến thành miễn BH nếu chưa đủ 14 ngày", "C7"),
+        ("EMPT001 - Nguyễn Văn Nam", "15-16/06/2026", "Nghỉ ốm",
+         "Đơn Approved + phân ca + OnLeave", "Không có giờ công hai ngày nghỉ", "Bổ sung"),
+        ("EMPT002 - Trần Thị Hoa", "03-04/08/2026", "Phép năm có lương",
+         "Đơn Approved + quỹ phép; lớp tạm tính sinh OnLeave", "Có dữ liệu đơn thật cho tạm tính tháng 08", "Bổ sung"),
+        ("EMPT004 - Phạm Thị Linh", "10/08/2026", "Nghỉ không lương",
+         "Đơn Approved; lớp tạm tính sinh OnLeave", "Giảm công hưởng lương tháng 08", "Bổ sung"),
+        ("EMPT006 - Vũ Thị Mai", "17-18/08/2026", "Nghỉ ốm",
+         "Đơn Approved; lớp tạm tính sinh OnLeave", "Không có giờ công hai ngày nghỉ", "Bổ sung"),
+        ("7 nhân viên nhiều bộ phận", "23-25/08/2026", "WFH",
+         "Đơn WFH Approved + phân ca FULLTIME; ngày có lịch sinh chấm công từ xa", "Ngày 24-25 đủ công; Chủ nhật 23/08 không tự sinh 8 giờ", "Bổ sung"),
+    ]
+    for i, row in enumerate(operation_rows, 1):
+        operations.append([i, *row])
+    style_sheet(operations, [6, 30, 20, 28, 58, 58, 20])
+    operations.sheet_view.showGridLines = False
+
     manual = wb.create_sheet("Case nhập tay sau tạo kỳ")
     manual.append(["STT", "Cột", "Dòng đề nghị", "Giá trị test", "Kỳ vọng tác động THỰC NHẬN"])
     manual_rows = [
@@ -450,6 +512,7 @@ def build_workbook() -> None:
         ("Miễn đóng tháng", "≥14 ngày làm việc không hưởng lương", "Đếm từ phân ca + đơn + chấm công; ngoại lệ tháng đầu nghỉ ốm"),
         ("Ăn ca miễn thuế", "Tối đa 1.200.000 đ/tháng", "Phần vượt vào TNCT"),
         ("Tiền nhà", "Chịu thuế tối đa 15% TNCT chưa gồm nhà", "Phần vượt được loại khỏi TNCT"),
+        ("Mốc đổi cấu hình pháp luật", "01/07/2026", "Seed có đối chiếu luật cũ/mới giữa kỳ 06 và kỳ 07; không tạo luật giả đổi giữa một tháng"),
     ]:
         law.append(row)
     style_sheet(law, [28, 58, 68])

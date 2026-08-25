@@ -69,9 +69,23 @@ Các case chỉ có thể tạo bằng ghi DB trực tiếp nhưng không có lu
 
 ## Kịch bản WFH tháng 08/2026
 
-Bốn hồ sơ `HR001`, `ACC001`, `SX1W2`, `SX3W3` có đơn WFH Approved từ 23-25/08. Ngày 24-25 có phân ca Fulltime thật và chấm công từ xa đủ 08:00-17:00; ngày 23/08/2026 là Chủ nhật nên không sinh công nếu lịch không phân ca. Tháng 07 cũng có bốn hồ sơ WFH `SX3QD`, `HR001`, `ACC001`, `SX1W2` trong khoảng 13-15/07.
+Bảy hồ sơ `HR001`, `ACC001`, `SX1W2`, `SX3W3`, `EMPT001`, `EMPT002`, `EMPT004` có đơn WFH Approved từ 23-25/08. Ngày 24-25 có phân ca Fulltime thật và chấm công từ xa đủ 08:00-17:00; ngày 23/08/2026 là Chủ nhật nên không sinh công nếu lịch không phân ca. Tháng 07 cũng có bốn hồ sơ WFH `SX3QD`, `HR001`, `ACC001`, `SX1W2` trong khoảng 13-15/07.
 
 Toàn bộ ca chính của bộ payroll dùng mẫu `FULLTIME` 08:00-17:00, nghỉ 12:00-13:00. Seeder không tạo mẫu ca đêm, không phân ca đêm và không tạo OT ban đêm. Các ca OT ban ngày được rải cho nhiều nhân viên: ngày thường, sáng thứ Bảy, Chủ nhật và ngày lễ 01/05; mỗi ca OT đều có đơn Approved và `AttendanceRecord` riêng, trừ case `OT0` cố ý kiểm tra đơn duyệt nhưng chưa chấm thực tế.
+
+## Dữ liệu vận hành bổ sung quanh các case chính
+
+- OT ngày lễ 01/05: bốn nhân viên `SX1TT`, `SX3QD`, `SX3W6`, `EMPT001`; mỗi người có đơn Approved và chấm công OT riêng.
+- Ca chính ngày lễ 01/05: ba nhân viên `SX2TT`, `SX2W3`, `EMPT002` được phân `FULLTIME`, có attendance 08:00-17:00; đây không phải OT.
+- OT thứ Bảy: `SX2TT` ở tháng 07; `SX2W4` và `EMPT004` ở tháng 06.
+- OT Chủ nhật: `OT-CN` ở tháng 07; `BH13` và `EMPT006` ở tháng 06.
+- Ca chính ngày nghỉ tuần: `REST+OT-T7` ở tháng 07; `SX1TT`, `SX2W3`, `WFH07` ở tháng 06. Mọi ca đều có assignment Fulltime tương ứng.
+- Ca chính cuối tuần bổ sung ngay trong tháng 07: `EMPT001` thứ Bảy 04/07, `EMPT002` Chủ nhật 05/07,
+  `EMPT004` thứ Bảy 25/07 và `EMPT006` Chủ nhật 26/07. Đây là ca làm thường theo lịch điều động,
+  có assignment Fulltime + chấm công 08:00-17:00 và không được ghi nhận như OT.
+- Đơn từ bổ sung: phép năm của `SX1TT` và `EMPT002`; nghỉ không lương của `SX2W3` và `EMPT004`; nghỉ ốm của `EMPT001` và `EMPT006`. Các đơn tháng 05-07 được reconcile thành `OnLeave` ngay cả khi DB đã có attendance nền; đơn tháng 08 được lớp chuẩn bị tạm tính đối chiếu khi sinh công.
+
+Các dòng trên là dữ liệu vận hành bổ sung cho cùng nhánh nghiệp vụ, không làm tăng số **27 case oracle tháng 07**. Mục đích là để màn hình phân ca, chấm công và đơn từ nhìn giống dữ liệu sản phẩm thật, đồng thời có nhiều nhân viên cùng đi qua một nhánh thay vì chỉ một dòng duy nhất.
 
 ## Cách sử dụng
 
