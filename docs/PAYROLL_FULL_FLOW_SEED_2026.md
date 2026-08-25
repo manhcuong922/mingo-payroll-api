@@ -12,6 +12,16 @@ Tài liệu này là hợp đồng dữ liệu của `SeedPayrollDemoPeriodsAsyn
 
 Chạy lại server trên DB đã có là idempotent: seeder kiểm tra khóa nghiệp vụ và chỉ bổ sung phần thiếu. Reset DB chỉ thực hiện khi người dùng yêu cầu rõ.
 
+## Cấu hình pháp lý dùng cho kỳ 07/2026
+
+- Thuế khoán 10%: điều kiện ngưỡng 5 triệu và căn cứ nhân đều dùng `TNCT` (thu nhập chịu thuế). Không dùng `TONGTHUNHAP`; cũng không dùng `TNTT` vì nhánh khoán không hưởng giảm trừ bản thân/NPT/BH như biểu lũy tiến.
+- Thuế lũy tiến: giảm trừ 15,5 triệu/tháng và 6,2 triệu/người phụ thuộc; 5 bậc 5%–35% áp dụng cho kỳ tính thuế 2026.
+- BHXH/BHYT/BHTN: công thức được override riêng trong seeder để tính mức đóng hằng tháng trên lương + phụ cấp lương ổn định, có trần riêng và không chia theo công thực tế. Vì bộ demo luôn có đủ phân ca, cổng miễn suy từ `CONGCHUAN - SONGAYCONGHL >= 14`; không sửa collector/runtime.
+- Từ 01/07/2026: mức tham chiếu 2,53 triệu, trần BHXH/BHYT 50,6 triệu; BHTN vùng I dùng trần 106,2 triệu; ăn ca miễn tối đa 1,2 triệu/tháng.
+- Tiền OT/làm đêm được loại toàn bộ khỏi TNCT cho kỳ tính thuế 2026; tiền nhà chịu thuế tối đa 15% nền chưa gồm tiền nhà.
+
+Workbook có thêm sheet `Độ phủ nhánh tính lương`, `Case nhập tay sau tạo kỳ` và `Cấu hình luật 01-07-2026`. “Bao phủ 100%” ở đây là 100% nhánh nghiệp vụ độc lập mà UI/API hiện tại có thể tạo và có đường phụ thuộc tới `THỰC NHẬN`; không phải tích Descartes vô hạn giữa mọi nhánh. Các cột Input chỉ tồn tại sau khi kỳ 07 được tạo nên được mô tả thành thao tác kiểm thử, không seed thẳng vào kết quả kỳ.
+
 ## Toàn vẹn dữ liệu bắt buộc
 
 1. Hồ sơ: `User -> EmployeeInformation -> Department/Position -> ContractParty -> Contract -> SalaryGrade`.
@@ -26,33 +36,42 @@ Chạy lại server trên DB đã có là idempotent: seeder kiểm tra khóa ng
 
 | Mã NV | Nhân viên | Case | Module và dữ liệu nguồn | Điểm quan sát trên bảng lương |
 |---|---|---|---|---|
-| `SX1W1` | Nguyễn Văn Minh | C1 | HĐ thử việc riêng 01-14/07, HĐLĐ chính thức từ 15/07, ca và công theo từng đoạn | Lương thử việc 85%, BH chỉ ở đoạn HĐLĐ |
-| `SX2W1` | Lê Văn Tài | C2 | Thử việc ghi trong HĐLĐ, đủ ca/công | Vẫn thuộc diện BH bắt buộc |
-| `SX1W2` | Trần Văn Dũng | C3 | Phụ lục tăng lương hiệu lực 16/07 | Lương chia hai đoạn mức cũ/mới |
+| `SX2W1` | Lê Văn Tài | C2 | Thử việc từng ghi trong HĐLĐ ở kỳ trước; đến 07/2026 đã hoàn toàn chính thức, đủ ca/công | Dòng chính thức đủ tháng, không trộn công thử việc và công chính thức trong cùng kỳ |
+| `SX1W2` | Trần Văn Dũng | C3 | Phụ lục tăng lương hiệu lực 16/07 | Thu nhập lương chia hai đoạn; căn cứ BH tháng lấy mức đăng ký đang hiệu lực cuối kỳ, không bình quân theo công |
 | `SX3W3` | Lý Văn Hùng | C4 | Phụ lục phụ cấp hiệu lực 11/07, có ảnh phụ cấp trước thay đổi | Phụ cấp chia hai đoạn đúng lịch sử |
-| `SX2W2` | Nguyễn Đức Anh | C5 | Quyết định chấm dứt, ngày cuối 18/07, chỉ có ca/công trong cửa sổ HĐ | Thu nhập theo 13 ngày; dưới 14 ngày hưởng lương thì BH tháng bằng 0 |
-| `SX3W2` | Phạm Quốc Việt | C6 | Tuyển mới từ 22/07, ca/công bắt đầu đúng ngày hiệu lực | Thu nhập phần tháng; BH theo cổng dưới 14 ngày |
-| `SX2W3` | Trịnh Văn Bình | C7 | HĐ khoán việc, chấm công/giờ làm và OT lịch sử | Không BH; thuế khoán 10% nếu đạt ngưỡng; hỗ trợ tiến độ theo giờ |
+| `SX2W2` | Nguyễn Đức Anh | C5 | Quyết định chấm dứt, ngày cuối 20/07, chỉ có ca/công trong cửa sổ HĐ | Thu nhập theo 14 ngày; vẫn là case chấm dứt giữa tháng và đóng BH tháng |
+| `SX3W2` | Phạm Quốc Việt | C6 | Tuyển mới từ 14/07, ca/công bắt đầu đúng ngày hiệu lực | Thu nhập theo 14 ngày; vẫn là case tuyển mới giữa tháng và đóng BH tháng |
+| `SX2W3` | Trịnh Văn Bình | C7 | HĐ khoán việc, phân ca Fulltime và giờ làm theo lô | Không BH; không tạo đơn OT trái loại HĐ; thuế khoán 10% nếu đạt ngưỡng; hỗ trợ tiến độ theo giờ |
 | `SX2W5` | Hà Văn Sơn | C8 | HĐ khoán việc, có ca thứ Bảy để vượt 200 giờ | Hỗ trợ tiến độ bậc cao, không cộng thành công chuẩn giả |
-| `SX1TT` | Bùi Văn Thành | C9 | Đủ 23 ca chính và OT ngày thường/ngày nghỉ/ban đêm, phụ cấp trách nhiệm | OT tách record, công quy đổi 25,8; trách nhiệm không chia theo công |
+| `SX1TT` | Bùi Văn Thành | C9 | Đủ 23 ca Fulltime và 2 giờ OT ngày thường có đơn + chấm công riêng, phụ cấp trách nhiệm | OT không làm biến động căn cứ BH; trách nhiệm tính vào căn cứ BH theo cấu hình danh mục |
 | `SX1W4` | Hoàng Thị Thu | C10 | Đơn thai sản Approved trọn tháng, 23 ngày phân ca và 23 `OnLeave` | Cờ `TS`; BH, KPCĐ, đoàn phí và thu nhập công tháng bằng 0 |
 | `SX2W4` | Đặng Thị Hương | C11 | Đơn phép năm 08-10/07 và không lương 22-23/07, có phân ca/OnLeave | Phân biệt nghỉ hưởng lương và không hưởng lương |
 | `SX1W3` | Phạm Văn Hải | C12 | Đi muộn, về sớm, vắng, nửa ngày, thiếu giờ, đơn/phiếu điều chỉnh, điểm đánh giá thấp | Công thực tế, phạt/điều chỉnh và hệ số năng suất cùng ảnh hưởng thực nhận |
-| `DIR001` | Trần Quang Huy | C13 | Lương cao, phụ cấp trách nhiệm tính BH, nhà ở, 15 ngày nghỉ ốm có đơn/phân ca/OnLeave | Chạm trần thuế/BH nhưng cổng dưới 14 ngày hưởng lương phải miễn toàn bộ BH và KPCĐ |
-| `ACC001` | Vũ Thị Thu Hà | C14 | Người phụ thuộc hết hiệu lực 30/06 | Tháng 7 không còn giảm trừ suất đã hết hạn |
+| `DIR001` | Trần Quang Huy | C13 | Lương cao, phụ cấp trách nhiệm tính BH, nhà ở, 15 ngày làm việc nghỉ ốm không lương có đơn/phân ca/OnLeave | Chạm trần thuế/BH nhưng cổng từ đủ 14 ngày làm việc không hưởng lương phải miễn toàn bộ BH và KPCĐ |
+| `ACC001` | Vũ Thị Thu Hà | C14+T30 | Phụ lục lương 30 triệu từ 01/07; người phụ thuộc hết hiệu lực 30/06; đánh giá Direct đủ tiêu chí | Thuế lũy tiến ở mức 30 triệu, chỉ còn 1 suất NPT và đoàn phí chạm trần |
 | `SX1W5` | Ngô Văn Long | C15 | HĐLĐ bật BH nhưng có cờ miễn KPCĐ doanh nghiệp | BH vẫn tính; riêng KPCĐ bằng 0; đoàn phí phụ thuộc đoàn viên |
 | `SX1W6` | Đinh Thị Lan Anh | PT | HĐ bán thời gian 4 giờ/ngày, cờ BH lấy từ metadata loại HĐ | Không dựng tổ hợp BH mà UI không tạo được |
-| `SX2W6` | Mai Thị Ngọc | DV | HĐ dịch vụ, ca/công nguồn | Không BH; thuế theo chính sách hợp đồng dân sự |
-| `SX3W4` | Vương Thị Mơ | CTV | HĐ cộng tác viên, ca/công nguồn | Không BH; thuế khoán theo ngưỡng kỳ 07 |
+| `SX2W6` | Mai Thị Ngọc | DV-TNCT | HĐ dịch vụ chọn thuế 10%, ca/công và phụ cấp ăn ca + điện thoại có căn cứ miễn | Không BH; tổng thu nhập 8,6 triệu, TNCT 7 triệu, thuế khoán kỳ vọng 700 nghìn — bắt lỗi công thức trong ảnh |
+| `SX3W4` | Vương Thị Mơ | CAMKET | HĐ cộng tác viên chọn chính sách cam kết qua trường mà UI/API cho phép, ca/công nguồn đầy đủ | Không BH; đi đúng nhánh cam kết và thuế TNCN bằng 0 |
 | `SX3W1` | Nguyễn Văn Thắng | X2 | Phụ cấp độc hại tính vào nền BH và phụ cấp ăn ca | Nền BH = lương + khoản `TOXIC` |
 | `TPKD001` | Lê Hoàng Nam | X4 | Công tác phí miễn thuế và thuê nhà 9 triệu | Tiền nhà chịu thuế tối đa 15% nền chưa có nhà; phần vượt được miễn |
-| `SX3W5` | Cao Văn Đạt | X5 | Ca đêm thường xuyên và khoản truy lĩnh từ kỳ 06 | Phụ cấp đêm + truy lĩnh cộng vào thực nhận tháng 7 |
+| `SX3W5` | Cao Văn Đạt | OT-CN | Ca Fulltime, phép năm có lương 06-07/07, OT Chủ nhật 4 giờ, phụ cấp độc hại và khoản truy lĩnh từ kỳ 06 | Phép có đơn vẫn hưởng lương; OT Chủ nhật không vào căn cứ BH; truy lĩnh cộng vào thực nhận tháng 7 |
+| `SX1QD` | Đỗ Mạnh Cường | BH13 | Đơn ốm Approved đúng 13 ngày làm việc không lương, đủ phân ca và 13 `OnLeave`; 10 ngày có mặt | Đối chứng chưa đạt mốc 14 ngày không lương: nghiệp vụ kỳ vọng vẫn đóng BH |
+| `SX2QD` | Phan Trọng Nghĩa | BH14 | Đơn ốm Approved đúng 14 ngày làm việc, đủ phân ca và 14 `OnLeave`; 9 ngày có mặt | Đạt mốc miễn toàn bộ BH, KPCĐ và đoàn phí |
+| `SX3QD` | Trương Văn Khánh | WFH07 | WFH Approved 13-15/07, từng ngày có assignment + attendance; tiền ăn 1,5 triệu | WFH đủ công; 300 nghìn tiền ăn vượt trần 1,2 triệu phải chịu thuế |
+| `SX3TT` | Đoàn Minh Tuấn | OT0 | Đơn OT Approved 16/07 nhưng chưa có attendance ca OT; ca chính và đánh giá vẫn đầy đủ | Tiền OT bằng 0 tới khi có bằng chứng giờ vào/ra thật |
+| `SX2TT` | Vũ Đình Phúc | REST+OT-T7 | Ca thường Chủ nhật 12/07 có assignment/attendance và OT sáng thứ Bảy 4 giờ có đơn/chấm OT; phụ cấp trách nhiệm tính vào đơn giá giờ | Hai nguồn phụ trội ngày nghỉ và OT tách biệt; cả hai không làm thay đổi căn cứ BH |
+| `SX3W6` | Lương Thị Bích Ngọc | TAX10+OT | Phụ lục lương 10 triệu từ 01/07; tiền ăn đúng 1,2 triệu; phép năm 27/07 và OT ngày thường 2 giờ | Phép có lương giữ đủ công; OT miễn thuế theo cấu hình kỳ nhưng không vào căn cứ BH |
 
-Các case chỉ có thể tạo bằng ghi DB trực tiếp nhưng không có luồng UI/API thật, tổ hợp bảo hiểm tùy ý kiểu A7 cũ và thỏa thuận tự đóng tiếp BH khi đã được miễn không nằm trong bộ chính.
+Tổng workbook hiện có **27 kịch bản**: 26 dòng có biến thể nghiệp vụ và 1 dòng đối chứng `HR001`. Case trộn nửa tháng thử việc/nửa tháng chính thức đã được loại bỏ.
+
+Các case chỉ có thể tạo bằng ghi DB trực tiếp nhưng không có luồng UI/API thật, tổ hợp bảo hiểm tùy ý kiểu A7 cũ và thỏa thuận tự đóng tiếp BH khi đã được miễn không nằm trong bộ chính. Các cột nhập tay thuần trong chính bảng lương (`Hoa hồng`, `Thưởng`, `Tạm ứng`, `Thu/chi khác`, `Lương ngày phép`) không có module nguồn để seed; sau khi tạo kỳ, người dùng phải nhập qua chức năng sửa ô nếu muốn kiểm tra các cột đó. Seeder không gán cứng các ô này. Bộ seed không dựng dữ liệu học việc hoặc kỳ trộn học việc/thử việc với chính thức.
 
 ## Kịch bản WFH tháng 08/2026
 
-Bốn hồ sơ `HR001`, `ACC001`, `SX1W2`, `SX3W3` có đơn WFH Approved từ 23-25/08. Ngày 24-25 có phân ca thật và chấm công Present theo ca; ngày 23/08/2026 là Chủ nhật nên không sinh 8 giờ nếu lịch không phân ca.
+Bốn hồ sơ `HR001`, `ACC001`, `SX1W2`, `SX3W3` có đơn WFH Approved từ 23-25/08. Ngày 24-25 có phân ca Fulltime thật và chấm công từ xa đủ 08:00-17:00; ngày 23/08/2026 là Chủ nhật nên không sinh công nếu lịch không phân ca. Tháng 07 cũng có bốn hồ sơ WFH `SX3QD`, `HR001`, `ACC001`, `SX1W2` trong khoảng 13-15/07.
+
+Toàn bộ ca chính của bộ payroll dùng mẫu `FULLTIME` 08:00-17:00, nghỉ 12:00-13:00. Seeder không tạo mẫu ca đêm, không phân ca đêm và không tạo OT ban đêm. Các ca OT ban ngày được rải cho nhiều nhân viên: ngày thường, sáng thứ Bảy, Chủ nhật và ngày lễ 01/05; mỗi ca OT đều có đơn Approved và `AttendanceRecord` riêng, trừ case `OT0` cố ý kiểm tra đơn duyệt nhưng chưa chấm thực tế.
 
 ## Cách sử dụng
 
@@ -61,4 +80,3 @@ Bốn hồ sơ `HR001`, `ACC001`, `SX1W2`, `SX3W3` có đơn WFH Approved từ 2
 3. Vào bảng lương tháng, chọn 07/2026 và nhấn tạo kỳ; không cần chạy seeder riêng lần nữa.
 4. Đối chiếu theo `Payroll_FullFlow_TestMatrix_07-2026.xlsx`.
 5. Tháng 08/2026 dùng chức năng tạm tính; không chốt kỳ vì dữ liệu tháng chưa hoàn chỉnh.
-

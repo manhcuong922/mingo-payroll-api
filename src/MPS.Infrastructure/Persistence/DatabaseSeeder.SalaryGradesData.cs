@@ -81,9 +81,8 @@ public sealed partial class DatabaseSeeder
 
         // ===== Khối sản xuất (chức danh xưởng — SeedManufacturingWorkforceDemoAsync) =====
         // NHÂN CÔNG: toàn bộ khối này nằm trong khung lương cơ bản 5-8 triệu. Sàn thực tế lấy
-        // 6.300.000 chứ không phải 5.310.000: case thử việc C1a (DatabaseSeeder.WorkforceContractsData.cs)
-        // hưởng 85% lương công việc, nên bậc thấp nhất phải ≥ 5.310.000 / 0,85 thì mức thử việc mới
-        // không tụt dưới lương tối thiểu vùng I.
+        // 6.300.000 chứ không phải 5.310.000 để tạo khoảng cách hợp lý với lương tối thiểu vùng I
+        // và phản ánh mức khởi điểm thực tế của nhóm lao động kỹ thuật đã qua đào tạo tại xưởng.
         ("QDX", "Quản đốc xưởng", new[]
         {
             new GradeLevel(1, 7_400_000m, "Quản đốc mới bổ nhiệm"),

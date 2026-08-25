@@ -9,13 +9,13 @@ using EvaluationEnums = MPS.Domain.Enums.Evaluation;
 namespace MPS.Infrastructure.Persistence;
 
 /// <summary>
-/// Chấm công "có chuyện" cho một nhóm nhân sự được chọn: tăng ca đủ bốn loại ngày, nghỉ phép có
-/// lương / không lương / thai sản, đi muộn – về sớm – vắng – nửa công, và khối lượng giờ của hợp
+/// Chấm công "có chuyện" cho một nhóm nhân sự được chọn: tăng ca ngày thường / thứ Bảy / Chủ nhật /
+/// ngày lễ, nghỉ phép có lương / không lương / thai sản, đi muộn – về sớm – vắng – nửa công, và khối lượng giờ của hợp
 /// đồng khoán việc.
 ///
 /// <para><b>Vì sao cần.</b> Chấm công nền do <c>PreparePayrollMonthDataAsync</c> sinh là 8 giờ,
 /// <c>Present</c>, thứ Hai–thứ Sáu, 08:00–17:00 cho TẤT CẢ mọi người. Với dữ liệu đó thì cột tăng
-/// ca, phụ trội loại ngày, phụ trội ca đêm, ngày nghỉ có lương và toàn bộ khối hỗ trợ theo tiến độ
+/// ca, phụ trội loại ngày, ngày nghỉ có lương và toàn bộ khối hỗ trợ theo tiến độ
 /// của hợp đồng khoán đều bằng 0 trên mọi dòng lương.</para>
 ///
 /// <para><b>Hai ràng buộc đã tính tới:</b>
@@ -45,18 +45,13 @@ public sealed partial class DatabaseSeeder
     private static readonly TimeOnly ShiftStart = new(8, 0);
     private static readonly TimeOnly ShiftEnd = new(17, 0);
 
-    /// <summary>Ca đêm mẫu <c>CA-DEM</c> — trọn 8 giờ nằm trong khung đêm 22:00–06:00 (Điều 106 BLLĐ 2019).</summary>
-    private static readonly TimeOnly NightShiftStart = new(22, 0);
-    private static readonly TimeOnly NightShiftEnd = new(6, 0);
-
     private async Task SeedAttendanceCasesAsync(CancellationToken ct)
     {
         var adminId = await _context.Users.AsNoTracking()
             .Where(u => u.RoleId == SystemRoles.SystemAdminId).Select(u => u.Id).FirstOrDefaultAsync(ct);
         var shiftId = await _context.ShiftTemplates.AsNoTracking()
-            .Where(s => s.IsActive).Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
-        var nightShiftId = await _context.ShiftTemplates.AsNoTracking()
-            .Where(s => s.IsActive && s.Code == "CA-DEM").Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
+            .Where(s => s.IsActive && s.Code == "FULLTIME")
+            .Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
         if (adminId == 0 || shiftId is null)
         {
             _logger.LogWarning("SeedAttendanceCases: thiếu admin hoặc mẫu ca; bỏ qua.");
@@ -72,7 +67,10 @@ public sealed partial class DatabaseSeeder
         // duyệt đơn trong dữ liệu demo đều do tài khoản admin thực hiện nên kịch bản duyệt không đổi.
         var usernames = new[]
         {
-            "totruong_x1", "cn_x1_3", "cn_x1_4", "cn_x2_3", "cn_x2_4", "cn_x2_5", "cn_x3_5", "director",
+            "totruong_x1", "totruong_x2", "totruong_x3",
+            "quandoc_x1", "quandoc_x2",
+            "cn_x1_3", "cn_x1_4", "cn_x2_3", "cn_x2_4", "cn_x2_5", "cn_x3_5", "cn_x3_6",
+            "director",
         };
         var emps = await _context.EmployeeInformations.AsNoTracking()
             .Where(e => e.User != null && usernames.Contains(e.User.Username))
@@ -99,6 +97,12 @@ public sealed partial class DatabaseSeeder
             leaveTypeIds, adminId, ct);
         await EnsureLeaveRequestAsync(emps, "cn_x2_4", "UNPAID", DemoDay(2, 22), DemoDay(2, 23),
             isPaid: false, "Nghỉ không hưởng lương do việc gia đình, đã hết quỹ phép trong tháng.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "cn_x3_5", "ANNUAL", DemoDay(2, 6), DemoDay(2, 7),
+            isPaid: true, "Nghỉ phép năm hai ngày để giải quyết việc gia đình; bàn giao ca và công việc đầy đủ.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "cn_x3_6", "ANNUAL", DemoDay(2, 27), DemoDay(2, 27),
+            isPaid: true, "Nghỉ phép năm một ngày để làm thủ tục hành chính cá nhân.",
             leaveTypeIds, adminId, ct);
 
         // ⭐ X1a — NGHỈ ỐM 14 NGÀY LÀM VIỆC của người có lương TRÊN TRẦN đóng BHXH (Giám đốc, GD-4 =
@@ -132,10 +136,21 @@ public sealed partial class DatabaseSeeder
             isPaid: false, "Nghỉ ốm dài ngày có giấy ra viện — hưởng chế độ ốm đau do quỹ BHXH chi trả.",
             leaveTypeIds, adminId, ct);
 
-        await SeedCaseMonthAttendanceAsync(emps, holidays, shiftId.Value, nightShiftId, adminId, ct);
+        // ⭐ BH13/BH14 — cặp biên đúng theo SỐ NGÀY NGHỈ KHÔNG HƯỞNG LƯƠNG mà nghiệp vụ cần đối
+        // chiếu. Hai quản đốc có cùng loại HĐ, cùng ca, cùng nhóm phụ cấp; chỉ khác đúng 1 ngày nghỉ:
+        // 13 ngày (01-17/07) và 14 ngày (01-20/07). Nhờ vậy có thể nhìn thẳng xem hệ thống cắt BH ở
+        // đúng mốc hay đang suy luận nhầm từ số ngày còn đi làm.
+        await EnsureLeaveRequestAsync(emps, "quandoc_x1", "SICK", DemoDay(2, 1), DemoDay(2, 17),
+            isPaid: false, "Điều trị phục hồi sau phẫu thuật, nghỉ đúng 13 ngày làm việc có hồ sơ y tế.",
+            leaveTypeIds, adminId, ct);
+        await EnsureLeaveRequestAsync(emps, "quandoc_x2", "SICK", DemoDay(2, 1), DemoDay(2, 20),
+            isPaid: false, "Điều trị nội trú và phục hồi, nghỉ đúng 14 ngày làm việc có hồ sơ y tế.",
+            leaveTypeIds, adminId, ct);
+
+        await SeedCaseMonthAttendanceAsync(emps, holidays, shiftId.Value, adminId, ct);
         await SeedOvertimeCasesAsync(emps, adminId, ct);
         await SeedLateEarlyAndAdjustmentCasesAsync(emps, adminId, ct);
-        await SeedLowScoreEvaluationAsync(emps, adminId, ct);
+        await SeedNamedEvaluationScoresAsync(adminId, ct);
     }
 
     private async Task<HashSet<DateOnly>> LoadHolidayDatesAsync(CancellationToken ct)
@@ -157,7 +172,6 @@ public sealed partial class DatabaseSeeder
         IReadOnlyDictionary<string, (int Id, int? UserId)> emps,
         IReadOnlySet<DateOnly> holidays,
         int shiftId,
-        int? nightShiftId,
         int adminId,
         CancellationToken ct)
     {
@@ -179,13 +193,8 @@ public sealed partial class DatabaseSeeder
                 var includeSaturday = username.Equals("cn_x2_5", StringComparison.OrdinalIgnoreCase);
                 var mine = specials.GetValueOrDefault(username, new Dictionary<DateOnly, SpecialDay>());
 
-                // ⭐ Thợ trực lò sấy chạy CA ĐÊM thường xuyên — nguồn duy nhất của phụ cấp làm đêm 30%
-                // cho giờ THƯỜNG (khác hẳn tăng ca ban đêm, vốn đi qua đường hệ số OT).
-                var nightWorker = username.Equals("cn_x3_5", StringComparison.OrdinalIgnoreCase);
-                var shiftForPerson = nightWorker && nightShiftId is int nightId ? nightId : shiftId;
-
                 await AddMonthAttendanceAsync(empId, monthStart, holidays, includeSaturday, mine,
-                    shiftForPerson, adminId, nightWorker, ct);
+                    shiftId, adminId, ct);
             }
         }
 
@@ -230,6 +239,17 @@ public sealed partial class DatabaseSeeder
         foreach (var (day, spec) in badMonth) days.TryAdd(NearestWorkday(DemoDay(2, day)), spec);
 
         result["cn_x1_3"] = days;
+
+        // ⭐ REST-RESP — giờ làm THƯỜNG vào Chủ nhật (không phải OT) của tổ trưởng có phụ cấp trách
+        // nhiệm IsBhxhBase. Đây là nhánh còn thiếu trong ma trận cũ: phụ trội ngày nghỉ phải dùng đơn
+        // giá giờ gồm cả phụ cấp lương gắn với công việc.
+        var sunday = DemoDay(2, 12);
+        while (sunday.DayOfWeek != DayOfWeek.Sunday) sunday = sunday.AddDays(1);
+        result["totruong_x2"] = new Dictionary<DateOnly, SpecialDay>
+        {
+            [sunday] = new(AttendanceEnums.AttendanceStatus.Present, ShiftStart, ShiftEnd, 8m,
+                "Ca điều phối kiểm kê Chủ nhật theo kế hoạch sản xuất, không phải đơn tăng ca."),
+        };
         return result;
     }
 
@@ -249,7 +269,6 @@ public sealed partial class DatabaseSeeder
         IReadOnlyDictionary<DateOnly, SpecialDay> specials,
         int shiftId,
         int adminId,
-        bool nightShift,
         CancellationToken ct)
     {
         // Chỉ chấm công những ngày hợp đồng THỰC SỰ phủ — người vào làm hoặc nghỉ việc giữa tháng
@@ -266,8 +285,12 @@ public sealed partial class DatabaseSeeder
             if (day < from || (to is DateOnly last && day > last)) continue;
             if (holidays.Contains(day)) continue;
 
+            // Ngày cuối tuần chỉ được sinh khi có lịch nghiệp vụ rõ ràng: HĐ khoán làm thứ Bảy hoặc
+            // một SpecialDay đã khai. Nhờ đó ca Chủ nhật REST-RESP có đủ attendance rồi lớp schedule
+            // sẽ tạo EmployeeShiftAssignment tương ứng, không phải một dòng công rơi tự do.
             var isWorkday = day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday
-                || (includeSaturday && day.DayOfWeek == DayOfWeek.Saturday);
+                || (includeSaturday && day.DayOfWeek == DayOfWeek.Saturday)
+                || specials.ContainsKey(day);
             if (!isWorkday) continue;
 
             var special = specials.GetValueOrDefault(day);
@@ -281,27 +304,17 @@ public sealed partial class DatabaseSeeder
             var hours = onLeave ? 0m : special?.DayHours ?? 8m;
             if (status == AttendanceEnums.AttendanceStatus.Absent) { checkIn = null; checkOut = null; hours = 0m; }
 
-            // Ca đêm 22:00–06:00: toàn bộ giờ nằm trong khung đêm (Điều 106) ⇒ đổ vào NightHours để
-            // hưởng phụ cấp làm đêm 30% cho giờ THƯỜNG. Giờ ra rơi sang ngày hôm sau.
-            if (nightShift && !onLeave && status != AttendanceEnums.AttendanceStatus.Absent)
-            {
-                checkIn = NightShiftStart;
-                checkOut = NightShiftEnd;
-            }
-
             await _context.AttendanceRecords.AddAsync(new AttendanceRecord
             {
                 EmployeeInformationId = empId,
                 WorkDate = day,
                 ShiftTemplateId = shiftId,
-                DayHours = nightShift ? 0m : hours,
-                NightHours = nightShift ? hours : 0m,
+                DayHours = hours,
+                NightHours = 0m,
                 Status = status,
                 CheckInAt = checkIn is TimeOnly ci ? day.ToDateTime(ci) : null,
-                CheckOutAt = checkOut is TimeOnly co
-                    ? (nightShift ? day.AddDays(1).ToDateTime(co) : day.ToDateTime(co))
-                    : null,
-                Notes = onLeave ? "Nghỉ theo đơn đã duyệt" : special?.Note ?? (nightShift ? "Ca đêm trực lò sấy" : null),
+                CheckOutAt = checkOut is TimeOnly co ? day.ToDateTime(co) : null,
+                Notes = onLeave ? "Nghỉ theo đơn đã duyệt" : special?.Note,
                 CreatedAt = now,
                 CreatedByUserId = adminId,
             }, ct);
@@ -408,18 +421,18 @@ public sealed partial class DatabaseSeeder
         await _context.SaveChangesAsync(ct);
     }
 
-    // ===== Tăng ca: đủ bốn loại ngày + ca vắt nửa đêm =====
+    // ===== Tăng ca ban ngày: ngày thường / thứ Bảy / Chủ nhật / ngày lễ =====
     /// <summary>Ngày mà ca tăng ca phải rơi vào — quyết định hệ số 150 / 200 / 300%.</summary>
     private enum OvertimeDayKind
     {
         /// <summary>Ngày làm việc thường (150%). Lệch cuối tuần thì đẩy sang ngày làm việc gần nhất.</summary>
         Workday,
-        /// <summary>Ngày nghỉ hằng tuần (200%) — ép về Chủ nhật.</summary>
-        WeeklyRest,
+        /// <summary>Thứ Bảy ngoài lịch Fulltime (200%).</summary>
+        Saturday,
+        /// <summary>Chủ nhật ngoài lịch Fulltime (200%).</summary>
+        Sunday,
         /// <summary>Ngày nghỉ lễ (300%) — dùng đúng ngày đã ghi.</summary>
         Holiday,
-        /// <summary>Ngày cuối tháng — để ca đêm vắt sang ngày (và tháng) kế tiếp.</summary>
-        MonthEnd,
     }
 
     private sealed record OvertimeCase(
@@ -430,64 +443,47 @@ public sealed partial class DatabaseSeeder
     {
         var byPerson = new List<(string Username, List<OvertimeCase> Cases)>();
 
-        if (emps.ContainsKey("totruong_x1")) byPerson.Add(("totruong_x1", BuildLeaderOvertimeCases()));
-
-        // ⭐ X5 — ĐƠN TĂNG CA TRÊN HỢP ĐỒNG DÂN SỰ, nay là DỮ LIỆU LỊCH SỬ. `cn_x2_3` ký hợp đồng
-        // KHOÁN VIỆC (case C7) — quan hệ dân sự không có khái niệm "làm thêm giờ" của BLLĐ. Trước
-        // bản sửa X5, không handler nào trong `Features/Attendance/OvertimeRequest/` đọc
-        // `ContractKind` nên đơn vẫn tạo và duyệt được, rồi tiền chảy vào cột TANG_CA theo hệ số
-        // 150%/200% như người làm công ăn lương — mâu thuẫn với chính quyết định đặt tên "Hỗ trợ
-        // theo tiến độ" (chứng từ HĐ dân sự không mang chữ "lương"/"thưởng").
-        //
-        // GIỮ LẠI hai đơn này có chủ đích, dù `OvertimeContractKindGuard` nay đã chặn: seed ghi
-        // thẳng qua repository nên không đi qua guard, đúng như những đơn đã tồn tại trong DB thật
-        // trước ngày guard ra đời. Chúng chứng minh guard KHÔNG hồi tố — tiền của đơn cũ vẫn nguyên,
-        // hệ thống không tự ý xoá dữ liệu lịch sử. Muốn kiểm chính guard thì thử tạo đơn MỚI cho
-        // `cn_x2_3` qua API: phải bị từ chối với mã `OT_CIVIL_CONTRACT`.
-        if (emps.ContainsKey("cn_x2_3"))
-        {
-            byPerson.Add(("cn_x2_3", new List<OvertimeCase>
+        if (emps.ContainsKey("totruong_x1"))
+            byPerson.Add(("totruong_x1", new List<OvertimeCase>
             {
-                new(1, 9, OvertimeDayKind.Workday, new TimeOnly(18, 0), new TimeOnly(21, 0),
-                    "Chạy nốt lô khung gấp — kê tăng ca dù đang là hợp đồng khoán việc"),
-                new(2, 21, OvertimeDayKind.WeeklyRest, new TimeOnly(8, 0), new TimeOnly(12, 0),
-                    "Làm bù ngày Chủ nhật theo yêu cầu quản đốc"),
+                new(2, 9, OvertimeDayKind.Workday, new TimeOnly(17, 30), new TimeOnly(19, 30),
+                    "Hoàn thiện đóng gói lô hàng giao sáng hôm sau"),
             }));
-        }
+
+        if (emps.ContainsKey("totruong_x2"))
+            byPerson.Add(("totruong_x2", new List<OvertimeCase>
+            {
+                new(2, 18, OvertimeDayKind.Saturday, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Kiểm kê bán thành phẩm sáng thứ Bảy theo kế hoạch đã duyệt"),
+            }));
+
+        if (emps.ContainsKey("cn_x3_5"))
+            byPerson.Add(("cn_x3_5", new List<OvertimeCase>
+            {
+                new(2, 12, OvertimeDayKind.Sunday, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Xử lý lô sơn cần giao gấp vào đầu tuần"),
+            }));
+
+        if (emps.ContainsKey("cn_x3_6"))
+            byPerson.Add(("cn_x3_6", new List<OvertimeCase>
+            {
+                new(0, 1, OvertimeDayKind.Holiday, new TimeOnly(8, 0), new TimeOnly(12, 0),
+                    "Trực xử lý đơn hàng xuất khẩu ngày Quốc tế Lao động"),
+                new(2, 22, OvertimeDayKind.Workday, new TimeOnly(17, 30), new TimeOnly(19, 30),
+                    "Hoàn thiện kiểm tra chất lượng trước khi bàn giao"),
+            }));
 
         var added = 0;
         foreach (var (username, cases) in byPerson)
             added += await SeedOvertimeCasesForAsync(emps[username], cases, adminId, ct);
 
-        if (added > 0) _logger.LogInformation("Seeded {Count} ca tăng ca (thường / nghỉ tuần / lễ / đêm).", added);
-    }
+        // ⭐ OT0 — đơn đã Approved nhưng chưa có AttendanceRecord ca OT: collector phải trả 0 đồng
+        // cho tới khi có bằng chứng giờ vào/ra thật. Ca chính của người này vẫn đầy đủ và có phân ca.
+        if (emps.TryGetValue("totruong_x3", out var noAttendance))
+            added += await SeedApprovedOvertimeWithoutAttendanceAsync(noAttendance, adminId, ct);
 
-    /// <summary>Bộ tăng ca của tổ trưởng xưởng 1 — phủ đủ 4 loại ngày + ca vắt nửa đêm cuối tháng.</summary>
-    private static List<OvertimeCase> BuildLeaderOvertimeCases()
-    {
-        var cases = new List<OvertimeCase>
-        {
-            // Kỳ cũ nhất có 01/5 — tăng ca NGÀY LỄ hưởng ít nhất 300% (Điều 98 k.1 điểm c).
-            new(0, 1, OvertimeDayKind.Holiday, new TimeOnly(8, 0), new TimeOnly(12, 0),
-                "Chạy đơn xuất khẩu gấp trong ngày lễ 01/5"),
-        };
-        // Kỳ giữa và kỳ mới nhất có cùng bộ tăng ca ⇒ so được tác động của mốc luật 01/07/2026:
-        // tiền tăng ca kỳ trước CHỊU thuế, kỳ sau được miễn toàn bộ.
-        foreach (var period in new[] { 1, 2 })
-        {
-            cases.Add(new(period, 9, OvertimeDayKind.Workday, new TimeOnly(18, 0), new TimeOnly(20, 0),
-                "Tăng ca ngày thường hoàn thiện lô hàng"));
-            cases.Add(new(period, 14, OvertimeDayKind.Workday, new TimeOnly(18, 0), new TimeOnly(20, 30),
-                "Tăng ca ngày thường bù tiến độ công đoạn ghép"));
-            cases.Add(new(period, 21, OvertimeDayKind.WeeklyRest, new TimeOnly(8, 0), new TimeOnly(12, 0),
-                "Tăng ca ngày nghỉ hằng tuần — kiểm hàng trước giao"));
-            // Ca đêm VẮT NỬA ĐÊM ở ngày cuối tháng: phần giờ sau 00:00 rơi sang ngày (và có thể là
-            // tháng) kế tiếp — nhánh tra hằng số luật lao động theo TỪNG NGÀY.
-            cases.Add(new(period, 0, OvertimeDayKind.MonthEnd, new TimeOnly(22, 0), new TimeOnly(2, 0),
-                "Trực lò sấy qua đêm cuối tháng"));
-        }
-
-        return cases;
+        if (added > 0)
+            _logger.LogInformation("Seeded {Count} ca tăng ca ban ngày (ngày thường / thứ Bảy / Chủ nhật / ngày lễ).", added);
     }
 
     /// <summary>
@@ -510,16 +506,16 @@ public sealed partial class DatabaseSeeder
             if (await _context.OvertimeRequests.AsNoTracking()
                     .AnyAsync(o => o.EmployeeInformationId == leader.Id && o.WorkDate == day, ct)) continue;
 
-            var (dayHours, nightHours) = SplitDayNight(c.Start, c.End);
+            var dayHours = decimal.Round((decimal)(c.End - c.Start).TotalHours, 2);
             var request = new OvertimeRequest
             {
                 EmployeeInformationId = leader.Id,
                 WorkDate = day,
                 OtStartTime = c.Start,
                 OtEndTime = c.End,
-                OtHours = dayHours + nightHours,
+                OtHours = dayHours,
                 OtDayHours = dayHours,
-                OtNightHours = nightHours,
+                OtNightHours = 0m,
                 Status = AttendanceEnums.OtRequestStatus.Approved,
                 ApproverRoute = AttendanceEnums.OvertimeApproverRoute.DepartmentManager,
                 Reason = c.Reason,
@@ -537,9 +533,7 @@ public sealed partial class DatabaseSeeder
             // Bản ghi chấm công RIÊNG của ca tăng ca — không có giờ vào/ra thì đơn duyệt suông
             // không sinh đồng nào.
             var checkIn = day.ToDateTime(c.Start);
-            var checkOut = c.End < c.Start
-                ? day.AddDays(1).ToDateTime(c.End)      // ca vắt nửa đêm
-                : day.ToDateTime(c.End);
+            var checkOut = day.ToDateTime(c.End);
             await _context.AttendanceRecords.AddAsync(new AttendanceRecord
             {
                 EmployeeInformationId = leader.Id,
@@ -547,7 +541,7 @@ public sealed partial class DatabaseSeeder
                 OvertimeRequestId = request.Id,
                 ShiftTemplateId = null,
                 DayHours = dayHours,
-                NightHours = nightHours,
+                NightHours = 0m,
                 Status = AttendanceEnums.AttendanceStatus.Present,
                 CheckInAt = checkIn,
                 CheckOutAt = checkOut,
@@ -562,35 +556,48 @@ public sealed partial class DatabaseSeeder
         return added;
     }
 
+    private async Task<int> SeedApprovedOvertimeWithoutAttendanceAsync(
+        (int Id, int? UserId) employee, int adminId, CancellationToken ct)
+    {
+        var day = NearestWorkday(DemoDay(2, 16));
+        if (await _context.OvertimeRequests.AsNoTracking()
+                .AnyAsync(o => o.EmployeeInformationId == employee.Id && o.WorkDate == day, ct))
+            return 0;
+
+        await _context.OvertimeRequests.AddAsync(new OvertimeRequest
+        {
+            EmployeeInformationId = employee.Id,
+            WorkDate = day,
+            OtStartTime = new TimeOnly(18, 0),
+            OtEndTime = new TimeOnly(20, 0),
+            OtHours = 2m,
+            OtDayHours = 2m,
+            OtNightHours = 0m,
+            Status = AttendanceEnums.OtRequestStatus.Approved,
+            ApproverRoute = AttendanceEnums.OvertimeApproverRoute.DepartmentManager,
+            Reason = "Duyệt tăng ca chuẩn bị vật tư nhưng chưa ghi nhận giờ làm thực tế.",
+            ReviewNote = "Đã duyệt kế hoạch; chờ chấm công ca tăng ca để thanh toán.",
+            ReviewedByUserId = adminId,
+            ReviewedAt = Utc(day.AddDays(-1)),
+            ApproverReviewedByUserId = adminId,
+            ApproverReviewedAt = Utc(day.AddDays(-1)),
+            CreatedAt = Utc(day.AddDays(-3)),
+            CreatedByUserId = adminId,
+        }, ct);
+        await _context.SaveChangesAsync(ct);
+        return 1;
+    }
+
     /// <summary>Quy ngày tăng ca về đúng loại ngày mà kịch bản cần (quyết định hệ số 150/200/300%).</summary>
     private static DateOnly ResolveOvertimeDay(OvertimeCase c, DateOnly monthStart)
     {
-        if (c.DayKind == OvertimeDayKind.MonthEnd) return EndOfMonth(monthStart);
-
         var day = monthStart.AddDays(c.Day - 1);
         if (c.DayKind == OvertimeDayKind.Holiday) return day;      // ngày lễ là mốc cố định, không dời
         if (c.DayKind == OvertimeDayKind.Workday) return NearestWorkday(day);
 
-        while (day.DayOfWeek != DayOfWeek.Sunday) day = day.AddDays(1);
+        var target = c.DayKind == OvertimeDayKind.Saturday ? DayOfWeek.Saturday : DayOfWeek.Sunday;
+        while (day.DayOfWeek != target) day = day.AddDays(1);
         return day;
-    }
-
-    /// <summary>Tách giờ ngày / giờ đêm theo khung 22:00–06:00 (Điều 106 BLLĐ 2019).</summary>
-    private static (decimal Day, decimal Night) SplitDayNight(TimeOnly start, TimeOnly end)
-    {
-        var total = end >= start
-            ? (end - start).TotalHours
-            : (TimeSpan.FromHours(24) - (start - end)).TotalHours;
-
-        decimal night = 0m;
-        for (var minute = 0; minute < (int)Math.Round(total * 60); minute++)
-        {
-            var at = start.AddMinutes(minute);
-            if (at.Hour >= 22 || at.Hour < 6) night += 1m / 60m;
-        }
-
-        night = decimal.Round(night, 2);
-        return (decimal.Round((decimal)total - night, 2), night);
     }
 
     // ===== Đơn đi muộn / về sớm + phiếu điều chỉnh chấm công =====
@@ -599,7 +606,7 @@ public sealed partial class DatabaseSeeder
     {
         if (!emps.TryGetValue("cn_x1_3", out var emp)) return;
 
-        var specials = BuildSpecialDays(1).GetValueOrDefault("cn_x1_3");
+        var specials = BuildSpecialDays(2).GetValueOrDefault("cn_x1_3");
         if (specials is null) return;
 
         foreach (var (day, spec) in specials)
@@ -670,33 +677,55 @@ public sealed partial class DatabaseSeeder
         await _context.SaveChangesAsync(ct);
     }
 
-    // ===== Điểm đánh giá thấp cho nhân vật "tháng xấu" =====
-    private async Task SeedLowScoreEvaluationAsync(
-        IReadOnlyDictionary<string, (int Id, int? UserId)> emps, int adminId, CancellationToken ct)
+    // ===== Điểm đánh giá có chủ đích cho các case mới =====
+    private async Task SeedNamedEvaluationScoresAsync(int adminId, CancellationToken ct)
     {
-        if (!emps.TryGetValue("cn_x1_3", out var emp) || emp.UserId is not int userId) return;
-
         var period = DemoPeriodStart(2);
-        if (await _context.MonthlyEvaluations.AsNoTracking()
-                .AnyAsync(m => m.EmployeeUserId == userId && m.PeriodYear == period.Year
-                    && m.PeriodMonth == period.Month, ct)) return;
-
-        await _context.MonthlyEvaluations.AddAsync(new MonthlyEvaluation
+        var targetScores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
-            EmployeeUserId = userId,
-            PeriodYear = period.Year,
-            PeriodMonth = period.Month,
-            SubjectRoleIdSnapshot = SystemRoles.EmployeeId,
-            Source = EvaluationEnums.EvaluationSource.Direct,
-            // Rơi vào bậc thấp nhất của bảng hệ số năng suất (0.5) — hệ quả trực tiếp của tháng có
-            // vắng không phép, đi muộn và nửa công ở trên.
-            FinalScore = 2.20m,
-            Status = EvaluationEnums.EvaluationStatus.Approved,
-            ApprovedByUserId = adminId,
-            ApprovedAt = DateTime.UtcNow,
-            CreatedByUserId = adminId,
-            CreatedAt = DateTime.UtcNow,
-        }, ct);
+            ["cn_x1_3"] = 2,       // tháng xấu -> hệ số 0,5
+            ["quandoc_x1"] = 4,    // cặp biên nghỉ 13 ngày
+            ["quandoc_x2"] = 4,    // cặp biên nghỉ 14 ngày
+            ["quandoc_x3"] = 5,    // WFH tháng 7 -> hệ số 1,2
+            ["totruong_x2"] = 4,   // làm ca thường ngày nghỉ
+            ["totruong_x3"] = 4,   // OT duyệt nhưng chưa chấm
+            ["cn_x3_6"] = 3,       // lương 10 triệu + ngưỡng cơm -> hệ số 0,8
+            ["cn_x3_5"] = 4,       // phép năm + OT Chủ nhật + độc hại -> hệ số 1,0
+            ["accountant"] = 4,    // lương 30 triệu + NPT hết hiệu lực -> hệ số 1,0
+        };
+
+        var userIds = await _context.Users.AsNoTracking()
+            .Where(u => targetScores.Keys.Contains(u.Username))
+            .ToDictionaryAsync(u => u.Id, u => u.Username, ct);
+        if (userIds.Count == 0) return;
+
+        var evaluations = await _context.MonthlyEvaluations
+            .Include(m => m.Scores)
+            .Include(m => m.SourceLinks)
+                .ThenInclude(l => l.OrderEvaluationSubject)
+                    .ThenInclude(s => s!.Scores)
+            .Where(m => userIds.Keys.Contains(m.EmployeeUserId)
+                && m.PeriodYear == period.Year && m.PeriodMonth == period.Month)
+            .ToListAsync(ct);
+
+        foreach (var evaluation in evaluations)
+        {
+            var score = targetScores[userIds[evaluation.EmployeeUserId]];
+            evaluation.FinalScore = score;
+            evaluation.Status = EvaluationEnums.EvaluationStatus.Approved;
+            evaluation.ApprovedByUserId = adminId;
+            evaluation.ApprovedAt ??= DateTime.UtcNow;
+
+            foreach (var line in evaluation.Scores) line.Score = score;
+            foreach (var link in evaluation.SourceLinks)
+            {
+                link.ContributedScore = score;
+                if (link.OrderEvaluationSubject is not { } subject) continue;
+                subject.FinalScore = score;
+                foreach (var line in subject.Scores) line.Score = score;
+            }
+        }
+
         await _context.SaveChangesAsync(ct);
     }
 }

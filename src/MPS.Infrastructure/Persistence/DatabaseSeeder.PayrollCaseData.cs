@@ -34,6 +34,8 @@ public sealed partial class DatabaseSeeder
 {
     private const string SalaryAppendixNo = "PL-C3-TANGLUONG";
     private const string AllowanceAppendixNo = "PL-C4-PHUCAP";
+    private const string TaxTenMillionAppendixNo = "PL-TAX10-KCS";
+    private const string TaxThirtyMillionAppendixNo = "PL-TAX30-KTT";
 
     /// <summary>Nhãn mở đầu lý do của hai khoản truy lĩnh/truy thu DEMO — dùng làm khoá idempotent.</summary>
     private const string AdjustmentCaseTag = "[Demo]";
@@ -85,6 +87,19 @@ public sealed partial class DatabaseSeeder
             // ⭐ C4 — trạng thái TRƯỚC phụ lục: chỉ ăn ca mức cũ 730k. Phụ lục hiệu lực giữa kỳ 06 sẽ
             // nâng lên 1tr và thêm xăng xe; ảnh "trước" ghim ngay dưới đây.
             ["cn_x3_3"] = new[] { ("MEAL", 1_000_000m), ("FUEL", 400_000m) },
+            // Nhân viên sơn có phụ cấp độc hại tính vào nền BH và đơn giá OT; đồng thời có phép năm
+            // và OT Chủ nhật để kiểm tra OT không chảy ngược vào căn cứ BH.
+            ["cn_x3_5"] = new[] { ("MEAL", 1_000_000m), ("UNIFORM", 400_000m), ("TOXIC", 500_000m) },
+            // Mốc đúng bằng trần miễn thuế tiền ăn tháng 07/2026 (1,2 triệu).
+            ["cn_x3_6"] = new[] { ("MEAL", 1_200_000m), ("UNIFORM", 400_000m) },
+            // DV-TNCT — HĐ dịch vụ khấu trừ 10% nhưng khoản ăn ca/điện thoại hợp lệ không thuộc
+            // TNCT. Case này làm TONGTHUNHAP khác TNCT để bắt đúng lỗi công thức trong ảnh.
+            ["cn_x2_6"] = new[] { ("MEAL", 1_200_000m), ("PHONE", 400_000m) },
+            // WFH tháng 7 + tiền ăn vượt trần: cùng một hồ sơ có đủ HĐ, phụ cấp, phân ca, đơn và công.
+            ["quandoc_x3"] = new[]
+            {
+                ("MEAL", 1_500_000m), ("FUEL", 600_000m), ("PHONE", 300_000m), ("RESP", 1_500_000m),
+            },
         };
 
     /// <summary>Loại hợp đồng KHÔNG gắn phụ cấp: hợp đồng dân sự trả trọn gói, thử việc, học nghề.</summary>
@@ -137,7 +152,8 @@ public sealed partial class DatabaseSeeder
         var rows = new List<ContractAllowance>();
         foreach (var c in contracts)
         {
-            if (KindsWithoutAllowance.Contains(c.Kind)) continue;
+            if (KindsWithoutAllowance.Contains(c.Kind)
+                && (c.Username is null || !AllowanceOverrides.ContainsKey(c.Username))) continue;
 
             var lines = c.Username is not null && AllowanceOverrides.TryGetValue(c.Username, out var over)
                 ? over
@@ -173,8 +189,12 @@ public sealed partial class DatabaseSeeder
             .Where(u => u.RoleId == SystemRoles.SystemAdminId).Select(u => u.Id).FirstOrDefaultAsync(ct);
         if (adminId == 0) return;
 
+        var appendixNos = new[]
+        {
+            SalaryAppendixNo, AllowanceAppendixNo, TaxTenMillionAppendixNo, TaxThirtyMillionAppendixNo,
+        };
         var existing = (await _context.ContractAppendices.AsNoTracking()
-            .Where(a => a.AppendixNo == SalaryAppendixNo || a.AppendixNo == AllowanceAppendixNo)
+            .Where(a => appendixNos.Contains(a.AppendixNo))
             .Select(a => a.AppendixNo).ToListAsync(ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var now = DateTime.UtcNow;
@@ -250,11 +270,73 @@ public sealed partial class DatabaseSeeder
             }
         }
 
+        // ⭐ TAX10 — mức lương tròn 10 triệu để đối chiếu vùng thuế thấp, đồng thời người này nhận
+        // đúng 1,2 triệu tiền ăn (bằng trần miễn thuế). Phụ lục là entity người dùng tạo được thật,
+        // không sửa thẳng SalaryAmountSnapshot của hợp đồng.
+        if (!existing.Contains(TaxTenMillionAppendixNo))
+        {
+            var contract = await FindActiveContractByUsernameAsync("cn_x3_6", ct);
+            if (contract is not null)
+            {
+                var effective = DemoDay(2, 1);
+                toAdd.Add(new ContractAppendix
+                {
+                    ContractId = contract.Id,
+                    AppendixNo = TaxTenMillionAppendixNo,
+                    AppendixType = ContractEnums.AppendixType.Amendment,
+                    Title = "Nâng bậc nhân viên KCS lên mức 10 triệu đồng",
+                    ChangedClausesJson = PayrollJson.Serialize(new { salaryAmount = 10_000_000m }),
+                    AppendixText =
+                        $"Hai bên thoả thuận mức lương mới 10.000.000 VND/tháng từ ngày {effective:dd/MM/yyyy} "
+                        + "sau kỳ đánh giá tay nghề và chất lượng.",
+                    SalaryAmountSnapshot = 10_000_000m,
+                    SalaryCurrencySnapshot = "VND",
+                    NoticeSentAt = Utc(effective.AddDays(-10)),
+                    EffectiveFrom = Utc(effective),
+                    SignedAt = Utc(effective.AddDays(-3)),
+                    Status = ContractEnums.AppendixStatus.Active,
+                    CreatedAt = now,
+                    CreatedByUserId = adminId,
+                });
+            }
+        }
+
+        // ⭐ TAX30 — mức lương tròn 30 triệu cho case thuế lũy tiến cao hơn và chạm trần đoàn phí.
+        // Kế toán trưởng đồng thời có người phụ thuộc hết hiệu lực từ 30/06 nên nhìn được tác động
+        // kết hợp giữa lương, giảm trừ gia cảnh, BH và thuế trong cùng một dòng lương tháng 7.
+        if (!existing.Contains(TaxThirtyMillionAppendixNo))
+        {
+            var contract = await FindActiveContractByUsernameAsync("accountant", ct);
+            if (contract is not null)
+            {
+                var effective = DemoDay(2, 1);
+                toAdd.Add(new ContractAppendix
+                {
+                    ContractId = contract.Id,
+                    AppendixNo = TaxThirtyMillionAppendixNo,
+                    AppendixType = ContractEnums.AppendixType.Amendment,
+                    Title = "Điều chỉnh lương Kế toán trưởng lên 30 triệu đồng",
+                    ChangedClausesJson = PayrollJson.Serialize(new { salaryAmount = 30_000_000m }),
+                    AppendixText =
+                        $"Hai bên thoả thuận mức lương mới 30.000.000 VND/tháng từ ngày {effective:dd/MM/yyyy} "
+                        + "theo phạm vi trách nhiệm quyết toán và kiểm toán mở rộng.",
+                    SalaryAmountSnapshot = 30_000_000m,
+                    SalaryCurrencySnapshot = "VND",
+                    NoticeSentAt = Utc(effective.AddDays(-10)),
+                    EffectiveFrom = Utc(effective),
+                    SignedAt = Utc(effective.AddDays(-3)),
+                    Status = ContractEnums.AppendixStatus.Active,
+                    CreatedAt = now,
+                    CreatedByUserId = adminId,
+                });
+            }
+        }
+
         if (toAdd.Count == 0) return;
 
         await _context.ContractAppendices.AddRangeAsync(toAdd, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded {Count} phụ lục hợp đồng có hiệu lực giữa tháng.", toAdd.Count);
+        _logger.LogInformation("Seeded {Count} phụ lục hợp đồng cho các case lương/phụ cấp.", toAdd.Count);
     }
 
     private Task<Contract?> FindCaseContractAsync(string caseCode, string username, CancellationToken ct)

@@ -50,7 +50,7 @@ public sealed partial class DatabaseSeeder
             IsDefault = true,
             CreatedByUserId = adminId,
             CreatedAt = DateTime.UtcNow,
-            Columns = DefaultPayrollFormulaSet.BuildColumns(),
+            Columns = BuildSeedPayrollColumns(),
         };
         await _context.PayrollFormulaSets.AddAsync(set, ct);
         await _context.SaveChangesAsync(ct);
@@ -72,7 +72,7 @@ public sealed partial class DatabaseSeeder
             .FirstOrDefaultAsync(s => s.IsDefault, ct);
         if (set is null) return;
 
-        var defaults = DefaultPayrollFormulaSet.BuildColumns();
+        var defaults = BuildSeedPayrollColumns();
         var defaultByCode = defaults.ToDictionary(d => d.ColumnCode, StringComparer.OrdinalIgnoreCase);
         var existingCodes = set.Columns.Select(c => c.ColumnCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missing = defaults.Where(d => !existingCodes.Contains(d.ColumnCode)).ToList();
@@ -163,9 +163,7 @@ public sealed partial class DatabaseSeeder
         // Phải ưu tiên ca Fulltime 8 giờ. Lấy "bản ghi đầu tiên" theo Id khiến DB mới luôn chọn
         // Ca sáng 4 giờ; hậu quả là phân ca, WFH và chấm công nền mô tả hai chế độ khác nhau.
         var shiftTemplateId = await _context.ShiftTemplates.AsNoTracking()
-            .Where(s => s.IsActive)
-            .OrderByDescending(s => s.Name == "Fulltime")
-            .ThenByDescending(s => s.StandardHours)
+            .Where(s => s.IsActive && s.Code == "FULLTIME")
             .Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
         if (shiftTemplateId is null)
         {
@@ -289,7 +287,10 @@ public sealed partial class DatabaseSeeder
         await EnsurePayrollMonthScheduleAsync(
             periodStart, periodEnd, shiftTemplateId, adminId, emps.Select(e => e.Id).ToList(), workdays, ct);
 
-        // Đơn WFH tháng 08 phải được áp sau khi đã có phân ca, đúng luồng repository của sản phẩm.
+        // Đơn WFH phải được áp SAU khi đã có phân ca và TRƯỚC khi điền attendance nền, đúng thứ tự
+        // của repository sản phẩm: chỉ ngày có assignment mới được tự sinh công WFH.
+        if (periodStart == DemoPeriodStart(2))
+            await SeedJulyWfhPayrollCaseAsync(adminId, ct);
         if (periodStart == DemoCurrentMonth)
             await SeedWfhDemoCasesAsync(adminId, ct);
 
@@ -324,23 +325,32 @@ public sealed partial class DatabaseSeeder
             // 21 ngày còn lại không có chấm công; đồng thời dữ liệu case một ngày cũng chặn toàn bộ nền.
             if (assignmentsByEmployee.TryGetValue(emp.Id, out var employeeAssignments))
             {
+                // Đơn nghỉ dài ngày có thể kéo sang tháng 08 (điển hình thai sản). Nếu chỉ lớp case
+                // tháng 07 biết đơn nghỉ còn bước prepare tháng 08 luôn điền Present, cùng một đơn sẽ
+                // cho hai trạng thái trái nhau giữa hai tháng. Mỗi ca nền phải đối chiếu đơn Approved.
+                var approvedLeaveDays = await LoadApprovedLeaveDaysAsync(emp.Id, periodStart, ct);
                 foreach (var assignment in employeeAssignments)
                 {
                     if (existingAttendanceKeys.Contains((emp.Id, assignment.WorkDate, assignment.ShiftTemplateId)))
                         continue;
+
+                    var onLeave = approvedLeaveDays.Contains(assignment.WorkDate);
 
                     await _context.AttendanceRecords.AddAsync(new AttendanceRecord
                     {
                         EmployeeInformationId = emp.Id,
                         WorkDate = assignment.WorkDate,
                         ShiftTemplateId = assignment.ShiftTemplateId,
-                        DayHours = 8m,
+                        DayHours = onLeave ? 0m : 8m,
                         NightHours = 0m,
-                        Status = AttendanceEnums.AttendanceStatus.Present,
+                        Status = onLeave
+                            ? AttendanceEnums.AttendanceStatus.OnLeave
+                            : AttendanceEnums.AttendanceStatus.Present,
                         // Ngày quá khứ phải có đủ giờ vào/ra — thiếu CheckOutAt khiến bản ghi trông như
                         // nhân viên "đang làm việc" dù ngày đã qua từ lâu.
-                        CheckInAt = assignment.WorkDate.ToDateTime(new TimeOnly(8, 0)),
-                        CheckOutAt = assignment.WorkDate.ToDateTime(new TimeOnly(17, 0)),
+                        CheckInAt = onLeave ? null : assignment.WorkDate.ToDateTime(new TimeOnly(8, 0)),
+                        CheckOutAt = onLeave ? null : assignment.WorkDate.ToDateTime(new TimeOnly(17, 0)),
+                        Notes = onLeave ? "Nghỉ theo đơn đã duyệt" : null,
                         CreatedAt = now,
                         CreatedByUserId = adminId,
                     }, ct);

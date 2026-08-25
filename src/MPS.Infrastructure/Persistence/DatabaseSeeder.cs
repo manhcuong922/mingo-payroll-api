@@ -54,7 +54,7 @@ public sealed partial class DatabaseSeeder
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
-        // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (100/200/300 %) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
+        // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (100/200/300 %) + các mẫu ca ban ngày.
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
         await SeedDefaultLeaveTypesAsync(cancellationToken);
@@ -85,7 +85,7 @@ public sealed partial class DatabaseSeeder
         await SeedLeaveBalancesAsync(cancellationToken);
         // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
         // xem DatabaseSeeder.PayrollDemoData.cs.
-        // Chấm công "có chuyện" (tăng ca đủ 4 loại ngày, nghỉ phép/thai sản, đi muộn/vắng/nửa công)
+        // Chấm công "có chuyện" (OT ngày thường/thứ Bảy/Chủ nhật/lễ, nghỉ phép/thai sản, đi muộn/vắng/nửa công)
         // cho nhóm nhân vật case. Phải chạy TRƯỚC payroll: bước chuẩn bị của payroll chỉ sinh chấm
         // công nền cho người CHƯA có bản ghi nào. Xem DatabaseSeeder.AttendanceCaseData.cs.
         await SeedAttendanceCasesAsync(cancellationToken);
@@ -1219,7 +1219,7 @@ public sealed partial class DatabaseSeeder
         }
 
         // Row 1: historical (2021-01-01, IsActive=false) — miễn thuế OT chỉ phần chênh lệch (TT 111/2013 Đ.3).
-        // Kỳ lương CŨ (trước 01/07/2026) tính lại vẫn ra đúng số của thời điểm đó nhờ
+        // Kỳ lương trước năm 2026 tính lại vẫn ra đúng số của thời điểm đó nhờ
         // LaborLawConstantsRepository.GetActiveAtAsync fallback theo ValidFrom.
         var row1 = new LaborLawConstantsVersion
         {
@@ -1248,14 +1248,16 @@ public sealed partial class DatabaseSeeder
             CreatedByUserId = adminId,
         };
 
-        // Row 2: current active (2026-07-01, IsActive=true — ValidFrom đã ở QUÁ KHỨ so với ngày seed)
+        // Row 2: áp dụng cho thu nhập tiền lương của kỳ tính thuế 2026. Luật TNCN 109/2025/QH15
+        // quy định nhóm tiền lương áp dụng từ kỳ tính thuế năm 2026, dù luật/NĐ 253 có hiệu lực
+        // hành chính từ 01/07/2026; vì vậy không được để nửa đầu năm vẫn chỉ miễn phần chênh OT.
         // — miễn thuế TOÀN BỘ tiền tăng ca (Luật TNCN 109/2025 + NĐ 253/2026). Phải bật cờ ngay tại
         // seed, không chờ ComplianceActivationJob: GetActiveAtAsync ưu tiên hàng CÓ cờ IsActive trước
         // khi fallback theo ValidFrom, nên để row1 giữ cờ thì payroll sẽ ăn luật CŨ tới lần chạy job
         // đầu tiên (nửa đêm UTC kế tiếp).
         var row2 = new LaborLawConstantsVersion
         {
-            ValidFrom = new DateOnly(2026, 7, 1),
+            ValidFrom = new DateOnly(2026, 1, 1),
             IsActive = true,
             IsArchived = false,
             ProbationSalaryMinPercent = 85.00m,
@@ -1275,14 +1277,14 @@ public sealed partial class DatabaseSeeder
             OvertimeMaxHoursPerMonth = 40.00m,
             OvertimeMaxHoursPerYear = 200,
             OvertimeIncomeFullyTaxExempt = true,
-            LegalReference = "Luật TNCN 109/2025/QH15 + NĐ 253/2026/NĐ-CP — miễn thuế toàn bộ tiền lương làm đêm/OT từ 01/07/2026",
+            LegalReference = "Luật TNCN 109/2025/QH15 Điều 24, 29, 51 + NĐ 253/2026/NĐ-CP — quy định tiền lương áp dụng từ kỳ tính thuế 2026; miễn toàn bộ tiền làm đêm/OT",
             CreatedAt = now,
             CreatedByUserId = adminId,
         };
 
         await _context.LaborLawConstantsVersions.AddRangeAsync(new[] { row1, row2 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 2 LaborLawConstantsVersion rows (row1 IsActive=false historical BLLĐ 2019, row2 IsActive=true current từ 01/07/2026).");
+        _logger.LogInformation("Seeded 2 LaborLawConstantsVersion rows (row1 historical đến 2025, row2 áp dụng kỳ tính thuế từ 01/01/2026).");
 
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.LaborLawConstants, row1.Id,
@@ -1456,7 +1458,7 @@ public sealed partial class DatabaseSeeder
         _logger.LogInformation("Seeded default AttendanceRule '{Name}' (100/200/300 %%) + version đầu tiên.", DefaultAttendanceRuleName);
     }
 
-    // 4 ca làm việc mặc định: CA-SANG, CA-CHIEU, CA-DEM, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".
+    // 3 ca làm việc ban ngày: CA-SANG, CA-CHIEU, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".
     // Idempotent theo Code (unique index) — chỉ chèn Code còn thiếu.
     private async Task SeedDefaultShiftTemplatesAsync(CancellationToken ct)
     {
@@ -1515,21 +1517,6 @@ public sealed partial class DatabaseSeeder
                 BreakStartTime = null,
                 BreakEndTime = null,
                 StandardHours = 4.00m,
-                StandardDays = 1.00m,
-                AppliedAttendanceRuleId = rule.Id,
-                IsActive = true,
-                CreatedAt = now,
-                CreatedByUserId = adminId,
-            },
-            new()
-            {
-                Code = "CA-DEM",
-                Name = "Ca đêm",
-                StartTime = new TimeOnly(22, 0),
-                EndTime = new TimeOnly(6, 0),
-                BreakStartTime = null,
-                BreakEndTime = null,
-                StandardHours = 8.00m,
                 StandardDays = 1.00m,
                 AppliedAttendanceRuleId = rule.Id,
                 IsActive = true,

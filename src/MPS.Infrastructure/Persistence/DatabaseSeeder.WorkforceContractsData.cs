@@ -86,38 +86,30 @@ public sealed partial class DatabaseSeeder
         bool HasProbationClause = false,
         int ProbationPeriod = 0,
         bool UnionFundExempt = false,
+        bool? SocialInsurance = null,
+        bool? HealthInsurance = null,
+        bool? UnemploymentInsurance = null,
+        ContractEnums.TaxPolicy? TaxPolicy = null,
         string? JobNote = null);
 
     private static readonly WorkforceCaseSpec[] WorkforceCaseSpecs =
     {
-        // ── C1: thử việc BẰNG HỢP ĐỒNG RIÊNG rồi ký chính thức giữa kỳ 07 ──
-        // Hai hợp đồng nối nhau trong CÙNG một kỳ ⇒ engine phải tách ngày công theo đoạn: nửa đầu
-        // hưởng 85% và KHÔNG đóng BH (HĐ thử việc), nửa sau hưởng đủ và đóng BH.
-        new("cn_x1_1", "C1a", ContractEnums.ContractKind.Probation, null,
-            FromPeriod: 2, FromDay: 1, ToPeriod: 2, ToDay: 14,
-            Status: ContractEnums.ContractStatus.Expired,
-            Subtype: ContractEnums.ContractSubtype.Probation, SalaryPercent: 0.85m,
-            JobNote: "thử việc 14 ngày theo Điều 25 BLLĐ 2019"),
-        new("cn_x1_1", "C1b", ContractEnums.ContractKind.LaborFullTime,
-            FromPeriod: 2, FromDay: 15,
-            JobNote: "ký chính thức ngay sau khi đạt thử việc"),
-
-        // ── C2: thử việc GHI TRONG HĐLĐ (khác C1: vẫn đóng BHXH bắt buộc) ──
+        // ── C2: thử việc GHI TRONG HĐLĐ; đến kỳ 07 đã chuyển hoàn toàn sang giai đoạn chính thức ──
         new("cn_x2_1", "C2", ContractEnums.ContractKind.LaborFullTime,
             ContractEnums.ContractCategory.Definite,
             FromPeriod: 0, FromDay: 1, ToPeriod: 2, ToDay: 0,
             HasProbationClause: true, ProbationPeriod: 0,
             JobNote: "HĐ xác định thời hạn, tháng đầu là thời gian thử việc ghi ngay trong hợp đồng"),
 
-        // ── C5: chấm dứt HĐ giữa kỳ 07 (ngày làm việc cuối 18/07) ──
+        // ── C5: chấm dứt HĐ giữa kỳ 07 (ngày làm việc cuối 20/07) ──
         new("cn_x2_2", "C5", ContractEnums.ContractKind.LaborFullTime,
-            ToPeriod: 2, ToDay: 18,
+            ToPeriod: 2, ToDay: 20,
             Status: ContractEnums.ContractStatus.Terminated,
             JobNote: "đơn phương chấm dứt theo Điều 35, báo trước 30 ngày"),
 
         // ── C6: vào làm giữa kỳ 07 ──
         new("cn_x3_2", "C6", ContractEnums.ContractKind.LaborFullTime,
-            FromPeriod: 2, FromDay: 22,
+            FromPeriod: 2, FromDay: 14,
             JobNote: "tuyển mới giữa tháng"),
 
         // ── C7 / C8: hợp đồng KHOÁN VIỆC (dân sự) — không BH, thuế khoán 10%, hỗ trợ theo bậc giờ ──
@@ -136,7 +128,8 @@ public sealed partial class DatabaseSeeder
 
         // ── Phủ nốt các loại hợp đồng còn lại ──
         new("cn_x1_6", "PT", ContractEnums.ContractKind.LaborPartTime, null,
-            ToPeriod: 2, ToDay: 0,
+            ToPeriod: 2, ToDay: 0, SocialInsurance: false, HealthInsurance: false,
+            UnemploymentInsurance: false, TaxPolicy: ContractEnums.TaxPolicy.ProgressivePit,
             JobNote: "làm bán thời gian 4 giờ/ngày"),
         // ⚠️ ĐÃ BỎ case "DT" (ContractKind.VocationalTraining) của cn_x3_6 — công ty KHÔNG ký hợp đồng
         // đào tạo nghề, nên dữ liệu demo không được mô tả một loại quan hệ lao động không tồn tại.
@@ -144,10 +137,14 @@ public sealed partial class DatabaseSeeder
         // Enum + nhánh `CongCategory.Apprentice` trong engine giữ nguyên: đó là code, không phải dữ liệu.
         new("cn_x2_6", "DV", ContractEnums.ContractKind.Service, null,
             FromPeriod: 0, FromDay: 1, ToPeriod: 2, ToDay: 0,
+            SocialInsurance: false, HealthInsurance: false, UnemploymentInsurance: false,
+            TaxPolicy: ContractEnums.TaxPolicy.FlatRate10Percent,
             JobNote: "cung cấp dịch vụ đóng gói theo đơn hàng"),
         new("cn_x3_4", "CTV", ContractEnums.ContractKind.Collaborator, null,
             FromPeriod: 0, FromDay: 1, ToPeriod: 2, ToDay: 0, SalaryPercent: 0.60m,
-            JobNote: "cộng tác viên giới thiệu khách hàng"),
+            SocialInsurance: false, HealthInsurance: false, UnemploymentInsurance: false,
+            TaxPolicy: ContractEnums.TaxPolicy.Exempt,
+            JobNote: "cộng tác viên giới thiệu khách hàng có cam kết khấu trừ hợp lệ"),
     };
 
     private async Task SeedWorkforceContractsAsync(CancellationToken ct)
@@ -318,14 +315,14 @@ public sealed partial class DatabaseSeeder
             WorkingTimeJson = spec.Kind == ContractEnums.ContractKind.LaborPartTime
                 ? @"{""hoursPerDay"":4,""daysPerWeek"":5}"
                 : @"{""hoursPerDay"":8,""daysPerWeek"":5}",
-            // Chế độ BH + thuế lấy từ metadata của loại hợp đồng — cùng nguồn luồng tạo HĐ thật dùng.
-            // Loại UserChoice (bán thời gian, đào tạo nghề, dịch vụ, CTV) không có mặc định: theo
-            // QĐ 595 người làm dưới 14 ngày/tháng và người ký HĐ dân sự không thuộc diện đóng.
-            SocialInsuranceFlag = meta.DefaultSocialInsurance ?? false,
-            HealthInsuranceFlag = meta.DefaultHealthInsurance ?? false,
-            UnemploymentInsuranceFlag = meta.DefaultUnemploymentInsurance ?? false,
+            // RuleDriven lấy đúng metadata. UserChoice lấy đúng lựa chọn đã khai trong case — đây là
+            // cùng bốn trường mà request tạo/sửa hợp đồng thật bắt buộc người dùng nhập, không phải
+            // tổ hợp DB-only. Không để TaxPolicy=null vì collector sẽ rơi nhầm về thuế lũy tiến.
+            SocialInsuranceFlag = meta.DefaultSocialInsurance ?? spec.SocialInsurance ?? false,
+            HealthInsuranceFlag = meta.DefaultHealthInsurance ?? spec.HealthInsurance ?? false,
+            UnemploymentInsuranceFlag = meta.DefaultUnemploymentInsurance ?? spec.UnemploymentInsurance ?? false,
             UnionFundExemptFlag = spec.UnionFundExempt,
-            TaxPolicy = meta.DefaultTaxPolicy,
+            TaxPolicy = meta.DefaultTaxPolicy ?? spec.TaxPolicy,
             Status = spec.Status,
             ConvertedFromDefiniteFlag = false,
             HasProbation = spec.HasProbationClause,
