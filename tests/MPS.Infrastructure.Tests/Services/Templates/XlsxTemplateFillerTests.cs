@@ -201,4 +201,109 @@ public class XlsxTemplateFillerTests
             stream.Length.Should().BeGreaterThan(0, "biểu mẫu {0} phải có nội dung", kind);
         }
     }
+
+    /// <summary>
+    /// Đọc giá trị cache (&lt;v&gt;) của một ô — thứ mà mọi trình xem KHÔNG tự tính lại công thức
+    /// sẽ hiển thị. Đây chính là chỗ trước đây trả về 0 làm chứng từ in ra trống.
+    /// </summary>
+    private static (string? Cached, string? Formula) ReadFormulaCell(
+        byte[] xlsx, string sheetName, string cellRef)
+    {
+        using var ms = new MemoryStream(xlsx);
+        using var doc = SpreadsheetDocument.Open(ms, false);
+        var workbookPart = doc.WorkbookPart!;
+        var sheet = workbookPart.Workbook.Descendants<Sheet>().First(s => s.Name == sheetName);
+        var part = (WorksheetPart)workbookPart.GetPartById(sheet.Id!.Value!);
+
+        var cell = part.Worksheet.Descendants<Cell>()
+            .FirstOrDefault(c => c.CellReference?.Value == cellRef);
+
+        return (cell?.CellValue?.InnerText, cell?.CellFormula?.Text);
+    }
+
+    [Fact]
+    public void Fill_GhiCacheChoOCongThucTroToiOVuaDien()
+    {
+        // AB22 (liên 1) và AB63 (liên 2) đều là "=Nguon!$B$24" — ô tiền của bản in.
+        var result = FillBhxhTemplate(XlsxCellEdit.OfNumber(DataSheet, "B24", 76_189_773m));
+
+        foreach (var cellRef in new[] { "AB22", "AB63" })
+        {
+            var (cached, formula) = ReadFormulaCell(result, FormSheet, cellRef);
+
+            formula.Should().Be("Nguon!$B$24", "công thức của biểu mẫu phải còn nguyên");
+            cached.Should().Be("76189773",
+                "trình xem không tính lại công thức chỉ đọc cache — cache sai là chứng từ sai tiền");
+        }
+    }
+
+    [Fact]
+    public void Fill_GhiCacheChoCaCongThucNoiChuoiVaTEXT()
+    {
+        var result = FillBhxhTemplate(
+            XlsxCellEdit.OfText(DataSheet, "B11", "BHXH-07/2026"),
+            XlsxCellEdit.OfDate(DataSheet, "B12", new DateTime(2026, 7, 31)));
+
+        // AB1  = "Số: "&Nguon!$B$11
+        ReadFormulaCell(result, FormSheet, "AB1").Cached.Should().Be("Số: BHXH-07/2026");
+
+        // N5   = "Ngày: "&TEXT(Nguon!$B$12,"dd/mm/yyyy") — 'm' của Excel là THÁNG, không phải phút.
+        ReadFormulaCell(result, FormSheet, "N5").Cached.Should().Be("Ngày: 31/07/2026");
+    }
+
+    [Fact]
+    public void Fill_KhongDienGiOCa_ThiKhongDungVaoCacheCuaBieuMau()
+    {
+        // Không có ô nào được ghi ⇒ không suy ra được gì ⇒ phải để nguyên biểu mẫu.
+        using var template = Templates.Open(PaymentTemplateKind.BhxhRemittanceOrder);
+        var result = Filler.Fill(template, []);
+
+        var (cached, formula) = ReadFormulaCell(result, FormSheet, "AB22");
+
+        formula.Should().Be("Nguon!$B$24");
+        cached.Should().Be("0", "cache gốc của biểu mẫu phải được giữ nguyên khi không ghi gì");
+    }
+
+    [Fact]
+    public void Fill_OCongThucKhongLienQuanDuLieuGhiVao_ThiGiuNguyenCache()
+    {
+        // Chỉ ghi B24; các ô công thức trỏ vào B38/B39/... không được đụng tới.
+        var result = FillBhxhTemplate(XlsxCellEdit.OfNumber(DataSheet, "B24", 1_000m));
+
+        // H8 = Nguon!$B$38 — không nằm trong danh sách ô vừa ghi.
+        var (cached, formula) = ReadFormulaCell(result, FormSheet, "H8");
+
+        formula.Should().Be("Nguon!$B$38");
+        cached.Should().Be("0");
+    }
+
+    [Fact]
+    public void Fill_GhiOThanhTrong_ThiXoaCacheChuKhongDeSoCu()
+    {
+        // Ghi rỗng = chưa khai. Để nguyên cache cũ thì bản in hiện số của lần lưu trước —
+        // với chứng từ chuyển tiền, ô trống an toàn hơn số sai.
+        var result = FillBhxhTemplate(XlsxCellEdit.OfText(DataSheet, "B24", null));
+
+        var (cached, formula) = ReadFormulaCell(result, FormSheet, "AB22");
+
+        formula.Should().Be("Nguon!$B$24");
+        cached.Should().BeNull();
+    }
+
+    [Fact]
+    public void Fill_MauLenhChiLuongKhongCoCongThuc_NenKhongBiAnhHuong()
+    {
+        // Mẫu VPBank ghi số thẳng vào ô in (0 công thức) — thay đổi về cache không được
+        // làm suy suyển gì ở đây.
+        using var template = Templates.Open(PaymentTemplateKind.SalaryPaymentOrder);
+        var result = Filler.Fill(template, [XlsxCellEdit.OfNumber("Lệnh TT", "A1", 1m)]);
+
+        using var ms = new MemoryStream(result);
+        using var doc = SpreadsheetDocument.Open(ms, false);
+
+        doc.WorkbookPart!.WorksheetParts
+            .SelectMany(p => p.Worksheet.Descendants<Cell>())
+            .Count(c => c.CellFormula is not null)
+            .Should().Be(0);
+    }
 }

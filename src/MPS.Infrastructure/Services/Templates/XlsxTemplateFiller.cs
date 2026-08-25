@@ -60,6 +60,8 @@ public sealed class XlsxTemplateFiller : IXlsxTemplateFiller
                 worksheetPart.Worksheet.Save();
             }
 
+            var written = new Dictionary<string, XlsxFormulaCacheWriter.WrittenValue>(StringComparer.Ordinal);
+
             foreach (var group in edits.GroupBy(e => e.Sheet, StringComparer.OrdinalIgnoreCase))
             {
                 var worksheetPart = ResolveWorksheet(workbookPart, group.Key);
@@ -69,11 +71,15 @@ public sealed class XlsxTemplateFiller : IXlsxTemplateFiller
 
                 foreach (var edit in group)
                 {
-                    ApplyEdit(sheetData, edit);
+                    written[XlsxFormulaCacheWriter.MakeKey(edit.Sheet, edit.Cell)] = ApplyEdit(sheetData, edit);
                 }
 
                 worksheetPart.Worksheet.Save();
             }
+
+            // Sau khi số liệu đã vào sheet dữ liệu: cập nhật luôn cache của các ô công thức trỏ
+            // vào đó, để chứng từ hiện đúng ngay cả ở trình xem không tự tính lại công thức.
+            XlsxFormulaCacheWriter.Apply(workbookPart, written);
 
             ForceRecalculationOnOpen(workbookPart);
             workbookPart.Workbook.Save();
@@ -99,7 +105,8 @@ public sealed class XlsxTemplateFiller : IXlsxTemplateFiller
         return (WorksheetPart)workbookPart.GetPartById(sheet.Id!.Value!);
     }
 
-    private static void ApplyEdit(SheetData sheetData, XlsxCellEdit edit)
+    /// <returns>Giá trị vừa ghi, để cập nhật cache cho các ô công thức trỏ tới ô này.</returns>
+    private static XlsxFormulaCacheWriter.WrittenValue ApplyEdit(SheetData sheetData, XlsxCellEdit edit)
     {
         var (rowIndex, columnIndex) = ParseReference(edit.Cell);
         var row = GetOrCreateRow(sheetData, rowIndex);
@@ -113,27 +120,36 @@ public sealed class XlsxTemplateFiller : IXlsxTemplateFiller
         if (edit.Date.HasValue)
         {
             // Excel lưu ngày dưới dạng số sê-ri; định dạng hiển thị lấy từ style ô mẫu.
+            var serial = edit.Date.Value.ToOADate();
             cell.DataType = null;
             cell.CellValue = new CellValue(
-                edit.Date.Value.ToOADate().ToString(System.Globalization.CultureInfo.InvariantCulture));
+                serial.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+            return new XlsxFormulaCacheWriter.WrittenValue(serial, null);
         }
-        else if (edit.Number.HasValue)
+
+        if (edit.Number.HasValue)
         {
             cell.DataType = null;
             cell.CellValue = new CellValue(
                 edit.Number.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+            return new XlsxFormulaCacheWriter.WrittenValue((double)edit.Number.Value, null);
         }
-        else if (!string.IsNullOrEmpty(edit.Text))
+
+        if (!string.IsNullOrEmpty(edit.Text))
         {
             cell.DataType = CellValues.InlineString;
             cell.InlineString = new InlineString(
                 new Text(edit.Text) { Space = SpaceProcessingModeValues.Preserve });
+
+            return new XlsxFormulaCacheWriter.WrittenValue(null, edit.Text);
         }
-        else
-        {
-            // Chuỗi rỗng/null ⇒ để ô trống hẳn, không ghi chuỗi "" gây hiểu nhầm là đã khai.
-            cell.DataType = null;
-        }
+
+        // Chuỗi rỗng/null ⇒ để ô trống hẳn, không ghi chuỗi "" gây hiểu nhầm là đã khai.
+        cell.DataType = null;
+
+        return default;
     }
 
     private static Row GetOrCreateRow(SheetData sheetData, uint rowIndex)
