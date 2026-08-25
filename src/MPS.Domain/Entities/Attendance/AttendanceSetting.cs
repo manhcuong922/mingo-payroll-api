@@ -40,6 +40,18 @@ public class AttendanceSetting
     /// <summary>Độ dài tối thiểu của WorkPlan trong đơn WFH. Null = 20.</summary>
     public int? WfhWorkPlanMinLength { get; set; }
 
+    // ===== Ngày nghỉ hằng tuần (Đ.111 BLLĐ) =====
+
+    /// <summary>
+    /// ⭐ RESTDAY-2026-08 — bitmask các thứ được ấn định là NGÀY NGHỈ HẰNG TUẦN trong nội quy lao
+    /// động: bit N ⇔ <c>(DayOfWeek)N</c> (CN = bit 0 … T7 = bit 6). Null = chưa cấu hình ⇒ dùng
+    /// <c>WeeklyRestDayPolicy.DefaultMask</c> (T7 + CN).
+    ///
+    /// <para>Trước bản này ngày nghỉ tuần được SUY từ bảng phân ca, sai cả hai chiều — xem
+    /// <c>WeeklyRestDayPolicy</c>.</para>
+    /// </summary>
+    public int? WeeklyRestDayMask { get; set; }
+
     // ===== Grace period cho auto-resolve AttendanceStatus =====
 
     /// <summary>

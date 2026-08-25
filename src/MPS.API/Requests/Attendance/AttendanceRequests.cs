@@ -46,6 +46,7 @@ public sealed record UpdateAttendanceSettingRequest(
     int? WfhMinNoticeDays,
     decimal? WfhMaxDaysPerRequest,
     int? WfhWorkPlanMinLength,
+    int? WeeklyRestDayMask,
     int? LateGraceMinutes,
     int? EarlyLeaveGraceMinutes,
     int? HalfDayThresholdMinutes);

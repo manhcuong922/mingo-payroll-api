@@ -17,7 +17,13 @@ namespace MPS.Application.Features.Attendance.Attendance.Queries;
 /// Bảng chấm công tháng — aggregate theo NV × DayType × giờ × hệ số.
 /// - Status-based counts (Present/Absent/Late/HalfDay/OnLeave/EarlyLeave/Total) — cho Báo cáo cũ.
 /// - DayType-based aggregations (Normal/WeeklyRest/Holiday/PaidLeave) — cho Bảng chấm công tháng.
-///   Halfday cộng 0.5 vào DayType tương ứng.
+///   ⭐ CONG-MONTHLY-2026-08 — công quy đổi qua <see cref="WorkDayCongCalculator"/>, ĐÚNG hàm mà
+///   bảng lương dùng: cộng GIỜ công được công nhận của cả kỳ theo từng loại ngày, rồi mới chia giờ
+///   chuẩn/ngày và làm tròn LÊN bội số 0,5. Làm tròn từng nhóm loại-ngày, cùng quy ước "làm tròn
+///   từng nhóm" mà bảng lương áp cho chính thức / thử việc / học việc.
+///   Trước đây màn này tự đọc <c>AttendanceStatus</c> (HalfDay = 0,5; còn lại = 1,0) nên ca 8h về
+///   sớm 2h ra 1,0 công ở đây nhưng 0,75 công trên bảng lương — hai con số khác nhau cho cùng một
+///   tháng, không ai đối chiếu nổi.
 /// - Quy đổi giờ, chia 2 nhánh:
 ///   • Non-OT (record không có OvertimeRequestId) — dùng ShiftRate (AttendanceRuleVersion):
 ///       - Normal day:      DayHours × Rate% / 100 + NightHours × (Rate% + NightSurcharge%) / 100
@@ -32,8 +38,6 @@ namespace MPS.Application.Features.Attendance.Attendance.Queries;
 public class GetAttendanceSummaryQueryHandler
     : IRequestHandler<GetAttendanceSummaryQuery, PagedResult<EmployeeAttendanceSummaryDto>>
 {
-    private const decimal HalfDayWeight = 0.5m;
-    private const decimal FullDayWeight = 1.0m;
     private const int MaxPageSize = 1000;
     private const int DefaultPageSize = 20;
 
@@ -43,6 +47,8 @@ public class GetAttendanceSummaryQueryHandler
     private readonly IAttendanceRateResolver _rateResolver;
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IOvertimeMultiplierCalculator _otCalculator;
+    private readonly IAttendanceSettingRepository _settingRepository;
+    private readonly ILateEarlyRequestRepository _lateEarlyRepository;
 
     public GetAttendanceSummaryQueryHandler(
         IEmployeeInformationRepository employeeRepository,
@@ -50,7 +56,9 @@ public class GetAttendanceSummaryQueryHandler
         IDayTypeResolver dayTypeResolver,
         IAttendanceRateResolver rateResolver,
         IComplianceLookupService complianceLookup,
-        IOvertimeMultiplierCalculator otCalculator)
+        IOvertimeMultiplierCalculator otCalculator,
+        IAttendanceSettingRepository settingRepository,
+        ILateEarlyRequestRepository lateEarlyRepository)
     {
         _employeeRepository = employeeRepository;
         _attendanceRepository = attendanceRepository;
@@ -58,6 +66,8 @@ public class GetAttendanceSummaryQueryHandler
         _rateResolver = rateResolver;
         _complianceLookup = complianceLookup;
         _otCalculator = otCalculator;
+        _settingRepository = settingRepository;
+        _lateEarlyRepository = lateEarlyRepository;
     }
 
     public async Task<PagedResult<EmployeeAttendanceSummaryDto>> Handle(
@@ -94,6 +104,12 @@ public class GetAttendanceSummaryQueryHandler
         // Prefetch chỉ những ngày cần: có NightHours > 0 (surcharge non-OT) hoặc là record OT (calc dùng snapshot).
         var laborLawByDate = await BuildLaborLawMapAsync(allRecords, cancellationToken);
 
+        // Tầng 2d — nền để tính TRỌNG SỐ CÔNG giống hệt bảng lương: grace của cấu hình chấm công,
+        // giờ chuẩn/ngày của luật (chỉ dùng khi bản ghi mất ca), và các ngày đã có đơn đi muộn/về
+        // sớm được duyệt (hưởng trọn công). Đọc 1 lượt cho cả page, không hỏi lẻ từng ngày.
+        var congContext = await BuildCongContextAsync(
+            employees.Select(e => e.Id).ToList(), request, cancellationToken);
+
         // Tầng 3 — mỗi NV: resolve DayType range (prefetch, no N+1 trong resolver) + aggregate
         var results = new List<EmployeeAttendanceSummaryDto>(employees.Count);
         foreach (var emp in employees)
@@ -105,10 +121,40 @@ public class GetAttendanceSummaryQueryHandler
                 ? list
                 : Array.Empty<AttendanceRecordEntity>();
 
-            results.Add(Aggregate(emp, empRecords, dayMap, _rateResolver, _otCalculator, laborLawByDate));
+            results.Add(Aggregate(
+                emp, empRecords, dayMap, _rateResolver, _otCalculator, laborLawByDate, congContext));
         }
 
         return new PagedResult<EmployeeAttendanceSummaryDto>(results, total, page, size);
+    }
+
+    /// <summary>
+    /// Nền dùng chung cho <see cref="WorkDayCongCalculator"/> trên toàn page.
+    ///
+    /// <para><c>StandardHoursPerDay</c> gánh hai vai — trần giờ khi bản ghi mất ca, và mẫu số quy
+    /// đổi 1 công — vì cả hai đều là cùng một hằng số luật
+    /// (<c>LaborLawConstants.StandardWorkingHoursPerDay</c>), đúng như bên bảng lương.</para>
+    /// </summary>
+    private readonly record struct CongContext(
+        int LateGraceMinutes,
+        int EarlyLeaveGraceMinutes,
+        decimal StandardHoursPerDay,
+        IReadOnlySet<(int EmployeeId, DateOnly WorkDate)> ExcusedDays);
+
+    private async Task<CongContext> BuildCongContextAsync(
+        IReadOnlyList<int> employeeIds, GetAttendanceSummaryQuery request, CancellationToken ct)
+    {
+        // GetAsync (không phải GetOrCreateDefaultAsync): đây là đường READ, không được ghi DB.
+        var setting = await _settingRepository.GetAsync(ct);
+        var laborLaw = await _complianceLookup.GetActiveLaborLawConstantsAsync(ct);
+        var excused = await _lateEarlyRepository.GetApprovedByEmployeesAndRangeAsync(
+            employeeIds, request.FromDate, request.ToDate, ct);
+
+        return new CongContext(
+            LateGraceMinutes: setting?.LateGraceMinutes ?? AttendanceGraceDefaults.LateGraceMinutes,
+            EarlyLeaveGraceMinutes: setting?.EarlyLeaveGraceMinutes ?? AttendanceGraceDefaults.EarlyLeaveGraceMinutes,
+            StandardHoursPerDay: laborLaw.StandardWorkingHoursPerDay,
+            ExcusedDays: excused.Select(l => (l.EmployeeInformationId, l.WorkDate)).ToHashSet());
     }
 
     private async Task<IReadOnlyDictionary<DateOnly, LaborLawConstantsSnapshot>> BuildLaborLawMapAsync(
@@ -161,7 +207,8 @@ public class GetAttendanceSummaryQueryHandler
         IReadOnlyDictionary<DateOnly, DayType> dayMap,
         IAttendanceRateResolver rateResolver,
         IOvertimeMultiplierCalculator otCalculator,
-        IReadOnlyDictionary<DateOnly, LaborLawConstantsSnapshot> laborLawByDate)
+        IReadOnlyDictionary<DateOnly, LaborLawConstantsSnapshot> laborLawByDate,
+        CongContext congContext)
     {
         var bucket = new Bucket();
 
@@ -188,14 +235,35 @@ public class GetAttendanceSummaryQueryHandler
             // DayType-based aggregations — bỏ qua Absent (không đi làm không tính ngày công)
             if (r.Status == AttendanceStatus.Absent) continue;
 
-            var weight = r.Status == AttendanceStatus.HalfDay ? HalfDayWeight : FullDayWeight;
             var dayType = dayMap.TryGetValue(r.WorkDate, out var dt) ? dt : DayType.Normal;
-            AccrueDayType(bucket, dayType, weight);
 
-            // OnLeave nhưng ngày đó KHÔNG phải PaidLeaveDay ⇒ nghỉ không lương. Đếm riêng để FE
-            // phân biệt "phép có lương" (đã vào PaidLeaveDays) vs "phép không lương".
-            if (r.Status == AttendanceStatus.OnLeave && dayType != DayType.PaidLeaveDay)
-                bucket.UnpaidLeaveDays += weight;
+            // ⭐ A1 — TRỌNG SỐ CÔNG chỉ tính cho bản ghi CA CHÍNH. Ngày có tăng ca được chấm 2 bản
+            // ghi (ca chính + ca OT); cộng cả hai là ngày đó thành 2 công. Bảng lương đã lọc
+            // `OvertimeRequestId == null` từ lâu, màn này thì chưa — đúng nguồn của lệch số.
+            // Giờ làm (DayHours/NightHours/OtHours/EquivalentHours) vẫn cộng CẢ HAI, vì đó là giờ thật.
+            if (r.OvertimeRequestId is null)
+            {
+                var recognizedHours = WorkDayCongCalculator.RecognizedHours(new WorkDayInput(
+                    Status: r.Status,
+                    DayType: dayType,
+                    WorkDate: r.WorkDate,
+                    CheckInAt: r.CheckInAt,
+                    CheckOutAt: r.CheckOutAt,
+                    DayHours: r.DayHours,
+                    NightHours: r.NightHours,
+                    HasApprovedLateEarly: congContext.ExcusedDays.Contains((emp.Id, r.WorkDate)),
+                    Shift: r.ShiftTemplate,
+                    StandardHoursPerDay: congContext.StandardHoursPerDay,
+                    LateGraceMinutes: congContext.LateGraceMinutes,
+                    EarlyLeaveGraceMinutes: congContext.EarlyLeaveGraceMinutes));
+
+                AccrueDayType(bucket, dayType, recognizedHours);
+
+                // OnLeave nhưng ngày đó KHÔNG phải PaidLeaveDay ⇒ nghỉ không lương. Đếm riêng để FE
+                // phân biệt "phép có lương" (đã vào PaidLeaveDays) vs "phép không lương".
+                if (r.Status == AttendanceStatus.OnLeave && dayType != DayType.PaidLeaveDay)
+                    bucket.UnpaidLeaveHours += recognizedHours;
+            }
 
             bucket.DayHours += r.DayHours;
             bucket.NightHours += r.NightHours;
@@ -206,6 +274,9 @@ public class GetAttendanceSummaryQueryHandler
 
             bucket.EquivalentHours += ComputeEquivalentHours(r, dayType, otDayDates, rateResolver, otCalculator, laborLawByDate);
         }
+
+        decimal Cong(decimal hours) =>
+            WorkDayCongCalculator.ToCong(hours, congContext.StandardHoursPerDay);
 
         return new EmployeeAttendanceSummaryDto(
             EmployeeInformationId: emp.Id,
@@ -221,11 +292,11 @@ public class GetAttendanceSummaryQueryHandler
             OnLeaveDays: bucket.OnLeaveDays,
             EarlyLeaveDays: bucket.EarlyLeaveDays,
             TotalRecords: bucket.TotalRecords,
-            NormalDays: bucket.NormalDays,
-            WeeklyRestDays: bucket.WeeklyRestDays,
-            HolidayDays: bucket.HolidayDays,
-            PaidLeaveDays: bucket.PaidLeaveDays,
-            UnpaidLeaveDays: bucket.UnpaidLeaveDays,
+            NormalDays: Cong(bucket.NormalHours),
+            WeeklyRestDays: Cong(bucket.WeeklyRestHoursForCong),
+            HolidayDays: Cong(bucket.HolidayHoursForCong),
+            PaidLeaveDays: Cong(bucket.PaidLeaveHours),
+            UnpaidLeaveDays: Cong(bucket.UnpaidLeaveHours),
             DayHours: bucket.DayHours,
             NightHours: bucket.NightHours,
             TotalHours: bucket.DayHours + bucket.NightHours,
@@ -233,14 +304,15 @@ public class GetAttendanceSummaryQueryHandler
             OtHours: bucket.OtHours);
     }
 
-    private static void AccrueDayType(Bucket bucket, DayType dayType, decimal weight)
+    /// <summary>Cộng GIỜ công được công nhận vào đúng rổ loại-ngày; quy đổi sang công ở cuối.</summary>
+    private static void AccrueDayType(Bucket bucket, DayType dayType, decimal recognizedHours)
     {
         switch (dayType)
         {
-            case DayType.PublicHoliday:  bucket.HolidayDays += weight; break;
-            case DayType.PaidLeaveDay:   bucket.PaidLeaveDays += weight; break;
-            case DayType.WeeklyRestDay:  bucket.WeeklyRestDays += weight; break;
-            default:                     bucket.NormalDays += weight; break;
+            case DayType.PublicHoliday:  bucket.HolidayHoursForCong += recognizedHours; break;
+            case DayType.PaidLeaveDay:   bucket.PaidLeaveHours += recognizedHours; break;
+            case DayType.WeeklyRestDay:  bucket.WeeklyRestHoursForCong += recognizedHours; break;
+            default:                     bucket.NormalHours += recognizedHours; break;
         }
     }
 
@@ -283,11 +355,12 @@ public class GetAttendanceSummaryQueryHandler
         public int OnLeaveDays;
         public int EarlyLeaveDays;
         public int TotalRecords;
-        public decimal NormalDays;
-        public decimal WeeklyRestDays;
-        public decimal HolidayDays;
-        public decimal PaidLeaveDays;
-        public decimal UnpaidLeaveDays;
+        // Giờ công được công nhận, gom theo loại ngày — quy đổi sang công một lần ở cuối.
+        public decimal NormalHours;
+        public decimal WeeklyRestHoursForCong;
+        public decimal HolidayHoursForCong;
+        public decimal PaidLeaveHours;
+        public decimal UnpaidLeaveHours;
         public decimal DayHours;
         public decimal NightHours;
         public decimal EquivalentHours;

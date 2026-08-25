@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MPS.Application.Common.Interfaces;
@@ -1241,7 +1241,7 @@ public sealed partial class DatabaseSeeder
             WorkRateHolidayFloor = 300.00m,
             OvertimeMaxHoursPerDay = 4.00m,
             OvertimeMaxHoursPerMonth = 40.00m,
-            OvertimeMaxHoursPerYear = 300,
+            OvertimeMaxHoursPerYear = 200,
             OvertimeIncomeFullyTaxExempt = false,
             LegalReference = "BLLĐ 2019 Điều 26, 98, 107, 113 + NĐ 145/2020 Điều 54 + TT 111/2013 Đ.3 (miễn thuế OT phần chênh lệch)",
             CreatedAt = now,
@@ -1273,7 +1273,7 @@ public sealed partial class DatabaseSeeder
             WorkRateHolidayFloor = 300.00m,
             OvertimeMaxHoursPerDay = 4.00m,
             OvertimeMaxHoursPerMonth = 40.00m,
-            OvertimeMaxHoursPerYear = 300,
+            OvertimeMaxHoursPerYear = 200,
             OvertimeIncomeFullyTaxExempt = true,
             LegalReference = "Luật TNCN 109/2025/QH15 + NĐ 253/2026/NĐ-CP — miễn thuế toàn bộ tiền lương làm đêm/OT từ 01/07/2026",
             CreatedAt = now,

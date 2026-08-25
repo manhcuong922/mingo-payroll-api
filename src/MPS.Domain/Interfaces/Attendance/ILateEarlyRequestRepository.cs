@@ -57,4 +57,14 @@ public interface ILateEarlyRequestRepository
         int employeeInformationId,
         DateOnly workDate,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Mọi đơn Late/Early đã Approved của một TẬP nhân viên trong khoảng ngày. Batch cho bảng chấm
+    /// công tháng: mỗi ngày công phải biết có đơn miễn hay không, hỏi lẻ từng ngày là N+1.
+    /// </summary>
+    Task<IReadOnlyList<LateEarlyRequest>> GetApprovedByEmployeesAndRangeAsync(
+        IReadOnlyList<int> employeeInformationIds,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default);
 }

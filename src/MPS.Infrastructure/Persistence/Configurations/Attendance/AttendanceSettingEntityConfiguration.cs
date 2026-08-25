@@ -26,6 +26,8 @@ public class AttendanceSettingEntityConfiguration : IEntityTypeConfiguration<Att
         builder.Property(e => e.WfhMaxDaysPerRequest).HasColumnType("decimal(5,1)");
         builder.Property(e => e.WfhWorkPlanMinLength);
 
+        builder.Property(e => e.WeeklyRestDayMask);
+
         builder.Property(e => e.LateGraceMinutes);
         builder.Property(e => e.EarlyLeaveGraceMinutes);
         builder.Property(e => e.HalfDayThresholdMinutes);

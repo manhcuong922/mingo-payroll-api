@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using MPS.Application.Common.Payroll;
 using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
@@ -67,7 +67,7 @@ public sealed class PayrollCollectorDayWeightTests
 
     // ===================== Chia theo tỷ lệ giờ =====================
 
-    [Fact(DisplayName = "CH-01 · Ca 8h làm 6h ra 0,75 công (trước đây ăn trọn 1 công)")]
+    [Fact(DisplayName = "CH-01 · Ca 8h làm 6h — 0,75 công thô, làm tròn LÊN 1,0 khi đó là ngày duy nhất")]
     public async Task Eight_Hour_Shift_Worked_Six_Gives_Three_Quarters()
     {
         using var db = await SeedBaseAsync();
@@ -78,11 +78,13 @@ public sealed class PayrollCollectorDayWeightTests
 
         var i = await CollectAsync(db);
 
-        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(0.75m);
-        N(i, PayrollFieldKeys.CongTinhCom).Should().Be(0.75m);
+        // ⭐ CONG-MONTHLY-2026-08 — 6h là toàn bộ giờ công của kỳ ⇒ 6/8 = 0,75 ⇒ làm tròn lên 1,0.
+        // Ngày thiếu giờ chỉ thực sự bị trừ khi phần thiếu của CẢ KỲ vượt nửa công (xem CHM-*).
+        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(1m);
+        N(i, PayrollFieldKeys.CongTinhCom).Should().Be(1m);
     }
 
-    [Fact(DisplayName = "CH-02 · Ca 4h làm đủ 4h vẫn là 1 công — mẫu số là ca được phân, không phải 8h của luật")]
+    [Fact(DisplayName = "CH-02 · Ca 4h khai đáng trọn 1 công, làm đủ ⇒ 1 công (quy chuẩn theo StandardDays)")]
     public async Task Four_Hour_Shift_Worked_Fully_Gives_One_Day()
     {
         using var db = await SeedBaseAsync();
@@ -95,7 +97,7 @@ public sealed class PayrollCollectorDayWeightTests
         N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(1m);
     }
 
-    [Fact(DisplayName = "CH-03 · Ca 4h làm 3h ra 0,75 công")]
+    [Fact(DisplayName = "CH-03 · Ca 4h/1 công làm 3h ⇒ 0,75 công thô, làm tròn lên 1,0")]
     public async Task Four_Hour_Shift_Worked_Three_Gives_Three_Quarters()
     {
         using var db = await SeedBaseAsync();
@@ -105,21 +107,21 @@ public sealed class PayrollCollectorDayWeightTests
 
         var i = await CollectAsync(db);
 
-        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(0.75m);
+        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(1m, "3/4 ca × 1,00 công = 0,75 ⇒ làm tròn lên 1,0");
     }
 
-    [Fact(DisplayName = "CH-04 · Số lẻ vô hạn được làm tròn 2 chữ số thập phân")]
-    public async Task Ratio_Is_Rounded_To_Two_Decimals()
+    [Fact(DisplayName = "CH-04 · Số lẻ vô hạn vẫn ra bội số 0,5 — cột công luôn đối chiếu được bằng mắt")]
+    public async Task Ratio_Always_Lands_On_A_Half_Multiple()
     {
         using var db = await SeedBaseAsync();
         SetShiftHours(db, 3m);
-        // 1/3 ca = 0,3333… ⇒ chốt ở 0,33 để cột công còn đối chiếu được bằng mắt.
+        // 1/3 ca = 0,3333… — bản cũ chốt ở 0,33; nay làm tròn LÊN bội số 0,5 ⇒ 0,5.
         db.AttendanceRecords.Add(RecordOnShift(1, ShiftId, dayHours: 1m));
         await db.SaveChangesAsync();
 
         var i = await CollectAsync(db);
 
-        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(0.33m);
+        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(0.5m);
     }
 
     [Fact(DisplayName = "CH-05 · Làm quá giờ ca không đẩy công vượt 1 — phần dôi thuộc về đơn OT")]
@@ -198,7 +200,7 @@ public sealed class PayrollCollectorDayWeightTests
 
         var i = await CollectAsync(db);
 
-        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(0.63m, "5/8 = 0,625 làm tròn lên 0,63");
+        N(i, PayrollFieldKeys.CongChinhThuc).Should().Be(1m, "5/8 = 0,625 ⇒ làm tròn lên bội số 0,5 gần nhất = 1,0");
     }
 
     [Fact(DisplayName = "CH-10 · Đơn của ngày khác không lan sang ngày thiếu giờ")]

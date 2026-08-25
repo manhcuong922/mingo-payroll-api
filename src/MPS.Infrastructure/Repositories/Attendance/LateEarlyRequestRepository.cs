@@ -146,6 +146,23 @@ public class LateEarlyRequestRepository : ILateEarlyRequestRepository
                 && r.Status == LateEarlyRequestStatus.Approved)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<LateEarlyRequest>> GetApprovedByEmployeesAndRangeAsync(
+        IReadOnlyList<int> employeeInformationIds,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (employeeInformationIds.Count == 0) return Array.Empty<LateEarlyRequest>();
+
+        return await _context.LateEarlyRequests
+            .AsNoTracking()
+            .Where(r => employeeInformationIds.Contains(r.EmployeeInformationId)
+                && r.WorkDate >= fromDate
+                && r.WorkDate <= toDate
+                && r.Status == LateEarlyRequestStatus.Approved)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<bool> HasPendingOrApprovedInRangeAsync(
         int employeeInformationId,
         DateOnly startDate,

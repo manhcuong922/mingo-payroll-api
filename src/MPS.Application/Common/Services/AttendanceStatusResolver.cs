@@ -55,15 +55,8 @@ public sealed class AttendanceStatusResolver : IAttendanceStatusResolver
         if (checkInAt is null)
             return AttendanceStatus.Absent;
 
-        var plannedStart = workDate.ToDateTime(shift.StartTime, DateTimeKind.Unspecified);
-        var plannedEnd = shift.EndTime > shift.StartTime
-            ? workDate.ToDateTime(shift.EndTime, DateTimeKind.Unspecified)
-            : workDate.AddDays(1).ToDateTime(shift.EndTime, DateTimeKind.Unspecified);
-
-        var lateMin = (int)Math.Max(0, (checkInAt.Value - plannedStart).TotalMinutes);
-        var earlyMin = checkOutAt.HasValue
-            ? (int)Math.Max(0, (plannedEnd - checkOutAt.Value).TotalMinutes)
-            : 0;
+        // Phép đo dùng CHUNG với WorkDayWeightCalculator — xem ShiftDeviation.
+        var (lateMin, earlyMin) = ShiftDeviation.Measure(checkInAt, checkOutAt, shift, workDate);
 
         var graceLate = setting?.LateGraceMinutes ?? AttendanceGraceDefaults.LateGraceMinutes;
         var graceEarly = setting?.EarlyLeaveGraceMinutes ?? AttendanceGraceDefaults.EarlyLeaveGraceMinutes;

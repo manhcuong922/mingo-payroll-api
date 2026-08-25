@@ -1,8 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using MPS.Application.Common.Interfaces;
 using MPS.Application.Common.Interfaces.Payroll;
 using MPS.Application.Common.Payroll;
 using MPS.Application.Common.Payroll.Formula;
+using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.OvertimeRequest.Common;
 using MPS.Application.Features.ContractAppendix.Common;
 using MPS.Application.Features.Payroll.Common;
@@ -183,7 +184,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         // HR chấm công 2 lần cho ngày có tăng ca (một cho ca chính, một cho ca OT) đúng như hệ thống
         // thiết kế — `AttendanceRecord` có invariant exactly-one-of (ShiftTemplateId, OvertimeRequestId).
         // Trước đây vòng lặp bên dưới nuốt cả hai loại nên bản ghi ca OT bị tính 3 lần thừa:
-        //   (1) `DayWeight` cộng thêm 1 ngày công khống ⇒ phồng CongTinhCom/CongChinhThuc, kéo theo
+        //   (1) trọng số công cộng thêm 1 ngày công khống ⇒ phồng CongTinhCom/CongChinhThuc, kéo theo
         //       thu nhập phân bổ theo công, tiền cơm và nền đóng BHXH;
         //   (2) `dayHours/nightHours` nuốt giờ OT ⇒ trả hai lần (đã trả qua cột Tăng ca);
         //   (3) `workSegments` sinh phụ trội loại-ngày lần nữa ⇒ OT ngày nghỉ/lễ được ~300% thay vì 200%.
@@ -196,9 +197,16 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
 
         // ⭐ CONG-HOUR-2026-08 — ngày công nay chia theo GIỜ THỰC / GIỜ ĐƯỢC PHÂN nên phải biết ca
         // của từng bản ghi dài bao nhiêu. Nạp một lượt cho cả kỳ thay vì Include theo record.
-        var shiftById = await _db.ShiftTemplates.AsNoTracking()
-            .Select(s => new { s.Id, s.StandardHours, s.StandardDays })
-            .ToDictionaryAsync(s => s.Id, s => (s.StandardHours, s.StandardDays), ct);
+        // ⭐ CONG-ONE-SOURCE-2026-08 — nạp nguyên entity ca: ngoài StandardHours/StandardDays còn
+        // cần StartTime/EndTime để đo phần vào muộn / về sớm nằm trong grace (xem WorkDayWeightCalculator).
+        var shiftById = await _db.ShiftTemplates.AsNoTracking().ToDictionaryAsync(s => s.Id, ct);
+
+        // Grace đi muộn / về sớm của cấu hình chấm công — cùng nguồn mà AttendanceStatusResolver đọc,
+        // để nhãn "đúng giờ" và tiền công không nói hai chuyện khác nhau.
+        var attendanceSetting = await _db.AttendanceSettings.AsNoTracking()
+            .OrderBy(s => s.Id).FirstOrDefaultAsync(ct);
+        var lateGrace = attendanceSetting?.LateGraceMinutes ?? AttendanceGraceDefaults.LateGraceMinutes;
+        var earlyGrace = attendanceSetting?.EarlyLeaveGraceMinutes ?? AttendanceGraceDefaults.EarlyLeaveGraceMinutes;
 
         // ⭐ CONG-HOUR-2026-08 — ngày có đơn đi muộn/về sớm ĐÃ DUYỆT được hưởng TRỌN công của ca
         // (quyết định PO 24/08/2026), bất kể giờ thực tế thiếu bao nhiêu. Đơn luôn gắn NGÀY BẮT ĐẦU
@@ -300,37 +308,49 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // vẫn phải biết những ngày nào là ngày lễ để hưởng lương.
             var dayTypeByDate = await _dayTypeResolver.ResolveRangeAsync(e.Id, periodStart, periodEnd, ct);
 
-            decimal congCom = 0, congThuViec = 0, congChinhThuc = 0, congHocViec = 0, dayHours = 0, nightHours = 0;
-            // ⭐ CC-2026-08 — tổng trọng số công đã ghi nhận theo TỪNG NGÀY. Là căn cứ chống độn công
-            // khi bù công ngày lễ bên dưới: phải cộng dồn theo ngày chứ không kiểm tra "ngày này đã
-            // có bản ghi chưa", vì 1 ngày có thể có NHIỀU bản ghi (unique index là bộ ba
-            // Employee+WorkDate+ShiftTemplate ⇒ ca xoay 2 ca/ngày) và `HalfDay` chỉ mang 0.5 công.
-            var weightByDate = new Dictionary<DateOnly, decimal>();
+            // ⭐ CONG-MONTHLY-2026-08 — tích luỹ theo GIỜ công được công nhận, KHÔNG theo công. Công
+            // chỉ sinh ra một lần ở cuối kỳ (`WorkDayCongCalculator.ToCong`) để phần thiếu vụn của
+            // từng ngày được gộp lại rồi mới làm tròn, thay vì làm tròn 2 chữ số ngay ở mỗi ngày.
+            decimal gioCom = 0, gioThuViec = 0, gioChinhThuc = 0, gioHocViec = 0, dayHours = 0, nightHours = 0;
+            // ⭐ CC-2026-08 — tổng GIỜ công đã ghi nhận theo TỪNG NGÀY. Là căn cứ chống độn công khi
+            // bù công ngày lễ bên dưới: phải cộng dồn theo ngày chứ không kiểm tra "ngày này đã có
+            // bản ghi chưa", vì 1 ngày có thể có NHIỀU bản ghi (unique index là bộ ba
+            // Employee+WorkDate+ShiftTemplate ⇒ ca xoay 2 ca/ngày).
+            var hoursByDate = new Dictionary<DateOnly, decimal>();
             // ⭐ CC-2026-08 — công ngày lễ được cộng tự động, tách riêng để kế toán đối chiếu.
-            decimal congLe = 0;
+            decimal gioLe = 0;
+
+            // Giờ chuẩn/ngày của luật = mẫu số quy đổi 1 công, và cũng là giờ bù cho mỗi ngày lễ.
+            // KHÔNG dùng cho đơn giá giờ — đơn giá giữ công thức riêng theo NĐ145 Đ.54.
+            var hoursPerCong = labor.StandardWorkingHoursPerDay;
             decimal weeklyRestHours = 0, holidayHours = 0;
-            // ⭐ Phase 5 — tiền lương cộng dồn theo TRỌNG SỐ NGÀY của từng đoạn HĐ, để chia ra mức
-            // bình quân của riêng đoạn chính thức và riêng đoạn thử việc.
-            decimal luongChinhThucTheoCong = 0, luongThuViecTheoCong = 0, congKhongBaoHiem = 0;
+            // ⭐ Phase 5 — tiền lương cộng dồn theo GIỜ CÔNG của từng đoạn HĐ, để chia ra mức bình
+            // quân của riêng đoạn chính thức và riêng đoạn thử việc.
+            //
+            // ⭐ CONG-MONTHLY-2026-08 — các tổng này luôn được dùng dưới dạng BÌNH QUÂN GIA QUYỀN
+            // (`Σ(trọng số × giá trị) / Σ(trọng số)`), nên đổi đơn vị trọng số từ công sang giờ
+            // KHÔNG đổi kết quả: hệ số quy đổi triệt tiêu giữa tử và mẫu. Mẫu phải là tổng GIỜ (chưa
+            // làm tròn) — chia cho số công ĐÃ làm tròn sẽ bóp méo chính các mức bình quân đó.
+            decimal luongChinhThucTheoGio = 0, luongThuViecTheoGio = 0, gioKhongBaoHiem = 0;
             // ⭐ X1 — nền đóng BH cộng dồn theo ngày, ĐÃ KẸP TRẦN NGAY TẠI NGÀY. Phải cộng riêng ba
             // quỹ vì ba trần khác nhau. Kẹp ở đây thay vì ở công thức là bắt buộc: cột MUCLUONG đã
             // là bình quân của các đoạn lương trong kỳ, mà MIN không giao hoán với phép bình quân —
             // tháng nâng bậc giữa kỳ kẹp sau khi bình quân sẽ ra số khác kẹp từng đoạn rồi bình quân.
-            decimal nenBhxhTheoCong = 0, nenBhytTheoCong = 0, nenBhtnTheoCong = 0;
+            decimal nenBhxhTheoGio = 0, nenBhytTheoGio = 0, nenBhtnTheoGio = 0;
 
             // Trần = 0 nghĩa là KHÔNG áp trần — cùng quy ước với hàm BH_CO_TRAN trên bảng công thức.
             // BHYT thiếu trần riêng thì dùng chung trần BHXH, giống nhánh fallback bên công thức.
             static decimal CapAt(decimal nen, decimal tran) => tran > 0m && nen > tran ? tran : nen;
 
-            void AccrueCappedBase(Contract? c, DateOnly day, decimal weight, AllowanceBuckets buckets)
+            void AccrueCappedBase(Contract? c, DateOnly day, decimal hours, AllowanceBuckets buckets)
             {
                 var nenNgay = SalaryForDay(c, day) + buckets.NenPhuCapLuong;
-                nenBhxhTheoCong += weight * CapAt(nenNgay, bhxhBhytCap);
-                nenBhytTheoCong += weight * CapAt(nenNgay, bhytCap > 0m ? bhytCap : bhxhBhytCap);
-                nenBhtnTheoCong += weight * CapAt(nenNgay, bhtnCap);
+                nenBhxhTheoGio += hours * CapAt(nenNgay, bhxhBhytCap);
+                nenBhytTheoGio += hours * CapAt(nenNgay, bhytCap > 0m ? bhytCap : bhxhBhytCap);
+                nenBhtnTheoGio += hours * CapAt(nenNgay, bhtnCap);
             }
-            // ⭐ Phase 6 — phụ cấp cũng cộng dồn theo trọng số ngày (phụ lục đổi phụ cấp giữa tháng).
-            var phuCapTheoCong = new AllowanceBuckets();
+            // ⭐ Phase 6 — phụ cấp cũng cộng dồn theo giờ công của ngày (phụ lục đổi phụ cấp giữa tháng).
+            var phuCapTheoGio = new AllowanceBuckets();
             var workSegments = new List<RegularHoursPremiumCalculator.WorkDaySegment>(records.Count);
 
             foreach (var r in records)
@@ -341,24 +361,31 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 if (!IsCoveredByContract(empContracts, r.WorkDate)) continue;
 
                 // Loại ngày phải resolve TRƯỚC khi tính trọng số công: ngày nghỉ CÓ LƯƠNG cũng là
-                // ngày công được trả (xem DayWeight).
+                // ngày công được trả (xem WorkDayWeightCalculator).
                 var dayType = dayTypeByDate.GetValueOrDefault(r.WorkDate, DayType.Normal);
 
-                var (shiftHours, shiftDays) = r.ShiftTemplateId is int shiftId
-                    && shiftById.TryGetValue(shiftId, out var shiftInfo)
-                        ? shiftInfo
-                        : (0m, 1m);
+                var shift = r.ShiftTemplateId is int shiftId
+                    && shiftById.TryGetValue(shiftId, out var shiftTemplate)
+                        ? shiftTemplate
+                        : null;
 
-                var weight = DayWeight(
-                    r, dayType,
-                    hasApprovedLateEarly: excusedDays.Contains((e.Id, r.WorkDate)),
-                    shiftStandardHours: shiftHours,
-                    shiftStandardDays: shiftDays,
-                    fallbackHoursPerDay: laborTimeline.For(r.WorkDate).StandardWorkingHoursPerDay);
-                if (weight > 0)
+                var recognizedHours = WorkDayCongCalculator.RecognizedHours(new WorkDayInput(
+                    Status: r.Status,
+                    DayType: dayType,
+                    WorkDate: r.WorkDate,
+                    CheckInAt: r.CheckInAt,
+                    CheckOutAt: r.CheckOutAt,
+                    DayHours: r.DayHours,
+                    NightHours: r.NightHours,
+                    HasApprovedLateEarly: excusedDays.Contains((e.Id, r.WorkDate)),
+                    Shift: shift,
+                    StandardHoursPerDay: laborTimeline.For(r.WorkDate).StandardWorkingHoursPerDay,
+                    LateGraceMinutes: lateGrace,
+                    EarlyLeaveGraceMinutes: earlyGrace));
+                if (recognizedHours > 0)
                 {
-                    congCom += weight;
-                    weightByDate[r.WorkDate] = weightByDate.GetValueOrDefault(r.WorkDate) + weight;
+                    gioCom += recognizedHours;
+                    hoursByDate[r.WorkDate] = hoursByDate.GetValueOrDefault(r.WorkDate) + recognizedHours;
 
                     // ⭐ Phase 5 — mọi thứ của một ngày công đều quy về HỢP ĐỒNG PHỦ ĐÚNG NGÀY ĐÓ,
                     // không còn dùng chung một HĐ đại diện cho cả kỳ: tháng chuyển thử việc → chính
@@ -368,24 +395,24 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                     switch (ResolveCategory(dayContract, r.WorkDate))
                     {
                         case CongCategory.Probation:
-                            congThuViec += weight;
-                            luongThuViecTheoCong += weight * SalaryForDay(dayContract, r.WorkDate);
+                            gioThuViec += recognizedHours;
+                            luongThuViecTheoGio += recognizedHours * SalaryForDay(dayContract, r.WorkDate);
                             break;
                         case CongCategory.Apprentice:
-                            congHocViec += weight;
+                            gioHocViec += recognizedHours;
                             break;
                         default:
-                            congChinhThuc += weight;
-                            luongChinhThucTheoCong += weight * SalaryForDay(dayContract, r.WorkDate);
-                            AccrueCappedBase(dayContract, r.WorkDate, weight, dayBuckets);
+                            gioChinhThuc += recognizedHours;
+                            luongChinhThucTheoGio += recognizedHours * SalaryForDay(dayContract, r.WorkDate);
+                            AccrueCappedBase(dayContract, r.WorkDate, recognizedHours, dayBuckets);
                             break;
                     }
 
                     // Ngày thuộc HĐ không đóng bảo hiểm nào (điển hình: HĐ thử việc riêng) không
                     // được vào nền đóng BH của kỳ.
-                    if (dayContract is not null && !HasAnyInsurance(dayContract)) congKhongBaoHiem += weight;
+                    if (dayContract is not null && !HasAnyInsurance(dayContract)) gioKhongBaoHiem += recognizedHours;
 
-                    phuCapTheoCong += dayBuckets.Scale(weight);
+                    phuCapTheoGio += dayBuckets.Scale(recognizedHours);
                 }
                 dayHours += r.DayHours;
                 nightHours += r.NightHours;
@@ -411,12 +438,12 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             //
             // Bù theo PHẦN CÒN THIẾU của ngày (`1 − trọng số đã ghi nhận`), KHÔNG phải "ngày này
             // chưa có bản ghi thì cộng 1":
-            //   • đi làm trọn ca ngày lễ  → đã có 1.0 ⇒ bù 0  (giữ 300%, không độn thành 2 công)
-            //   • làm nửa ca (HalfDay)    → đã có 0.5 ⇒ bù 0.5 (nửa công làm + nửa công lễ)
-            //   • xếp 2 ca cùng ngày lễ   → đã có 2.0 ⇒ bù 0  (không làm nặng thêm)
-            //   • nghỉ lễ ở nhà           → chưa có gì ⇒ bù 1.0
-            //   • đơn phép có lương trùng lễ → resolver ưu tiên `PublicHoliday` nên `DayWeight` trả 0
-            //     ⇒ bù 1.0. Đây cũng là bản vá cho lỗi cũ: ngày đó trước đây mất trắng công.
+            //   • đi làm trọn ca ngày lễ  → đã có 8h ⇒ bù 0  (giữ 400%, không độn thành 2 công)
+            //   • làm nửa ca             → đã có 4h ⇒ bù 4h (nửa ca làm + nửa ca lễ)
+            //   • xếp 2 ca cùng ngày lễ   → đã có ≥8h ⇒ bù 0  (không làm nặng thêm)
+            //   • nghỉ lễ ở nhà           → chưa có gì ⇒ bù trọn 8h
+            //   • đơn phép có lương trùng lễ → resolver ưu tiên `PublicHoliday` nên giờ công trả 0
+            //     ⇒ bù trọn. Đây cũng là bản vá cho lỗi cũ: ngày đó trước đây mất trắng công.
             //
             // KHÔNG đụng `workSegments` (sẽ sinh phụ trội 200% cho người nằm nhà), KHÔNG đụng
             // `dayHours/nightHours/totalWorkHours` (sai trần OT + sai bậc hỗ trợ HĐ khoán), KHÔNG
@@ -433,38 +460,57 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
                 // #25 — NV vào/nghỉ giữa tháng không được hưởng ngày lễ nằm ngoài kỳ hiệu lực HĐ.
                 if (!IsCoveredByContract(empContracts, leDate)) continue;
 
-                var buLe = 1m - weightByDate.GetValueOrDefault(leDate);
-                if (buLe <= 0m) continue;
+                // ⭐ CONG-MONTHLY-2026-08 — bù bằng GIỜ, mốc là giờ chuẩn/ngày của luật (Đ.112.1 cho
+                // nghỉ nguyên lương một NGÀY, không phụ thuộc hôm đó NV được xếp ca dài hay ngắn).
+                var buLeHours = hoursPerCong - hoursByDate.GetValueOrDefault(leDate);
+                if (buLeHours <= 0m) continue;
 
-                congLe += buLe;
+                gioLe += buLeHours;
 
                 var leContract = ContractForDay(empContracts, leDate) ?? activeContract;
                 var leBuckets = AllowanceBuckets.From(AllowanceLinesFor(leContract, leDate));
                 switch (ResolveCategory(leContract, leDate))
                 {
                     case CongCategory.Probation:
-                        congThuViec += buLe;
-                        luongThuViecTheoCong += buLe * SalaryForDay(leContract, leDate);
+                        gioThuViec += buLeHours;
+                        luongThuViecTheoGio += buLeHours * SalaryForDay(leContract, leDate);
                         break;
                     case CongCategory.Apprentice:
-                        congHocViec += buLe;
+                        gioHocViec += buLeHours;
                         break;
                     default:
-                        congChinhThuc += buLe;
-                        luongChinhThucTheoCong += buLe * SalaryForDay(leContract, leDate);
-                        AccrueCappedBase(leContract, leDate, buLe, leBuckets);
+                        gioChinhThuc += buLeHours;
+                        luongChinhThucTheoGio += buLeHours * SalaryForDay(leContract, leDate);
+                        AccrueCappedBase(leContract, leDate, buLeHours, leBuckets);
                         break;
                 }
 
-                if (leContract is not null && !HasAnyInsurance(leContract)) congKhongBaoHiem += buLe;
+                if (leContract is not null && !HasAnyInsurance(leContract)) gioKhongBaoHiem += buLeHours;
 
-                phuCapTheoCong += leBuckets.Scale(buLe);
+                phuCapTheoGio += leBuckets.Scale(buLeHours);
             }
 
-            // ⭐ CC-2026-08 — tổng công HƯỞNG LƯƠNG (đã gồm công lễ) = mẫu số đúng cho nền đóng BH.
-            // Bằng `congCom + congLe` theo cấu tạo, nhưng cộng lại từ 3 loại công cho tường minh
-            // rằng đây chính là tử số mà THU_NHAP_PHANBO đang dùng.
+            // ⭐ CONG-MONTHLY-2026-08 — QUY ĐỔI GIỜ → CÔNG, một lần duy nhất cho cả kỳ.
+            //
+            // Làm tròn TỪNG NHÓM (chính thức / thử việc / học việc) chứ không làm tròn tổng rồi chia
+            // tỉ lệ ngược lại (quyết định PO 25/08/2026): mỗi cột trên bảng lương là bội số 0,5 sạch
+            // nên kế toán soát được từng dòng. Đổi lại tổng có thể lệch 0,5 so với việc làm tròn
+            // tổng giờ — chấp nhận, và lệch luôn theo hướng có lợi cho NLĐ vì đều làm tròn LÊN.
+            var congChinhThuc = WorkDayCongCalculator.ToCong(gioChinhThuc, hoursPerCong);
+            var congThuViec = WorkDayCongCalculator.ToCong(gioThuViec, hoursPerCong);
+            var congHocViec = WorkDayCongCalculator.ToCong(gioHocViec, hoursPerCong);
+            var congCom = WorkDayCongCalculator.ToCong(gioCom, hoursPerCong);
+            var congLe = WorkDayCongCalculator.ToCong(gioLe, hoursPerCong);
+            var congKhongBaoHiem = WorkDayCongCalculator.ToCong(gioKhongBaoHiem, hoursPerCong);
+
+            // ⭐ CC-2026-08 — tổng công HƯỞNG LƯƠNG (đã gồm công lễ) = tử số mà THU_NHAP_PHANBO dùng.
+            // Cộng từ 3 loại công ĐÃ làm tròn, không làm tròn lại lần nữa.
             var congHuongLuong = congChinhThuc + congThuViec + congHocViec;
+
+            // Tổng GIỜ hưởng lương — mẫu số của mọi phép BÌNH QUÂN GIA QUYỀN bên dưới. Phải là giờ
+            // CHƯA làm tròn: chia cho số công đã làm tròn sẽ bóp méo chính các mức bình quân đó
+            // (mức lương bình quân, nền đóng BH, phụ cấp bình quân), tức làm tròn bị tính hai lần.
+            var gioHuongLuong = gioChinhThuc + gioThuViec + gioHocViec;
 
             // ⭐ BH-14 (QĐ 595 Đ.42) — SỐ NGÀY trong kỳ mà NLĐ thật sự có công hưởng lương. Dưới
             // ngưỡng thì tháng đó KHÔNG thuộc diện đóng BHXH/BHYT/BHTN, chứ không phải đóng theo tỷ lệ
@@ -496,7 +542,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             {
                 if (!IsCoveredByContract(empContracts, d)) continue;
 
-                if (weightByDate.GetValueOrDefault(d) > 0m)
+                if (hoursByDate.GetValueOrDefault(d) > 0m)
                 {
                     soNgayCongHuongLuong++;
                     continue;
@@ -523,7 +569,7 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // ngày lễ ở trên đã cộng phụ cấp của những ngày lễ vào `phuCapTheoCong`, chia lại cho
             // riêng công đi làm thật sẽ thổi phồng mức bình quân đúng bằng tỉ lệ ngày lễ.
             var phuCap = congHuongLuong > 0
-                ? phuCapTheoCong.Divide(congHuongLuong)
+                ? phuCapTheoGio.Divide(gioHuongLuong)
                 : AllowanceBuckets.From(AllowanceLinesFor(activeContract, periodEnd));
             // ⚠️ Khối phụ cấp phải tính TRƯỚC mức lương/đơn giá giờ: từ bản sửa X2, đơn giá giờ làm
             // thêm cần `phuCap.NenPhuCapLuong`.
@@ -538,8 +584,8 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // của HĐ đại diện, giữ nguyên hành vi trước Phase 5.
             // Không có ngày công nào để cân: lấy mức tại CUỐI KỲ — mốc mới nhất đã có hiệu lực.
             var mucLuongHopDong = activeContract is null ? 0m : SalaryOfContract(activeContract, periodEnd);
-            var mucChinhThuc = congChinhThuc > 0 ? luongChinhThucTheoCong / congChinhThuc : mucLuongHopDong;
-            var mucThuViec = congThuViec > 0 ? luongThuViecTheoCong / congThuViec : mucChinhThuc;
+            var mucChinhThuc = gioChinhThuc > 0 ? luongChinhThucTheoGio / gioChinhThuc : mucLuongHopDong;
+            var mucThuViec = gioThuViec > 0 ? luongThuViecTheoGio / gioThuViec : mucChinhThuc;
             var mucLuong = mucChinhThuc;
             // ⭐ X2b — đơn giá giờ làm thêm tính trên "tiền lương thực trả theo công việc" (NĐ
             // 145/2020 Đ.55.1), tức lương cộng PHỤ CẤP LƯƠNG gắn với công việc (trách nhiệm, độc
@@ -628,14 +674,14 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
             // Kỳ không có ngày công chính thức nào ⇒ lùi về mức của HĐ đại diện tại cuối kỳ, kẹp
             // trần một lần — giữ đúng cách `mucChinhThuc` đang lùi.
             var nenCuoiKy = mucLuongHopDong + phuCap.NenPhuCapLuong;
-            n[ContractMucLuongCapBhxh] = congChinhThuc > 0
-                ? nenBhxhTheoCong / congChinhThuc
+            n[ContractMucLuongCapBhxh] = gioChinhThuc > 0
+                ? nenBhxhTheoGio / gioChinhThuc
                 : CapAt(nenCuoiKy, bhxhBhytCap);
-            n[ContractMucLuongCapBhyt] = congChinhThuc > 0
-                ? nenBhytTheoCong / congChinhThuc
+            n[ContractMucLuongCapBhyt] = gioChinhThuc > 0
+                ? nenBhytTheoGio / gioChinhThuc
                 : CapAt(nenCuoiKy, bhytCap > 0m ? bhytCap : bhxhBhytCap);
-            n[ContractMucLuongCapBhtn] = congChinhThuc > 0
-                ? nenBhtnTheoCong / congChinhThuc
+            n[ContractMucLuongCapBhtn] = gioChinhThuc > 0
+                ? nenBhtnTheoGio / gioChinhThuc
                 : CapAt(nenCuoiKy, bhtnCap);
             n[CongChuan] = req.StandardWorkingDays;
             n[CongTinhCom] = congCom;
@@ -756,88 +802,6 @@ public sealed class PayrollDataCollector : IPayrollDataCollector
         HeadlineLabel = headlineLabel,
         HeadlineValue = headlineValue,
     };
-
-    /// <summary>
-    /// Trọng số ngày công dùng để tính lương.
-    ///
-    /// <para><b>Ngày nghỉ CÓ LƯƠNG được tính là 1 ngày công.</b> `CAC-CASE-XAY-RA.md` §6: đơn nghỉ
-    /// phép được duyệt thì "sinh ngày nghỉ **có lương** trong bảng chấm công, **chảy vào lương với
-    /// hệ số ngày phép**".</para>
-    ///
-    /// <para>Trước đây mọi bản ghi <c>OnLeave</c> đều nhận trọng số 0 — kể cả phép năm/nghỉ ốm đã
-    /// trừ quỹ. Hậu quả: nghỉ 5 ngày phép năm thì <b>mất luôn 5 ngày lương</b>, tức phép "có lương"
-    /// thực chất không được trả đồng nào; và mọi ngày nghỉ có lương đều có giờ công = 0 nên cũng
-    /// không có cột nào khác bù lại.</para>
-    ///
-    /// <para>Bản thân <c>AttendanceStatus.OnLeave</c> KHÔNG phân biệt được nghỉ có lương hay không
-    /// lương, nên phải tra <paramref name="dayType"/> — <c>DayTypeResolver</c> chỉ đánh
-    /// <c>PaidLeaveDay</c> khi có đơn nghỉ Approved với <c>IsPaid = true</c>. Nhờ đó nghỉ KHÔNG
-    /// lương vẫn giữ trọng số 0, đúng nghiệp vụ.</para>
-    /// </summary>
-    /// <summary>
-    /// ⭐ CONG-HOUR-2026-08 — TRỌNG SỐ CÔNG CỦA MỘT BẢN GHI CHẤM CÔNG = giờ làm THỰC / giờ ĐƯỢC PHÂN
-    /// của chính ca đó, kẹp trần 1 ca và làm tròn 2 chữ số thập phân.
-    ///
-    /// <para>Trước bản này trọng số chỉ đọc <see cref="AttendanceStatus"/> — vốn chỉ biểu diễn được
-    /// 1 / 0,5 / 0 — nên giờ làm thật KHÔNG hề tham gia vào lương dù `DayHours`/`NightHours` đã có
-    /// sẵn trên bản ghi. Hai lỗ hổng đo được:</para>
-    /// <list type="bullet">
-    ///   <item>Ngưỡng nửa công là 240 phút (`AttendanceGraceDefaults.HalfDayThresholdMinutes`) tính
-    ///     trên phút MUỘN chứ không trên giờ LÀM, nên đi muộn 3h59 của ca 8h vẫn ra `Late` ⇒ ăn
-    ///     TRỌN 1 công dù chỉ làm 4h01. Ca 4h thì ngưỡng đó dài bằng cả ca ⇒ không bao giờ chạm.</item>
-    ///   <item>Ngược lại, muộn 6' + về sớm 6' (thiếu 12 phút) rơi vào nhánh "vừa muộn vừa sớm" ⇒
-    ///     `HalfDay` ⇒ mất NỬA ngày lương. Cùng một sự việc "không đủ ca" mà chế tài chênh nhau
-    ///     nhiều lần theo hướng vô lý.</item>
-    /// </list>
-    ///
-    /// <para>Mẫu số là <c>ShiftTemplate.StandardHours</c> — giờ chuẩn ĐÃ TRỪ nghỉ giữa ca của đúng ca
-    /// được phân, không phải giờ chuẩn của luật: ca sáng 4h làm 3h ra 0,75 công, ca 8h làm 4h ra 0,5
-    /// công. Nhân thêm <c>StandardDays</c> để ca được cấu hình chỉ tính nửa công vẫn ra nửa công
-    /// (mọi ca đang seed đều là 1,00 nên hiện không đổi số nào).</para>
-    ///
-    /// <para>Ba nhánh KHÔNG đi qua giờ, giữ nguyên như cũ:</para>
-    /// <list type="bullet">
-    ///   <item><paramref name="hasApprovedLateEarly"/> — ngày có đơn đi muộn/về sớm đã duyệt hưởng
-    ///     TRỌN công của ca (quyết định PO 24/08/2026). Approver là người chịu trách nhiệm về phần
-    ///     giờ được miễn, engine không trừ thêm lần nữa.</item>
-    ///   <item><see cref="AttendanceStatus.OnLeave"/> — nghỉ có lương không có giờ chấm nào để chia.</item>
-    ///   <item>Ca không tra được (bản ghi mất `ShiftTemplateId`, hoặc ca khai `StandardHours` ≤ 0) —
-    ///     lùi về giờ chuẩn/ngày của luật lao động; vẫn không tra được thì trả 0 thay vì tự cho
-    ///     đủ công, vì đó là dữ liệu hỏng chứ không phải bằng chứng đã đi làm.</item>
-    /// </list>
-    ///
-    /// <para>⚠️ Bản ghi KHÔNG có giờ (quên chấm ra ⇒ `AttendanceHourCalculator` trả 0, hoặc HR nhập
-    /// tay thiếu giờ) nay ra 0 công. CỐ Ý không fallback về 1 công: chính "có check-in là đủ công"
-    /// là lỗ hổng đang sửa. Hệ quả vận hành: HR phải sửa chấm công trước khi chốt kỳ.</para>
-    /// </summary>
-    private static decimal DayWeight(
-        Domain.Entities.Attendance.AttendanceRecord record,
-        DayType dayType,
-        bool hasApprovedLateEarly,
-        decimal shiftStandardHours,
-        decimal shiftStandardDays,
-        decimal fallbackHoursPerDay)
-    {
-        if (record.Status == AttendanceStatus.OnLeave)
-            return dayType == DayType.PaidLeaveDay ? shiftStandardDays : 0m;
-
-        if (record.Status == AttendanceStatus.Absent)
-            return 0m;
-
-        if (hasApprovedLateEarly)
-            return shiftStandardDays;
-
-        var assigned = shiftStandardHours > 0m ? shiftStandardHours : fallbackHoursPerDay;
-        if (assigned <= 0m) return 0m;
-
-        var worked = record.DayHours + record.NightHours;
-        if (worked <= 0m) return 0m;
-
-        var ratio = worked / assigned;
-        if (ratio > 1m) ratio = 1m;
-
-        return Math.Round(ratio * shiftStandardDays, 2, MidpointRounding.AwayFromZero);
-    }
 
     private static Contract? PickContract(List<Contract> contracts, DateOnly start, DateOnly end)
     {

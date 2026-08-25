@@ -396,6 +396,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int?>("UpdatedByUserId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("WeeklyRestDayMask")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("WfhMaxDaysPerMonth")
                         .HasColumnType("decimal(5,1)");
 
