@@ -5,6 +5,7 @@ using MPS.Application.Features.EmployeeInformation.Validators;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Employee;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 using Xunit;
 using EmployeeInformationEntity = MPS.Domain.Entities.EmployeeInformation;
 
@@ -28,6 +29,7 @@ public sealed class EmployeeInformationTaxSocialUniqueTests
     private readonly Mock<IEmployeeInformationRepository> _repo = new();
     private readonly Mock<IDepartmentRepository> _departments = new();
 
+    private readonly Mock<ICompanyPaymentSettingRepository> _banking = new();
     public EmployeeInformationTaxSocialUniqueTests()
     {
         // Mọi rule khác pass để cô lập rule trùng mã.
@@ -60,8 +62,8 @@ public sealed class EmployeeInformationTaxSocialUniqueTests
         _repo.Setup(r => r.SocialNoExistsAsync(TakenSocialNo, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-    private EmployeeInformationCreateCommandValidator CreateValidator() => new(_repo.Object, _departments.Object);
-    private EmployeeInformationUpdateCommandValidator UpdateValidator() => new(_repo.Object, _departments.Object);
+    private EmployeeInformationCreateCommandValidator CreateValidator() => new(_repo.Object, _departments.Object, _banking.Object);
+    private EmployeeInformationUpdateCommandValidator UpdateValidator() => new(_repo.Object, _departments.Object, _banking.Object);
 
     // ===== Nhánh TẠO =====
 
@@ -152,6 +154,9 @@ public sealed class EmployeeInformationTaxSocialUniqueTests
         TaxNo: taxNo,
         SocialNo: socialNo,
         BankNumber: null,
+        BankCode: null,
+        BankBranch: null,
+        BankProvinceCode: null,
         GuardianFullName: null,
         GuardianRelationship: null,
         GuardianPhoneNo: null,
@@ -178,6 +183,9 @@ public sealed class EmployeeInformationTaxSocialUniqueTests
         TaxNo: taxNo,
         SocialNo: socialNo,
         BankNumber: null,
+        BankCode: null,
+        BankBranch: null,
+        BankProvinceCode: null,
         GuardianFullName: null,
         GuardianRelationship: null,
         GuardianPhoneNo: null,

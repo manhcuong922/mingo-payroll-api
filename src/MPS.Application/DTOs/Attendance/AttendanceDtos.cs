@@ -297,6 +297,11 @@ public sealed record AttendanceSettingDto(
     int? WfhMinNoticeDays,
     decimal? WfhMaxDaysPerRequest,
     int? WfhWorkPlanMinLength,
+    /// <summary>
+    /// Bitmask ngày nghỉ hằng tuần (Đ.111): bit N ⇔ <c>(DayOfWeek)N</c>, CN = bit 0 … T7 = bit 6.
+    /// Null = chưa cấu hình ⇒ mặc định T7 + CN. Xem <c>WeeklyRestDayPolicy</c>.
+    /// </summary>
+    int? WeeklyRestDayMask,
     int? LateGraceMinutes,
     int? EarlyLeaveGraceMinutes,
     int? HalfDayThresholdMinutes,

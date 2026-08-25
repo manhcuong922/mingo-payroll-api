@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MPS.API.Authorization;
@@ -80,9 +80,7 @@ public class LateEarlyRequestController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ApproveLateEarlyRequestCommand(
-            id, request.ReviewNote, request.DeductFromLeaveBalance, request.OverrideReason), cancellationToken);
-        if (!result.Approved)
-            return UnprocessableEntity(result);
+            id, request.ReviewNote, request.OverrideReason), cancellationToken);
         return Ok(result);
     }
 

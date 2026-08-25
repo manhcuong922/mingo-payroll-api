@@ -90,6 +90,11 @@ public class CreateOvertimeOnBehalfCommandHandler : IRequestHandler<CreateOverti
         if (!await _contracts.HasActiveContractAsync(request.EmployeeInformationId, cancellationToken))
             throw new DomainValidationException(
                 "CONTRACT_NOT_ACTIVE: Nhân viên không còn hợp đồng lao động hiệu lực — không thể đăng ký OT.");
+
+        // X5 — chặn cả đường ĐĂNG KÝ HỘ. Hai đường vào, chặn một đường là thủng: quản lý tạo hộ là
+        // đúng cái đường mà đơn tăng ca của người khoán việc trong dữ liệu thật đã đi qua.
+        OvertimeContractKindGuard.EnsureLaborRelationship(
+            await _contracts.GetActiveContractKindsAsync(request.EmployeeInformationId, cancellationToken));
         OvertimeWorkDateGuard.EnsureNotTooFarInFuture(request.WorkDate, _clock.UtcNow);
 
         // 4. NV mục tiêu có task trong đơn.

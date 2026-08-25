@@ -14,34 +14,12 @@ namespace MPS.Infrastructure.Tests.Services;
 /// cho A2) rồi commit cùng bản sửa, để mọi commit trên nhánh đều xanh. File này rỗng dần và được
 /// xoá khi hết lỗi.</para>
 ///
-/// <para>Còn lại: A4 (cột Thưởng dự án luôn bằng 0), C3 (CCCD làm mã NV),
-/// D3 (trần BHYT không có tác dụng).</para>
+/// <para>Còn lại: C3 (CCCD làm mã NV). A4 (cột Thưởng dự án luôn bằng 0) đã sửa — PO chốt
+/// 19/08/2026 mở cột thành Input cho kế toán nhập tay, xem <c>ProjectBonusColumnTests</c>;
+/// D3 (trần BHYT) đã sửa.</para>
 /// </summary>
 public sealed class PayrollDataCollectorBugTests
 {
-    // ===================== A4 (phần Thưởng dự án) — cột vĩnh viễn bằng 0 =====================
-    //
-    // Phần PHÍ CÔNG ĐOÀN của A4 đã sửa xong (xem PayrollUnionDuesTests): đoàn phí nay tính từ tỷ lệ
-    // + trần khai trong Compliance, nhân cờ đoàn viên trên hồ sơ NV. Phần Thưởng dự án dưới đây thì
-    // KHÔNG có nguồn nào để tra — hệ thống không có khái niệm "dự án có thưởng" hay bảng phân bổ
-    // thưởng theo NLĐ. Hai lối ra: (a) mở cột thành Input cho kế toán nhập như Thưởng năm/Thưởng
-    // khác bên cạnh, hoặc (b) dựng nguồn dữ liệu thật. Chờ PO chốt.
-
-    [Fact(DisplayName = "A4 · Thưởng dự án phải được tra từ dữ liệu hoặc cho nhập tay, không gán cứng 0")]
-    public async Task A4_ProjectBonus_MustNotBeHardcodedZero()
-    {
-        using var db = await SeedBaseAsync();
-        db.AttendanceRecords.Add(ShiftRecord(day: 6));
-        await db.SaveChangesAsync();
-
-        var inputs = await CollectAsync(db);
-
-        inputs.Numbers.Should().ContainKey(PayrollFieldKeys.BonusThuongDuAn);
-        inputs.Numbers[PayrollFieldKeys.BonusThuongDuAn].Should().NotBe(0m,
-            "cột luôn = 0 với mọi dữ liệu đầu vào ⇒ NLĐ không bao giờ nhận thưởng dự án; " +
-            "cần nguồn tra thật hoặc mở cho kế toán sửa tay");
-    }
-
     // ===================== C3 — CCCD làm mã nhân viên =====================
 
     [Fact(DisplayName = "C3 · NV chưa có tài khoản: cột Mã NV không được lấy số CCCD")]

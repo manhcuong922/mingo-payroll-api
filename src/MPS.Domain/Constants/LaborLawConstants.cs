@@ -72,6 +72,24 @@ public static class LaborLawConstants
     }
 
     /// <summary>
+    /// Ngưỡng ngày công tối thiểu để tháng đó thuộc diện đóng BHXH/BHYT/BHTN bắt buộc
+    /// (QĐ 595/QĐ-BHXH Đ.42 k.4–5; BHYT: NĐ 146/2018 Đ.7 k.8; BHTN: NĐ 28/2015 Đ.11).
+    ///
+    /// <para>Tháng NLĐ có DƯỚI 14 ngày làm việc hưởng lương ⇒ KHÔNG đóng cả 3 quỹ tháng đó — không
+    /// phải đóng theo tỷ lệ ngày công. Ngưỡng đếm theo NGÀY, không theo trọng số công: đi làm nửa
+    /// buổi vẫn là một ngày có làm việc và có hưởng lương.</para>
+    ///
+    /// <para>⚠️ Cố ý HARD-CODE ở giai đoạn này để ra bản sửa nhanh. Đúng ra ngưỡng thuộc văn bản
+    /// luật nên phải tra theo ngày hiệu lực như mọi hằng số compliance khác — chỗ đặt đúng của nó là
+    /// một trường trên <c>SocialInsuranceRateVersion</c> (kèm migration + form cấu hình). Khi làm
+    /// việc đó, thay chỗ đọc hằng số này trong <c>PayrollDataCollector</c> là đủ.</para>
+    /// </summary>
+    public static class InsuranceEligibility
+    {
+        public const int MinPaidWorkingDaysPerMonth = 14;
+    }
+
+    /// <summary>
     /// Deadline nộp nghĩa vụ BHXH & TNCN cho module BHXH & Tax Payment Tracking.
     /// Deadline = ngày thứ N của tháng liền sau kỳ lương (kỳ 2026-07 ⇒ BHXH hạn 2026-08-15,
     /// TNCN hạn 2026-08-20). Chu kỳ TNCN mặc định là hàng THÁNG.

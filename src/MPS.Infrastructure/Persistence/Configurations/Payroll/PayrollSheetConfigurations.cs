@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using MPS.Domain.Entities.Payroll;
 
@@ -17,6 +17,8 @@ public class PayrollPeriodEntityConfiguration : IEntityTypeConfiguration<Payroll
         builder.Property(e => e.FormulaSnapshotJson).IsRequired();
         builder.Property(e => e.ParamsSnapshotJson).IsRequired();
         builder.Property(e => e.ProductivitySnapshotJson).IsRequired();
+        // Phase 2 — KHÔNG IsRequired: kỳ tạo trước Phase 2 không có giá trị, để mặc định rỗng.
+        builder.Property(e => e.PieceWorkSupportSnapshotJson).HasDefaultValue(string.Empty);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.RowVersion).IsRowVersion();
 

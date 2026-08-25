@@ -38,6 +38,19 @@ public class EmployeeInformation
     public string? SocialNo { get; set; }
     public string? BankNumber { get; set; }
 
+    /// <summary>
+    /// Mã ngân hàng giữ tài khoản của NLĐ (<see cref="Payroll.Banking.BankCatalog.Code"/>).
+    /// Lệnh chi lương tách NV theo mã này: trùng ngân hàng chủ quản thì vào bảng "TK nội bộ",
+    /// còn lại vào bảng "TK ngân hàng khác" và phải khai thêm chi nhánh + tỉnh/TP.
+    /// </summary>
+    public string? BankCode { get; set; }
+
+    /// <summary>Tên chi nhánh ngân hàng của NLĐ — bắt buộc với NV ở ngân hàng khác.</summary>
+    public string? BankBranch { get; set; }
+
+    /// <summary>Mã tỉnh/TP của chi nhánh (<see cref="Payroll.Banking.ProvinceCatalog.Code"/>).</summary>
+    public string? BankProvinceCode { get; set; }
+
     // Guardian / next-of-kin (emergency contact)
     public string? GuardianFullName { get; set; }
     public string? GuardianRelationship { get; set; }

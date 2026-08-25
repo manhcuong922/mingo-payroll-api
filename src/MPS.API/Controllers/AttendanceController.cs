@@ -112,6 +112,7 @@ public class AttendanceController : ControllerBase
             request.WfhMinNoticeDays,
             request.WfhMaxDaysPerRequest,
             request.WfhWorkPlanMinLength,
+            request.WeeklyRestDayMask,
             request.LateGraceMinutes,
             request.EarlyLeaveGraceMinutes,
             request.HalfDayThresholdMinutes), cancellationToken);

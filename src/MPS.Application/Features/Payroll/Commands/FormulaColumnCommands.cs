@@ -10,6 +10,45 @@ using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.Payroll.Commands;
 
+/// <summary>
+/// Dùng chung cho Add/Update cột — PayrollSheetTable (FE) và PayrollExcelSalarySheet (Excel) gộp
+/// header cha theo DẢI CỘT LIÊN TIẾP cùng GroupName. Cột mới (hoặc cột vừa đổi sang 1 GroupName đã
+/// có sẵn) mà không nằm liền kề các cột cùng nhóm sẽ làm header cha bị tách/lặp tên thay vì gộp
+/// colSpan. Nên khi biết cột thuộc 1 nhóm đã tồn tại, tự chèn nó ngay sau cột cuối cùng của nhóm đó,
+/// đẩy lùi (+1) các cột phía sau — thay vì luôn đặt cuối bảng / giữ nguyên vị trí cũ.
+/// </summary>
+internal static class GroupedColumnOrdering
+{
+    public static string? Normalize(string? groupName) =>
+        string.IsNullOrWhiteSpace(groupName) ? null : groupName.Trim();
+
+    /// <param name="siblings">
+    /// Các cột khác trong bảng (KHÔNG gồm cột đang xử lý). Cột bị đẩy lùi được cập nhật CẢ trong
+    /// danh sách này (để caller validate/tính toán tiếp) LẪN qua repo (để persist).
+    /// </param>
+    public static async Task<int> ResolveOrderAsync(
+        IPayrollFormulaSetRepository repo,
+        List<SalaryColumnDefinition> siblings,
+        string? groupName,
+        int fallbackOrder,
+        CancellationToken ct)
+    {
+        var group = Normalize(groupName);
+        if (group is null) return fallbackOrder;
+
+        var groupCols = siblings.Where(c => c.GroupName == group).ToList();
+        if (groupCols.Count == 0) return fallbackOrder;
+
+        var insertAt = groupCols.Max(c => c.DisplayOrder) + 1;
+        foreach (var c in siblings.Where(c => c.DisplayOrder >= insertAt))
+        {
+            c.DisplayOrder += 1;
+            await repo.UpdateColumnAsync(c, ct);
+        }
+        return insertAt;
+    }
+}
+
 // ===== Thêm cột =====
 public sealed record AddColumnCommand(
     int FormulaSetId,
@@ -48,7 +87,9 @@ public sealed class AddColumnCommandHandler : IRequestHandler<AddColumnCommand, 
             throw new ConflictException($"Mã cột '{request.ColumnCode}' đã tồn tại trong bảng.");
 
         var existing = (await _repo.GetColumnsAsync(request.FormulaSetId, ct)).ToList();
-        var order = request.DisplayOrder ?? (existing.Count == 0 ? 0 : existing.Max(c => c.DisplayOrder) + 1);
+        var order = request.DisplayOrder ?? await GroupedColumnOrdering.ResolveOrderAsync(
+            _repo, existing, request.GroupName,
+            fallbackOrder: existing.Count == 0 ? 0 : existing.Max(c => c.DisplayOrder) + 1, ct);
 
         var column = new SalaryColumnDefinition
         {
@@ -108,6 +149,16 @@ public sealed class UpdateColumnCommandHandler : IRequestHandler<UpdateColumnCom
         // Dựng tập cột sau khi sửa để validate (giữ ColumnCode gốc).
         var siblings = (await _repo.GetColumnsAsync(current.FormulaSetId, ct))
             .Where(c => c.Id != current.Id).ToList();
+
+        // Đổi GroupName sang 1 nhóm đã có cột khác ⇒ tự chèn liền nhóm (xem GroupedColumnOrdering).
+        // Giữ nguyên nhóm / đổi sang nhóm mới toanh / bỏ nhóm ⇒ giữ đúng DisplayOrder FE gửi lên
+        // (không có xung đột liền kề cần xử lý — hoặc là vị trí người dùng đã tự sắp bằng nút Lên/Xuống).
+        var groupChanged = GroupedColumnOrdering.Normalize(request.GroupName)
+            != GroupedColumnOrdering.Normalize(current.GroupName);
+        var order = groupChanged
+            ? await GroupedColumnOrdering.ResolveOrderAsync(_repo, siblings, request.GroupName, request.DisplayOrder, ct)
+            : request.DisplayOrder;
+
         var edited = new SalaryColumnDefinition
         {
             Id = current.Id,
@@ -115,7 +166,7 @@ public sealed class UpdateColumnCommandHandler : IRequestHandler<UpdateColumnCom
             ColumnCode = current.ColumnCode,
             Label = request.Label,
             GroupName = request.GroupName,
-            DisplayOrder = request.DisplayOrder,
+            DisplayOrder = order,
             DataType = request.DataType,
             ValueSource = request.ValueSource,
             LookupKey = request.LookupKey,

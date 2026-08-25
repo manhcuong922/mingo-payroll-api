@@ -5,6 +5,7 @@ using MPS.Application.Features.EmployeeInformation.Validators;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Employee;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 using Xunit;
 using EmployeeInformationEntity = MPS.Domain.Entities.EmployeeInformation;
 
@@ -30,6 +31,7 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
     private readonly Mock<IEmployeeInformationRepository> _repo = new();
     private readonly Mock<IDepartmentRepository> _departments = new();
 
+    private readonly Mock<ICompanyPaymentSettingRepository> _banking = new();
     public EmployeeInformationInactiveAccountDepartmentTests()
     {
         // Cho mọi rule khác pass để cô lập rule trạng thái tài khoản.
@@ -59,7 +61,7 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
     {
         GivenAccountActive(false);
 
-        var result = await new EmployeeInformationCreateCommandValidator(_repo.Object, _departments.Object)
+        var result = await new EmployeeInformationCreateCommandValidator(_repo.Object, _departments.Object, _banking.Object)
             .TestValidateAsync(CreateCmd(departmentId: DepartmentId));
 
         result.ShouldHaveValidationErrorFor("DepartmentId");
@@ -70,7 +72,7 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
     {
         GivenAccountActive(false);
 
-        var result = await new EmployeeInformationCreateCommandValidator(_repo.Object, _departments.Object)
+        var result = await new EmployeeInformationCreateCommandValidator(_repo.Object, _departments.Object, _banking.Object)
             .TestValidateAsync(CreateCmd(departmentId: null));
 
         result.ShouldNotHaveValidationErrorFor("DepartmentId");
@@ -81,7 +83,7 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
     {
         GivenAccountActive(true);
 
-        var result = await new EmployeeInformationCreateCommandValidator(_repo.Object, _departments.Object)
+        var result = await new EmployeeInformationCreateCommandValidator(_repo.Object, _departments.Object, _banking.Object)
             .TestValidateAsync(CreateCmd(departmentId: DepartmentId));
 
         result.ShouldNotHaveValidationErrorFor("DepartmentId");
@@ -94,7 +96,7 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
     {
         GivenAccountActive(false);
 
-        var result = await new EmployeeInformationUpdateCommandValidator(_repo.Object, _departments.Object)
+        var result = await new EmployeeInformationUpdateCommandValidator(_repo.Object, _departments.Object, _banking.Object)
             .TestValidateAsync(UpdateCmd(departmentId: DepartmentId));
 
         result.ShouldHaveValidationErrorFor("DepartmentId");
@@ -105,7 +107,7 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
     {
         GivenAccountActive(true);
 
-        var result = await new EmployeeInformationUpdateCommandValidator(_repo.Object, _departments.Object)
+        var result = await new EmployeeInformationUpdateCommandValidator(_repo.Object, _departments.Object, _banking.Object)
             .TestValidateAsync(UpdateCmd(departmentId: DepartmentId));
 
         result.ShouldNotHaveValidationErrorFor("DepartmentId");
@@ -118,7 +120,7 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
         // đã bị vô hiệu hoá tài khoản không được vì thế mà bị chặn.
         GivenAccountActive(false);
 
-        var result = await new EmployeeInformationUpdateCommandValidator(_repo.Object, _departments.Object)
+        var result = await new EmployeeInformationUpdateCommandValidator(_repo.Object, _departments.Object, _banking.Object)
             .TestValidateAsync(UpdateCmd(departmentId: null));
 
         result.ShouldNotHaveValidationErrorFor("DepartmentId");
@@ -144,6 +146,9 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
         TaxNo: null,
         SocialNo: null,
         BankNumber: null,
+        BankCode: null,
+        BankBranch: null,
+        BankProvinceCode: null,
         GuardianFullName: null,
         GuardianRelationship: null,
         GuardianPhoneNo: null,
@@ -170,6 +175,9 @@ public sealed class EmployeeInformationInactiveAccountDepartmentTests
         TaxNo: null,
         SocialNo: null,
         BankNumber: null,
+        BankCode: null,
+        BankBranch: null,
+        BankProvinceCode: null,
         GuardianFullName: null,
         GuardianRelationship: null,
         GuardianPhoneNo: null,

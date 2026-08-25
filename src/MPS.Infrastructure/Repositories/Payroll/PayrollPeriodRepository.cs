@@ -63,6 +63,31 @@ public sealed class PayrollPeriodRepository : IPayrollPeriodRepository
             .Take(limit)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<PayrollRow>> GetRowsByYearAsync(
+        int year, int? employeeInformationId, CancellationToken ct = default)
+    {
+        var query = _context.Set<PayrollRow>().AsNoTracking()
+            .Include(r => r.Cells)
+            .Include(r => r.PayrollPeriod)
+            .Include(r => r.EmployeeInformation!)
+                .ThenInclude(e => e.User)
+            .Where(r => r.RowType == PayrollRowType.Employee
+                        && r.EmployeeInformationId != null
+                        && r.PayrollPeriod.PeriodYear == year
+                        && r.PayrollPeriod.Status != PayrollPeriodStatus.Draft);
+
+        if (employeeInformationId is not null)
+        {
+            query = query.Where(r => r.EmployeeInformationId == employeeInformationId);
+        }
+
+        return await query
+            .OrderBy(r => r.EmployeeInformationId)
+            .ThenBy(r => r.PayrollPeriod.PeriodMonth)
+            .AsSplitQuery()
+            .ToListAsync(ct);
+    }
+
     public Task<PayrollPeriod?> GetPeriodWithEmployeeRowAsync(
         int periodId, int employeeInformationId, CancellationToken ct = default) =>
         _context.PayrollPeriods.AsNoTrackingWithIdentityResolution()

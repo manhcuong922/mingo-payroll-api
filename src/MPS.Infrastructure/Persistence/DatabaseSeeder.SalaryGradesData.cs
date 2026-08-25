@@ -32,12 +32,10 @@ public sealed partial class DatabaseSeeder
             new GradeLevel(1, 36_000_000m, "Giám đốc điều hành — bổ nhiệm mới"),
             new GradeLevel(2, 40_000_000m, "Giám đốc điều hành — đã qua 1 nhiệm kỳ"),
             new GradeLevel(3, 45_000_000m, "Giám đốc điều hành — thâm niên, kiêm nhiệm mảng chiến lược"),
-        }),
-        ("PGD", "Phó Giám đốc", new[]
-        {
-            new GradeLevel(1, 28_000_000m, "Phó Giám đốc — bổ nhiệm mới"),
-            new GradeLevel(2, 31_000_000m, "Phó Giám đốc — phụ trách 1 khối"),
-            new GradeLevel(3, 34_000_000m, "Phó Giám đốc — phụ trách nhiều khối"),
+            // Bậc cao nhất công ty — cố ý VƯỢT trần đóng BHXH/BHYT (20 × mức tham chiếu 2.530.000 =
+            // 50.600.000). Không có bậc nào vượt trần thì nhánh chặn trần của khối bảo hiểm là code
+            // không kiểm được trên dữ liệu thật.
+            new GradeLevel(4, 55_000_000m, "Giám đốc điều hành — kiêm người đại diện theo pháp luật"),
         }),
         ("TPHR", "Trưởng phòng Nhân sự", new[]
         {
@@ -82,70 +80,74 @@ public sealed partial class DatabaseSeeder
         }),
 
         // ===== Khối sản xuất (chức danh xưởng — SeedManufacturingWorkforceDemoAsync) =====
+        // NHÂN CÔNG: toàn bộ khối này nằm trong khung lương cơ bản 5-8 triệu. Sàn thực tế lấy
+        // 6.300.000 chứ không phải 5.310.000 để tạo khoảng cách hợp lý với lương tối thiểu vùng I
+        // và phản ánh mức khởi điểm thực tế của nhóm lao động kỹ thuật đã qua đào tạo tại xưởng.
         ("QDX", "Quản đốc xưởng", new[]
         {
-            new GradeLevel(1, 15_000_000m, "Quản đốc mới bổ nhiệm"),
-            new GradeLevel(2, 16_500_000m, "Quản đốc, 2-3 năm quản lý xưởng"),
-            new GradeLevel(3, 18_000_000m, "Quản đốc thâm niên, xưởng trên 20 người"),
-            new GradeLevel(4, 20_000_000m, "Quản đốc kiêm phụ trách kỹ thuật nhiều xưởng"),
+            new GradeLevel(1, 7_400_000m, "Quản đốc mới bổ nhiệm"),
+            new GradeLevel(2, 7_600_000m, "Quản đốc, 2-3 năm quản lý xưởng"),
+            new GradeLevel(3, 7_800_000m, "Quản đốc thâm niên, xưởng trên 20 người"),
+            new GradeLevel(4, 8_000_000m, "Quản đốc kiêm phụ trách kỹ thuật nhiều xưởng"),
         }),
         ("TTSX", "Tổ trưởng sản xuất", new[]
         {
-            new GradeLevel(1, 12_500_000m, "Tổ trưởng mới bổ nhiệm, tổ 3-5 người"),
-            new GradeLevel(2, 14_000_000m, "Tổ trưởng, tổ 6-10 người"),
-            new GradeLevel(3, 16_000_000m, "Tổ trưởng thâm niên, kiêm kèm cặp thợ mới"),
+            new GradeLevel(1, 7_000_000m, "Tổ trưởng mới bổ nhiệm, tổ 3-5 người"),
+            new GradeLevel(2, 7_400_000m, "Tổ trưởng, tổ 6-10 người"),
+            new GradeLevel(3, 7_800_000m, "Tổ trưởng thâm niên, kiêm kèm cặp thợ mới"),
         }),
         ("THOCAT", "Thợ cắt", new[]
         {
-            new GradeLevel(1, 9_000_000m, "Mới vào nghề, 0-1 năm KN"),
-            new GradeLevel(2, 10_500_000m, "Tay nghề khá, 2-3 năm KN"),
-            new GradeLevel(3, 12_000_000m, "Thợ chính, đọc được bản vẽ phức tạp"),
+            new GradeLevel(1, 6_300_000m, "Mới vào nghề, 0-1 năm KN"),
+            new GradeLevel(2, 6_900_000m, "Tay nghề khá, 2-3 năm KN"),
+            new GradeLevel(3, 7_500_000m, "Thợ chính, đọc được bản vẽ phức tạp"),
         }),
         ("THOGHEP", "Thợ ghép", new[]
         {
-            new GradeLevel(1, 9_000_000m, "Mới vào nghề, 0-1 năm KN"),
-            new GradeLevel(2, 10_500_000m, "Tay nghề khá, 2-3 năm KN"),
-            new GradeLevel(3, 12_000_000m, "Thợ chính, xử lý được cụm chi tiết khó"),
+            new GradeLevel(1, 6_300_000m, "Mới vào nghề, 0-1 năm KN"),
+            new GradeLevel(2, 6_900_000m, "Tay nghề khá, 2-3 năm KN"),
+            new GradeLevel(3, 7_500_000m, "Thợ chính, xử lý được cụm chi tiết khó"),
         }),
         ("THOSON", "Thợ sơn", new[]
         {
-            new GradeLevel(1, 9_500_000m, "Mới vào nghề, 0-1 năm KN"),
-            new GradeLevel(2, 11_000_000m, "Tay nghề khá, pha màu độc lập"),
-            new GradeLevel(3, 12_500_000m, "Thợ chính, sơn hàng cao cấp"),
+            new GradeLevel(1, 6_500_000m, "Mới vào nghề, 0-1 năm KN"),
+            new GradeLevel(2, 7_100_000m, "Tay nghề khá, pha màu độc lập"),
+            new GradeLevel(3, 7_700_000m, "Thợ chính, sơn hàng cao cấp"),
         }),
         ("THOHT", "Thợ hoàn thiện", new[]
         {
-            new GradeLevel(1, 9_000_000m, "Mới vào nghề, 0-1 năm KN"),
-            new GradeLevel(2, 10_500_000m, "Tay nghề khá, 2-3 năm KN"),
-            new GradeLevel(3, 12_000_000m, "Thợ chính, phụ trách hàng xuất khẩu"),
+            new GradeLevel(1, 6_300_000m, "Mới vào nghề, 0-1 năm KN"),
+            new GradeLevel(2, 6_900_000m, "Tay nghề khá, 2-3 năm KN"),
+            new GradeLevel(3, 7_500_000m, "Thợ chính, phụ trách hàng xuất khẩu"),
         }),
         ("KCS", "Nhân viên KCS", new[]
         {
-            new GradeLevel(1, 8_500_000m, "Kiểm tra ngoại quan, 0-1 năm KN"),
-            new GradeLevel(2, 10_000_000m, "Kiểm tra theo tiêu chuẩn kỹ thuật, 2-3 năm KN"),
-            new GradeLevel(3, 11_500_000m, "Phụ trách gate QC, lập báo cáo chất lượng"),
+            new GradeLevel(1, 6_400_000m, "Kiểm tra ngoại quan, 0-1 năm KN"),
+            new GradeLevel(2, 7_000_000m, "Kiểm tra theo tiêu chuẩn kỹ thuật, 2-3 năm KN"),
+            new GradeLevel(3, 7_600_000m, "Phụ trách gate QC, lập báo cáo chất lượng"),
         }),
 
         // ===== Nhóm chức danh của dữ liệu contract-test (EnsureContractTestPositionsAsync) =====
-        // Giữ nguyên mức lương đã có ở 3 bậc gốc để không lệch số liệu HĐ/kỳ lương demo.
+        // Cũng là nhân công xưởng ⇒ cùng khung 5-8 triệu. Các hợp đồng demo ở
+        // DatabaseSeeder.ContractTestData.cs hardcode lại đúng những mức này — sửa ở đây phải sửa cả bên đó.
         ("MOC", "Thợ mộc", new[]
         {
-            new GradeLevel(1, 15_000_000m, "Mới vào nghề, 0-1 năm KN"),
-            new GradeLevel(2, 25_000_000m, "Tay nghề khá, 2-3 năm KN"),
-            new GradeLevel(3, 35_000_000m, "Thợ cả, 4-6 năm KN"),
-            new GradeLevel(99, 10_000_000m, "Demo soft-delete: bậc lương đã ngừng áp dụng", IsActive: false),
+            new GradeLevel(1, 6_500_000m, "Mới vào nghề, 0-1 năm KN"),
+            new GradeLevel(2, 7_200_000m, "Tay nghề khá, 2-3 năm KN"),
+            new GradeLevel(3, 8_000_000m, "Thợ cả, 4-6 năm KN"),
+            new GradeLevel(99, 6_000_000m, "Demo soft-delete: bậc lương đã ngừng áp dụng", IsActive: false),
         }),
         ("SON", "Thợ sơn hoàn thiện", new[]
         {
-            new GradeLevel(1, 18_000_000m, "Mới vào nghề, 0-1 năm KN"),
-            new GradeLevel(2, 22_000_000m, "Tay nghề khá, 2-3 năm KN"),
-            new GradeLevel(3, 28_000_000m, "Thợ chính, sơn hàng cao cấp"),
+            new GradeLevel(1, 6_600_000m, "Mới vào nghề, 0-1 năm KN"),
+            new GradeLevel(2, 7_300_000m, "Tay nghề khá, 2-3 năm KN"),
+            new GradeLevel(3, 7_900_000m, "Thợ chính, sơn hàng cao cấp"),
         }),
         ("TOTR", "Tổ trưởng sản xuất", new[]
         {
-            new GradeLevel(1, 50_000_000m, "Quản lý tổ 3-5 người"),
-            new GradeLevel(2, 58_000_000m, "Quản lý tổ 6-10 người"),
-            new GradeLevel(3, 66_000_000m, "Quản lý nhiều tổ, kiêm điều độ sản xuất"),
+            new GradeLevel(1, 7_200_000m, "Quản lý tổ 3-5 người"),
+            new GradeLevel(2, 7_600_000m, "Quản lý tổ 6-10 người"),
+            new GradeLevel(3, 8_000_000m, "Quản lý nhiều tổ, kiêm điều độ sản xuất"),
         }),
         ("HR", "Nhân viên nhân sự", new[]
         {

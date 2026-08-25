@@ -23,6 +23,8 @@ public class ContractAppendixEntityConfiguration : IEntityTypeConfiguration<Cont
         // [D12] — mức lương mới đóng băng theo mốc hiệu lực của phụ lục.
         builder.Property(e => e.SalaryAmountSnapshot).HasColumnType("decimal(18,2)");
         builder.Property(e => e.SalaryCurrencySnapshot).HasMaxLength(3);
+        // ⭐ Phase 6 — ảnh phụ cấp NGAY TRƯỚC khi phụ lục này áp; null = phụ lục không đụng phụ cấp.
+        builder.Property(e => e.AllowanceSnapshotBeforeJson);
         builder.Property(e => e.SignedAt);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();

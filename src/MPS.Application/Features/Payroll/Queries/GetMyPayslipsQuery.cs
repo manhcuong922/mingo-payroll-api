@@ -6,6 +6,7 @@ using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Payroll;
+using MPS.Application.Features.Payroll.Common;
 
 namespace MPS.Application.Features.Payroll.Queries;
 
@@ -52,16 +53,9 @@ public sealed class GetMyPayslipsQueryHandler
                 r.PayrollPeriod.PeriodMonth,
                 r.PayrollPeriod.PayDate,
                 r.PayrollPeriod.Status.ToString(),
-                EffectiveValue(r, PayrollColumnCodes.TongThuNhap),
-                EffectiveValue(r, PayrollColumnCodes.ThucNhan)))
+                PayrollCellReader.Value(r, PayrollColumnCodes.TongThuNhap),
+                PayrollCellReader.Value(r, PayrollColumnCodes.ThucNhan)))
             .ToList();
     }
 
-    private static decimal? EffectiveValue(PayrollRow row, string columnCode)
-    {
-        var cell = row.Cells.FirstOrDefault(c =>
-            string.Equals(c.ColumnCode, columnCode, StringComparison.OrdinalIgnoreCase));
-        if (cell is null) return null;
-        return cell.IsOverridden ? cell.OverrideValue : cell.ComputedValue;
-    }
 }

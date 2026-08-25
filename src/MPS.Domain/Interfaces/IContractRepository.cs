@@ -124,6 +124,14 @@ public interface IContractRepository
     /// </summary>
     Task<bool> HasActiveContractAsync(int employeeInformationId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Loại của các hợp đồng còn hiệu lực của một nhân viên (cùng bộ lọc trạng thái với
+    /// <see cref="HasActiveContractAsync"/>). Dùng để phân biệt quan hệ LAO ĐỘNG với quan hệ DÂN SỰ
+    /// — xem <c>OvertimeContractKindGuard</c>.
+    /// </summary>
+    Task<IReadOnlyList<ContractKind>> GetActiveContractKindsAsync(
+        int employeeInformationId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<int>> GetEmployeeInformationIdsWithActiveContractsAsync(
         IReadOnlyCollection<int> employeeInformationIds,
         CancellationToken cancellationToken = default);

@@ -5,6 +5,7 @@ using MPS.Application.Features.EmployeeInformation.Validators;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Employee;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 using Xunit;
 
 namespace MPS.Application.Tests.Features.EmployeeInformation;
@@ -18,6 +19,7 @@ public sealed class EmployeeInformationDepartmentRoleValidatorTests
     private readonly Mock<IEmployeeInformationRepository> _repo = new();
     private readonly Mock<IDepartmentRepository> _departments = new();
 
+    private readonly Mock<ICompanyPaymentSettingRepository> _banking = new();
     public EmployeeInformationDepartmentRoleValidatorTests()
     {
         // Cho các rule khác luôn pass để chỉ cô lập rule role-xưởng.
@@ -32,7 +34,7 @@ public sealed class EmployeeInformationDepartmentRoleValidatorTests
             .ReturnsAsync(new MPS.Domain.Entities.Department { Id = 5, Code = "IT", Name = "IT" });
     }
 
-    private EmployeeInformationCreateCommandValidator NewValidator() => new(_repo.Object, _departments.Object);
+    private EmployeeInformationCreateCommandValidator NewValidator() => new(_repo.Object, _departments.Object, _banking.Object);
 
     private static EmployeeInformationCreateCommand ValidCmd(int? userId, int? departmentId) =>
         new(
@@ -55,6 +57,9 @@ public sealed class EmployeeInformationDepartmentRoleValidatorTests
             TaxNo: null,
             SocialNo: null,
             BankNumber: null,
+            BankCode: null,
+            BankBranch: null,
+            BankProvinceCode: null,
             GuardianFullName: null,
             GuardianRelationship: null,
             GuardianPhoneNo: null,

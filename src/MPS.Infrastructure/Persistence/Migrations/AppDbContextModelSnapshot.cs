@@ -396,6 +396,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int?>("UpdatedByUserId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("WeeklyRestDayMask")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("WfhMaxDaysPerMonth")
                         .HasColumnType("decimal(5,1)");
 
@@ -2344,6 +2347,11 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("DependentDeductionAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("HousingExemptRatePercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(15.00m);
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -2821,6 +2829,9 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AllowanceSnapshotBeforeJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("AppendixNo")
                         .IsRequired()
@@ -3547,7 +3558,19 @@ namespace MPS.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BankBranch")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("BankCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("BankNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("BankProvinceCode")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
@@ -3944,6 +3967,1439 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "ExpiresAt");
 
                     b.ToTable("PasswordResetTokens", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.Banking.BankCatalog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsForeign")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("BankCatalogs", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Code = "VPBANK",
+                            FullName = "VPBank",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Code = "ABBANK",
+                            FullName = "NH An Binh",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Code = "ACB",
+                            FullName = "NH A Chau",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Code = "AGRIBANK",
+                            FullName = "NHNo va PTNT VN",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Code = "BAC A BANK",
+                            FullName = "NH Bac A",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Code = "BAOVIETBANK",
+                            FullName = "NH Bao Viet",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Code = "BIDV",
+                            FullName = "NH Dau Tu va Phat Trien VN",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Code = "CO-OP BANK",
+                            FullName = "NH Hop Tac VN",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Code = "DAIABANK",
+                            FullName = "NH Dai A",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Code = "DONG A BANK",
+                            FullName = "NH Dong A",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Code = "EXIMBANK",
+                            FullName = "NH Xuat nhap khau",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Code = "GPBANK",
+                            FullName = "NH Dau khi toan cau",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Code = "HDBANK",
+                            FullName = "NH TMCP Phat trien TP HCM",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Code = "KIENLONGBANK",
+                            FullName = "NH Kien Long",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Code = "LIENVIETPOSTBANK",
+                            FullName = "NH Buu dien Lien Viet",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Code = "MARITIME BANK",
+                            FullName = "NH Hang Hai",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Code = "MB",
+                            FullName = "NH Quan Doi",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Code = "MDB",
+                            FullName = "NH Phat Trien Me Kong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Code = "MHB",
+                            FullName = "NH phat trien nha DBSCL",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Code = "NAM A BANK",
+                            FullName = "NH Nam A",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Code = "NAVIBANK",
+                            FullName = "NH Nam Viet",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Code = "OCB",
+                            FullName = "NH Phuong Dong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Code = "OCEANBANK",
+                            FullName = "NH Dai Duong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Code = "PGBANK",
+                            FullName = "NH Xang dau Petrolimex",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Code = "PVCOMBANK",
+                            FullName = "NH Dai Chung",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Code = "SACOMBANK",
+                            FullName = "NH Sai Gon Thuong Tin",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Code = "SAIGONBANK",
+                            FullName = "NH Sai Gon Cong Thuong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 28,
+                            Code = "SCB",
+                            FullName = "NH TMCP Sai Gon",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 29,
+                            Code = "SEABANK",
+                            FullName = "NH Dong Nam A",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 30,
+                            Code = "SHB",
+                            FullName = "NH Sai Gon Ha Noi",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 31,
+                            Code = "SOUTHERN BANK",
+                            FullName = "NH Phuong Nam",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 32,
+                            Code = "TECHCOMBANK",
+                            FullName = "NH Ky Thuong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 33,
+                            Code = "TPBANK",
+                            FullName = "NH Tien Phong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 34,
+                            Code = "VBSP",
+                            FullName = "NH Chinh sach Xa Hoi",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 35,
+                            Code = "VDB",
+                            FullName = "NH Phat trien Viet Nam",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 36,
+                            Code = "VIB",
+                            FullName = "NH Quoc Te",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 37,
+                            Code = "VIET A BANK",
+                            FullName = "NH Viet A",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 38,
+                            Code = "VIET BANK",
+                            FullName = "NH Viet Nam Thuong Tin",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 39,
+                            Code = "VIETCAPITALBANK",
+                            FullName = "NH Ban Viet Gia Dinh",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 40,
+                            Code = "VIETCOMBANK",
+                            FullName = "NH Ngoai Thuong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 41,
+                            Code = "VIETINBANK",
+                            FullName = "NH Cong Thuong",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 42,
+                            Code = "VNCB",
+                            FullName = "NH Xay Dung VN",
+                            IsActive = true,
+                            IsForeign = false
+                        },
+                        new
+                        {
+                            Id = 43,
+                            Code = "ANZ",
+                            FullName = "NH ANZ Viet Nam",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 44,
+                            Code = "BANGKOK BANK",
+                            FullName = "Bangkok Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 45,
+                            Code = "BANK OF INDIA",
+                            FullName = "Bank Of India HCM Branch",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 46,
+                            Code = "BIDC",
+                            FullName = "NH Dau Tu va PT Campuchia",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 47,
+                            Code = "BNP",
+                            FullName = "PARIBAS",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 48,
+                            Code = "BOC",
+                            FullName = "Bank of China",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 49,
+                            Code = "BOComm",
+                            FullName = "Bank of Communication",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 50,
+                            Code = "BPCE IOM",
+                            FullName = "BPCE International et Outre-Mer",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 51,
+                            Code = "BTMU",
+                            FullName = "Bank of Tokyo Mitsubishi",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 52,
+                            Code = "BUSAN BANK",
+                            FullName = "Busan Bank Co Ltd",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 53,
+                            Code = "CATHAY BANK",
+                            FullName = "Cathay Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 54,
+                            Code = "CCB",
+                            FullName = "China Construction Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 55,
+                            Code = "CHIFONBANK",
+                            FullName = "NH Chifon Dai Loan",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 56,
+                            Code = "CIMB",
+                            FullName = "NH TNHH MTV CIMB Viet Nam",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 57,
+                            Code = "CITIBANK",
+                            FullName = "CitiBank Viet Nam",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 58,
+                            Code = "COMMONWEALTH",
+                            FullName = "Commonwealth Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 59,
+                            Code = "CREDIT AGRICOLE",
+                            FullName = "Credit Agricole CIB",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 60,
+                            Code = "CTBC Bank",
+                            FullName = "Chinatrust Commercial Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 61,
+                            Code = "DBS",
+                            FullName = "DBS Bank Ltd",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 62,
+                            Code = "DEUTSCHE BANK",
+                            FullName = "Deutsche Bank Viet Nam",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 63,
+                            Code = "E.SUN BANK",
+                            FullName = "E.SUN Commercial Bank Ltd",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 64,
+                            Code = "FCB",
+                            FullName = "First Commercial Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 65,
+                            Code = "HLB",
+                            FullName = "Hong Leong Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 66,
+                            Code = "HNCB",
+                            FullName = "Hua Nan Commerecial Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 67,
+                            Code = "HSBC",
+                            FullName = "HSBC Viet Nam",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 68,
+                            Code = "IBK",
+                            FullName = "Industrial Bank Of Korea",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 69,
+                            Code = "ICBC",
+                            FullName = "NH Cong Thuong Trung Quoc",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 70,
+                            Code = "IVB",
+                            FullName = "NH Indovina",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 71,
+                            Code = "JP MORGAN CHASE",
+                            FullName = "JP Morgan Chase Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 72,
+                            Code = "KEB Hana Bank",
+                            FullName = "Korea Exchange Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 73,
+                            Code = "KEB Hana Bank HCM",
+                            FullName = "Korean Exchange Bank HCM",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 74,
+                            Code = "KOOKMIN BANK",
+                            FullName = "Kookmin Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 75,
+                            Code = "LVB",
+                            FullName = "NH lien doanh Viet Lao",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 76,
+                            Code = "MALAYAN BANKING BERHAD",
+                            FullName = "Malayan Banking Berhad",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 77,
+                            Code = "MAY BANK",
+                            FullName = "May Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 78,
+                            Code = "MEGA ICBC",
+                            FullName = "Mega ICBC",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 79,
+                            Code = "MIZUHO",
+                            FullName = "Mizuho Corporate Bank, Ltd",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 80,
+                            Code = "NCB",
+                            FullName = "NH Quoc Dan",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 81,
+                            Code = "NONG HYUP",
+                            FullName = "Nong Hyup Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 82,
+                            Code = "OCBC",
+                            FullName = "Oversea Chinese Banking Corp",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 83,
+                            Code = "SCSB",
+                            FullName = "Shanghai Commercial & Savings",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 84,
+                            Code = "SHINHAN",
+                            FullName = "NH ShinhanVina",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 85,
+                            Code = "SHINHAN BANK",
+                            FullName = "Shinhan Vietnam Bank Limited",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 86,
+                            Code = "SIAM COMMERCIAL BANK",
+                            FullName = "NH The Siam Commercial Bank Public",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 87,
+                            Code = "SINOPAC",
+                            FullName = "Far East National Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 88,
+                            Code = "SMBC",
+                            FullName = "Sumitomo Mitsui Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 89,
+                            Code = "STANDARD CHARTERED",
+                            FullName = "Standard Chartered Viet Nam",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 90,
+                            Code = "TAIPEI FUBON",
+                            FullName = "Taipei Fubon Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 91,
+                            Code = "THE SIAM",
+                            FullName = "NH The Siam Commercial Bank Public",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 92,
+                            Code = "UOB",
+                            FullName = "United Overseas Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 93,
+                            Code = "VID",
+                            FullName = "NH VID Public",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 94,
+                            Code = "VRB",
+                            FullName = "NH Lien doanh Viet Nga",
+                            IsActive = true,
+                            IsForeign = true
+                        },
+                        new
+                        {
+                            Id = 95,
+                            Code = "WOORI BANK",
+                            FullName = "Woori Bank",
+                            IsActive = true,
+                            IsForeign = true
+                        });
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.Banking.CompanyPaymentSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BhxhAgencyCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("BhxhAgencyName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("BhxhBeneficiaryAccountNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("BhxhBeneficiaryBankName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("BhxhPayerAccountNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("BhxhPayerBankBranch")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("BhxhPayerBankCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("BhxhUnitCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SalaryAccountName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SalaryAccountNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SalaryBankBranch")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SalaryBankCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SalaryContactPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("SalaryCustomerCif")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<byte>("SingletonGuard")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint")
+                        .HasDefaultValue((byte)1);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("SingletonGuard")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("CompanyPaymentSettings", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.Banking.ProvinceCatalog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("FormName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("ProvinceCatalogs", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Code = "HA_NOI",
+                            FormName = "HA NOI",
+                            IsActive = true,
+                            Name = "Hà Nội"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Code = "TP_HO_CHI_MINH",
+                            FormName = "TP. HO CHI MINH",
+                            IsActive = true,
+                            Name = "TP. Hồ Chí Minh"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Code = "HAI_PHONG",
+                            FormName = "HAI PHONG",
+                            IsActive = true,
+                            Name = "Hải Phòng"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Code = "DA_NANG",
+                            FormName = "DA NANG",
+                            IsActive = true,
+                            Name = "Đà Nẵng"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Code = "HA_GIANG",
+                            FormName = "HA GIANG",
+                            IsActive = true,
+                            Name = "Hà Giang"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Code = "CAO_BANG",
+                            FormName = "CAO BANG",
+                            IsActive = true,
+                            Name = "Cao Bằng"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Code = "LAI_CHAU",
+                            FormName = "LAI CHAU",
+                            IsActive = true,
+                            Name = "Lai Châu"
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Code = "LAO_CAI",
+                            FormName = "LAO CAI",
+                            IsActive = true,
+                            Name = "Lào Cai"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Code = "TUYEN_QUANG",
+                            FormName = "TUYEN QUANG",
+                            IsActive = true,
+                            Name = "Tuyên Quang"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Code = "LANG_SON",
+                            FormName = "LANG SON",
+                            IsActive = true,
+                            Name = "Lạng Sơn"
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Code = "BAC_KAN",
+                            FormName = "BAC KAN",
+                            IsActive = true,
+                            Name = "Bắc Kạn"
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Code = "THAI_NGUYEN",
+                            FormName = "THAI NGUYEN",
+                            IsActive = true,
+                            Name = "Thái Nguyên"
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Code = "YEN_BAI",
+                            FormName = "YEN BAI",
+                            IsActive = true,
+                            Name = "Yên Bái"
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Code = "SON_LA",
+                            FormName = "SON LA",
+                            IsActive = true,
+                            Name = "Sơn La"
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Code = "PHU_THO",
+                            FormName = "PHU THO",
+                            IsActive = true,
+                            Name = "Phú Thọ"
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Code = "VINH_PHUC",
+                            FormName = "VINH PHUC",
+                            IsActive = true,
+                            Name = "Vĩnh Phúc"
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Code = "QUANG_NINH",
+                            FormName = "QUANG NINH",
+                            IsActive = true,
+                            Name = "Quảng Ninh"
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Code = "BAC_GIANG",
+                            FormName = "BAC GIANG",
+                            IsActive = true,
+                            Name = "Bắc Giang"
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Code = "BAC_NINH",
+                            FormName = "BAC NINH",
+                            IsActive = true,
+                            Name = "Bắc Ninh"
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Code = "HAI_DUONG",
+                            FormName = "HAI DUONG",
+                            IsActive = true,
+                            Name = "Hải Dương"
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Code = "HUNG_YEN",
+                            FormName = "HUNG YEN",
+                            IsActive = true,
+                            Name = "Hưng Yên"
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Code = "HOA_BINH",
+                            FormName = "HOA BINH",
+                            IsActive = true,
+                            Name = "Hòa Bình"
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Code = "HA_NAM",
+                            FormName = "HA NAM",
+                            IsActive = true,
+                            Name = "Hà Nam"
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Code = "NAM_DINH",
+                            FormName = "NAM DINH",
+                            IsActive = true,
+                            Name = "Nam Định"
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Code = "THAI_BINH",
+                            FormName = "THAI BINH",
+                            IsActive = true,
+                            Name = "Thái Bình"
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Code = "NINH_BINH",
+                            FormName = "NINH BINH",
+                            IsActive = true,
+                            Name = "Ninh Bình"
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Code = "THANH_HOA",
+                            FormName = "THANH HOA",
+                            IsActive = true,
+                            Name = "Thanh Hóa"
+                        },
+                        new
+                        {
+                            Id = 28,
+                            Code = "NGHE_AN",
+                            FormName = "NGHE AN",
+                            IsActive = true,
+                            Name = "Nghệ An"
+                        },
+                        new
+                        {
+                            Id = 29,
+                            Code = "HA_TINH",
+                            FormName = "HA TINH",
+                            IsActive = true,
+                            Name = "Hà Tĩnh"
+                        },
+                        new
+                        {
+                            Id = 30,
+                            Code = "QUANG_BINH",
+                            FormName = "QUANG BINH",
+                            IsActive = true,
+                            Name = "Quảng Bình"
+                        },
+                        new
+                        {
+                            Id = 31,
+                            Code = "QUANG_TRI",
+                            FormName = "QUANG TRI",
+                            IsActive = true,
+                            Name = "Quảng Trị"
+                        },
+                        new
+                        {
+                            Id = 32,
+                            Code = "THUA_THIEN_HUE",
+                            FormName = "THUA THIEN - HUE",
+                            IsActive = true,
+                            Name = "Thừa Thiên - Huế"
+                        },
+                        new
+                        {
+                            Id = 33,
+                            Code = "QUANG_NAM",
+                            FormName = "QUANG NAM",
+                            IsActive = true,
+                            Name = "Quảng Nam"
+                        },
+                        new
+                        {
+                            Id = 34,
+                            Code = "QUANG_NGAI",
+                            FormName = "QUANG NGAI",
+                            IsActive = true,
+                            Name = "Quảng Ngãi"
+                        },
+                        new
+                        {
+                            Id = 35,
+                            Code = "KON_TUM",
+                            FormName = "KON TUM",
+                            IsActive = true,
+                            Name = "Kon Tum"
+                        },
+                        new
+                        {
+                            Id = 36,
+                            Code = "BINH_DINH",
+                            FormName = "BINH DINH",
+                            IsActive = true,
+                            Name = "Bình Định"
+                        },
+                        new
+                        {
+                            Id = 37,
+                            Code = "GIA_LAI",
+                            FormName = "GIA LAI",
+                            IsActive = true,
+                            Name = "Gia Lai"
+                        },
+                        new
+                        {
+                            Id = 38,
+                            Code = "PHU_YEN",
+                            FormName = "PHU YEN",
+                            IsActive = true,
+                            Name = "Phú Yên"
+                        },
+                        new
+                        {
+                            Id = 39,
+                            Code = "DAC_LAC",
+                            FormName = "DAC LAC",
+                            IsActive = true,
+                            Name = "Đắc Lắc"
+                        },
+                        new
+                        {
+                            Id = 40,
+                            Code = "KHANH_HOA",
+                            FormName = "KHANH HOA",
+                            IsActive = true,
+                            Name = "Khánh Hòa"
+                        },
+                        new
+                        {
+                            Id = 41,
+                            Code = "LAM_DONG",
+                            FormName = "LAM DONG",
+                            IsActive = true,
+                            Name = "Lâm Đồng"
+                        },
+                        new
+                        {
+                            Id = 42,
+                            Code = "BINH_PHUOC",
+                            FormName = "BINH PHUOC",
+                            IsActive = true,
+                            Name = "Bình Phước"
+                        },
+                        new
+                        {
+                            Id = 43,
+                            Code = "BINH_DUONG",
+                            FormName = "BINH DUONG",
+                            IsActive = true,
+                            Name = "Bình Dương"
+                        },
+                        new
+                        {
+                            Id = 44,
+                            Code = "NINH_THUAN",
+                            FormName = "NINH THUAN",
+                            IsActive = true,
+                            Name = "Ninh Thuận"
+                        },
+                        new
+                        {
+                            Id = 45,
+                            Code = "TAY_NINH",
+                            FormName = "TAY NINH",
+                            IsActive = true,
+                            Name = "Tây Ninh"
+                        },
+                        new
+                        {
+                            Id = 46,
+                            Code = "BINH_THUAN",
+                            FormName = "BINH THUAN",
+                            IsActive = true,
+                            Name = "Bình Thuận"
+                        },
+                        new
+                        {
+                            Id = 47,
+                            Code = "DONG_NAI",
+                            FormName = "DONG NAI",
+                            IsActive = true,
+                            Name = "Đồng Nai"
+                        },
+                        new
+                        {
+                            Id = 48,
+                            Code = "LONG_AN",
+                            FormName = "LONG AN",
+                            IsActive = true,
+                            Name = "Long An"
+                        },
+                        new
+                        {
+                            Id = 49,
+                            Code = "DONG_THAP",
+                            FormName = "DONG THAP",
+                            IsActive = true,
+                            Name = "Đồng Tháp"
+                        },
+                        new
+                        {
+                            Id = 50,
+                            Code = "AN_GIANG",
+                            FormName = "AN GIANG",
+                            IsActive = true,
+                            Name = "An Giang"
+                        },
+                        new
+                        {
+                            Id = 51,
+                            Code = "BA_RIA_VUNG_TAU",
+                            FormName = "BA RIA - VUNG TAU",
+                            IsActive = true,
+                            Name = "Bà Rịa - Vũng Tàu"
+                        },
+                        new
+                        {
+                            Id = 52,
+                            Code = "TIEN_GIANG",
+                            FormName = "TIEN GIANG",
+                            IsActive = true,
+                            Name = "Tiền Giang"
+                        },
+                        new
+                        {
+                            Id = 53,
+                            Code = "KIEN_GIANG",
+                            FormName = "KIEN GIANG",
+                            IsActive = true,
+                            Name = "Kiên Giang"
+                        },
+                        new
+                        {
+                            Id = 54,
+                            Code = "CAN_THO",
+                            FormName = "CAN THO",
+                            IsActive = true,
+                            Name = "Cần Thơ"
+                        },
+                        new
+                        {
+                            Id = 55,
+                            Code = "BEN_TRE",
+                            FormName = "BEN TRE",
+                            IsActive = true,
+                            Name = "Bến Tre"
+                        },
+                        new
+                        {
+                            Id = 56,
+                            Code = "VINH_LONG",
+                            FormName = "VINH LONG",
+                            IsActive = true,
+                            Name = "Vĩnh Long"
+                        },
+                        new
+                        {
+                            Id = 57,
+                            Code = "TRA_VINH",
+                            FormName = "TRA VINH",
+                            IsActive = true,
+                            Name = "Trà Vinh"
+                        },
+                        new
+                        {
+                            Id = 58,
+                            Code = "SOC_TRANG",
+                            FormName = "SOC TRANG",
+                            IsActive = true,
+                            Name = "Sóc Trăng"
+                        },
+                        new
+                        {
+                            Id = 59,
+                            Code = "BAC_LIEU",
+                            FormName = "BAC LIEU",
+                            IsActive = true,
+                            Name = "Bạc Liêu"
+                        },
+                        new
+                        {
+                            Id = 60,
+                            Code = "CA_MAU",
+                            FormName = "CA MAU",
+                            IsActive = true,
+                            Name = "Cà Mau"
+                        },
+                        new
+                        {
+                            Id = 61,
+                            Code = "DIEN_BIEN",
+                            FormName = "DIEN BIEN",
+                            IsActive = true,
+                            Name = "Điện Biên"
+                        },
+                        new
+                        {
+                            Id = 62,
+                            Code = "DAC_NONG",
+                            FormName = "DAC NONG",
+                            IsActive = true,
+                            Name = "Đắc Nông"
+                        },
+                        new
+                        {
+                            Id = 63,
+                            Code = "HAU_GIANG",
+                            FormName = "HAU GIANG",
+                            IsActive = true,
+                            Name = "Hậu Giang"
+                        });
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", b =>
@@ -4457,6 +5913,12 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.Property<int>("PeriodYear")
                         .HasColumnType("int");
 
+                    b.Property<string>("PieceWorkSupportSnapshotJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("");
+
                     b.Property<string>("PitBracketsSnapshotJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -4534,6 +5996,45 @@ namespace MPS.Infrastructure.Persistence.Migrations
                     b.HasIndex("PayrollPeriodId", "RowType");
 
                     b.ToTable("PayrollRows", (string)null);
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.PieceWorkSupportBand", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal?>("MaxHours")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("MinHours")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "MinHours");
+
+                    b.ToTable("PieceWorkSupportBands", (string)null);
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.ProductivityCoefficient", b =>
@@ -9097,6 +10598,23 @@ namespace MPS.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MPS.Domain.Entities.Payroll.Banking.CompanyPaymentSetting", b =>
+                {
+                    b.HasOne("MPS.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MPS.Domain.Entities.User", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("UpdatedByUser");
                 });
 
             modelBuilder.Entity("MPS.Domain.Entities.Payroll.BhxhTax.PaymentObligation", b =>

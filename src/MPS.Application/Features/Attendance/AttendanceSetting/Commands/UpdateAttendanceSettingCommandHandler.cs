@@ -48,6 +48,7 @@ public sealed class UpdateAttendanceSettingCommandHandler
             WfhMinNoticeDays = request.WfhMinNoticeDays,
             WfhMaxDaysPerRequest = request.WfhMaxDaysPerRequest,
             WfhWorkPlanMinLength = request.WfhWorkPlanMinLength,
+            WeeklyRestDayMask = request.WeeklyRestDayMask,
             LateGraceMinutes = request.LateGraceMinutes,
             EarlyLeaveGraceMinutes = request.EarlyLeaveGraceMinutes,
             HalfDayThresholdMinutes = request.HalfDayThresholdMinutes,

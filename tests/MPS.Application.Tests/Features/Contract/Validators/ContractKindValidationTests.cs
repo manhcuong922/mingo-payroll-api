@@ -19,6 +19,9 @@ public sealed class ContractKindValidationTests
     [Theory]
     [InlineData(ContractKind.LaborFullTime)]
     [InlineData(ContractKind.Probation)]
+    // Phase 1 — HĐ khoán chuyển sang RuleDriven: không BH + thuế khoán 10% là điểm chết,
+    // xem PieceWorkContractRulesTests.
+    [InlineData(ContractKind.PieceWork)]
     public void Fails_When_RuleDriven_Kind_Supplies_Insurance_Flag(ContractKind kind)
     {
         var cmd = ContractCommandFactory.ValidCreate(kind: kind) with
@@ -50,7 +53,6 @@ public sealed class ContractKindValidationTests
     [InlineData(ContractKind.LaborPartTime)]
     [InlineData(ContractKind.Service)]
     [InlineData(ContractKind.Collaborator)]
-    [InlineData(ContractKind.PieceWork)]
     [InlineData(ContractKind.VocationalTraining)]
     public void Fails_When_UserChoice_Kind_Missing_Insurance_Flags(ContractKind kind)
     {

@@ -10,6 +10,7 @@ using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using MPS.Application.Settings;
 // 'ShiftTemplate' trùng tên với namespace Features.Attendance.ShiftTemplate → alias cho rõ.
 using ShiftTemplateEntity = MPS.Domain.Entities.Attendance.ShiftTemplate;
@@ -19,6 +20,12 @@ namespace MPS.Application.Features.Attendance.FaceRegistration.Commands;
 public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinCommand, FaceCheckinResultDto>
 {
     private const int CheckoutMinGapMinutes = 5;
+
+    // Thứ tự ưu tiên khi nhiều ca cùng mở cổng — số nhỏ được chọn trước.
+    private const int RankAwaitingCheckout = 0;
+    private const int RankOpenForCheckin   = 1;
+    private const int RankAlreadyComplete  = 2;
+    private const int RankCheckinExpired   = 3;
 
     private readonly IAttendanceRecordRepository _attendanceRepository;
     private readonly IEmployeeShiftAssignmentRepository _shiftAssignmentRepository;
@@ -31,6 +38,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     private readonly IEmployeeDayOffChecker _dayOffChecker;
     private readonly IOvertimeRequestRepository _overtimeRepository;
     private readonly LateEarlyExcuseResolver _excuseResolver;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
     private readonly IClock _clock;
     private readonly ILogger<FaceCheckinCommandHandler> _logger;
     private readonly AttendanceCheckinSettings _checkinSettings;
@@ -47,6 +55,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         IEmployeeDayOffChecker dayOffChecker,
         IOvertimeRequestRepository overtimeRepository,
         LateEarlyExcuseResolver excuseResolver,
+        IPayrollSourceChangeHandler payrollChange,
         IClock clock,
         ILogger<FaceCheckinCommandHandler> logger,
         IOptions<AttendanceCheckinSettings> checkinSettings)
@@ -62,6 +71,7 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         _dayOffChecker = dayOffChecker;
         _overtimeRepository = overtimeRepository;
         _excuseResolver = excuseResolver;
+        _payrollChange = payrollChange;
         _clock = clock;
         _logger = logger;
         _checkinSettings = checkinSettings.Value;
@@ -119,10 +129,15 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                     ? date.AddDays(1).ToDateTime(template.EndTime)
                     : date.ToDateTime(template.EndTime);
 
+                // Hạn chót MỞ ca mới sớm hơn hạn chót đóng ca: xem ShiftWindow.CheckinDeadline.
+                var checkinDeadline = startAt.AddMinutes(_checkinSettings.LateCheckinMinutes);
+                if (checkinDeadline > endAt) checkinDeadline = endAt;
+
                 candidates.Add(new ShiftWindow(
                     date, assignment, startAt, endAt,
                     OpenAt:  startAt.AddMinutes(-_checkinSettings.EarlyCheckinMinutes),
-                    CloseAt: endAt.AddMinutes(_checkinSettings.LateCheckoutMinutes)));
+                    CloseAt: endAt.AddMinutes(_checkinSettings.LateCheckoutMinutes),
+                    CheckinDeadline: checkinDeadline));
             }
         }
 
@@ -163,8 +178,13 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 $"đóng cổng sau {_checkinSettings.LateCheckoutMinutes / 60} giờ.");
         }
 
-        // Nhiều ca cùng mở cổng (cửa sổ chồng nhau) → ưu tiên ca đang chờ checkout,
-        // rồi ca chưa chấm công, cuối cùng mới tới ca đã hoàn thành.
+        // Nhiều ca cùng mở cổng (cửa sổ chồng nhau) → ưu tiên ca đang chờ checkout, rồi ca chưa
+        // chấm công còn trong hạn mở ca, rồi ca đã hoàn thành, cuối cùng mới tới ca chưa chấm công
+        // nhưng đã QUÁ hạn mở ca.
+        //
+        // Xếp "quá hạn mở ca" xuống cuối chứ không loại thẳng khỏi danh sách là có chủ đích: ca đêm
+        // hôm trước (22:00–06:00) vẫn nằm trong cửa sổ tới trưa hôm sau, nên NV quét lúc 08:30 để
+        // VÀO ca ngày hôm nay không được bị ca đêm quá hạn kia nuốt mất lượt.
         var chosen   = inWindow[0];
         var existing = default(AttendanceRecord);
         var bestRank = int.MaxValue;
@@ -174,17 +194,29 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
                 employeeInformationId, candidate.WorkDate, candidate.Assignment.ShiftTemplateId, cancellationToken);
             var rank = record switch
             {
-                { CheckInAt: not null, CheckOutAt: null } => 0,
-                null => 1,
-                _ => 2,
+                { CheckInAt: not null, CheckOutAt: null } => RankAwaitingCheckout,
+                null when localTime <= candidate.CheckinDeadline => RankOpenForCheckin,
+                null => RankCheckinExpired,
+                _ => RankAlreadyComplete,
             };
             if (rank < bestRank)
             {
                 bestRank = rank;
                 chosen   = candidate;
                 existing = record;
-                if (rank == 0) break;
+                if (rank == RankAwaitingCheckout) break;
             }
+        }
+
+        // Không còn ca nào mở được: mọi ứng viên đều là ca chưa chấm công đã quá hạn VÀO ca.
+        // Chặn tại đây thay vì để Case 1 tạo bản ghi check-in muộn — bản ghi đó ra HalfDay (0.5 công
+        // hưởng lương) trong khi giờ công thực tế bằng 0 vì nằm trọn ngoài khung ca.
+        if (bestRank == RankCheckinExpired)
+        {
+            return Fail(
+                $"Đã quá hạn chấm công VÀO ca. Ca bắt đầu lúc {chosen.Assignment.ShiftTemplate.StartTime:HH\\:mm}, " +
+                $"chỉ mở ca đến {TimeOnly.FromDateTime(chosen.CheckinDeadline):HH\\:mm}. " +
+                "Vui lòng liên hệ HR để được chấm công bổ sung.");
         }
 
         var workDate = chosen.WorkDate;
@@ -221,6 +253,11 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
             };
 
             var newId = await _attendanceRepository.AddAsync(record, cancellationToken);
+
+            await NotifyPayrollAsync(
+                employeeInformationId, workDate,
+                $"Chấm công vào ca ngày {workDate:dd/MM/yyyy}", cancellationToken);
+
             return new FaceCheckinResultDto(
                 Success: true,
                 CheckinType: FaceCheckinType.Checkin,
@@ -304,6 +341,12 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         // cap theo khung giờ OT đã được duyệt — không tự ý mở rộng ngoài đơn.
         await RecordActualOvertimeIfAnyAsync(
             employeeInformationId, workDate, chosen.EndAt, localTime, updateUserId, cancellationToken);
+
+        // Đặt SAU `RecordActualOvertimeIfAnyAsync` để một lần báo phủ cả giờ ca chính lẫn bản ghi OT
+        // vừa sinh — chính bản ghi OT đó mới là thứ làm tiền tăng ca phát sinh.
+        await NotifyPayrollAsync(
+            employeeInformationId, workDate,
+            $"Chấm công tan ca ngày {workDate:dd/MM/yyyy}", cancellationToken);
 
         return new FaceCheckinResultDto(
             Success: true,
@@ -389,6 +432,22 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
         await _attendanceRepository.AddAsync(record, cancellationToken);
     }
 
+    /// <summary>
+    /// BS-6 + BS-5 — báo cho bảng lương biết ngày công/giờ OT của NV vừa đổi: kỳ Draft mark stale,
+    /// kỳ Finalized capture chênh lệch thành khoản truy lĩnh/truy thu.
+    ///
+    /// <para>Quét mặt là NGUỒN chính của số liệu công. Trước đây chỉ các bước DUYỆT ĐƠN mới báo, nên
+    /// tiền OT — vốn chỉ phát sinh khi bản ghi chấm công OT ra đời, tức luôn SAU khi duyệt đơn — không
+    /// bao giờ tới được cổng truy lĩnh.</para>
+    ///
+    /// <para>Best-effort như mọi call-site khác: service tự nuốt lỗi + log, không được phép làm hỏng
+    /// thao tác chấm công của NLĐ đang đứng trước camera.</para>
+    /// </summary>
+    private Task NotifyPayrollAsync(
+        int employeeInformationId, DateOnly workDate, string reason, CancellationToken ct) =>
+        _payrollChange.OnSourceChangedAsync(
+            workDate.Year, workDate.Month, employeeInformationId, reason, ct);
+
     private static FaceCheckinResultDto Fail(string message) =>
         new(false, FaceCheckinType.Failed, null, message, null, null, null, null);
 
@@ -397,11 +456,18 @@ public sealed class FaceCheckinCommandHandler : IRequestHandler<FaceCheckinComma
     /// ngày cụ thể (ca đêm → EndAt sang ngày hôm sau); OpenAt/CloseAt nới thêm
     /// EarlyCheckinMinutes/LateCheckoutMinutes.
     /// </summary>
+    /// <param name="CheckinDeadline">
+    /// Hạn chót MỞ ca mới = <paramref name="StartAt"/> + <c>LateCheckinMinutes</c>, kẹp tại
+    /// <paramref name="EndAt"/>. Sớm hơn <paramref name="CloseAt"/> vì chấm VÀO và chấm RA là hai
+    /// việc khác nhau: cửa sổ đóng ca phải rộng để đón NV tan ca sau OT, còn cửa sổ mở ca phải hẹp
+    /// vì quét lần đầu sau khi ca đã trôi qua thì không thể là "đã đi làm ca đó".
+    /// </param>
     private sealed record ShiftWindow(
         DateOnly WorkDate,
         EmployeeShiftAssignment Assignment,
         DateTime StartAt,
         DateTime EndAt,
         DateTime OpenAt,
-        DateTime CloseAt);
+        DateTime CloseAt,
+        DateTime CheckinDeadline);
 }

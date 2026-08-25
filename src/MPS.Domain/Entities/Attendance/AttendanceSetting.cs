@@ -1,4 +1,4 @@
-namespace MPS.Domain.Entities.Attendance;
+﻿namespace MPS.Domain.Entities.Attendance;
 
 public class AttendanceSetting
 {
@@ -12,10 +12,17 @@ public class AttendanceSetting
 
     // ===== Company policy config (nullable = fallback to hardcoded default in checker) =====
 
-    /// <summary>Số lần đi trễ/về sớm tối đa trong tháng trước khi bị trừ quỹ phép. Null = 2.</summary>
+    /// <summary>
+    /// ⚠️ KHÔNG CÒN TÁC DỤNG từ LATE-EARLY-2026-08 — quota số lần/tháng đã bỏ cùng với đường trừ quỹ
+    /// phép năm (quyết định PO 24/08/2026). Giữ cột để đọc lịch sử cấu hình; đã gỡ khỏi màn hình
+    /// cấu hình chấm công để HR không chỉnh một ô không còn ai đọc.
+    /// </summary>
     public int? LateEarlyMaxOccurrencesPerMonth { get; set; }
 
-    /// <summary>Số phút tối đa cho mỗi lần đi trễ/về sớm. Null = 30.</summary>
+    /// <summary>
+    /// ⚠️ KHÔNG CÒN TÁC DỤNG từ LATE-EARLY-2026-08 — trần phút mỗi lần nay là THỜI LƯỢNG CA ĐƯỢC PHÂN
+    /// của chính ngày đó, chặn trong <c>CreateLateEarlyRequestCommandHandler</c>.
+    /// </summary>
     public int? LateEarlyMaxMinutesPerOccurrence { get; set; }
 
     /// <summary>Số ngày tối đa cho phép nộp đơn Late/Early sau WorkDate (đột xuất). Null = 2.</summary>
@@ -32,6 +39,18 @@ public class AttendanceSetting
 
     /// <summary>Độ dài tối thiểu của WorkPlan trong đơn WFH. Null = 20.</summary>
     public int? WfhWorkPlanMinLength { get; set; }
+
+    // ===== Ngày nghỉ hằng tuần (Đ.111 BLLĐ) =====
+
+    /// <summary>
+    /// ⭐ RESTDAY-2026-08 — bitmask các thứ được ấn định là NGÀY NGHỈ HẰNG TUẦN trong nội quy lao
+    /// động: bit N ⇔ <c>(DayOfWeek)N</c> (CN = bit 0 … T7 = bit 6). Null = chưa cấu hình ⇒ dùng
+    /// <c>WeeklyRestDayPolicy.DefaultMask</c> (T7 + CN).
+    ///
+    /// <para>Trước bản này ngày nghỉ tuần được SUY từ bảng phân ca, sai cả hai chiều — xem
+    /// <c>WeeklyRestDayPolicy</c>.</para>
+    /// </summary>
+    public int? WeeklyRestDayMask { get; set; }
 
     // ===== Grace period cho auto-resolve AttendanceStatus =====
 

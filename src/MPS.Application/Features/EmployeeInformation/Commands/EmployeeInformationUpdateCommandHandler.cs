@@ -102,6 +102,9 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
             TaxNo = Merge(request.TaxNo, existing.TaxNo),
             SocialNo = Merge(request.SocialNo, existing.SocialNo),
             BankNumber = Merge(request.BankNumber, existing.BankNumber),
+            BankCode = Merge(request.BankCode, existing.BankCode),
+            BankBranch = Merge(request.BankBranch, existing.BankBranch),
+            BankProvinceCode = Merge(request.BankProvinceCode, existing.BankProvinceCode),
             GuardianFullName = Merge(request.GuardianFullName, existing.GuardianFullName),
             GuardianRelationship = Merge(request.GuardianRelationship, existing.GuardianRelationship),
             GuardianPhoneNo = Merge(request.GuardianPhoneNo, existing.GuardianPhoneNo),
@@ -140,6 +143,9 @@ public class EmployeeInformationUpdateCommandHandler : IRequestHandler<EmployeeI
                 changed.Add("CCCD");
             if (!string.Equals(existing.BankNumber, entity.BankNumber, StringComparison.Ordinal))
                 changed.Add("Số tài khoản");
+            // Đổi ngân hàng cũng là đổi nơi tiền lương chạy tới, không nhẹ hơn đổi số tài khoản.
+            if (!string.Equals(existing.BankCode, entity.BankCode, StringComparison.Ordinal))
+                changed.Add("Ngân hàng");
             if (!string.Equals(existing.TaxNo, entity.TaxNo, StringComparison.Ordinal))
                 changed.Add("Mã số thuế");
             if (!string.Equals(existing.SocialNo, entity.SocialNo, StringComparison.Ordinal))

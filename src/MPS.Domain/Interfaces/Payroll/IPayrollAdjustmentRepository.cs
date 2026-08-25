@@ -12,6 +12,18 @@ public interface IPayrollAdjustmentRepository
     Task<IReadOnlyList<PayrollAdjustment>> GetPendingForEmployeesAsync(
         IReadOnlyCollection<int> employeeInformationIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// Y hệt <see cref="GetPendingForEmployeesAsync"/> nhưng trả bản KHÔNG THEO DÕI (AsNoTracking).
+    ///
+    /// <para>Bắt buộc dùng ở nhánh chỉ-đọc (màn hình tạm tính giữa tháng):
+    /// <c>PayrollAdjustmentApplier.Build</c> có SỬA chính các entity này — đặt <c>AppliedAt</c> và
+    /// cắt <c>Amount</c> khi trừ một phần. Nếu chúng đang được EF theo dõi thì một lệnh
+    /// <c>SaveChanges</c> bất kỳ sau đó sẽ ghi thật những thay đổi đó xuống DB, tức là bấm "xem thử"
+    /// lại đánh dấu khoản truy thu là ĐÃ TRỪ trong khi chưa có kỳ lương nào trả tiền.</para>
+    /// </summary>
+    Task<IReadOnlyList<PayrollAdjustment>> GetPendingForEmployeesReadOnlyAsync(
+        IReadOnlyCollection<int> employeeInformationIds, CancellationToken ct = default);
+
     /// <summary>Các khoản đã áp vào 1 kỳ — dùng khi xoá kỳ để trả chúng về trạng thái chưa áp.</summary>
     Task<IReadOnlyList<PayrollAdjustment>> GetAppliedToPeriodAsync(int periodId, CancellationToken ct = default);
 

@@ -70,11 +70,28 @@ public static class ContractKindMetadata
             [ContractKind.PieceWork] = new(
                 Kind: ContractKind.PieceWork,
                 LegalFramework: ContractLegalFramework.CivilCode,
-                InsuranceMode: InsuranceDeterminationMode.UserChoice,
+                // ⭐ Phase 1 (quyết định PO 18/08/2026) — HĐ khoán việc có chế độ CỐ ĐỊNH, không để
+                // HR tick tay: KHÔNG đóng BHXH/BHYT/BHTN (hợp đồng dân sự, không thuộc đối tượng bắt
+                // buộc khi đúng bản chất khoán việc) và luôn thuế khoán 10% (TT 111/2013 Đ.25.1.i —
+                // cá nhân cư trú không ký HĐLĐ hoặc ký HĐLĐ dưới 3 tháng).
+                //
+                // Trước đây là UserChoice: mỗi HĐ khoán phụ thuộc HR tick đúng hay sai 4 ô, và không
+                // gì chặn một HĐ khoán bị khai đóng đủ BH + thuế lũy tiến.
+                //
+                // ⚠️ Điều kiện để chế độ này đúng luật: quan hệ phải là khoán việc THẬT (giao kết
+                // quả, người nhận khoán tự tổ chức thực hiện). Luật BHXH 2024 Đ.2 k.1 kéo cả hợp
+                // đồng "tên gọi khác" vào diện BHXH bắt buộc nếu có trả công + quản lý, điều hành,
+                // giám sát. Rủi ro này đã được cảnh báo và PO chấp nhận — xem
+                // docs/plans/piecework-contract-and-midperiod-payroll-plan.md §0.3.
+                InsuranceMode: InsuranceDeterminationMode.RuleDriven,
                 AllowsAutoConvert: false,
                 RequiresEffectiveTo: true,
                 TypeCodePrefix: "KV",
-                DisplayNameVi: "Hợp đồng khoán việc"),
+                DisplayNameVi: "Hợp đồng khoán việc",
+                DefaultSocialInsurance: false,
+                DefaultHealthInsurance: false,
+                DefaultUnemploymentInsurance: false,
+                DefaultTaxPolicy: TaxPolicy.FlatRate10Percent),
 
             [ContractKind.Service] = new(
                 Kind: ContractKind.Service,

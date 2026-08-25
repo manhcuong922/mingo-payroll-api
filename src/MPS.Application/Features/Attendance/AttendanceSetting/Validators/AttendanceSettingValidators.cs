@@ -1,4 +1,5 @@
 using FluentValidation;
+using MPS.Application.Common.Services;
 using MPS.Application.Features.Attendance.AttendanceSetting.Commands;
 
 namespace MPS.Application.Features.Attendance.AttendanceSetting.Validators;
@@ -38,6 +39,15 @@ public class UpdateAttendanceSettingCommandValidator : AbstractValidator<UpdateA
         RuleFor(x => x.WfhWorkPlanMinLength)
             .InclusiveBetween(0, 500).When(x => x.WfhWorkPlanMinLength.HasValue)
             .WithMessage("WfhWorkPlanMinLength phải trong khoảng 0-500 ký tự.");
+
+        // Đ.111 BLLĐ — mỗi tuần phải có ÍT NHẤT 1 ngày nghỉ; và phải còn ít nhất 1 ngày làm việc,
+        // nếu không cả tháng thành ngày nghỉ tuần (mọi ca đều ăn 200%, công chuẩn hết ý nghĩa).
+        RuleFor(x => x.WeeklyRestDayMask)
+            .Must(mask => WeeklyRestDayPolicy.IsValid(mask!.Value))
+            .When(x => x.WeeklyRestDayMask.HasValue)
+            .WithMessage(
+                $"WeeklyRestDayMask phải trong khoảng 1-{WeeklyRestDayPolicy.AllDaysMask - 1}: "
+                + "ít nhất 1 ngày nghỉ hằng tuần (Điều 111 BLLĐ) và ít nhất 1 ngày làm việc.");
 
         RuleFor(x => x.LateGraceMinutes)
             .InclusiveBetween(0, 120).When(x => x.LateGraceMinutes.HasValue)

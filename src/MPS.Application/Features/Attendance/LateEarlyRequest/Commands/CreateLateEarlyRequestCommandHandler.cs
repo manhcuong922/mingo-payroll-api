@@ -64,6 +64,26 @@ public class CreateLateEarlyRequestCommandHandler : IRequestHandler<CreateLateEa
             throw new DomainValidationException(
                 $"Ngày {request.WorkDate:dd/MM/yyyy} không có phân ca — không cần đơn đi trễ/về sớm.");
 
+        // ⭐ LATE-EARLY-2026-08 — trần số phút không còn là hằng số 240 mà là CHÍNH CA ĐƯỢC PHÂN của
+        // ngày đó (quyết định PO 24/08/2026: bỏ quota số lần/tháng, đổi lại đơn không được vượt ra
+        // ngoài phạm vi ca). Ca sáng 4h ⇒ tối đa 240'; ca fulltime 8h ⇒ 480'; NV có 2 ca trong ngày
+        // ⇒ cộng cả hai. Ca ĐÊM vắt sang hôm sau vẫn tính trọn độ dài ca ở đây vì đơn luôn gắn ngày
+        // BẮT ĐẦU ca — không cần (và không được) nộp thêm đơn cho ngày hôm sau.
+        //
+        // Mẫu số là `StandardHours` (đã trừ nghỉ giữa ca), cùng đại lượng mà `PayrollDataCollector`
+        // dùng làm mẫu số chia công — để "xin tối đa" luôn khớp đúng một ca công, không lệch vì giờ
+        // nghỉ trưa.
+        var assignedMinutes = (int)decimal.Round(
+            assignments.Sum(a => a.ShiftTemplate.StandardHours) * 60m, 0, MidpointRounding.AwayFromZero);
+        if (assignedMinutes <= 0)
+            throw new DomainValidationException(
+                $"Ca được phân ngày {request.WorkDate:dd/MM/yyyy} khai giờ chuẩn ≤ 0 — không xác định được "
+                + "giới hạn đơn đi trễ/về sớm. Kiểm tra lại cấu hình ca.");
+        if (request.Minutes > assignedMinutes)
+            throw new DomainValidationException(
+                $"Số phút xin ({request.Minutes}) vượt thời lượng ca được phân ngày "
+                + $"{request.WorkDate:dd/MM/yyyy} ({assignedMinutes} phút). Nghỉ trọn ca thì nộp đơn nghỉ phép.");
+
         var today = DateOnly.FromDateTime(_clock.UtcNow.AddHours(7));
         var isUnplanned = request.WorkDate <= today;
 

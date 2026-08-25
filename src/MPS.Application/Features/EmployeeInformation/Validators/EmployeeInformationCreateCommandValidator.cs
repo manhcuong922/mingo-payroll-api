@@ -2,6 +2,7 @@ using FluentValidation;
 using MPS.Application.Features.EmployeeInformation.Commands;
 using MPS.Domain.Constants;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 
 namespace MPS.Application.Features.EmployeeInformation.Validators;
 
@@ -9,8 +10,12 @@ public class EmployeeInformationCreateCommandValidator : AbstractValidator<Emplo
 {
     public EmployeeInformationCreateCommandValidator(
         IEmployeeInformationRepository repository,
-        IDepartmentRepository departmentRepository)
+        IDepartmentRepository departmentRepository,
+        ICompanyPaymentSettingRepository bankingRepository)
     {
+        EmployeeBankAccountRules.Apply(
+            this, bankingRepository, x => x.BankCode, x => x.BankBranch, x => x.BankProvinceCode);
+
         RuleFor(x => x.FullName)
             .NotEmpty().WithMessage("FullName is required.")
             .MaximumLength(200).WithMessage("FullName must not exceed 200 characters.");

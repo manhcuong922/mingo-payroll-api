@@ -101,7 +101,9 @@ public sealed class ContractTerminationFlowIntegrationTests
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
             new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
-            new FakeClock());
+            new FakeClock(),
+            new NoopPayrollSourceChangeHandler(),
+            NullLogger<CreateContractTerminationCommandHandler>.Instance);
 
         var noticeSent = DateTime.UtcNow;
         var terminationResult = await createTermHandler.Handle(new CreateContractTerminationCommand(
@@ -162,7 +164,9 @@ public sealed class ContractTerminationFlowIntegrationTests
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
             new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
-            new FakeClock());
+            new FakeClock(),
+            new NoopPayrollSourceChangeHandler(),
+            NullLogger<CreateContractTerminationCommandHandler>.Instance);
 
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
@@ -207,14 +211,18 @@ public sealed class ContractTerminationFlowIntegrationTests
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
             new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
-            new FakeClock());
+            new FakeClock(),
+            new NoopPayrollSourceChangeHandler(),
+            NullLogger<CreateContractTerminationCommandHandler>.Instance);
 
         // TerminationDate ở quá khứ (NLĐ chết hôm qua, HR ghi nhận hôm nay) → chấm dứt tức thời.
         // Dùng FakeClock để mốc "hôm nay" nằm sau TerminationDate → xác định deterministic.
         var termHandlerWithClock = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
             new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
-            new FakeClock(new DateTime(2026, 8, 5, 0, 0, 0, DateTimeKind.Utc)));
+            new FakeClock(new DateTime(2026, 8, 5, 0, 0, 0, DateTimeKind.Utc)),
+            new NoopPayrollSourceChangeHandler(),
+            NullLogger<CreateContractTerminationCommandHandler>.Instance);
 
         var terminationResult = await termHandlerWithClock.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
@@ -261,7 +269,9 @@ public sealed class ContractTerminationFlowIntegrationTests
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
             new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
-            new FakeClock());
+            new FakeClock(),
+            new NoopPayrollSourceChangeHandler(),
+            NullLogger<CreateContractTerminationCommandHandler>.Instance);
 
         await createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,
@@ -354,7 +364,9 @@ public sealed class ContractTerminationFlowIntegrationTests
         var createTermHandler = new CreateContractTerminationCommandHandler(
             termRepo, repo, lookup, currentUser.Object,
             new EmployeeInformationRepository(fx.Db), new ProjectTaskRepository(fx.Db),
-            new FakeClock());
+            new FakeClock(),
+            new NoopPayrollSourceChangeHandler(),
+            NullLogger<CreateContractTerminationCommandHandler>.Instance);
 
         var act = () => createTermHandler.Handle(new CreateContractTerminationCommand(
             ContractId: contractId,

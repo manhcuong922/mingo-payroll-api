@@ -12,6 +12,7 @@ using MPS.Domain.Entities.Attendance;
 using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using Xunit;
 
 namespace MPS.Application.Tests.Features.Attendance;
@@ -43,6 +44,7 @@ public sealed class FaceCheckinCommandHandlerTests
         return mock;
     }
     private readonly Mock<IClock> _clock = new();
+    private readonly Mock<IPayrollSourceChangeHandler> _payrollChange = new();
     private readonly Mock<ILogger<FaceCheckinCommandHandler>> _logger = new();
 
     private AttendanceCheckinSettings _checkinSettings = new();
@@ -59,6 +61,7 @@ public sealed class FaceCheckinCommandHandlerTests
         _dayOffChecker.Object,
         _overtimeRepository.Object,
         new LateEarlyExcuseResolver(_lateEarlyRepository.Object),
+        _payrollChange.Object,
         _clock.Object,
         _logger.Object,
         Microsoft.Extensions.Options.Options.Create(_checkinSettings));
@@ -230,6 +233,135 @@ public sealed class FaceCheckinCommandHandlerTests
         result.AttendanceLogId.Should().Be("123");
         _attendanceRepository.Verify(r => r.AddAsync(
             It.Is<AttendanceRecord>(a => a.CheckInAt != null && a.CheckOutAt == null && a.Status == AttendanceStatus.Present),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── Hạn chót MỞ ca mới (LateCheckinMinutes), tách khỏi hạn đóng ca ──────────────
+
+    [Fact]
+    public async Task Handle_Fails_WhenOpeningNewShiftAfterCheckinDeadline()
+    {
+        // Ca 08:00–17:00, cap 240' ⇒ hạn mở ca 12:00. Quét lần đầu lúc 14:00 (vẫn trong cửa sổ
+        // đóng ca tới 23:00) KHÔNG được mở ca mới: bản ghi đó sẽ ra HalfDay = 0.5 công hưởng lương
+        // trong khi giờ công thực tế bằng 0 vì nằm trọn ngoài khung ca.
+        ArrangeCommon();
+        var shift = DayShift();
+        _shiftAssignmentRepository.Setup(r => r.GetByEmployeeAndDateAsync(
+                EmployeeInformationId, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([AssignmentFor(shift, Today)]);
+        _attendanceRepository.Setup(r => r.GetByKeyAsync(
+                EmployeeInformationId, Today, shift.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AttendanceRecord?)null);
+
+        var result = await CreateSut().Handle(Command(UtcAt(14)), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("Đã quá hạn chấm công VÀO ca");
+        result.Message.Should().Contain("12:00");
+        _attendanceRepository.Verify(r => r.AddAsync(It.IsAny<AttendanceRecord>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_CreatesCheckin_ExactlyAtCheckinDeadline()
+    {
+        // Biên: đúng 12:00 vẫn mở được ca. Cap 240' bằng đúng trần LateEarlyRequest.Minutes nên NV
+        // có đơn xin đi trễ 4 tiếng ĐÃ DUYỆT không bị chặn nhầm.
+        ArrangeCommon();
+        var shift = DayShift();
+        _shiftAssignmentRepository.Setup(r => r.GetByEmployeeAndDateAsync(
+                EmployeeInformationId, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([AssignmentFor(shift, Today)]);
+        _attendanceRepository.Setup(r => r.GetByKeyAsync(
+                EmployeeInformationId, Today, shift.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AttendanceRecord?)null);
+        _attendanceRepository.Setup(r => r.AddAsync(It.IsAny<AttendanceRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(124);
+
+        var result = await CreateSut().Handle(Command(UtcAt(12)), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.CheckinType.Should().Be(FaceCheckinType.Checkin);
+    }
+
+    [Fact]
+    public async Task Handle_ClampsCheckinDeadlineToShiftEnd_ForShiftShorterThanCap()
+    {
+        // Ca 4 tiếng (08:00–12:00): StartAt + 240' = đúng giờ TAN ca, không được nới quá.
+        ArrangeCommon();
+        var shift = new ShiftTemplate
+        {
+            Id = 3,
+            Code = "HALF",
+            Name = "Ca nửa ngày",
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(12, 0),
+        };
+        _shiftAssignmentRepository.Setup(r => r.GetByEmployeeAndDateAsync(
+                EmployeeInformationId, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([AssignmentFor(shift, Today)]);
+        _attendanceRepository.Setup(r => r.GetByKeyAsync(
+                EmployeeInformationId, Today, shift.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AttendanceRecord?)null);
+
+        // 12:30 vẫn trong cửa sổ ĐÓNG ca (12:00 + 360' = 18:00) nhưng đã quá giờ tan ca.
+        var result = await CreateSut().Handle(Command(UtcAt(12, 30)), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("Đã quá hạn chấm công VÀO ca");
+        _attendanceRepository.Verify(r => r.AddAsync(It.IsAny<AttendanceRecord>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_StillChecksOut_LongAfterShiftEnd_WhenRecordAlreadyOpen()
+    {
+        // Hạn mở ca KHÔNG được đụng tới nhánh chấm RA: OT trần 4h/ngày nên NV tan ca sau OT quét
+        // muộn hơn giờ tan ca chính vài tiếng là bình thường (xem LateCheckoutMinutes = 360').
+        ArrangeCommon();
+        ArrangeOpenShift();
+        ArrangeCheckoutDependencies();
+
+        var result = await CreateSut().Handle(Command(UtcAt(20)), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.CheckinType.Should().Be(FaceCheckinType.Checkout);
+    }
+
+    [Fact]
+    public async Task Handle_PicksTodayShift_WhenYesterdayNightShiftIsPastItsCheckinDeadline()
+    {
+        // Ca đêm hôm qua (22:00–06:00) còn nằm trong cửa sổ đóng ca tới 12:00 hôm nay, nhưng hạn mở
+        // ca của nó đã hết từ 02:00. NV quét 08:30 để VÀO ca ngày hôm nay không được bị ca đêm quá
+        // hạn kia nuốt mất lượt — đây là lý do "quá hạn" bị xếp cuối bảng thay vì loại thẳng.
+        ArrangeCommon();
+        var yesterday = Today.AddDays(-1);
+        var nightShift = new ShiftTemplate
+        {
+            Id = 2,
+            Code = "NIGHT",
+            Name = "Ca đêm",
+            StartTime = new TimeOnly(22, 0),
+            EndTime = new TimeOnly(6, 0),
+        };
+        var dayShift = DayShift();
+        _shiftAssignmentRepository.Setup(r => r.GetByEmployeeAndDateAsync(
+                EmployeeInformationId, yesterday, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([AssignmentFor(nightShift, yesterday)]);
+        _shiftAssignmentRepository.Setup(r => r.GetByEmployeeAndDateAsync(
+                EmployeeInformationId, Today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([AssignmentFor(dayShift, Today)]);
+        _attendanceRepository.Setup(r => r.GetByKeyAsync(
+                EmployeeInformationId, It.IsAny<DateOnly>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AttendanceRecord?)null);
+        _attendanceRepository.Setup(r => r.AddAsync(It.IsAny<AttendanceRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(125);
+
+        var result = await CreateSut().Handle(Command(UtcAt(8, 30)), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.CheckinType.Should().Be(FaceCheckinType.Checkin);
+        result.ShiftName.Should().Be(dayShift.Name);
+        _attendanceRepository.Verify(r => r.AddAsync(
+            It.Is<AttendanceRecord>(a => a.ShiftTemplateId == dayShift.Id && a.WorkDate == Today),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -1,4 +1,4 @@
-using MPS.Domain.Enums.Payroll;
+﻿using MPS.Domain.Enums.Payroll;
 
 namespace MPS.API.Requests.Payroll;
 
@@ -40,3 +40,7 @@ public sealed record ReorderColumnsRequest(IReadOnlyList<int> OrderedColumnIds);
 // ===== Hệ số năng suất =====
 public sealed record CreateProductivityCoefficientRequest(decimal MinScore, decimal MaxScore, decimal Coefficient, string? Label);
 public sealed record UpdateProductivityCoefficientRequest(decimal MinScore, decimal MaxScore, decimal Coefficient, string? Label, bool IsActive);
+
+// Phase 2 — bậc hỗ trợ theo tiến độ của HĐ khoán việc. MaxHours null = bậc trên cùng, không trần.
+public sealed record CreatePieceWorkSupportBandRequest(decimal MinHours, decimal? MaxHours, decimal Amount, string? Label);
+public sealed record UpdatePieceWorkSupportBandRequest(decimal MinHours, decimal? MaxHours, decimal Amount, string? Label, bool IsActive);

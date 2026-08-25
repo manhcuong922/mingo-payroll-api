@@ -16,6 +16,7 @@ public sealed record UpdateAttendanceSettingCommand(
     int? WfhMinNoticeDays,
     decimal? WfhMaxDaysPerRequest,
     int? WfhWorkPlanMinLength,
+    int? WeeklyRestDayMask,
     int? LateGraceMinutes,
     int? EarlyLeaveGraceMinutes,
     int? HalfDayThresholdMinutes) : IRequest<AttendanceSettingDto>;

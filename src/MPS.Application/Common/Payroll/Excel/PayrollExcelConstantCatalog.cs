@@ -29,11 +29,15 @@ public static class PayrollExcelConstantCatalog
         [Fk.BhtnDnRate] = new("TYLE_BHTN_DN", true, true),
         [Fk.BhtnNldRate] = new("TYLE_BHTN_NLD", true, true),
         [Fk.KpcdRate] = new("TYLE_KPCD", true, true),
+        // Phase 7 — thuế khoán: tỷ lệ + ngưỡng khấu trừ là số của cả kỳ (theo bản luật tại ngày trả),
+        // nên hiện ở hàng tham số như các tỷ lệ BH thay vì nhân bản thành cột phụ trợ mỗi NV.
+        [Fk.ShortTermFlatRate] = new("TYLE_THUE_KHOAN", true, true),
         [Fk.BhxhBhytCap] = new("TRAN_BHXH_BHYT", false, false),
         [Fk.BhtnCap] = new("TRAN_BHTN", false, false),
         [Fk.PersonalDeduction] = new("GIAMTRU_BANTHAN", false, false),
         [Fk.DependentDeduction] = new("GIAMTRU_NPT", false, false),
         [Fk.MealExemptThreshold] = new("NGUONG_COM_MIENTHUE", false, false),
+        [Fk.ShortTermTaxExemptIncome] = new("NGUONG_KHAUTRU_KHOAN", false, false),
     };
 
     public static bool TryGetField(string key, out ConstantPlacement placement) =>

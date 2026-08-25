@@ -15,8 +15,10 @@ namespace MPS.Infrastructure.Tests.Services;
 /// → tháng 8 đã có Mon-Fri, tháng 9 rỗng → 22 weekday tháng 9 bị suy sai là WeeklyRestDay
 /// → popup hiện dù không có ngày nghỉ/lễ thật.</para>
 ///
-/// <para>Guard mới suy DOW-pattern từ 28 ngày TRƯỚC <c>addFrom</c>, không dùng chính
-/// khoảng đang add — vẫn cảnh báo được khi paint tay T7 cho NV làm T2-T6.</para>
+/// <para>⭐ RESTDAY-2026-08 — vòng luẩn quẩn đó sinh ra từ việc suy ngày nghỉ tuần từ roster.
+/// Nay ngày nghỉ tuần đọc thẳng từ cấu hình (<c>AttendanceSetting.WeeklyRestDayMask</c>) nên guard
+/// không còn phải dò lịch sử: khoảng add rỗng hay đầy đều cho cùng kết quả. Các test dưới đây giữ
+/// nguyên để chốt rằng bug gốc KHÔNG tái phát.</para>
 /// </summary>
 public sealed class DayTypeResolverGuardRangeTests
 {
@@ -93,13 +95,13 @@ public sealed class DayTypeResolverGuardRangeTests
             "workingDows từ lookback = {Mon..Fri}, T7 không thuộc ⇒ vẫn cảnh báo (yêu cầu của user)");
     }
 
-    [Fact(DisplayName = "Guard · Công ty T2-T7 (A2 scenario) paint T7 KHÔNG cảnh báo vì T7 nằm trong pattern")]
+    [Fact(DisplayName = "Guard · Công ty T2-T7 khai mask = chỉ CN ⇒ paint T7 KHÔNG cảnh báo")]
     public async Task PaintSaturday_ForMonSatCompany_DoesNotWarn()
     {
         using var db = NewContext();
-        // Tháng 8/2026: T2-T7 (bao gồm mọi T7: 01, 08, 15, 22, 29).
-        foreach (var d in new[] { 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 31 })
-            db.EmployeeShiftAssignments.Add(Assign(new DateOnly(2026, 8, d)));
+        // ⭐ RESTDAY-2026-08 — xưởng T2–T7 nay khai bằng CẤU HÌNH, không để guard đoán qua roster:
+        // roster đầy đủ T7 vẫn không biến T7 thành ngày thường (đó chính là lỗ hổng trả thiếu 100%).
+        db.AttendanceSettings.Add(WeeklyRestSetting(DayOfWeek.Sunday));
         await db.SaveChangesAsync();
 
         var resolver = new DayTypeResolver(db);
@@ -107,7 +109,7 @@ public sealed class DayTypeResolverGuardRangeTests
         var map = await resolver.ResolveGuardRangeAsync(EmpId, saturday, saturday, CancellationToken.None);
 
         map[saturday].Should().Be(AttendanceEnums.DayType.Normal,
-            "workingDows từ lookback = {Mon..Sat}, T7 thuộc pattern ⇒ không cảnh báo (A2 semantics giữ nguyên)");
+            "nội quy ấn định chỉ nghỉ Chủ nhật ⇒ T7 là ngày làm việc bình thường (A2 semantics giữ nguyên)");
     }
 
     [Fact(DisplayName = "Guard · NV mới chưa có lịch sử ⇒ fallback T7/CN mặc định")]

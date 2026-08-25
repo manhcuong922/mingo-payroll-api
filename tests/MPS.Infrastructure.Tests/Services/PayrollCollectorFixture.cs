@@ -82,6 +82,12 @@ internal static class PayrollCollectorFixture
             Name = "Ca hành chính",
             StartTime = new TimeOnly(8, 0),
             EndTime = new TimeOnly(17, 0),
+            BreakStartTime = new TimeOnly(12, 0),
+            BreakEndTime = new TimeOnly(13, 0),
+            // Khai rõ 8h (trước đây để 0 và rơi vào fallback giờ chuẩn của luật, cũng là 8h nên
+            // không đổi số nào) — cần StartTime/EndTime + StandardHours thật để đo được grace.
+            StandardHours = HoursPerDay,
+            StandardDays = 1m,
         });
         db.Contracts.Add(new Contract
         {
@@ -154,6 +160,39 @@ internal static class PayrollCollectorFixture
         CreatedByUserId = UserId,
     };
 
+    /// <summary>
+    /// Bản ghi ca chính kèm GIỜ CHẤM THẬT — giờ công tự suy = khoảng chấm trừ 1h nghỉ trưa, đúng
+    /// như <c>WorkHourSplitter</c> tính rồi lưu. Cần cho các test về grace (đo lệch so với ca).
+    /// </summary>
+    public static AttendanceRecord ShiftRecordAt(
+        int day, TimeOnly checkIn, TimeOnly checkOut, AttendanceStatus status = AttendanceStatus.Present)
+    {
+        var worked = Math.Round((decimal)(checkOut - checkIn).TotalHours - 1m, 2);
+        return new AttendanceRecord
+        {
+            EmployeeInformationId = EmpId,
+            WorkDate = D(day),
+            ShiftTemplateId = ShiftId,
+            Status = status,
+            CheckInAt = D(day).ToDateTime(checkIn),
+            CheckOutAt = D(day).ToDateTime(checkOut),
+            DayHours = worked < 0m ? 0m : worked,
+            NightHours = 0m,
+            CreatedByUserId = UserId,
+        };
+    }
+
+    /// <summary>
+    /// Cấu hình chấm công khai NGÀY NGHỈ HẰNG TUẦN (Đ.111) — bỏ trống <paramref name="restDays"/>
+    /// để test chạy trên mặc định T7 + CN của <c>WeeklyRestDayPolicy</c>.
+    /// </summary>
+    public static AttendanceSetting WeeklyRestSetting(params DayOfWeek[] restDays) => new()
+    {
+        DailyEditCutoffTime = new TimeOnly(18, 0),
+        WeeklyRestDayMask = restDays.Aggregate(0, (mask, d) => mask | (1 << (int)d)),
+        CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+    };
+
     public static EmployeeShiftAssignment ShiftAssignment(int day) => new()
     {
         EmployeeInformationId = EmpId,
@@ -164,24 +203,34 @@ internal static class PayrollCollectorFixture
 
     /// <summary>Chạy collector trên <paramref name="db"/> và trả input của NV duy nhất.</summary>
     public static async Task<PayrollEmployeeInputs> CollectAsync(
-        AppDbContext db, IComplianceLookupService? compliance = null) =>
-        (await CollectFullAsync(db, compliance)).Employees.Single();
+        AppDbContext db, IComplianceLookupService? compliance = null, IClock? clock = null) =>
+        (await CollectFullAsync(db, compliance, clock)).Employees.Single();
 
     /// <summary>
     /// Như <see cref="CollectAsync"/> nhưng trả TOÀN BỘ kết quả — cần cho các test đọc
     /// <c>ComplianceRefs</c> / <c>ComplianceNotes</c> chứ không chỉ số của nhân viên.
     /// </summary>
     public static async Task<PayrollCollectionResult> CollectFullAsync(
-        AppDbContext db, IComplianceLookupService? compliance = null)
+        AppDbContext db, IComplianceLookupService? compliance = null, IClock? clock = null)
     {
         var lookup = compliance ?? new FakeComplianceLookup();
         var collector = new PayrollDataCollector(
-            db, lookup, new DayTypeResolver(db), new OvertimeMultiplierCalculator(lookup));
+            db, lookup, new DayTypeResolver(db), new OvertimeMultiplierCalculator(lookup),
+            // Kỳ của fixture là 07/2026; đồng hồ đặt sau đó để tháng được coi là ĐÃ KẾT THÚC — cổng
+            // BH-14 chỉ phán quyết khi tháng xong (xem `PayrollDataCollector.monthComplete`).
+            clock ?? new FixedClock(new DateTime(Year, Month + 1, 5, 3, 0, 0, DateTimeKind.Utc)));
 
         return await collector.CollectAsync(
             new PayrollCollectionRequest(Year, Month, PayDate, StandardDays, new[] { EmpId }),
             CancellationToken.None);
     }
+}
+
+/// <summary>Đồng hồ cố định — để cổng "tháng đã kết thúc" của BH-14 không phụ thuộc ngày chạy test.</summary>
+internal sealed class FixedClock : IClock
+{
+    public FixedClock(DateTime utcNow) => UtcNow = utcNow;
+    public DateTime UtcNow { get; }
 }
 
 /// <summary>Số liệu compliance cố định — tách khỏi DB để test đo đúng logic của collector.</summary>
@@ -248,7 +297,7 @@ internal sealed class FakeComplianceLookup : IComplianceLookupService
         VersionId: 1, ValidFrom: new DateOnly(2026, 1, 1),
         PersonalDeductionAmount: 11_000_000m, DependentDeductionAmount: 4_400_000m,
         ShortTermContractMaxMonths: 3, ShortTermFlatRatePercent: 10m,
-        ShortTermTaxExemptMonthlyIncome: 2_000_000m,
+        ShortTermTaxExemptMonthlyIncome: 2_000_000m, HousingExemptRatePercent: 15m,
         Brackets: new[] { new PitBracketSnapshot(1, 0m, 5_000_000m, 5m) },
         LegalReference: "test");
 

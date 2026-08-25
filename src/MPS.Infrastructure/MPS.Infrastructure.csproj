@@ -10,6 +10,16 @@
     <InternalsVisibleTo Include="MPS.Infrastructure.Tests" />
   </ItemGroup>
 
+  <!--
+    Biểu mẫu chính thức của ngân hàng / cơ quan thuế dùng để sinh chứng từ chi trả.
+    Nhúng thẳng vào assembly (không cho HR upload) vì code ghi theo toạ độ ô cố định —
+    một file sai bố cục sẽ điền lệch số tiền mà không báo lỗi.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Templates\*.xlsx" />
+    <EmbeddedResource Include="Resources\Templates\*.docx" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="HtmlAgilityPack" Version="1.11.71" />

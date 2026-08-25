@@ -19,6 +19,7 @@ internal static class AttendanceSettingMapper
         setting.WfhMinNoticeDays,
         setting.WfhMaxDaysPerRequest,
         setting.WfhWorkPlanMinLength,
+        setting.WeeklyRestDayMask,
         setting.LateGraceMinutes,
         setting.EarlyLeaveGraceMinutes,
         setting.HalfDayThresholdMinutes,

@@ -94,6 +94,39 @@ public sealed record MyPayslipDetailDto(
     decimal? Gross,
     decimal? Net);
 
+/// <summary>Một NV kèm danh sách thiếu liệu — dùng cho 2 khối của màn hình tạm tính.</summary>
+public sealed record PayrollPreviewIssueDto(
+    int EmployeeInformationId,
+    string EmployeeCode,
+    string FullName,
+    IReadOnlyList<string> Missing);
+
+/// <summary>
+/// Bảng lương TẠM TÍNH giữa tháng — chạy đúng engine của kỳ thật nhưng KHÔNG ghi gì xuống DB.
+///
+/// <para><c>Sheet</c> khớp 1-1 với <see cref="PayrollSheetDto"/> nên FE tái dùng nguyên
+/// &lt;PayrollSheetTable&gt;; <c>Sheet.Id</c> = 0 và <c>Sheet.Status</c> = "Preview" để không ai
+/// nhầm nó với một kỳ có thật.</para>
+/// </summary>
+/// <param name="AsOfDate">Ngày chốt số liệu (hôm nay, giờ VN) — dữ liệu chỉ có tới đây.</param>
+/// <param name="ElapsedWorkingDays">Số ngày T2–T6 đã trôi qua từ đầu tháng đến <paramref name="AsOfDate"/>.</param>
+/// <param name="StandardWorkingDays">Công chuẩn CẢ THÁNG — mẫu số của mọi phép chia, không co lại theo ngày đã trôi.</param>
+/// <param name="Issues">NV VẪN được tính nhưng đang thiếu liệu (chưa duyệt đánh giá, còn đơn OT treo…).</param>
+/// <param name="Excluded">NV KHÔNG tính được vì chưa có hợp đồng đã ký trong kỳ.</param>
+/// <param name="Warnings">Cảnh báo cấp kỳ (vd chưa nhập ngày lễ theo luật).</param>
+/// <param name="ExistingPeriodId">Kỳ lương THẬT của tháng này nếu đã tồn tại, để FE mời đi xem bản chính thức.</param>
+public sealed record PayrollPreviewDto(
+    PayrollSheetDto Sheet,
+    DateOnly AsOfDate,
+    int ElapsedWorkingDays,
+    decimal StandardWorkingDays,
+    int EmployeeCount,
+    IReadOnlyList<PayrollPreviewIssueDto> Issues,
+    IReadOnlyList<PayrollPreviewIssueDto> Excluded,
+    IReadOnlyList<string> Warnings,
+    int? ExistingPeriodId,
+    string? ExistingPeriodStatus);
+
 public sealed record PayrollReadinessDto(
     int EmployeeInformationId,
     string EmployeeCode,

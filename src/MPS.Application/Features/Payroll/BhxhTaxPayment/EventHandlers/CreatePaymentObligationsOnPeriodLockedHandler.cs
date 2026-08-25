@@ -7,6 +7,7 @@ using MPS.Domain.Entities.Payroll;
 using MPS.Domain.Entities.Payroll.BhxhTax;
 using MPS.Domain.Enums.Payroll;
 using MPS.Domain.Interfaces.Payroll;
+using MPS.Application.Features.Payroll.Common;
 
 namespace MPS.Application.Features.Payroll.BhxhTaxPayment.EventHandlers;
 
@@ -174,23 +175,15 @@ public sealed class CreatePaymentObligationsOnPeriodLockedHandler
         switch (type)
         {
             case PaymentObligationType.Bhxh:
-                var bhxhNld = EffectiveValue(row, PayrollColumnCodes.CongBhNld);
-                var bhxhDn = EffectiveValue(row, PayrollColumnCodes.CongBhDn);
-                var kpcd = EffectiveValue(row, PayrollColumnCodes.Kpcd);
+                var bhxhNld = PayrollCellReader.ValueOrZero(row, PayrollColumnCodes.CongBhNld);
+                var bhxhDn = PayrollCellReader.ValueOrZero(row, PayrollColumnCodes.CongBhDn);
+                var kpcd = PayrollCellReader.ValueOrZero(row, PayrollColumnCodes.Kpcd);
                 return (bhxhNld, bhxhDn + kpcd);
             case PaymentObligationType.Tncn:
-                return (EffectiveValue(row, PayrollColumnCodes.ThueTncn), 0m);
+                return (PayrollCellReader.ValueOrZero(row, PayrollColumnCodes.ThueTncn), 0m);
             default:
                 return (0m, 0m);
         }
-    }
-
-    private static decimal EffectiveValue(PayrollRow row, string columnCode)
-    {
-        var cell = row.Cells.FirstOrDefault(c =>
-            string.Equals(c.ColumnCode, columnCode, StringComparison.OrdinalIgnoreCase));
-        if (cell is null) return 0m;
-        return (cell.IsOverridden ? cell.OverrideValue : cell.ComputedValue) ?? 0m;
     }
 
     private static string Truncate(string value, int max) =>

@@ -108,6 +108,7 @@ public class AppDbContext : DbContext
     public DbSet<Domain.Entities.Payroll.PayrollCellValue> PayrollCellValues => Set<Domain.Entities.Payroll.PayrollCellValue>();
     public DbSet<Domain.Entities.Payroll.PayrollNote> PayrollNotes => Set<Domain.Entities.Payroll.PayrollNote>();
     public DbSet<Domain.Entities.Payroll.ProductivityCoefficient> ProductivityCoefficients => Set<Domain.Entities.Payroll.ProductivityCoefficient>();
+    public DbSet<Domain.Entities.Payroll.PieceWorkSupportBand> PieceWorkSupportBands => Set<Domain.Entities.Payroll.PieceWorkSupportBand>();
     public DbSet<Domain.Entities.Payroll.PayrollAdjustment> PayrollAdjustments => Set<Domain.Entities.Payroll.PayrollAdjustment>();
 
     // ===== BHXH & Tax Payment Tracking module =====
@@ -117,6 +118,14 @@ public class AppDbContext : DbContext
         => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligationLine>();
     public DbSet<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence> PaymentObligationEvidences
         => Set<Domain.Entities.Payroll.BhxhTax.PaymentObligationEvidence>();
+
+    // ===== Chứng từ chi trả (lệnh chi lương, ủy nhiệm chi BHXH) =====
+    public DbSet<Domain.Entities.Payroll.Banking.CompanyPaymentSetting> CompanyPaymentSettings
+        => Set<Domain.Entities.Payroll.Banking.CompanyPaymentSetting>();
+    public DbSet<Domain.Entities.Payroll.Banking.BankCatalog> BankCatalogs
+        => Set<Domain.Entities.Payroll.Banking.BankCatalog>();
+    public DbSet<Domain.Entities.Payroll.Banking.ProvinceCatalog> ProvinceCatalogs
+        => Set<Domain.Entities.Payroll.Banking.ProvinceCatalog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

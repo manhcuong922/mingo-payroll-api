@@ -9,6 +9,7 @@ using MPS.Domain.Enums.Attendance;
 using MPS.Domain.Exceptions;
 using MPS.Domain.Interfaces;
 using MPS.Domain.Interfaces.Attendance;
+using MPS.Domain.Interfaces.Payroll;
 using AttendanceRecordEntity = MPS.Domain.Entities.Attendance.AttendanceRecord;
 
 namespace MPS.Application.Features.Attendance.Attendance.Commands;
@@ -35,6 +36,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
     private readonly IComplianceLookupService _complianceLookup;
     private readonly IAttendanceEditLockChecker _lockChecker;
     private readonly LateEarlyExcuseResolver _excuseResolver;
+    private readonly IPayrollSourceChangeHandler _payrollChange;
     private readonly IClock _clock;
 
     public RecordAttendanceCommandHandler(
@@ -49,6 +51,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         IComplianceLookupService complianceLookup,
         IAttendanceEditLockChecker lockChecker,
         LateEarlyExcuseResolver excuseResolver,
+        IPayrollSourceChangeHandler payrollChange,
         IClock clock)
     {
         _repository = repository;
@@ -62,6 +65,7 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
         _complianceLookup = complianceLookup;
         _lockChecker = lockChecker;
         _excuseResolver = excuseResolver;
+        _payrollChange = payrollChange;
         _clock = clock;
     }
 
@@ -91,9 +95,28 @@ public class RecordAttendanceCommandHandler : IRequestHandler<RecordAttendanceCo
 
         var laborLaw = await _complianceLookup.GetLaborLawConstantsAtAsync(request.WorkDate, cancellationToken);
 
-        return hasShift
+        var recordId = hasShift
             ? await CreateShiftRecordAsync(request, userId, checkInAt, checkOutAt, laborLaw, cancellationToken)
             : await CreateOvertimeRecordAsync(request, userId, checkInAt, checkOutAt, laborLaw, cancellationToken);
+
+        // BS-6 + BS-5: CHẤM CÔNG cũng là nguồn của bảng lương, không kém gì các đơn được duyệt —
+        // kỳ Draft phải mark stale, kỳ Finalized phải capture chênh lệch.
+        //
+        // ⚠️ Bắt buộc với nhánh chấm công OT: tiền OT chỉ phát sinh khi CÓ bản ghi chấm công gắn
+        // `OvertimeRequestId` (xem `PayrollDataCollector.ComputeOvertimePayAsync` — đơn duyệt suông
+        // = 0 đồng), mà bản ghi đó LUÔN tới SAU khi đơn được duyệt (handler này chặn chấm công cho
+        // đơn chưa Approved). Cổng capture cũ chỉ gắn ở bước DUYỆT ĐƠN nên lúc nó chạy, OT vẫn 0 giờ
+        // ⇒ chênh lệch = 0 ⇒ không khoản truy lĩnh nào được sinh, và OT hồi tố (điển hình: OT ngày
+        // cuối tháng, duyệt sau khi kỳ đã chốt) mất tiền âm thầm. Đây là chỗ duy nhất biết được
+        // "tiền OT vừa thật sự phát sinh".
+        await _payrollChange.OnSourceChangedAsync(
+            request.WorkDate.Year, request.WorkDate.Month, request.EmployeeInformationId,
+            hasOt
+                ? $"Chấm công OT ngày {request.WorkDate:dd/MM/yyyy}"
+                : $"Chấm công ngày {request.WorkDate:dd/MM/yyyy}",
+            cancellationToken);
+
+        return recordId;
     }
 
     private async Task<int> CreateShiftRecordAsync(

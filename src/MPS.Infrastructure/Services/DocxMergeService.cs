@@ -12,8 +12,17 @@ public sealed class DocxMergeService : IDocumentRenderingService
     private static readonly Regex PlaceholderRegex = new(@"\{\{([^}]+)\}\}", RegexOptions.Compiled);
 
     public Task<Stream> RenderAsync(Stream templateDocx, PlaceholderContext context, CancellationToken cancellationToken = default)
+        => RenderAsync(templateDocx, context.ToDictionary(), cancellationToken);
+
+    public Task<Stream> RenderAsync(
+        Stream templateDocx,
+        IReadOnlyDictionary<string, string> rawValues,
+        CancellationToken cancellationToken = default)
     {
-        var values = context.ToDictionary();
+        // Chuẩn hoá về so khớp không phân biệt hoa/thường — bản dựng từ PlaceholderContext vốn
+        // đã như vậy, caller truyền Dictionary thường không được im lặng đổi hành vi.
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in rawValues) values[pair.Key] = pair.Value;
 
         // Copy to writable MemoryStream — the original stream from MinIO may be read-only.
         var ms = new MemoryStream();

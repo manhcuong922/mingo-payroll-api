@@ -54,10 +54,13 @@ public sealed partial class DatabaseSeeder
         await SeedDefaultContractPartyAsync(cancellationToken);
         await SeedDefaultAllowanceTypesAsync(cancellationToken);
         await SeedDefaultComplianceAsync(cancellationToken);
-        // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (100/200/300 %) + 4 ShiftTemplate (Sáng/Chiều/Đêm/Fulltime).
+        // Attendance defaults: 1 AttendanceRule "Tiêu chuẩn" (100/200/300 %) + các mẫu ca ban ngày.
         await SeedDefaultAttendanceRuleAsync(cancellationToken);
         await SeedDefaultShiftTemplatesAsync(cancellationToken);
         await SeedDefaultLeaveTypesAsync(cancellationToken);
+        // Ngày nghỉ lễ theo Điều 112 BLLĐ 2019 — nguồn của DayType.PublicHoliday (phụ trội 300%),
+        // của công chuẩn tháng, và của cảnh báo HOL-WARN01. Xem DatabaseSeeder.PublicHolidaysData.cs.
+        await SeedPublicHolidaysAsync(cancellationToken);
         // Contract module test data (chuyển từ docs/Contract.sql): 7 users test + 15 HĐ
         // cover mọi trạng thái — xem DatabaseSeeder.ContractTestData.cs.
         await SeedContractTestDataAsync(cancellationToken);
@@ -70,17 +73,36 @@ public sealed partial class DatabaseSeeder
         // HĐ lao động cho TOÀN BỘ workforce xưởng + văn phòng → payroll bao phủ cả công ty (không chỉ
         // nhóm contract-test). Phải chạy TRƯỚC SeedPayrollAsync — xem DatabaseSeeder.WorkforceContractsData.cs.
         await SeedWorkforceContractsAsync(cancellationToken);
+        // Người phụ thuộc (giảm trừ gia cảnh) — payroll đếm bản ghi này chứ KHÔNG đọc ô khai tay
+        // DependentsNo (#40). Xem DatabaseSeeder.DependentsData.cs.
+        await SeedEmployeeDependentsAsync(cancellationToken);
+        // Phụ cấp trên hợp đồng + phụ lục hiệu lực GIỮA THÁNG + quyết định chấm dứt giữa kỳ — đầu vào
+        // của engine nên phải xong trước khi sinh kỳ. Xem DatabaseSeeder.PayrollCaseData.cs.
+        await SeedContractCaseDataAsync(cancellationToken);
         // Quỹ phép năm cho mọi NV có HĐ — mô phỏng job cấp quỹ 01/01 mà hệ thống thật đã chạy.
         // Phải chạy SAU hợp đồng (cần ngày vào làm để tính thâm niên) — xem
         // DatabaseSeeder.LeaveBalancesData.cs.
         await SeedLeaveBalancesAsync(cancellationToken);
         // Payroll: bảng công thức mặc định + tham số + hệ số năng suất + sinh nhiều kỳ lương hoàn chỉnh —
         // xem DatabaseSeeder.PayrollDemoData.cs.
+        // Chấm công "có chuyện" (OT ngày thường/thứ Bảy/Chủ nhật/lễ, nghỉ phép/thai sản, đi muộn/vắng/nửa công)
+        // cho nhóm nhân vật case. Phải chạy TRƯỚC payroll: bước chuẩn bị của payroll chỉ sinh chấm
+        // công nền cho người CHƯA có bản ghi nào. Xem DatabaseSeeder.AttendanceCaseData.cs.
+        await SeedAttendanceCasesAsync(cancellationToken);
         await SeedPayrollAsync(cancellationToken);
         // Nhánh NGOẠI LỆ không dựng được qua API nhưng lớp chặn vẫn phải sống (đơn sản xuất thiếu tổ
         // trưởng · hồ sơ đã ký HĐ nhưng chưa có tài khoản). Chạy CUỐI để không ảnh hưởng kỳ lương demo
         // ở trên — xem DatabaseSeeder.LegacyEdgeCaseData.cs.
         await SeedLegacyEdgeCaseDataAsync(cancellationToken);
+        // Các case cố ý làm ĐỎ cổng đủ liệu, đặt ở tháng hiện tại (chưa chốt kỳ) để không chặn 3 kỳ
+        // demo ở trên. Xem DatabaseSeeder.ReadinessBlockersData.cs.
+        await SeedReadinessBlockersAsync(cancellationToken);
+        // Hồ sơ ngân hàng của NV (ngân hàng/chi nhánh/tỉnh) + cấu hình chi trả cấp công ty — đầu vào
+        // của lệnh chi lương VPBank và UNC nộp BHXH. Chạy sau MỌI pha tạo người để không sót ai —
+        // xem DatabaseSeeder.EmployeeBankAccountsData.cs.
+        await SeedEmployeeBankAccountsAsync(cancellationToken);
+        // Dồn email mọi tài khoản demo về một hòm thư thật — chạy cuối vì các pha trên còn tạo người.
+        await NormalizeDemoEmailsAsync(cancellationToken);
     }
 
     private async Task SeedDefaultAdminAsync(CancellationToken cancellationToken)
@@ -98,7 +120,7 @@ public sealed partial class DatabaseSeeder
         var section = _configuration.GetSection("DefaultAdmin");
         var username = section["Username"] ?? "admin";
         var employeeCode = section["EmployeeCode"] ?? "ADMIN001";
-        var email = section["Email"] ?? "admin@mingo.local";
+        var email = section["Email"] ?? DemoEmail("admin");
         var fullName = section["FullName"] ?? "System Administrator";
         var phone = section["PhoneNo"] ?? "0000000000";
         var password = section["Password"];
@@ -146,9 +168,9 @@ public sealed partial class DatabaseSeeder
         // SeedOfficeWorkforceDemoAsync để User.FullName và EmployeeInformation.FullName không lệch.
         var candidates = new[]
         {
-            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: "hr@mingo.local"),
-            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: "accountant@mingo.local"),
-            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: "director@mingo.local"),
+            (RoleId: SystemRoles.HrId,         Code: "HR001",  Username: "hr",         Email: DemoEmail("hr")),
+            (RoleId: SystemRoles.AccountantId, Code: "ACC001", Username: "accountant",  Email: DemoEmail("accountant")),
+            (RoleId: SystemRoles.DirectorId,   Code: "DIR001", Username: "director",    Email: DemoEmail("director")),
         };
 
         var existing = await _context.Users
@@ -294,7 +316,6 @@ public sealed partial class DatabaseSeeder
         {
             // Ban Giám đốc
             new() { Code = "GD", Name = "Giám đốc", Description = "Điều hành chung toàn công ty." },
-            new() { Code = "PGD", Name = "Phó Giám đốc", Description = "Hỗ trợ Giám đốc điều hành." },
 
             // Phòng Nhân sự
             new() { Code = "TPHR", Name = "Trưởng phòng Nhân sự", Description = "Quản lý phòng Nhân sự." },
@@ -361,13 +382,13 @@ public sealed partial class DatabaseSeeder
 
             // Quản đốc (role 5 Planning Manager) — trực thuộc xưởng ⇒ tạo/sửa đơn trong phạm vi xưởng.
             await EnsureStaffAsync(
-                username: $"quandoc_x{idx}", code: $"SX{idx}QD", email: $"quandoc_x{idx}@mingo.local",
+                username: $"quandoc_x{idx}", code: $"SX{idx}QD", email: DemoEmail($"quandoc_x{idx}"),
                 fullName: $"Quản đốc {dept.Name}", roleId: SystemRoles.PlanningManagerId,
                 positionId: positionsByCode["QDX"], departmentId: dept.Id, password, ct);
 
             // Tổ trưởng sản xuất (role 6) — ứng viên Project.ResponsibleUserId của xưởng.
             var (_, leaderEmpId) = await EnsureStaffAsync(
-                username: $"totruong_x{idx}", code: $"SX{idx}TT", email: $"totruong_x{idx}@mingo.local",
+                username: $"totruong_x{idx}", code: $"SX{idx}TT", email: DemoEmail($"totruong_x{idx}"),
                 fullName: $"Tổ trưởng {dept.Name}", roleId: SystemRoles.ProductionTeamLeaderId,
                 positionId: positionsByCode["TTSX"], departmentId: dept.Id, password, ct);
 
@@ -377,7 +398,7 @@ public sealed partial class DatabaseSeeder
                 var posCode = WorkerPositionCycle[w];
                 var posName = ManufacturingPositions.First(p => p.Code == posCode).Name;
                 await EnsureStaffAsync(
-                    username: $"cn_x{idx}_{w + 1}", code: $"SX{idx}W{w + 1}", email: $"cn_x{idx}_{w + 1}@mingo.local",
+                    username: $"cn_x{idx}_{w + 1}", code: $"SX{idx}W{w + 1}", email: DemoEmail($"cn_x{idx}_{w + 1}"),
                     fullName: $"CN {posName} X{idx}.{w + 1}", roleId: SystemRoles.EmployeeId,
                     positionId: positionsByCode[posCode], departmentId: dept.Id, password, ct);
             }
@@ -439,15 +460,15 @@ public sealed partial class DatabaseSeeder
         var seeds = new (string Username, string Code, string Email, string FullName, int RoleId, int PositionId, int DepartmentId)[]
         {
             // Backfill EmployeeInformation cho 3 user cấp công ty đã seed ở SeedDefaultRoleUsersAsync.
-            ("hr",         "HR001",   "hr@mingo.local",         "Phạm Thị Hồng Nhung",
+            ("hr",         "HR001",   DemoEmail("hr"),         "Phạm Thị Hồng Nhung",
                 SystemRoles.HrId,                 posMap["TPHR"], deptMap["HR"]),
-            ("accountant", "ACC001",  "accountant@mingo.local", "Vũ Thị Thu Hà",
+            ("accountant", "ACC001",  DemoEmail("accountant"), "Vũ Thị Thu Hà",
                 SystemRoles.AccountantId,         posMap["KTT"],  deptMap["ACC"]),
-            ("director",   "DIR001",  "director@mingo.local",   "Trần Quang Huy",
+            ("director",   "DIR001",  DemoEmail("director"),   "Trần Quang Huy",
                 SystemRoles.DirectorId,           posMap["GD"],   deptMap["BGD"]),
 
             // Trưởng phòng Kinh doanh — role DepartmentManagerId để hưởng auto-route → HR khi nộp đơn.
-            ("tpkd",       "TPKD001", "tpkd@mingo.local",       "Lê Hoàng Nam",
+            ("tpkd",       "TPKD001", DemoEmail("tpkd"),       "Lê Hoàng Nam",
                 SystemRoles.DepartmentManagerId,  posMap["TPKD"], deptMap["BIZ"]),
         };
 
@@ -585,7 +606,10 @@ public sealed partial class DatabaseSeeder
                 PhoneNo = user.PhoneNo,
                 PositionId = positionId,
                 DepartmentId = deptId,
-                DependentsNo = person?.Dependents ?? 0,
+                // Số suất giảm trừ CÒN hiệu lực hôm nay. Bản ghi chi tiết (thứ payroll thật sự đọc —
+                // xem #40) do SeedEmployeeDependentsAsync sinh từ cùng danh bạ này.
+                DependentsNo = person?.ActiveDependentsOn(DateOnly.FromDateTime(DateTime.UtcNow.Date)) ?? 0,
+                IsUnionMember = person?.IsUnionMember ?? false,
                 // Mã số thuế / số BHXH / số tài khoản ngân hàng — sinh xác định từ user.Id (tái lập
                 // được), để payroll không phải điền chuỗi "DEMO..." vô nghĩa.
                 TaxNo = $"{8_000_000_000L + user.Id}",
@@ -610,6 +634,7 @@ public sealed partial class DatabaseSeeder
                 if (emp.Gender != person.Gender) { emp.Gender = person.Gender; changed = true; }
                 if (emp.Dob != person.Dob) { emp.Dob = person.Dob; changed = true; }
                 if (emp.PhoneNo != person.Phone) { emp.PhoneNo = person.Phone; changed = true; }
+                if (emp.IsUnionMember != person.IsUnionMember) { emp.IsUnionMember = person.IsUnionMember; changed = true; }
                 if (emp.PermanentAddress == "N/A (manufacturing seed)")
                 {
                     emp.PermanentAddress = person.Address;
@@ -732,37 +757,66 @@ public sealed partial class DatabaseSeeder
             obsolete.Count, main.LegalName, affected.Count);
     }
 
+    /// <summary>
+    /// Danh mục phụ cấp mặc định.
+    ///
+    /// <para><c>MEAL</c> / <c>FUEL</c> / <c>PHONE</c> / <c>HOUSING</c> là 4 mã có <b>cột riêng</b>
+    /// trên bảng lương (<c>AllowanceBuckets</c>); mã ngoài 4 mã đó gom vào cột "Khác" để tiền không
+    /// biến mất (#64/[D15]). Trước bản này seed chỉ có 3 mã đầu ⇒ cột "Thuê nhà", "Khác" và "Ngoại
+    /// lệ" luôn bằng 0 trên mọi kỳ.</para>
+    ///
+    /// <para><c>RESP</c> (trách nhiệm) bật <c>ExcludeFromProration</c>: khoản gắn với chức danh, trả
+    /// NGUYÊN bất kể số ngày đi làm — đây là nhánh PRORATE-02 chưa từng có dữ liệu để chạy.</para>
+    ///
+    /// <para>⭐ X2c — <c>PERDIEM</c> và <c>UNIFORM</c> là hai mã đầu tiên khai <c>IsTaxable = false</c>.
+    /// Trước bản này MỌI mã trong danh mục đều chịu thuế, nên cờ <c>IsTaxable</c> chưa từng có giá trị
+    /// <c>false</c> nào để lộ ra việc bảng lương KHÔNG đọc cờ đó: cột <c>TNCT</c> chỉ trừ đúng
+    /// <c>DIEN_THOAI</c> + <c>COM_MIENTHUE</c> + khối tăng ca/phụ trội, nên công tác phí khoán và tiền
+    /// trang phục — hai khoản luật cho miễn — vẫn bị đánh thuế đủ. Xem
+    /// <c>DatabaseSeeder.CrossAxisCaseData.cs</c>.</para>
+    /// </summary>
     private async Task SeedDefaultAllowanceTypesAsync(CancellationToken ct)
     {
-        var codes = new[] { "MEAL", "FUEL", "PHONE" };
-        var existing = await _context.AllowanceTypes
-            .AsNoTracking()
-            .Where(a => codes.Contains(a.Code))
-            .Select(a => a.Code)
-            .ToListAsync(ct);
-
-        if (existing.Count == codes.Length)
-        {
-            _logger.LogDebug("AllowanceTypes already seeded; skipping.");
-            return;
-        }
-
         var now = DateTime.UtcNow;
-        var toSeed = new List<AllowanceType>();
-
-        if (!existing.Contains("MEAL"))
-            toSeed.Add(new AllowanceType { Code = "MEAL", Name = "Phụ cấp ăn ca", IsBhxhBase = false, IsTaxable = true, IsActive = true, DefaultAmount = 730_000, CreatedAt = now });
-        if (!existing.Contains("FUEL"))
-            toSeed.Add(new AllowanceType { Code = "FUEL", Name = "Phụ cấp xăng xe", IsBhxhBase = false, IsTaxable = true, IsActive = true, DefaultAmount = null, CreatedAt = now });
-        if (!existing.Contains("PHONE"))
-            toSeed.Add(new AllowanceType { Code = "PHONE", Name = "Phụ cấp điện thoại", IsBhxhBase = false, IsTaxable = true, IsActive = true, DefaultAmount = null, CreatedAt = now });
-
-        if (toSeed.Count > 0)
+        var specs = new[]
         {
-            await _context.AllowanceTypes.AddRangeAsync(toSeed, ct);
-            await _context.SaveChangesAsync(ct);
-            _logger.LogInformation("Seeded {Count} default AllowanceType(s).", toSeed.Count);
+            // Mức ăn ca của công ty. Trần MIỄN THUẾ là đại lượng khác, do Compliance giữ (730k tới
+            // 30/06/2026, 1,2tr từ 01/07/2026 theo NĐ 253/2026) — xem SeedAllowanceExemptThresholds.
+            new AllowanceType { Code = "MEAL",    Name = "Phụ cấp ăn ca",        IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = 1_000_000, ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "FUEL",    Name = "Phụ cấp xăng xe",      IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "PHONE",   Name = "Phụ cấp điện thoại",   IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "HOUSING", Name = "Phụ cấp thuê nhà",     IsBhxhBase = false, IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = false, CreatedAt = now },
+            new AllowanceType { Code = "RESP",    Name = "Phụ cấp trách nhiệm",  IsBhxhBase = true,  IsTaxable = true,  IsActive = true, DefaultAmount = null,      ExcludeFromProration = true,  CreatedAt = now },
+            new AllowanceType { Code = "TOXIC",   Name = "Phụ cấp độc hại",      IsBhxhBase = true,  IsTaxable = true,  IsActive = true, DefaultAmount = 500_000,   ExcludeFromProration = false, CreatedAt = now },
+            // ⭐ X2c — hai khoản MIỄN thuế TNCN (IsTaxable = false), cũng không vào căn cứ đóng BHXH.
+            // Công tác phí khoán trả theo chuyến nên bật ExcludeFromProration: đi công tác nửa tháng
+            // vẫn nhận đủ mức khoán, không chia theo ngày công.
+            new AllowanceType { Code = "PERDIEM", Name = "Công tác phí khoán",   IsBhxhBase = false, IsTaxable = false, IsActive = true, DefaultAmount = null,      ExcludeFromProration = true,  CreatedAt = now },
+            // Trang phục: trần miễn thuế 5.000.000đ/năm ⇒ 416.667đ/tháng; công ty chi 400.000đ/tháng
+            // nên nằm TRỌN trong ngưỡng miễn — không dính nhánh "phần vượt chịu thuế".
+            new AllowanceType { Code = "UNIFORM", Name = "Phụ cấp trang phục",   IsBhxhBase = false, IsTaxable = false, IsActive = true, DefaultAmount = 400_000,   ExcludeFromProration = false, CreatedAt = now },
+        };
+
+        var codes = specs.Select(s => s.Code).ToArray();
+        var existing = await _context.AllowanceTypes
+            .Where(a => codes.Contains(a.Code))
+            .ToDictionaryAsync(a => a.Code, StringComparer.OrdinalIgnoreCase, ct);
+
+        var toSeed = specs.Where(s => !existing.ContainsKey(s.Code)).ToList();
+        if (toSeed.Count > 0) await _context.AllowanceTypes.AddRangeAsync(toSeed, ct);
+
+        // Mức ăn ca mặc định từng để 730.000 (bằng trần miễn thuế cũ) — nâng theo trần mới để dữ liệu
+        // demo đi qua được cả hai thời kỳ trần. Chỉ nâng khi đang đúng mức cũ, không đè số HR tự sửa.
+        if (existing.TryGetValue("MEAL", out var meal) && meal.DefaultAmount == 730_000m)
+        {
+            meal.DefaultAmount = 1_000_000m;
+            meal.UpdatedAt = now;
         }
+
+        await _context.SaveChangesAsync(ct);
+        if (toSeed.Count > 0)
+            _logger.LogInformation("Seeded {Count} AllowanceType: {Codes}.",
+                toSeed.Count, string.Join(", ", toSeed.Select(t => t.Code)));
     }
 
     private async Task SeedDefaultComplianceAsync(CancellationToken ct)
@@ -870,7 +924,9 @@ public sealed partial class DatabaseSeeder
             new() { Code = "NQ-110-2025", DocumentType = LegalDocumentTypes.NghiQuyet, DocumentNumber = "110/2025/UBTVQH15", Title = "Biểu thuế TNCN lũy tiến từng phần", IssuedBy = "UBTVQH", IssuedDate = new DateOnly(2025, 12, 1), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "ND-293-2025", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "293/2025/NĐ-CP", Title = "Lương tối thiểu vùng 2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2025, 12, 20), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "TT-26-2016", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "26/2016/TT-BLĐTBXH", Title = "Ngưỡng phụ cấp ăn ca 730,000 (hết hiệu lực 15/06/2025)", IssuedBy = "Bộ LĐTBXH", IssuedDate = new DateOnly(2016, 9, 1), EffectiveDate = new DateOnly(2016, 10, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
-            new() { Code = "ND-253-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "253/2026/NĐ-CP", Title = "Ngưỡng phụ cấp ăn ca/ăn trưa miễn thuế 1,200,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 30), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "ND-253-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "253/2026/NĐ-CP", Title = "Ngưỡng phụ cấp ăn ca/ăn trưa miễn thuế 1,200,000 + ngưỡng khấu trừ thuế khoán 10% lên 5,000,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 30), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "TT-111-2013", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "111/2013/TT-BTC", Title = "Hướng dẫn Luật Thuế TNCN — khoán điện thoại/xăng xe theo mức chi thực tế", IssuedBy = "Bộ Tài chính", IssuedDate = new DateOnly(2013, 8, 15), EffectiveDate = new DateOnly(2013, 10, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "NQ-954-2020", DocumentType = LegalDocumentTypes.NghiQuyet, DocumentNumber = "954/2020/UBTVQH14", Title = "Giảm trừ gia cảnh 11,000,000 / 4,400,000 (áp dụng từ kỳ tính thuế 2020)", IssuedBy = "UBTVQH", IssuedDate = new DateOnly(2020, 6, 2), EffectiveDate = new DateOnly(2020, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "BLLD-2019", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "(không số)", Title = "Bộ luật Lao động 2019", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2019, 11, 20), EffectiveDate = new DateOnly(2021, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
         };
 
@@ -1004,6 +1060,12 @@ public sealed partial class DatabaseSeeder
         }
 
         // Row 1: historical (2020-01-01, IsActive=false)
+        //
+        // ⚠️ ValidFrom 01/01/2020 SỚM HƠN ngày NQ 954/2020/UBTVQH14 có hiệu lực (01/07/2020) — và
+        // đó là ĐÚNG, đừng "sửa" thành 01/07: Điều 2 của Nghị quyết ghi rõ áp dụng **từ kỳ tính thuế
+        // năm 2020**, tức hồi tố về đầu năm. `ValidFrom` ở đây là ngày ÁP DỤNG của mốc giảm trừ,
+        // không phải ngày hiệu lực của văn bản. Đây là ngoại lệ DUY NHẤT trong toàn bộ dữ liệu
+        // compliance; mọi version khác đều có ValidFrom >= hiệu lực văn bản căn cứ.
         var row1 = new PitRegulationVersion
         {
             ValidFrom = new DateOnly(2020, 1, 1),
@@ -1013,6 +1075,7 @@ public sealed partial class DatabaseSeeder
             DependentDeductionAmount = 4_400_000m,
             ShortTermContractMaxMonths = 3,
             ShortTermFlatRatePercent = 10.00m,
+            HousingExemptRatePercent = 15.00m,
             ShortTermTaxExemptMonthlyIncome = 2_000_000m,
             LegalReference = "Luật TNCN 04/2007/QH12 sửa đổi 2012 + NQ 954/2020/UBTVQH14 — giảm trừ 11tr/4.4tr",
             CreatedAt = now,
@@ -1029,16 +1092,19 @@ public sealed partial class DatabaseSeeder
             },
         };
 
-        // Row 2: current active (2026-01-01, IsActive=true — ValidFrom <= seedDate 2026-06-12)
+        // Row 2: bản của kỳ tính thuế 2026 (2026-01-01) — KHÔNG còn là bản đang áp dụng kể từ khi có
+        // row3 (01/07/2026). Vẫn giữ để kỳ lương trả TRƯỚC 01/07/2026 tính lại ra đúng ngưỡng 2tr cũ:
+        // GetActiveAtAsync lọc `ValidFrom <= ngày trả` nên tự chọn đúng bản theo thời điểm.
         var row2 = new PitRegulationVersion
         {
             ValidFrom = new DateOnly(2026, 1, 1),
-            IsActive = true,
+            IsActive = false,
             IsArchived = false,
             PersonalDeductionAmount = 15_500_000m,
             DependentDeductionAmount = 6_200_000m,
             ShortTermContractMaxMonths = 3,
             ShortTermFlatRatePercent = 10.00m,
+            HousingExemptRatePercent = 15.00m,
             ShortTermTaxExemptMonthlyIncome = 2_000_000m,
             LegalReference = "Luật TNCN 109/2025/QH15 + NQ 110/2025/UBTVQH15 — áp dụng từ kỳ tính thuế 2026",
             CreatedAt = now,
@@ -1053,18 +1119,56 @@ public sealed partial class DatabaseSeeder
             },
         };
 
-        await _context.PitRegulationVersions.AddRangeAsync(new[] { row1, row2 }, ct);
+        // Row 3: ⭐ Phase 7 — current active (2026-07-01, IsActive=true; ValidFrom đã ở QUÁ KHỨ so với
+        // ngày chạy seed). NĐ 253/2026/NĐ-CP nâng NGƯỠNG khấu trừ thuế khoán 10% mỗi lần chi trả từ
+        // 2.000.000 lên 5.000.000; giảm trừ gia cảnh + biểu luỹ tiến giữ nguyên như row2.
+        //
+        // Phải là bản MỚI chứ không sửa tại chỗ row2: kỳ lương trả trước 01/07/2026 tính lại vẫn
+        // phải ra ngưỡng 2tr của luật cũ. Cờ IsActive bật ngay tại seed, không chờ
+        // ComplianceActivationJob — xem lý do ở SeedLaborLawConstantsAsync.
+        var row3 = new PitRegulationVersion
+        {
+            ValidFrom = new DateOnly(2026, 7, 1),
+            IsActive = true,
+            IsArchived = false,
+            PersonalDeductionAmount = 15_500_000m,
+            DependentDeductionAmount = 6_200_000m,
+            ShortTermContractMaxMonths = 3,
+            ShortTermFlatRatePercent = 10.00m,
+            HousingExemptRatePercent = 15.00m,
+            ShortTermTaxExemptMonthlyIncome = 5_000_000m,
+            LegalReference = "NĐ 253/2026/NĐ-CP — ngưỡng khấu trừ thuế khoán 10% lên 5.000.000đ/lần chi trả từ 01/07/2026",
+            CreatedAt = now,
+            CreatedByUserId = adminId,
+            Brackets = new List<PitBracket>
+            {
+                new() { Order = 1, LowerBound = 0m,            UpperBound = 10_000_000m,  Rate = 0.0500m },
+                new() { Order = 2, LowerBound = 10_000_000m,   UpperBound = 30_000_000m,  Rate = 0.1000m },
+                new() { Order = 3, LowerBound = 30_000_000m,   UpperBound = 60_000_000m,  Rate = 0.2000m },
+                new() { Order = 4, LowerBound = 60_000_000m,   UpperBound = 100_000_000m, Rate = 0.3000m },
+                new() { Order = 5, LowerBound = 100_000_000m,  UpperBound = null,          Rate = 0.3500m },
+            },
+        };
+
+        await _context.PitRegulationVersions.AddRangeAsync(new[] { row1, row2, row3 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 2 PitRegulationVersion rows (row1 IsActive=false historical, row2 IsActive=true current).");
+        _logger.LogInformation(
+            "Seeded 3 PitRegulationVersion rows (row1/row2 IsActive=false historical, row3 IsActive=true current từ 01/07/2026).");
 
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.PitRegulation, row2.Id,
             new[] { "LUAT-TNCN-109-2025", "NQ-110-2025" },
             legalDocumentIdsByCode, adminId, now, ct);
-        // Row1 (historical pre-2026) — link bộ luật TNCN cũ áp dụng tại thời điểm đó để tuân thủ BR-15
+        // Row1 (historical pre-2026) — căn cứ ĐÚNG của mốc 11tr/4,4tr là NQ 954/2020/UBTVQH14.
+        // Trước đây link `LUAT-TNCN-109-2025`, tức gắn cho bản CŨ chính văn bản đã THAY THẾ nó
+        // (hiệu lực 01/01/2026, sau ValidFrom của row1 6 năm) — trái hẳn với chú thích ngay trên.
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.PitRegulation, row1.Id,
-            new[] { "LUAT-TNCN-109-2025" },
+            new[] { "NQ-954-2020" },
+            legalDocumentIdsByCode, adminId, now, ct);
+        await LinkLegalDocumentsAsync(
+            ComplianceEntityTypes.PitRegulation, row3.Id,
+            new[] { "LUAT-TNCN-109-2025", "ND-253-2026" },
             legalDocumentIdsByCode, adminId, now, ct);
     }
 
@@ -1115,7 +1219,7 @@ public sealed partial class DatabaseSeeder
         }
 
         // Row 1: historical (2021-01-01, IsActive=false) — miễn thuế OT chỉ phần chênh lệch (TT 111/2013 Đ.3).
-        // Kỳ lương CŨ (trước 01/07/2026) tính lại vẫn ra đúng số của thời điểm đó nhờ
+        // Kỳ lương trước năm 2026 tính lại vẫn ra đúng số của thời điểm đó nhờ
         // LaborLawConstantsRepository.GetActiveAtAsync fallback theo ValidFrom.
         var row1 = new LaborLawConstantsVersion
         {
@@ -1137,21 +1241,23 @@ public sealed partial class DatabaseSeeder
             WorkRateHolidayFloor = 300.00m,
             OvertimeMaxHoursPerDay = 4.00m,
             OvertimeMaxHoursPerMonth = 40.00m,
-            OvertimeMaxHoursPerYear = 300,
+            OvertimeMaxHoursPerYear = 200,
             OvertimeIncomeFullyTaxExempt = false,
             LegalReference = "BLLĐ 2019 Điều 26, 98, 107, 113 + NĐ 145/2020 Điều 54 + TT 111/2013 Đ.3 (miễn thuế OT phần chênh lệch)",
             CreatedAt = now,
             CreatedByUserId = adminId,
         };
 
-        // Row 2: current active (2026-07-01, IsActive=true — ValidFrom đã ở QUÁ KHỨ so với ngày seed)
+        // Row 2: áp dụng cho thu nhập tiền lương của kỳ tính thuế 2026. Luật TNCN 109/2025/QH15
+        // quy định nhóm tiền lương áp dụng từ kỳ tính thuế năm 2026, dù luật/NĐ 253 có hiệu lực
+        // hành chính từ 01/07/2026; vì vậy không được để nửa đầu năm vẫn chỉ miễn phần chênh OT.
         // — miễn thuế TOÀN BỘ tiền tăng ca (Luật TNCN 109/2025 + NĐ 253/2026). Phải bật cờ ngay tại
         // seed, không chờ ComplianceActivationJob: GetActiveAtAsync ưu tiên hàng CÓ cờ IsActive trước
         // khi fallback theo ValidFrom, nên để row1 giữ cờ thì payroll sẽ ăn luật CŨ tới lần chạy job
         // đầu tiên (nửa đêm UTC kế tiếp).
         var row2 = new LaborLawConstantsVersion
         {
-            ValidFrom = new DateOnly(2026, 7, 1),
+            ValidFrom = new DateOnly(2026, 1, 1),
             IsActive = true,
             IsArchived = false,
             ProbationSalaryMinPercent = 85.00m,
@@ -1169,16 +1275,16 @@ public sealed partial class DatabaseSeeder
             WorkRateHolidayFloor = 300.00m,
             OvertimeMaxHoursPerDay = 4.00m,
             OvertimeMaxHoursPerMonth = 40.00m,
-            OvertimeMaxHoursPerYear = 300,
+            OvertimeMaxHoursPerYear = 200,
             OvertimeIncomeFullyTaxExempt = true,
-            LegalReference = "Luật TNCN 109/2025/QH15 + NĐ 253/2026/NĐ-CP — miễn thuế toàn bộ tiền lương làm đêm/OT từ 01/07/2026",
+            LegalReference = "Luật TNCN 109/2025/QH15 Điều 24, 29, 51 + NĐ 253/2026/NĐ-CP — quy định tiền lương áp dụng từ kỳ tính thuế 2026; miễn toàn bộ tiền làm đêm/OT",
             CreatedAt = now,
             CreatedByUserId = adminId,
         };
 
         await _context.LaborLawConstantsVersions.AddRangeAsync(new[] { row1, row2 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 2 LaborLawConstantsVersion rows (row1 IsActive=false historical BLLĐ 2019, row2 IsActive=true current từ 01/07/2026).");
+        _logger.LogInformation("Seeded 2 LaborLawConstantsVersion rows (row1 historical đến 2025, row2 áp dụng kỳ tính thuế từ 01/01/2026).");
 
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.LaborLawConstants, row1.Id,
@@ -1211,13 +1317,15 @@ public sealed partial class DatabaseSeeder
         }
 
         // BR-15: mỗi version phải liên kết >=1 LegalDocument.
-        var thresholds = new List<(AllowanceExemptThresholdVersion Version, string LegalDocCode)>();
+        var thresholds = new List<(AllowanceExemptThresholdVersion Version, string[] LegalDocCodes)>();
 
         if (allowanceTypes.TryGetValue("MEAL", out var meal))
         {
             thresholds.Add((new AllowanceExemptThresholdVersion
             {
-                ValidFrom = new DateOnly(2016, 1, 1),
+                // Hiệu lực ĐÚNG BẰNG ngày TT 26/2016/TT-BLĐTBXH có hiệu lực (15/10/2016). Trước
+                // đây đặt 01/01/2016 — sớm hơn văn bản căn cứ 9,5 tháng, tức mốc luật tự bịa.
+                ValidFrom = new DateOnly(2016, 10, 15),
                 IsActive = false,
                 IsArchived = false,
                 AllowanceTypeId = meal.Id,
@@ -1228,7 +1336,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 26/2016/TT-BLĐTBXH + TT 111/2013/TT-BTC (hết hiệu lực 15/06/2025)",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "TT-26-2016"));
+            }, new[] { "TT-26-2016", "TT-111-2013" }));
             thresholds.Add((new AllowanceExemptThresholdVersion
             {
                 ValidFrom = new DateOnly(2026, 7, 1),
@@ -1242,7 +1350,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "NĐ 253/2026/NĐ-CP — ngưỡng mới 1,200,000 từ 01/07/2026",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "ND-253-2026"));
+            }, new[] { "ND-253-2026" }));
         }
 
         if (allowanceTypes.TryGetValue("FUEL", out var fuel))
@@ -1259,7 +1367,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 111/2013/TT-BTC",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "TT-26-2016"));
+            }, new[] { "TT-111-2013" }));
 
         if (allowanceTypes.TryGetValue("PHONE", out var phone))
             thresholds.Add((new AllowanceExemptThresholdVersion
@@ -1275,7 +1383,7 @@ public sealed partial class DatabaseSeeder
                 LegalReference = "TT 111/2013/TT-BTC",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
-            }, "TT-26-2016"));
+            }, new[] { "TT-111-2013" }));
 
         if (thresholds.Count > 0)
         {
@@ -1283,11 +1391,11 @@ public sealed partial class DatabaseSeeder
             await _context.SaveChangesAsync(ct);
             _logger.LogInformation("Seeded {Count} AllowanceExemptThreshold rows.", thresholds.Count);
 
-            foreach (var (version, legalDocCode) in thresholds)
+            foreach (var (version, legalDocCodes) in thresholds)
             {
                 await LinkLegalDocumentsAsync(
                     ComplianceEntityTypes.AllowanceExemptThreshold, version.Id,
-                    new[] { legalDocCode },
+                    legalDocCodes,
                     legalDocumentIdsByCode, adminId, now, ct);
             }
         }
@@ -1350,7 +1458,7 @@ public sealed partial class DatabaseSeeder
         _logger.LogInformation("Seeded default AttendanceRule '{Name}' (100/200/300 %%) + version đầu tiên.", DefaultAttendanceRuleName);
     }
 
-    // 4 ca làm việc mặc định: CA-SANG, CA-CHIEU, CA-DEM, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".
+    // 3 ca làm việc ban ngày: CA-SANG, CA-CHIEU, FULLTIME — tất cả FK về AttendanceRule "Tiêu chuẩn".
     // Idempotent theo Code (unique index) — chỉ chèn Code còn thiếu.
     private async Task SeedDefaultShiftTemplatesAsync(CancellationToken ct)
     {
@@ -1409,21 +1517,6 @@ public sealed partial class DatabaseSeeder
                 BreakStartTime = null,
                 BreakEndTime = null,
                 StandardHours = 4.00m,
-                StandardDays = 1.00m,
-                AppliedAttendanceRuleId = rule.Id,
-                IsActive = true,
-                CreatedAt = now,
-                CreatedByUserId = adminId,
-            },
-            new()
-            {
-                Code = "CA-DEM",
-                Name = "Ca đêm",
-                StartTime = new TimeOnly(22, 0),
-                EndTime = new TimeOnly(6, 0),
-                BreakStartTime = null,
-                BreakEndTime = null,
-                StandardHours = 8.00m,
                 StandardDays = 1.00m,
                 AppliedAttendanceRuleId = rule.Id,
                 IsActive = true,

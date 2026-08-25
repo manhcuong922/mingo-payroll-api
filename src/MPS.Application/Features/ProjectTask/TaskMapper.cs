@@ -11,7 +11,7 @@ internal static class TaskMapper
         var taskPercent = ResolveCompletionPercent(t);
 
         var assignees = t.Assignees
-            .Select(a => new TaskAssigneeDto(a.UserId, a.User?.Username))
+            .Select(a => new TaskAssigneeDto(a.UserId, a.User?.FullName))
             .ToList();
 
         // Attachment lấy qua endpoint riêng (GET /api/Task/{id}/attachments) — polymorphic, không nhúng ở đây.
@@ -49,11 +49,11 @@ internal static class TaskMapper
             t.ParentTask?.Title,
             assignees,
             t.CreatedByUserId,
-            t.CreatedBy?.Username,
+            t.CreatedBy?.FullName,
             t.IsBatchParent,
             taskPercent,
             t.WasLate,
-            t.CompletedBy?.Username,
+            t.CompletedBy?.FullName,
             t.CompletedAt,
             t.RowVersion is { Length: > 0 } ? Convert.ToBase64String(t.RowVersion) : string.Empty,
             attachments,

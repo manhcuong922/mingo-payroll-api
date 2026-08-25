@@ -121,8 +121,12 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IPayrollPeriodRepository, PayrollPeriodRepository>();
         services.AddScoped<IPayrollAdjustmentRepository, PayrollAdjustmentRepository>();
         services.AddScoped<IPaymentObligationRepository, PaymentObligationRepository>();
+        services.AddScoped<ICompanyPaymentSettingRepository,
+            MPS.Infrastructure.Repositories.Payroll.CompanyPaymentSettingRepository>();
         services.AddScoped<MPS.Application.Features.Payroll.BhxhTaxPayment.Common.BhxhTaxEvidenceUploader>();
+        services.AddScoped<MPS.Application.Features.Payroll.PaymentDocuments.Common.PaymentDocumentContextLoader>();
         services.AddScoped<IProductivityCoefficientRepository, ProductivityCoefficientRepository>();
+        services.AddScoped<IPieceWorkSupportBandRepository, PieceWorkSupportBandRepository>();
         services.AddScoped<IPayrollDataCollector, PayrollDataCollector>();
         services.AddScoped<IPayrollReadinessChecker, PayrollReadinessChecker>();
         // BS-6: đánh cờ "cần tính lại" cho kỳ Draft khi nguồn (chấm công/đơn/phụ lục/đánh giá) đổi.
@@ -145,6 +149,12 @@ public static class InfrastructureServiceRegistration
         services.AddSingleton<IPayrollFormulaValidator, PayrollFormulaValidator>();
         services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IPayrollExcelExporter,
             MPS.Infrastructure.Services.Payroll.PayrollExcelExporter>();
+
+        // Chứng từ chi trả: biểu mẫu nhúng + bộ điền .xlsx có sẵn. Cả hai đều không giữ state.
+        services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IPaymentTemplateProvider,
+            MPS.Infrastructure.Services.Templates.EmbeddedPaymentTemplateProvider>();
+        services.AddSingleton<MPS.Application.Common.Interfaces.Payroll.IXlsxTemplateFiller,
+            MPS.Infrastructure.Services.Templates.XlsxTemplateFiller>();
         services.AddSingleton<IPayrollLawChangeNoteBuilder, PayrollLawChangeNoteBuilder>();
 
         // Attendance sheet export/import (Excel) — Exporter/Parser singleton (không state), Cache singleton.
@@ -159,9 +169,6 @@ public static class InfrastructureServiceRegistration
         // Attendance module — orchestrators
         services.AddScoped<MPS.Application.Features.Attendance.OvertimeRequest.Common.OvertimeCapChecker>();
         services.AddScoped<MPS.Application.Features.Attendance.LeaveRequest.Common.LeaveBalanceFallbackResolver>();
-        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLimitChecker>();
-        // BS-8: trừ thật vào quỹ phép năm khi approver bật DeductFromLeaveBalance.
-        services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyLeaveDeduction>();
         // Đọc tổng số phút trễ/sớm đã Approved cho (NV, ngày) — dùng bởi calculator + recalc.
         services.AddScoped<MPS.Application.Features.Attendance.LateEarlyRequest.Common.LateEarlyExcuseResolver>();
         // Recompute giờ công cho bản ghi chấm công sau khi duyệt đơn đi trễ/về sớm.

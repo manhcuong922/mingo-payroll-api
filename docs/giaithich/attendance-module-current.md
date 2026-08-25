@@ -457,6 +457,47 @@ Recompute AttendanceWorkSegment.
 Recompute DayHours/NightHours/TotalHours.
 ```
 
+### 12.1. Ba mốc thời gian của cửa sổ chấm công
+
+Cấu hình ở section `AttendanceCheckin` (`appsettings.json`), đọc bởi `FaceCheckinCommandHandler`:
+
+```text
+OpenAt          = ShiftStart - EarlyCheckinMinutes (60')   -> sớm nhất được quét
+CheckinDeadline = min(ShiftStart + LateCheckinMinutes (240'), ShiftEnd)
+                                                           -> muộn nhất được MỞ ca mới
+CloseAt         = ShiftEnd + LateCheckoutMinutes (360')    -> muộn nhất được chấm RA
+```
+
+Ba mốc, không phải hai. Lý do tách `CheckinDeadline` khỏi `CloseAt`:
+
+```text
+Cửa sổ ĐÓNG ca phải RỘNG  -> OT trần 4h/ngày, NV tan ca sau OT quét muộn hơn ShiftEnd vài tiếng.
+Cửa sổ MỞ ca phải HẸP     -> quét lần đầu sau khi ca đã trôi qua thì không thể là "đã đi làm ca đó".
+```
+
+Trước khi tách, cả hai dùng chung `CloseAt`: quét lần đầu lúc 20:00 cho ca 08:00–17:00 vẫn mở
+được ca, ra `HalfDay` = **0.5 công hưởng lương** trong khi `DayHours = NightHours = 0` (vì
+`AttendanceHourCalculator.ClampToShiftWindow` cắt sạch phần ngoài khung ca). 0.5 công khống đó
+chảy tiếp vào tiền cơm, phụ cấp và nền đóng BHXH qua `PayrollDataCollector.DayWeight`.
+
+Ràng buộc khi chỉnh số:
+
+```text
+LateCheckinMinutes  >= 240  -> đúng trần LateEarlyRequest.Minutes; hạ thấp hơn sẽ chặn nhầm
+                               NV có đơn xin đi trễ ĐÃ DUYỆT tối đa 4 tiếng.
+LateCheckoutMinutes >= 300  -> cắt ngắn là cắt luôn giờ OT thực tế mà
+                               RecordActualOvertimeIfAnyAsync ghi nhận được.
+```
+
+Khi nhiều ca cùng mở cổng (ca đêm hôm trước chồng lên ca hôm nay), thứ tự ưu tiên chọn ca:
+
+```text
+0 chờ checkout > 1 chưa chấm & còn hạn mở ca > 2 đã hoàn thành > 3 chưa chấm & quá hạn mở ca
+```
+
+Hạng 3 bị xếp cuối chứ không loại thẳng khỏi danh sách: ca đêm hôm qua (22:00–06:00) còn nằm
+trong cửa sổ tới trưa hôm sau, không được để nó nuốt mất lượt quét VÀO ca của ngày hôm nay.
+
 ## 13. Overtime
 
 Overtime cũng nên đi cùng hướng này.

@@ -26,7 +26,20 @@ public sealed class LaborLawConstantsVersion : IComplianceVersion
     public decimal WorkRateHolidayFloor { get; set; } = 300.00m;
     public decimal OvertimeMaxHoursPerDay { get; set; } = 4.00m;
     public decimal OvertimeMaxHoursPerMonth { get; set; } = 40.00m;
-    public int OvertimeMaxHoursPerYear { get; set; } = 300;
+    /// <summary>
+    /// ⭐ OT-YEAR-CAP-2026-08 — mặc định 200h/năm, KHÔNG phải 300h.
+    ///
+    /// <para>Đ.107.3 BLLĐ đặt trần chung là 200 giờ/năm; 300 giờ chỉ dành cho danh mục ngành được
+    /// liệt kê (dệt may, da giày, điện tử, chế biến nông–lâm–thuỷ sản, điện, viễn thông, lọc dầu,
+    /// cấp thoát nước…) và doanh nghiệp còn phải THÔNG BÁO BẰNG VĂN BẢN cho Sở LĐTBXH
+    /// (NĐ 145/2020 Đ.62). Để 300 làm mặc định là hệ thống lặng lẽ cho vượt 200h với doanh nghiệp
+    /// không thuộc diện — <c>OvertimeCapChecker</c> tin tuyệt đối vào con số này.</para>
+    ///
+    /// <para>Doanh nghiệp thuộc diện 300h vẫn khai được: sửa hằng số của phiên bản luật đang áp
+    /// dụng và ghi căn cứ vào <see cref="LegalReference"/> — một quyết định CÓ HỒ SƠ, đúng như
+    /// nghĩa vụ thông báo mà luật đòi.</para>
+    /// </summary>
+    public int OvertimeMaxHoursPerYear { get; set; } = 200;
 
     /// <summary>
     /// Phạm vi miễn thuế TNCN cho tiền tăng ca:

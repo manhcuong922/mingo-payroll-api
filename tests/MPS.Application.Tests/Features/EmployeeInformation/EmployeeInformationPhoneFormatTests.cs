@@ -5,6 +5,7 @@ using MPS.Application.Features.EmployeeInformation.Validators;
 using MPS.Domain.Constants;
 using MPS.Domain.Enums.Employee;
 using MPS.Domain.Interfaces;
+using MPS.Domain.Interfaces.Payroll;
 using Xunit;
 using EmployeeInformationEntity = MPS.Domain.Entities.EmployeeInformation;
 
@@ -24,6 +25,7 @@ public sealed class EmployeeInformationPhoneFormatTests
     private readonly Mock<IEmployeeInformationRepository> _repo = new();
     private readonly Mock<IDepartmentRepository> _departments = new();
 
+    private readonly Mock<ICompanyPaymentSettingRepository> _banking = new();
     public EmployeeInformationPhoneFormatTests()
     {
         _repo.Setup(r => r.EmailExistsAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
@@ -45,8 +47,8 @@ public sealed class EmployeeInformationPhoneFormatTests
             .ReturnsAsync(new EmployeeInformationEntity { Id = EmployeeId, UserId = 31 });
     }
 
-    private EmployeeInformationCreateCommandValidator CreateValidator() => new(_repo.Object, _departments.Object);
-    private EmployeeInformationUpdateCommandValidator UpdateValidator() => new(_repo.Object, _departments.Object);
+    private EmployeeInformationCreateCommandValidator CreateValidator() => new(_repo.Object, _departments.Object, _banking.Object);
+    private EmployeeInformationUpdateCommandValidator UpdateValidator() => new(_repo.Object, _departments.Object, _banking.Object);
 
     [Theory(DisplayName = "SĐT sai định dạng → chặn")]
     [InlineData("abc-xyz-!!!")]      // rác hoàn toàn — case đo được trên API thật
@@ -136,6 +138,9 @@ public sealed class EmployeeInformationPhoneFormatTests
         TaxNo: null,
         SocialNo: null,
         BankNumber: null,
+        BankCode: null,
+        BankBranch: null,
+        BankProvinceCode: null,
         GuardianFullName: null,
         GuardianRelationship: null,
         GuardianPhoneNo: null,
@@ -162,6 +167,9 @@ public sealed class EmployeeInformationPhoneFormatTests
         TaxNo: null,
         SocialNo: null,
         BankNumber: null,
+        BankCode: null,
+        BankBranch: null,
+        BankProvinceCode: null,
         GuardianFullName: null,
         GuardianRelationship: null,
         GuardianPhoneNo: null,

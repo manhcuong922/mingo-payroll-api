@@ -190,6 +190,7 @@ public sealed class ComplianceLookupService : IComplianceLookupService
     private static PitRegulationSnapshot MapPit(Domain.Entities.Compliance.PitRegulationVersion v) =>
         new(v.Id, v.ValidFrom, v.PersonalDeductionAmount, v.DependentDeductionAmount,
             v.ShortTermContractMaxMonths, v.ShortTermFlatRatePercent, v.ShortTermTaxExemptMonthlyIncome,
+            v.HousingExemptRatePercent,
             v.Brackets.OrderBy(b => b.Order).Select(b => new PitBracketSnapshot(b.Order, b.LowerBound, b.UpperBound, b.Rate)).ToList(),
             v.LegalReference);
 

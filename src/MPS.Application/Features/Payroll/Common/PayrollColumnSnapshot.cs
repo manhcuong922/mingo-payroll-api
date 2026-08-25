@@ -49,7 +49,17 @@ public static class PayrollColumnSnapshotMapper
 /// <summary>Tiện ích tính công chuẩn mặc định của tháng.</summary>
 public static class PayrollWorkingDays
 {
-    /// <summary>Số ngày T2–T6 của tháng (KHÔNG trừ lễ). Giữ lại cho các phép đối chiếu/không có lễ.</summary>
+    /// <summary>
+    /// ⭐ CC-2026-08 — CÔNG CHUẨN của kỳ lương: số ngày T2–T6 của tháng, <b>KHÔNG trừ ngày lễ</b>.
+    ///
+    /// <para>CONGCHUAN là MẪU SỐ của mọi phép chia lương. Trừ lễ ra (quy tắc #59/HOL-STD01 cũ) làm
+    /// mẫu số co lại trong tháng nhiều lễ — tháng Tết còn 17 thay vì 22 — nên nghỉ 1 ngày bị trừ
+    /// 1/17 thay vì 1/22: cùng một hành vi nghỉ mà tháng Tết bị phạt nặng hơn tháng thường ~30%.
+    /// Đơn giá ngày công phải ổn định giữa các tháng.</para>
+    ///
+    /// <para>Ngày lễ KHÔNG biến mất khỏi phép tính — nó chuyển sang TỬ SỐ: <c>PayrollDataCollector</c>
+    /// cộng mỗi ngày lễ T2–T6 thành 1 công hưởng lương (Đ.112 BLLĐ). Hai vế phải đi cùng nhau.</para>
+    /// </summary>
     public static decimal CountWeekdays(int year, int month)
     {
         var days = DateTime.DaysInMonth(year, month);
@@ -63,46 +73,18 @@ public static class PayrollWorkingDays
     }
 
     /// <summary>
-    /// #59 — Công chuẩn mặc định = số ngày T2–T6 TRỪ ngày lễ. Lễ = mốc dương lịch cố định theo Đ.112
-    /// (luôn trừ, kể cả bảng <c>PublicHolidays</c> còn trống) ∪ ngày lễ đã nhập trong DB
-    /// (<paramref name="enteredHolidays"/>, gồm cả Tết/Giỗ Tổ âm lịch mà HR nhập tay).
-    /// CONGCHUAN là MẪU SỐ của mọi phép chia lương — đặt cao hơn thực tế ⇒ mỗi ngày công rẻ đi.
+    /// Số ngày T2–T6 từ ĐẦU THÁNG đến hết <paramref name="through"/> — dùng cho màn hình tạm tính
+    /// giữa tháng để nói rõ "đã trôi qua N/M ngày công". Đây KHÔNG phải mẫu số của phép chia lương:
+    /// mẫu số vẫn là công chuẩn cả tháng (xem <see cref="CountWeekdays"/>).
     /// </summary>
-    public static decimal CountStandardWorkingDays(int year, int month, IEnumerable<DateOnly>? enteredHolidays = null)
+    public static int CountWeekdaysThrough(DateOnly through)
     {
-        var holidays = new HashSet<DateOnly>(LaborLawConstants.PublicHolidays.FixedSolarInMonth(year, month));
-        if (enteredHolidays is not null)
-            foreach (var h in enteredHolidays) holidays.Add(h);
-
-        var totalDays = DateTime.DaysInMonth(year, month);
         var count = 0;
-        for (var d = 1; d <= totalDays; d++)
+        for (var d = 1; d <= through.Day; d++)
         {
-            var date = new DateOnly(year, month, d);
-            if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
-            if (holidays.Contains(date)) continue;
-            count++;
+            var dow = new DateOnly(through.Year, through.Month, d).DayOfWeek;
+            if (dow != DayOfWeek.Saturday && dow != DayOfWeek.Sunday) count++;
         }
         return count;
-    }
-
-    /// <summary>Bung các khoảng ngày lễ (<see cref="PublicHoliday"/>) thành tập DateOnly nằm trong tháng.</summary>
-    public static IReadOnlyCollection<DateOnly> HolidayDatesInMonth(
-        IEnumerable<PublicHoliday> holidays, int year, int month)
-    {
-        var first = new DateOnly(year, month, 1);
-        var last = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-        var set = new HashSet<DateOnly>();
-        foreach (var h in holidays)
-        {
-            var end = h.HolidayEndDate < h.HolidayDate ? h.HolidayDate : h.HolidayEndDate;
-            for (var d = h.HolidayDate; d <= end; d = d.AddDays(1))
-            {
-                if (d < first) continue;
-                if (d > last) break;
-                set.Add(d);
-            }
-        }
-        return set;
     }
 }

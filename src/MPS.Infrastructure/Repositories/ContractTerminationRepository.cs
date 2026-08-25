@@ -89,10 +89,33 @@ public class ContractTerminationRepository : IContractTerminationRepository
         await _context.ContractTerminations.AddAsync(termination, cancellationToken);
 
         contract.Status = targetStatus;
+        CloseEffectiveTo(contract, termination.TerminationDate);
         contract.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return termination.Id;
+    }
+
+    /// <summary>
+    /// ⭐ Phase 4 — chấm dứt HĐ phải ĐÓNG khoảng hiệu lực, không chỉ đổi <c>Status</c>.
+    ///
+    /// <para><c>TerminationDate</c> là ngày làm việc CUỐI CÙNG, đúng ngữ nghĩa <c>EffectiveTo</c>
+    /// (inclusive). Trước đây chỉ <c>Status</c> được đổi, nên HĐ không xác định thời hạn
+    /// (<c>EffectiveTo = null</c>) vẫn "phủ" mọi ngày sau khi NLĐ đã nghỉ: chấm công lỡ nhập sau ngày
+    /// nghỉ vẫn ra tiền, và tháng kế tiếp người đã nghỉ vẫn lọt cổng readiness với lỗi "chưa có chấm
+    /// công" ⇒ chặn tạo kỳ lương của cả công ty.</para>
+    ///
+    /// <para>Áp cho CẢ <c>PendingTermination</c>: quyết định đã ký thì khoảng hiệu lực đã biết trước,
+    /// đóng luôn để kỳ lương của tháng có ngày nghỉ tính đúng công mà không phải chờ job flip.</para>
+    ///
+    /// <para>KHÔNG BAO GIỜ kéo dài HĐ: hợp đồng có hạn kết thúc trước ngày chấm dứt giữ nguyên mốc
+    /// của chính nó.</para>
+    /// </summary>
+    private static void CloseEffectiveTo(Contract contract, DateTime terminationDate)
+    {
+        if (contract.EffectiveTo is { } currentEnd && currentEnd.Date <= terminationDate.Date) return;
+
+        contract.EffectiveTo = terminationDate;
     }
 }

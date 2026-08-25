@@ -14,6 +14,12 @@ public class AttendanceSettingRepository : IAttendanceSettingRepository
         _context = context;
     }
 
+    public Task<AttendanceSetting?> GetAsync(CancellationToken cancellationToken = default) =>
+        _context.AttendanceSettings
+            .AsNoTracking()
+            .OrderBy(s => s.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task<AttendanceSetting> GetOrCreateDefaultAsync(
         DateTime nowUtc,
         CancellationToken cancellationToken = default)

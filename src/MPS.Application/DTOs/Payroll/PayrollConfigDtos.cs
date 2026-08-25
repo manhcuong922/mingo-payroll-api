@@ -1,4 +1,4 @@
-namespace MPS.Application.DTOs.Payroll;
+﻿namespace MPS.Application.DTOs.Payroll;
 
 /// <summary>Tóm tắt 1 bảng công thức (danh sách).</summary>
 public sealed record FormulaSetDto(
@@ -37,6 +37,18 @@ public sealed record FormulaSetDetailDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     IReadOnlyList<SalaryColumnDto> Columns);
+
+/// <summary>
+/// Bậc hỗ trợ theo tiến độ của HĐ khoán việc: tổng giờ làm trong tháng vào khoảng
+/// [MinHours, MaxHours] → trả <c>Amount</c>. <c>MaxHours</c> null = bậc trên cùng, không trần.
+/// </summary>
+public sealed record PieceWorkSupportBandDto(
+    int Id,
+    decimal MinHours,
+    decimal? MaxHours,
+    decimal Amount,
+    string? Label,
+    bool IsActive);
 
 public sealed record ProductivityCoefficientDto(
     int Id,

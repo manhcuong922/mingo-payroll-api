@@ -10,4 +10,12 @@ public static class VietnamClock
         OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
 
     public static DateTime Now => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, VietnamTimeZone);
+
+    /// <summary>
+    /// Ngày LỊCH theo giờ VN của một mốc UTC. Dùng cho các module chạy theo <c>IClock</c> (UTC) nhưng
+    /// cần so với dữ liệu ghi theo ngày làm việc — vd chấm công. Không có nó thì từ 00:00 đến 07:00
+    /// giờ VN, <c>DateOnly.FromDateTime(utcNow)</c> trả về ngày HÔM QUA.
+    /// </summary>
+    public static DateOnly ToVietnamDate(DateTime utcNow) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, VietnamTimeZone));
 }

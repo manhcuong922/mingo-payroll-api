@@ -23,6 +23,21 @@ public sealed class PayrollAdjustmentRepository : IPayrollAdjustmentRepository
             .ToListAsync(ct);
     }
 
+    // AsNoTracking: nhánh tạm tính sẽ SỬA các entity này trong bộ nhớ (Applier đặt AppliedAt / cắt
+    // Amount) nhưng tuyệt đối không được ghi xuống DB.
+    public async Task<IReadOnlyList<PayrollAdjustment>> GetPendingForEmployeesReadOnlyAsync(
+        IReadOnlyCollection<int> employeeInformationIds, CancellationToken ct = default)
+    {
+        if (employeeInformationIds.Count == 0) return Array.Empty<PayrollAdjustment>();
+
+        return await _context.PayrollAdjustments
+            .AsNoTracking()
+            .Where(a => a.AppliedPeriodId == null
+                        && employeeInformationIds.Contains(a.EmployeeInformationId))
+            .OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<PayrollAdjustment>> GetAppliedToPeriodAsync(
         int periodId, CancellationToken ct = default) =>
         await _context.PayrollAdjustments

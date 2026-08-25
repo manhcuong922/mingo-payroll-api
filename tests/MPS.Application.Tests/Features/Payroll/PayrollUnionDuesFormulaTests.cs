@@ -67,13 +67,118 @@ public sealed class PayrollUnionDuesFormulaTests
         UnionDues(salary: 50_000_000m, rate: 0m, cap: 0m, isMember: 0m).Should().Be(0m);
     }
 
+    // ===== X3 — hai tầng chặn còn thiếu =====
+
+    /// <summary>
+    /// Cờ BH nói KHÔNG thì đoàn phí phải = 0: <c>x</c> là "không đóng phí công đoàn" nói thẳng ra
+    /// điều đó, <c>x1</c>/<c>TS</c> là không có tiền lương làm căn cứ đóng BHXH nên không có căn cứ
+    /// thu. Trước bản sửa cột này không nhìn cờ, cứ là đoàn viên là thu.
+    /// </summary>
+    /// <summary>
+    /// ⚠️ Vòng sửa X3 đầu tiên KHOÁ NHẦM ở đây: <c>x2</c> từng nằm ở nhóm "vẫn thu" bên dưới, vì tôi
+    /// đọc nó là "còn đóng bảo hiểm". Sai — <c>x2</c> là CHỈ đóng BHYT, tức KHÔNG đóng BHXH, mà đoàn
+    /// phí thu trên tiền lương làm căn cứ đóng BHXH. Bản sửa X7 chuyển nó sang đúng nhóm này.
+    /// </summary>
+    [Theory(DisplayName = "X3/X7 · Cờ BH cắt căn cứ đóng BHXH ⇒ đoàn phí = 0")]
+    [InlineData(InsuranceFlags.NoUnion)]
+    [InlineData(InsuranceFlags.NoInsurance)]
+    [InlineData(InsuranceFlags.Maternity)]
+    [InlineData(InsuranceFlags.HealthOnly)]
+    public void InsuranceFlagThatStopsContributions_StopsUnionDues(string flag)
+    {
+        UnionDues(salary: 7_000_000m, rate: 0.01m, cap: Cap, isMember: 1m, flag: flag)
+            .Should().Be(0m, $"cờ '{flag}' nói tháng này không có căn cứ đóng BHXH");
+    }
+
+    /// <summary>Đối chứng: cờ đóng đầy đủ thì vẫn thu như cũ.</summary>
+    [Fact(DisplayName = "X3 · Đối chứng — cờ đóng đầy đủ thì đoàn phí vẫn thu như cũ")]
+    public void FullFlag_KeepsUnionDues()
+    {
+        UnionDues(salary: 7_000_000m, rate: 0.01m, cap: Cap, isMember: 1m, flag: InsuranceFlags.Full)
+            .Should().Be(70_000m);
+    }
+
+    /// <summary>
+    /// Nghỉ thai sản / nghỉ không lương TRỌN THÁNG: cờ vẫn là <c>x3</c> nên tầng cờ không cứu được,
+    /// nhưng không có ngày công nào thuộc diện đóng ⇒ không có tiền lương làm căn cứ ⇒ không thu.
+    ///
+    /// <para>Đây là ca đẻ ra hậu quả dây chuyền đo được trên DB: thu nhập 0 → vẫn trừ đoàn phí →
+    /// thực nhận âm → sàn kẹp về 0 và GHI NỢ treo sang kỳ sau.</para>
+    /// </summary>
+    [Fact(DisplayName = "X3 · Không có ngày công nào thuộc diện đóng ⇒ đoàn phí = 0")]
+    public void NoInsuredWorkingDay_ChargesNothing()
+    {
+        UnionDues(salary: 6_500_000m, rate: 0.01m, cap: Cap, isMember: 1m,
+                congChuan: 22m, congTinhCom: 0m)
+            .Should().Be(0m, "nghỉ trọn tháng thì tháng đó không có căn cứ đóng");
+    }
+
+    [Fact(DisplayName = "X3 · Mọi ngày công đều thuộc HĐ không đóng BH ⇒ đoàn phí = 0")]
+    public void AllDaysOutsideInsurance_ChargesNothing()
+    {
+        UnionDues(salary: 6_500_000m, rate: 0.01m, cap: Cap, isMember: 1m,
+                congChuan: 22m, congTinhCom: 22m, congKhongBaoHiem: 22m)
+            .Should().Be(0m, "HĐ thử việc riêng không đóng BH nào thì cũng không có căn cứ thu đoàn phí");
+    }
+
+    /// <summary>
+    /// Tầng chặn thứ hai là NHỊ PHÂN, không phải chia theo công: có ngày công đóng BH thì thu ĐỦ
+    /// đoàn phí tháng. Cài nhầm thành prorate sẽ làm hỏng bài đối chiếu file lương thật 08/2023.
+    /// </summary>
+    [Fact(DisplayName = "X3 · Chỉ cần MỘT ngày công đóng BH là thu đủ đoàn phí tháng")]
+    public void OneInsuredDay_StillChargesTheFullMonth()
+    {
+        UnionDues(salary: 7_000_000m, rate: 0.01m, cap: Cap, isMember: 1m,
+                congChuan: 22m, congTinhCom: 1m)
+            .Should().Be(70_000m, "đoàn phí là khoản đóng theo THÁNG, chặn nhị phân chứ không chia");
+    }
+
+    // ===== X7 — bám theo CĂN CỨ ĐÓNG BHXH, không chỉ bám cờ =====
+
+    /// <summary>
+    /// Đoàn phí thu trên "tiền lương làm căn cứ đóng BHXH" (QĐ 1908 Đ.23). Hợp đồng TẮT RIÊNG BHXH
+    /// mà vẫn bật BHYT + BHTN thì không có căn cứ đó ⇒ không thu.
+    ///
+    /// <para>⚠️ Cờ KHÔNG cứu được ca này: <c>ResolveInsuranceFlag</c> chỉ trả <c>x2</c> khi BHYT bật
+    /// mà BHXH VÀ BHTN đều tắt; tắt mỗi BHXH thì không khớp nhánh nào và rơi xuống <c>x3</c> —
+    /// "đóng đầy đủ". Cờ nói CÓ, thực tế BHXH = 0. Chỉ công tắc hợp đồng mới bắt được.</para>
+    /// </summary>
+    [Fact(DisplayName = "X7 · HĐ tắt riêng BHXH (cờ vẫn x3) ⇒ đoàn phí = 0")]
+    public void ContractWithSocialInsuranceOff_ChargesNoUnionDues()
+    {
+        UnionDues(salary: 7_000_000m, rate: 0.01m, cap: Cap, isMember: 1m,
+                flag: InsuranceFlags.Full, noSocialInsurance: 1m)
+            .Should().Be(0m, "không có quỹ tiền lương làm căn cứ đóng BHXH thì không có gì để nhân tỷ lệ");
+    }
+
+    /// <summary>
+    /// Cờ <c>x2</c> = chỉ đóng BHYT, tức KHÔNG đóng BHXH. Tập cờ cắt đoàn phí trước đây thiếu đúng
+    /// cờ này nên người mang nó vẫn bị thu.
+    /// </summary>
+    [Fact(DisplayName = "X7 · Cờ x2 (chỉ đóng BHYT) ⇒ đoàn phí = 0")]
+    public void HealthOnlyFlag_ChargesNoUnionDues()
+    {
+        UnionDues(salary: 7_000_000m, rate: 0.01m, cap: Cap, isMember: 1m, flag: InsuranceFlags.HealthOnly)
+            .Should().Be(0m, "cờ x2 nói rõ không đóng BHXH");
+    }
+
+    [Fact(DisplayName = "X7 · Đối chứng — HĐ đóng đủ BHXH thì vẫn thu như cũ")]
+    public void ContractWithSocialInsuranceOn_StillCharges()
+    {
+        UnionDues(salary: 7_000_000m, rate: 0.01m, cap: Cap, isMember: 1m,
+                flag: InsuranceFlags.Full, noSocialInsurance: 0m)
+            .Should().Be(70_000m);
+    }
+
     /// <summary>
     /// Chạy ĐÚNG công thức của bảng mặc định (không chép lại phép tính vào test) trên bộ input tối
     /// thiểu đủ để cột PHICONGDOANVIEN tính được.
     /// </summary>
     private static decimal UnionDues(
         decimal salary, decimal rate, decimal cap, decimal isMember,
-        decimal congChuan = 26m, decimal congTinhCom = 26m)
+        decimal congChuan = 26m, decimal congTinhCom = 26m,
+        string flag = InsuranceFlags.Full, decimal congKhongBaoHiem = 0m,
+        decimal noSocialInsurance = 0m)
     {
         var graph = new ColumnDependencyGraph();
         var calculator = new PayrollCalculator(new FormulaEvaluator(new FormulaFunctionRegistry()), graph);
@@ -91,10 +196,12 @@ public sealed class PayrollUnionDuesFormulaTests
                 [PayrollFieldKeys.UnionDuesRate] = rate,
                 [PayrollFieldKeys.UnionDuesCap] = cap,
                 [PayrollFieldKeys.UnionMember] = isMember,
+                [PayrollFieldKeys.CongKhongBaoHiem] = congKhongBaoHiem,
+                [PayrollFieldKeys.ContractNoSocialInsurance] = noSocialInsurance,
             },
             Texts =
             {
-                [PayrollFieldKeys.ContractInsuranceFlag] = InsuranceFlags.Full,
+                [PayrollFieldKeys.ContractInsuranceFlag] = flag,
                 [PayrollFieldKeys.ContractTaxFlag] = TaxFlags.Progressive,
             },
         };

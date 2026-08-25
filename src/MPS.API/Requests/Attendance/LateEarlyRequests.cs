@@ -1,4 +1,4 @@
-using MPS.Domain.Enums.Attendance;
+﻿using MPS.Domain.Enums.Attendance;
 
 namespace MPS.API.Requests.Attendance;
 
@@ -12,7 +12,6 @@ public sealed record CreateLateEarlyRequest(
 
 public sealed record ApproveLateEarlyRequestBody(
     string? ReviewNote,
-    bool DeductFromLeaveBalance,
     string? OverrideReason);
 
 public sealed record RejectLateEarlyRequestBody(string? ReviewNote);

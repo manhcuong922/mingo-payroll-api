@@ -193,8 +193,11 @@ public sealed class RecalculatePayrollPeriodCommandHandler : IRequestHandler<Rec
         if (totalRow is not null)
             _calculator.ComputeTotals(plan, employeeRows, totalRow);
 
-        // Làm mới snapshot phụ thuộc số liệu (hệ số năng suất). Công thức + compliance giữ frozen.
+        // Làm mới snapshot phụ thuộc số liệu (hệ số năng suất, bậc hỗ trợ theo tiến độ của HĐ khoán).
+        // Công thức + compliance giữ frozen. Bỏ sót bảng nào ở đây thì số tiền trên dòng lương tính
+        // theo bảng MỚI trong khi snapshot của kỳ vẫn ghi bảng CŨ ⇒ kế toán đối chiếu ra hai đằng.
         period.ProductivitySnapshotJson = collection.ProductivitySnapshotJson;
+        period.PieceWorkSupportSnapshotJson = collection.PieceWorkSupportSnapshotJson;
 
         period.IsStale = false;
         period.StaleReason = null;

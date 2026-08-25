@@ -23,6 +23,22 @@ public static class PayrollColumnCodes
     public const string CongTinhLuong = "CONGTINHLUONG"; // công chính thức
     public const string CongHocViec = "CONGHOCVIEC";
 
+    /// <summary>
+    /// CC-2026-08 — công ngày lễ được cộng tự động (Đ.112 BLLĐ). Cột ĐỐI CHIẾU: giải thích vì sao
+    /// tổng công vẫn khớp công chuẩn dù NLĐ nghỉ lễ. Không cột nào chia cho cột này.
+    /// </summary>
+    public const string CongLe = "CONGLE";
+
+    /// <summary>
+    /// BH-14 — SỐ NGÀY làm việc có hưởng lương của kỳ (đếm theo ngày, nửa buổi vẫn tính 1 ngày).
+    /// Cột ĐỐI CHIẾU: dưới 14 ngày thì cả khối bảo hiểm về 0 theo QĐ 595 Đ.42, không có cột này thì
+    /// kế toán nhìn bảng không hiểu vì sao dòng đó không bị trừ bảo hiểm.
+    /// </summary>
+    public const string SoNgayCongHl = "SONGAYCONGHL";
+
+    /// <summary>Phase 2 — tổng giờ làm trong kỳ (ca chính + tăng ca), căn cứ xếp bậc hỗ trợ HĐ khoán.</summary>
+    public const string TongGioLam = "TONGGIOLAM";
+
     // Khối C — lương & phụ cấp tính lương T13
     public const string MucLuong = "MUCLUONG";
     public const string PhuCapLuong = "PHUCAPLUONG";
@@ -45,6 +61,19 @@ public static class PayrollColumnCodes
     public const string ThuongDuAn = "THUONGDUAN";
     public const string ThuongNam = "THUONGNAM";
     public const string ThuongKhac = "THUONGKHAC";
+
+    /// <summary>
+    /// Phase 2 — khoản HỖ TRỢ THEO TIẾN ĐỘ của HĐ khoán việc (bậc thang theo tổng giờ làm).
+    ///
+    /// <para>Cột RIÊNG chứ không ghi đè <c>PHUCAPLUONG</c> vì cột đó nằm trong nền chia theo ngày
+    /// công của <c>THUNHAP_PHANBO</c> — nhét 200k vào đó thì người làm 20/26 công chỉ nhận ~154k,
+    /// sai thoả thuận "đủ 150h là 200k". Ngoài ra <c>TROCAPTHUVIEC</c> tham chiếu
+    /// <c>PHUCAPLUONG</c> nên ghi đè sẽ nhân đôi khoản này.</para>
+    ///
+    /// <para>⚠️ Nhãn hiển thị phải là "Hỗ trợ theo tiến độ" — chứng từ của hợp đồng dân sự không
+    /// mang chữ "lương"/"thưởng".</para>
+    /// </summary>
+    public const string HoTroTienDo = "HOTRO_TIENDO";
 
     // BS-2 — phụ trội giờ THƯỜNG (ca chính thức, không qua đơn OT). Miễn thuế TNCN như CL_GLT.
     public const string PhuTroiNgayNghi = "PHUTROI_NGAYNGHI";  // ca rơi vào nghỉ tuần/lễ
@@ -70,6 +99,13 @@ public static class PayrollColumnCodes
     public const string GtBanThan = "GT_BT";
     public const string ChenhLechLtg = "CL_GLT";
     public const string ComMienThue = "ANTRUA";
+
+    /// <summary>
+    /// ⭐ X4 — phần tiền thuê nhà VƯỢT trần 15% ⇒ được MIỄN thuế TNCN, trừ khỏi thu nhập chịu thuế.
+    /// Có cột riêng chứ không tính chìm trong TNCT, cùng lý do với "Cơm miễn thuế": kế toán phải
+    /// giải trình được vì sao thu nhập chịu thuế thấp hơn tổng thu nhập.
+    /// </summary>
+    public const string NhaVuotTran = "NHA_VUOTTRAN";
     public const string Tnct = "TNCT";
     public const string Tntt = "TNTT";
     public const string ThueTncn = "THUETNCN";

@@ -30,6 +30,22 @@ public class ContractAppendix
 
     /// <summary>Đơn vị tiền của <see cref="SalaryAmountSnapshot"/>; kế thừa HĐ gốc.</summary>
     public string? SalaryCurrencySnapshot { get; set; }
+
+    /// <summary>
+    /// ⭐ Phase 6 — danh sách phụ cấp của hợp đồng NGAY TRƯỚC khi phụ lục này áp thay đổi
+    /// (<c>[{allowanceTypeId, amount, currency}]</c>). Null = phụ lục không đụng tới phụ cấp.
+    ///
+    /// <para><b>Vì sao lưu trạng thái TRƯỚC chứ không phải SAU:</b> <c>AppendixApplier</c> ghi đè
+    /// thẳng <c>ContractAllowances</c> nên trạng thái GỐC lúc ký hợp đồng bị mất ngay từ phụ lục
+    /// đầu tiên. Lưu "sau" thì vẫn không tái lập được các kỳ TRƯỚC phụ lục đầu tiên, phải thêm một
+    /// ô baseline nữa trên hợp đồng. Lưu "trước" thì tra ngược được toàn bộ lịch sử chỉ với một
+    /// cột: phụ cấp tại ngày D = ảnh "trước" của phụ lục CŨ NHẤT có hiệu lực SAU ngày D; không có
+    /// phụ lục nào như vậy ⇒ trạng thái hiện tại của hợp đồng.</para>
+    ///
+    /// <para>Không có ô này thì tính lại một kỳ CŨ sẽ ăn phụ cấp MỚI — sai lịch sử, ngược với lý do
+    /// đã làm <c>[D12]</c> cho lương.</para>
+    /// </summary>
+    public string? AllowanceSnapshotBeforeJson { get; set; }
     public DateTime? SignedAt { get; set; }
     public ContractEnums.AppendixStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -7,16 +7,16 @@ using ContractEnums = MPS.Domain.Enums.Contract;
 namespace MPS.Infrastructure.Tests.Services;
 
 /// <summary>
-/// A5 — <b>Quyết định đã chốt (PO, 01/08/2026): GIỮ NGUYÊN.</b> Phụ lục đổi lương chỉ áp từ kỳ
-/// lương KẾ TIẾP, không chia theo ngày hiệu lực trong kỳ đang chạy.
+/// A5 — <b>Quyết định PO 19/08/2026 (ĐẢO quyết định 01/08/2026):</b> phụ lục đổi lương được trả
+/// đúng TỪ NGÀY ghi trên phụ lục, chia theo ngày công trong kỳ đang chạy.
 ///
-/// <para>Lý do thiết kế (ghi chú <c>[D12]</c> tại <c>PayrollDataCollector</c>): mốc lương của kỳ
-/// chốt theo phụ lục có hiệu lực KHÔNG MUỘN HƠN đầu kỳ, nhờ vậy tính lại một kỳ CŨ luôn ra đúng
-/// mức lương của thời điểm đó.</para>
+/// <para>Quyết định cũ hoãn mức mới sang kỳ kế tiếp vì engine chưa tách được ngày công theo đoạn.
+/// Phase 5 đã dựng xong máy móc đó, nên ràng buộc cũ chỉ còn tạo lệch giữa văn bản đã ký (phụ lục
+/// ghi 15/09) và tiền thực trả (từ 01/10) — đúng thứ dễ thành tranh chấp.</para>
 ///
-/// <para>Đây là <b>test ghim quyết định</b>, không phải test lỗi: nếu ai đó sau này đổi sang chia
-/// theo ngày hiệu lực, test đỏ và buộc phải quay lại đọc quyết định này trước.
-/// ⚠️ Ràng buộc kèm theo: quy chế lương phải ghi rõ điều khoản này cho NLĐ.</para>
+/// <para><b>Vẫn giữ nguyên [D12]:</b> tính lại một kỳ CŨ phải ra đúng mức lương của thời điểm đó.
+/// Cơ chế là mốc <c>EffectiveFrom</c> của phụ lục lớn hơn mọi ngày trong kỳ cũ ⇒ không phụ lục nào
+/// khớp ⇒ rơi về mức đóng băng lúc ký. Có test canh riêng bên dưới.</para>
 /// </summary>
 public sealed class PayrollCollectorSalaryAppendixTests
 {
@@ -32,22 +32,39 @@ public sealed class PayrollCollectorSalaryAppendixTests
         SalaryAmountSnapshot = RaisedSalary,
     };
 
-    [Fact(DisplayName = "A5 · [Quyết định] Phụ lục tăng lương giữa tháng KHÔNG áp cho kỳ đang chạy")]
-    public async Task MidMonthAppendix_IsDeliberatelyDeferredToNextPeriod()
+    [Fact(DisplayName = "A5 · Phụ lục tăng lương giữa tháng được trả theo ĐOẠN, không hoãn sang kỳ sau")]
+    public async Task MidMonthAppendix_IsPaidFromItsEffectiveDate()
     {
         using var db = await SeedBaseAsync();
         db.ContractAppendices.Add(SalaryAppendix(new DateTime(Year, Month, 15)));
-        db.AttendanceRecords.Add(ShiftRecord(day: 20));
+        // 1 công trước mốc (mức cũ 10tr) + 3 công từ mốc (mức mới 12tr).
+        db.AttendanceRecords.AddRange(
+            ShiftRecord(day: 10),
+            ShiftRecord(day: 16), ShiftRecord(day: 17), ShiftRecord(day: 18));
         await db.SaveChangesAsync();
 
         var inputs = await CollectAsync(db);
 
-        inputs.Numbers[PayrollFieldKeys.ContractMucLuong].Should().Be(Salary,
-            "[D12] — kỳ 07 giữ nguyên mức lương cũ; mức mới bắt đầu từ kỳ 08");
+        // (10tr × 1 + 12tr × 3) / 4 = 11,5tr — mỗi ngày công ăn đúng mức của ngày đó.
+        inputs.Numbers[PayrollFieldKeys.ContractMucLuong].Should().Be(11_500_000m);
     }
 
-    [Fact(DisplayName = "A5 · [Quyết định] Phụ lục hiệu lực TỪ ĐẦU KỲ thì áp ngay kỳ đó")]
-    public async Task AppendixEffectiveFromPeriodStart_AppliesImmediately()
+    [Fact(DisplayName = "A5 · Ngày công ĐÚNG mốc hiệu lực đã ăn mức mới")]
+    public async Task DayOnEffectiveDate_UsesNewSalary()
+    {
+        // Biên: `EffectiveFrom` là ngày ĐẦU TIÊN áp mức mới (inclusive), không phải ngày sau đó.
+        using var db = await SeedBaseAsync();
+        db.ContractAppendices.Add(SalaryAppendix(new DateTime(Year, Month, 15)));
+        db.AttendanceRecords.Add(ShiftRecord(day: 15));
+        await db.SaveChangesAsync();
+
+        var inputs = await CollectAsync(db);
+
+        inputs.Numbers[PayrollFieldKeys.ContractMucLuong].Should().Be(RaisedSalary);
+    }
+
+    [Fact(DisplayName = "A5 · Phụ lục hiệu lực TỪ ĐẦU KỲ thì cả kỳ ăn mức mới")]
+    public async Task AppendixEffectiveFromPeriodStart_AppliesToWholePeriod()
     {
         using var db = await SeedBaseAsync();
         db.ContractAppendices.Add(SalaryAppendix(new DateTime(Year, Month, 1)));
@@ -56,8 +73,21 @@ public sealed class PayrollCollectorSalaryAppendixTests
 
         var inputs = await CollectAsync(db);
 
-        inputs.Numbers[PayrollFieldKeys.ContractMucLuong].Should().Be(RaisedSalary,
-            "ranh giới của quyết định: hiệu lực đúng đầu kỳ thì kỳ đó ăn mức mới — " +
-            "ghim để phân biệt 'cố ý hoãn' với 'phụ lục bị bỏ quên hoàn toàn'");
+        inputs.Numbers[PayrollFieldKeys.ContractMucLuong].Should().Be(RaisedSalary);
+    }
+
+    [Fact(DisplayName = "A5 · [D12] Kỳ CŨ tính lại vẫn ra mức lương của thời điểm đó")]
+    public async Task PastPeriod_KeepsSalaryOfItsOwnTime()
+    {
+        // Phụ lục ký cho THÁNG SAU kỳ đang tính ⇒ không ngày nào trong kỳ khớp mốc ⇒ mức cũ.
+        // Đây là ràng buộc lịch sử lương, KHÔNG bị quyết định 19/08/2026 nới lỏng.
+        using var db = await SeedBaseAsync();
+        db.ContractAppendices.Add(SalaryAppendix(new DateTime(Year, Month + 1, 1)));
+        db.AttendanceRecords.Add(ShiftRecord(day: 20));
+        await db.SaveChangesAsync();
+
+        var inputs = await CollectAsync(db);
+
+        inputs.Numbers[PayrollFieldKeys.ContractMucLuong].Should().Be(Salary);
     }
 }

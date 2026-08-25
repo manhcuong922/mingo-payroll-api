@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using MPS.API.Authorization;
 using MPS.API.Requests.Payroll;
 using MPS.Application.Features.Payroll.Commands;
+using MPS.Application.Features.Payroll.PaymentDocuments.Queries;
 using MPS.Application.Features.Payroll.Queries;
 using MPS.Domain.Constants;
 
@@ -21,6 +22,23 @@ public class PayrollController : ControllerBase
     public async Task<IActionResult> GetReadiness(
         [FromQuery] int year, [FromQuery] int month, CancellationToken ct)
         => Ok(await _mediator.Send(new GetPayrollReadinessQuery(year, month), ct));
+
+    /// <summary>
+    /// TẠM TÍNH bảng lương của tháng bằng dữ liệu có ĐẾN THỜI ĐIỂM GỌI — không phải đợi hết tháng.
+    ///
+    /// <para>Chỉ đọc tuyệt đối: chạy đúng engine của kỳ thật nhưng không ghi gì xuống DB, không
+    /// chiếm chỗ kỳ lương của tháng, gọi lại bao nhiêu lần cũng được. Cổng đủ liệu ở đây là CẢNH
+    /// BÁO chứ không chặn — xem <c>GetPayrollPreviewQuery</c> để biết vì sao con số không bằng
+    /// "lương nửa tháng" theo trực giác.</para>
+    /// </summary>
+    [HttpGet("periods/preview")]
+    [HasPermission(Permissions.PayrollReadAll)]
+    public async Task<IActionResult> GetPreview(
+        [FromQuery] int year, [FromQuery] int month,
+        [FromQuery] int? formulaSetId, [FromQuery] decimal? standardWorkingDays,
+        CancellationToken ct)
+        => Ok(await _mediator.Send(
+            new GetPayrollPreviewQuery(year, month, formulaSetId, standardWorkingDays), ct));
 
     [HttpGet("periods")]
     [HasPermission(Permissions.PayrollReadAll)]
@@ -134,5 +152,58 @@ public class PayrollController : ControllerBase
     {
         await _mediator.Send(new DeletePayrollPeriodCommand(id), ct);
         return NoContent();
+    }
+
+    // ===== Chứng từ chi trả =====
+    // Cầm số tiền + số tài khoản của TOÀN BỘ nhân sự nên dùng quyền riêng, KHÔNG mở cho HR như
+    // các quyền nhân sự thường; xem trước cũng vậy vì nó đã hiện tổng chi và danh sách NV.
+
+    /// <summary>
+    /// Xem trước lệnh chi lương + ủy nhiệm chi nộp BHXH của kỳ: tổng tiền, số người, ai bị loại
+    /// và thiếu ô cấu hình nào. Dùng để chặn trước khi mang chứng từ ra ngân hàng.
+    /// </summary>
+    [HttpGet("periods/{id:int}/payment-documents/preview")]
+    [HasPermission(Permissions.PayrollDocumentExportAll)]
+    public async Task<IActionResult> PreviewPaymentDocuments(int id, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetPeriodPaymentDocumentsPreviewQuery(id), ct));
+
+    /// <summary>Đề nghị thanh toán lương kiêm ủy nhiệm chi — VPBank, mẫu MB01.QT-NVTT/07 (.xlsx).</summary>
+    [HttpGet("periods/{id:int}/payment-documents/salary-order")]
+    [HasPermission(Permissions.PayrollDocumentExportAll)]
+    public async Task<IActionResult> ExportSalaryPaymentOrder(int id, CancellationToken ct)
+    {
+        var file = await _mediator.Send(new ExportSalaryPaymentOrderQuery(id), ct);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    /// <summary>Ủy nhiệm chi nộp BHXH/BHYT/BHTN — Agribank, mẫu DP004 (.xlsx).</summary>
+    [HttpGet("periods/{id:int}/payment-documents/bhxh-remittance")]
+    [HasPermission(Permissions.PayrollDocumentExportAll)]
+    public async Task<IActionResult> ExportBhxhRemittance(int id, CancellationToken ct)
+    {
+        var file = await _mediator.Send(new ExportBhxhRemittanceQuery(id), ct);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    /// <summary>
+    /// Bảng đối chiếu quyết toán thuế TNCN của năm: thuế tính theo biểu năm so với thuế đã khấu trừ
+    /// 12 tháng, lệch bao nhiêu cho từng NV.
+    /// </summary>
+    [HttpGet("pit-finalization/{year:int}/preview")]
+    [HasPermission(Permissions.PayrollDocumentExportAll)]
+    public async Task<IActionResult> PreviewPitFinalization(int year, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetPitFinalizationPreviewQuery(year), ct));
+
+    /// <summary>
+    /// Tờ khai quyết toán thuế TNCN mẫu 02/QTT-TNCN. Một NV ⇒ .docx; bỏ trống
+    /// <paramref name="employeeInformationId"/> ⇒ .zip gồm tờ khai của từng người.
+    /// </summary>
+    [HttpGet("pit-finalization/{year:int}/export")]
+    [HasPermission(Permissions.PayrollDocumentExportAll)]
+    public async Task<IActionResult> ExportPitFinalization(
+        int year, [FromQuery] int? employeeInformationId, CancellationToken ct)
+    {
+        var file = await _mediator.Send(new ExportPitFinalizationQuery(year, employeeInformationId), ct);
+        return File(file.Content, file.ContentType, file.FileName);
     }
 }

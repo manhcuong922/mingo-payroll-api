@@ -53,6 +53,7 @@ public sealed record PitRegulationSnapshot(
     int ShortTermContractMaxMonths,
     decimal ShortTermFlatRatePercent,
     decimal ShortTermTaxExemptMonthlyIncome,
+    decimal HousingExemptRatePercent,
     IReadOnlyList<PitBracketSnapshot> Brackets,
     string LegalReference)
 {

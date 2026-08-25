@@ -58,11 +58,61 @@ public static class DefaultPayrollFormulaSet
         FormulaNode ProrateByCong(FormulaNode value) =>
             N.Mul(N.Div(value, N.Col(Cc.CongChuan)), N.Col(Cc.CongTinhCom));
 
-        FormulaNode Bh(string rateField, string capField) =>
-            BhWithCap(rateField, N.Field(capField));
+        // ⭐ Phase 5 — nền đóng BH chỉ tính trên phần công THUỘC DIỆN ĐÓNG. Tháng chuyển thử việc →
+        // chính thức trước đây bị thu BH trên cả những ngày còn thử việc (HĐ thử việc riêng không
+        // đóng BH nào), vì cả kỳ dùng chung một cờ BH của hợp đồng đại diện.
+        //
+        // Trừ đi thay vì nhân trực tiếp "công CÓ bảo hiểm" là có chủ đích: kỳ lương cũ thiếu khoá ⇒
+        // `ToFields` điền 0 ⇒ trừ 0 ⇒ nền đóng vẫn nguyên như trước. Xem `PayrollFieldKeys.CongKhongBaoHiem`.
+        //
+        // ⭐ CC-2026-08 — tử số đổi từ `CONGTINHCOM` sang `CONGHUONGLUONG` (đã gồm CÔNG NGÀY LỄ).
+        // Bắt buộc: công chuẩn nay KHÔNG trừ lễ nên mẫu số to lên; giữ tử số là công đi làm thật thì
+        // nền đóng BHXH tụt đúng bằng tỉ lệ ngày lễ của tháng (tháng Tết ~23%) ⇒ đóng thiếu BH.
+        // `CONGTINHCOM` vẫn dành riêng cho tiền cơm (nghỉ lễ ở nhà không ăn cơm ca).
+        //
+        // Fallback về `CONGTINHCOM` khi khoá mới = 0: kỳ lương chốt TRƯỚC bản sửa này không có khoá
+        // ⇒ `ToFields` điền 0 ⇒ không fallback thì nền đóng của kỳ cũ tụt về 0.
+        var congHuongLuong = N.If(
+            N.Cmp(">", N.Field(Fk.CongHuongLuong), N.Const(0m)),
+            N.Field(Fk.CongHuongLuong),
+            N.Col(Cc.CongTinhCom));
 
-        FormulaNode BhWithCap(string rateField, FormulaNode capNode) =>
-            N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(rateField), capNode);
+        // Số công THUỘC DIỆN ĐÓNG của kỳ. Tách thành biến riêng vì ngoài việc chia nền đóng, nó còn
+        // là căn cứ trả lời câu "tháng này có tiền lương làm căn cứ đóng BHXH hay không" — thứ mà
+        // đoàn phí cần (xem cột PHICONGDOANVIEN).
+        var congCoBaoHiem = N.Func(Fn.Max,
+            N.Sub(congHuongLuong, N.Field(Fk.CongKhongBaoHiem)),
+            N.Const(0m));
+
+        FormulaNode ProrateByCongCoBaoHiem(FormulaNode value) =>
+            N.Mul(N.Div(value, N.Col(Cc.CongChuan)), congCoBaoHiem);
+
+        FormulaNode Bh(string rateField, string capField, string cappedField) =>
+            BhWithCap(rateField, N.Field(capField), cappedField);
+
+        // ⭐ X2a — nền đóng BH là "tiền lương + phụ cấp lương" (QĐ 595, Đ.30.2), không phải mỗi mức
+        // lương. Trước đây phụ cấp độc hại / trách nhiệm đã tick "tính vào nền BHXH" trong danh mục
+        // vẫn đứng ngoài ⇒ đóng THIẾU. Kỳ lương cũ không có khoá này ⇒ cộng 0 ⇒ giữ nguyên số cũ.
+        var nenDongBh = N.Add(N.Col(Cc.MucLuong), N.Field(Fk.ContractAllowanceNenPhuCapLuong));
+
+        // ⭐ X1 — TRẦN CHẶN MỨC LƯƠNG THÁNG, chia theo ngày công là bước SAU (QĐ 595). Trước đây thứ
+        // tự bị đảo: `MIN(nền_đã_chia, trần)`. Đứng riêng một trục thì không lộ — người đủ công,
+        // lương không đổi vẫn ra nền đúng bằng trần. Ghép thêm trục thứ hai mới sai:
+        //   · thiếu công — GĐ lương 55tr nghỉ ốm còn 8/22 công: engine chia trước ra nền 20tr, thấy
+        //     chưa chạm trần 46,8tr nên thu đủ trên 20tr. Đúng ra 46,8tr × 8/22 = 17.018.182đ.
+        //   · nâng bậc giữa kỳ — 45tr→55tr từ 16/05: engine bình quân ra 49.761.905 rồi mới kẹp còn
+        //     46.800.000. Đúng ra kẹp TỪNG ĐOẠN rồi bình quân: (11×45tr + 10×46,8tr)/21 = 45.857.143đ.
+        // Cả hai đều thu THỪA. Không thể sửa bằng cách đảo `MIN` ra ngoài ngay tại đây: cột MUCLUONG
+        // đã là bình quân, thông tin từng đoạn lương đã mất. Nền phải được kẹp trần TỪ TẦNG NGÀY ở
+        // collector rồi mới bình quân — đó là ba khoá `contract.mucLuongCap*`.
+        //
+        // Thiếu khoá (kỳ lương tạo TRƯỚC bản sửa) ⇒ 0 ⇒ lùi về nền cũ ⇒ số giữ nguyên.
+        FormulaNode CappedBase(string cappedField) =>
+            N.If(N.Cmp(">", N.Field(cappedField), N.Const(0m)), N.Field(cappedField), nenDongBh);
+
+        FormulaNode BhWithCap(string rateField, FormulaNode capNode, string cappedField) =>
+            N.Func(Fn.InsuranceWithCap, ProrateByCongCoBaoHiem(CappedBase(cappedField)),
+                N.Field(rateField), capNode);
 
         // ⭐ D3 — BHYT có trần RIÊNG (hệ số trần BHYT trên màn hình cấu hình BHXH), trước đây bị bỏ
         // qua và dùng chung trần BHXH nên admin sửa ô đó không có tác dụng gì.
@@ -100,13 +150,42 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.CongThuViec, "Công thử việc", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongThuViec);
         Add(Cc.CongTinhLuong, "Công chính thức", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongChinhThuc);
         Add(Cc.CongHocViec, "Công học việc", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongHocViec);
+        // ⭐ CC-2026-08 — cột ĐỐI CHIẾU: công chuẩn không còn trừ ngày lễ, bù lại ngày lễ được cộng
+        // vào công hưởng lương. Không có cột này thì kế toán nhìn bảng sẽ không hiểu vì sao NV nghỉ
+        // Tết vẫn đủ công. Không công thức nào đọc cột này.
+        Add(Cc.CongLe, "Công ngày lễ", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.CongLe,
+            editable: false);
+        // ⭐ BH-14 — cột ĐỐI CHIẾU cho cổng miễn bảo hiểm bên khối F: dưới 14 ngày thì cả khối BH về
+        // 0 (QĐ 595 Đ.42). Không có cột này thì kế toán thấy một dòng không bị trừ đồng bảo hiểm nào
+        // mà không có gì trên bảng giải thích — đúng kiểu lỗi im lặng, chỉ theo chiều ngược lại.
+        // Đếm theo NGÀY nên KHÁC tổng công ở các cột bên cạnh (nửa buổi = 0,5 công nhưng vẫn 1 ngày).
+        Add(Cc.SoNgayCongHl, "Số ngày công hưởng lương", GB, ColumnDataType.Number,
+            ColumnValueSource.Lookup, Fk.SoNgayCongHuongLuong, editable: false);
+        // Phase 2 — tổng giờ làm (ca chính + tăng ca thực tế): căn cứ xếp bậc "Hỗ trợ theo tiến độ"
+        // của HĐ khoán. Để kế toán đối chiếu vì sao ra mốc đó; không tham gia công thức nào khác.
+        Add(Cc.TongGioLam, "Tổng giờ làm", GB, ColumnDataType.Number, ColumnValueSource.Lookup, Fk.TotalWorkHours);
 
         // ===== Khối C — lương & phụ cấp tính lương T13 =====
         Add(Cc.MucLuong, "Mức lương", GC, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractMucLuong, money: true);
+        // Phase 2 — HĐ KHOÁN VIỆC không hưởng khoản theo hệ số năng suất; thay bằng "Hỗ trợ theo
+        // tiến độ" ở khối E (cột riêng để trả NGUYÊN, không bị chia theo ngày công).
+        // Cờ `contract.isPieceWork` mang ngữ nghĩa "CÓ phải khoán không" nên kỳ lương cũ (thiếu khoá
+        // ⇒ ToFields điền 0) chạy đúng nhánh cũ.
         Add(Cc.PhuCapLuong, "Trợ cấp lương chính", GC, ColumnDataType.Money, ColumnValueSource.Formula,
-            formula: N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.ProductivityCoefficient)), money: true);
-        Add(Cc.TroCapThuViec, "Trợ cấp thử việc", GC, ColumnDataType.Money, ColumnValueSource.Formula,
-            formula: N.Col(Cc.PhuCapLuong), money: true);
+            formula: N.If(
+                N.Cmp("=", N.Field(Fk.ContractIsPieceWork), N.Const(1m)),
+                N.Const(0m),
+                N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.ProductivityCoefficient))), money: true);
+        // ⭐ Phase 5 — collector tính sẵn phần BÙ để những ngày còn thử việc trong kỳ rơi về mức thử
+        // việc THẬT ghi trên hợp đồng; cột chỉ tra khoá. Trước đây cột này = PHUCAPLUONG nên hai
+        // nhánh thử việc / chính thức của THU_NHAP_PHANBO bằng nhau ⇒ tách công ra không tạo chênh
+        // lệch tiền nào, nửa tháng còn thử việc vẫn được trả theo mức chính thức.
+        //
+        // KHÔNG đặt hằng số 0.85 vào công thức: HĐ thử việc riêng vốn đã lấy `ProbationSalary` (85%)
+        // làm MUCLUONG nên nhân tiếp 0.85 ra 72,25% — thấp hơn sàn Điều 26 BLLĐ 2019; và 85% là mức
+        // SÀN, hợp đồng có thể thoả thuận 90%/95%.
+        Add(Cc.TroCapThuViec, "Trợ cấp thử việc", GC, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.ContractTroCapThuViec, money: true);
         Add(Cc.HocViec, "Học việc", GC, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThueNha, "Thuê nhà", GC, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceThueNha, money: true);
         Add(Cc.DienThoai, "Điện thoại", GC, ColumnDataType.Money, ColumnValueSource.Input, Fk.ContractAllowanceDienThoai, money: true);
@@ -149,7 +228,13 @@ public static class DefaultPayrollFormulaSet
         Add(Cc.LuongNgayPhep, "Lương ngày phép", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.TangCa, "Tăng ca", GE, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.OtTangCa, money: true);
         Add(Cc.HoaHong, "Hoa hồng", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
-        Add(Cc.ThuongDuAn, "Thưởng dự án", GE, ColumnDataType.Money, ColumnValueSource.Lookup, Fk.BonusThuongDuAn, money: true);
+        // ⭐ A4 — cột này từng khai `Lookup` vào một field mà collector luôn đổ 0, nên nó chết cứng ở
+        // 0 với MỌI dữ liệu đầu vào: kế toán không sửa được (không phải Input), hệ thống cũng không
+        // tra được (không có khái niệm "dự án có thưởng" hay bảng phân bổ thưởng theo NLĐ) ⇒ tiền
+        // thưởng dự án không bao giờ tới tay NLĐ.
+        // Quyết định PO 19/08/2026: mở thành Input để kế toán nhập tay như Thưởng năm / Thưởng khác
+        // ngay cạnh. Dựng nguồn dữ liệu thật là một module riêng, chưa làm.
+        Add(Cc.ThuongDuAn, "Thưởng dự án", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThuongNam, "Thưởng năm", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         Add(Cc.ThuongKhac, "Thưởng khác", GE, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // BS-2 — ca CHÍNH THỨC rơi vào ngày nghỉ tuần/lễ chỉ được trả 100% qua cột Thu nhập (phân bổ
@@ -159,15 +244,45 @@ public static class DefaultPayrollFormulaSet
             Fk.PremiumDayType, money: true);
         Add(Cc.PhuCapDem, "Phụ cấp làm đêm", GE, ColumnDataType.Money, ColumnValueSource.Lookup,
             Fk.PremiumNight, money: true);
+        // Phase 2 — HĐ khoán việc: khoản hỗ trợ theo mốc tổng giờ làm (từ 150h / từ 200h), collector
+        // tra sẵn thành tiền từ bảng bậc `PieceWorkSupportBand`. Cộng THẲNG vào tổng thu nhập nên
+        // KHÔNG bị chia theo ngày công — đủ giờ là nhận đủ, đúng thoả thuận trên hợp đồng.
+        // Loại HĐ khác ⇒ field = 0 ⇒ cột này = 0.
+        Add(Cc.HoTroTienDo, "Hỗ trợ theo tiến độ", GE, ColumnDataType.Money, ColumnValueSource.Lookup,
+            Fk.PieceWorkSupport, money: true);
         Add(Cc.TongThuNhap, "Tổng thu nhập", GE, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.ThuNhap), N.Col(Cc.LuongNgayPhep), N.Col(Cc.TangCa),
                 N.Col(Cc.HoaHong), N.Col(Cc.ThuongDuAn), N.Col(Cc.ThuongNam), N.Col(Cc.ThuongKhac),
-                N.Col(Cc.PhuTroiNgayNghi), N.Col(Cc.PhuCapDem)));
+                N.Col(Cc.PhuTroiNgayNghi), N.Col(Cc.PhuCapDem), N.Col(Cc.HoTroTienDo)));
 
         // ===== Khối F — bảo hiểm =====
         var noBh = new[] { InsuranceFlags.NoInsurance, InsuranceFlags.Maternity };
         var noBhOrHealthOnly = new[] { InsuranceFlags.NoInsurance, InsuranceFlags.Maternity, InsuranceFlags.HealthOnly };
-        var noUnion = new[] { InsuranceFlags.NoUnion, InsuranceFlags.NoInsurance, InsuranceFlags.Maternity };
+        // ⭐ X7 — KPCĐ và đoàn phí đều thu trên "quỹ tiền lương làm căn cứ đóng BHXH" (Luật Công đoàn
+        // 50/2024 Đ.30 cho KPCĐ, QĐ 1908 Đ.23 cho đoàn phí). Không có căn cứ đóng BHXH ⇒ không có gì
+        // để nhân tỷ lệ ⇒ cả hai đều bằng 0. Tập cờ vì thế phải là tập cờ CẮT BHXH cộng thêm `x`
+        // (cờ đè tay nói riêng về công đoàn), chứ không phải một tập tự chế.
+        //
+        // Trước đây tập này thiếu `x2` (chỉ đóng BHYT) nên hợp đồng tắt riêng BHXH mà giữ BHYT ra
+        // BHXH = 0 nhưng KPCĐ và đoàn phí vẫn thu đủ.
+        var noUnion = noBhOrHealthOnly.Append(InsuranceFlags.NoUnion).ToArray();
+
+        // ⭐ BH-14 (QĐ 595 Đ.42 k.4–5; BHYT: NĐ 146/2018 Đ.7 k.8; BHTN: NĐ 28/2015 Đ.11) — tháng NLĐ
+        // có DƯỚI 14 ngày làm việc hưởng lương thì KHÔNG đóng bảo hiểm tháng đó. Trước bản sửa này
+        // engine chỉ biết chia bảo hiểm theo tỷ lệ ngày công, nên người nghỉ quá nửa tháng vẫn bị
+        // thu — sai cả về số tiền lẫn về hồ sơ báo giảm gửi cơ quan BHXH.
+        //
+        // Đặt thành một tầng RIÊNG, nhân ngoài cùng, thay vì sửa `ProrateByCongCoBaoHiem`: đây là
+        // cổng CẮT CẢ THÁNG (nhân 0), độc lập hoàn toàn với phép chia theo ngày công. Trộn hai thứ
+        // vào một biểu thức là sau này không ai đọc ra được cái nào đang chi phối con số.
+        //
+        // Kỳ lương cũ không có khoá ⇒ 0 ⇒ nhân (1 − 0) ⇒ giữ nguyên số đã chốt. Xem ghi chú chiều
+        // NGƯỢC ở `PayrollFieldKeys.MienBhThieuNgayCong`.
+        //
+        // KPCĐ + đoàn phí cũng bị cắt theo, cùng lý do đã ghi ở X7: cả hai thu trên "quỹ tiền lương
+        // làm căn cứ đóng BHXH" — tháng không có căn cứ đóng thì không có gì để nhân tỷ lệ.
+        FormulaNode UnlessMonthExempt(FormulaNode value) =>
+            UnlessExempt(Fk.MienBhThieuNgayCong, value);
 
         // ⭐ A7 — mỗi cột BH nhân thêm CÔNG TẮC RIÊNG của hợp đồng (1/0).
         //
@@ -188,26 +303,63 @@ public static class DefaultPayrollFormulaSet
             N.Mul(value, N.Sub(N.Const(1m), N.Field(exemptField)));
 
         Add(Cc.DnBhxh, "BHXH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhDnRate, Fk.BhxhBhytCap))));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhDnRate, Fk.BhxhBhytCap, Fk.ContractMucLuongCapBhxh)))));
         Add(Cc.NldBhxh, "BHXH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhNldRate, Fk.BhxhBhytCap))));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoSocialInsurance, Bh(Fk.BhxhNldRate, Fk.BhxhBhytCap, Fk.ContractMucLuongCapBhxh)))));
         Add(Cc.DnBhyt, "BHYT – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBh,
-                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytDnRate, bhytCap))));
+            formula: SkipIfFlag(Cc.FlagBh, noBh, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytDnRate, bhytCap, Fk.ContractMucLuongCapBhyt)))));
         Add(Cc.NldBhyt, "BHYT – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBh,
-                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytNldRate, bhytCap))));
+            formula: SkipIfFlag(Cc.FlagBh, noBh, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoHealthInsurance, BhWithCap(Fk.BhytNldRate, bhytCap, Fk.ContractMucLuongCapBhyt)))));
         Add(Cc.DnBhtn, "BHTN – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnDnRate, Fk.BhtnCap))));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnDnRate, Fk.BhtnCap, Fk.ContractMucLuongCapBhtn)))));
         Add(Cc.NldBhtn, "BHTN – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly,
-                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnNldRate, Fk.BhtnCap))));
+            formula: SkipIfFlag(Cc.FlagBh, noBhOrHealthOnly, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoUnemploymentInsurance, Bh(Fk.BhtnNldRate, Fk.BhtnCap, Fk.ContractMucLuongCapBhtn)))));
+        // KPCĐ có HAI tầng chặn, cố ý giống hệt 3 cột BH ở trên (bản sửa A7):
+        //   · công tắc HĐ  — sự thật ghi trong hợp đồng (`Contract.UnionFundExemptFlag`);
+        //   · cờ FLAGBH    — kênh đè tay theo kỳ ([D23]), vd thai sản.
+        // Trước đây chỉ có tầng cờ, mà cờ được suy theo thứ tự ưu tiên nên HĐ "chỉ đóng BHYT" ra
+        // `x2` và không bao giờ chạm nhánh `x` ⇒ tick "miễn KPCĐ" bị bỏ qua, vẫn trích đủ 2%.
+        // ⭐ X6 (PO chốt 23/08/2026) — KPCĐ CÓ TRẦN, dùng chung trần và chung nền với BHXH.
+        //
+        // Luật Công đoàn 50/2024/QH15 (hiệu lực 01/07/2025): KPCĐ = 2% **quỹ tiền lương làm căn cứ
+        // đóng BHXH bắt buộc**. "Làm căn cứ đóng BHXH" đã bao hàm trần 20 lần mức tham chiếu — chính
+        // là trần mà 7 cột bảo hiểm đang dùng ⇒ mức KPCĐ tối đa 46.800.000 × 2% = 936.000đ/người/
+        // tháng (từ 01/07/2026: 50.600.000 × 2% = 1.012.000đ).
+        //
+        // Trước đây cột này truyền `cap = 0` (KHÔNG áp trần) nên người lương trên trần bị trích vượt.
+        // Nó cũng là cột DUY NHẤT còn dùng nền chưa kẹp trần theo ngày sau bản sửa X1 — nay thống
+        // nhất luôn, vì cùng một định nghĩa "quỹ tiền lương làm căn cứ đóng BHXH" thì không thể có
+        // hai cách tính.
+        //
+        // Cổng lùi cho kỳ cũ dùng chính field của X1 chứ không dùng trần: khoá `BhxhBhytCap` đã tồn
+        // tại từ lâu nên có mặt trong cả snapshot cũ — lấy nó làm điều kiện thì kỳ cũ cũng bị áp
+        // trần, tức bản sửa hồi tố. `ContractMucLuongCapBhxh` mới có từ X1, vắng mặt ở kỳ cũ, nên
+        // dùng nó làm cổng thì kỳ cũ giữ nguyên `cap = 0` như trước.
+        var kpcdCap = N.If(N.Cmp(">", N.Field(Fk.ContractMucLuongCapBhxh), N.Const(0m)),
+            N.Field(Fk.BhxhBhytCap),
+            N.Const(0m));
+
+        // ⚠️ Tầng CÔNG TẮC BHXH của hợp đồng là bắt buộc, cờ không thay thế được: hợp đồng tắt BHXH
+        // mà vẫn bật BHYT **và** BHTN thì `ResolveInsuranceFlag` không khớp nhánh nào và trả về `x3`
+        // — "đóng đầy đủ". Cờ nói có, thực tế BHXH = 0. Chỉ công tắc mới bắt được ca đó.
+        //
+        // KPCĐ KHÔNG nhân cờ đoàn viên: đây là nghĩa vụ của DOANH NGHIỆP với tổ chức công đoàn, trích
+        // trên quỹ lương của MỌI người lao động — kể cả người không tham gia công đoàn. Khác hẳn đoàn
+        // phí (nghĩa vụ cá nhân của đoàn viên). Giữ nguyên như trước, ghi ra đây để không ai "sửa"
+        // thành nhân cờ đoàn viên cho giống cột dưới.
         Add(Cc.Kpcd, "KPCĐ (DN)", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: SkipIfFlag(Cc.FlagBh, noUnion,
-                N.Func(Fn.InsuranceWithCap, ProrateByCong(N.Col(Cc.MucLuong)), N.Field(Fk.KpcdRate), N.Const(0m))));
+            formula: SkipIfFlag(Cc.FlagBh, noUnion, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoSocialInsurance,
+                    UnlessExempt(Fk.ContractUnionFundExempt,
+                        N.Func(Fn.InsuranceWithCap,
+                            ProrateByCongCoBaoHiem(CappedBase(Fk.ContractMucLuongCapBhxh)),
+                            N.Field(Fk.KpcdRate), kpcdCap))))));
         Add(Cc.CongBhDn, "Cộng BH – DN", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Sum, N.Col(Cc.DnBhxh), N.Col(Cc.DnBhyt), N.Col(Cc.DnBhtn)));
         Add(Cc.CongBhNld, "Cộng BH – NLĐ", GF, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
@@ -234,20 +386,74 @@ public static class DefaultPayrollFormulaSet
             formula: N.Func(Fn.Min, N.Col(Cc.Com), N.Field(Fk.MealExemptThreshold)));
         // BS-2 — phụ trội ngày nghỉ/lễ + phụ cấp đêm là phần trả CAO HƠN mức ngày thường do làm đêm/
         // làm thêm ⇒ MIỄN thuế TNCN (Đ.3 TT111/2013), trừ khỏi TNCT giống cột "Tăng ca miễn thuế".
+        // ⭐ X4 — TIỀN THUÊ NHÀ do DN trả thay chỉ tính vào thu nhập chịu thuế TỐI ĐA 15% tổng thu
+        // nhập chịu thuế CHƯA GỒM tiền nhà (TT 111/2013 Đ.11.1); phần vượt được MIỄN. Bước kẹp này
+        // trước đây không tồn tại — tiền nhà chảy thẳng vào thu nhập rồi vào TNCT, đánh thuế đủ.
+        //
+        // Nền tính trần = mọi khoản chịu thuế TRỪ chính tiền nhà. Viết lại từ các số hạng của TNCT
+        // thay vì lấy `TNCT − THUENHA` vì TNCT phụ thuộc ngược lại vào cột này (vòng lặp).
+        var nenTranNha = N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
+            N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)),
+            N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)),
+            N.Add(N.Field(Fk.ContractAllowanceMienThue), N.Col(Cc.ThueNha)));
+
+        // ⚠️ Tỷ lệ = 0 nghĩa là KHÔNG áp trần — quy ước của `BH_CO_TRAN`, KHÔNG phải quy ước "thiếu
+        // khoá ⇒ 0" thông thường. Hiểu 0 là "trần bằng 0" thì kỳ lương cũ sẽ miễn thuế TOÀN BỘ tiền
+        // nhà, tức bản sửa tự ý xoá thuế của mọi kỳ cũ. Phải chặn ngay ở nhánh ngoài cùng.
+        // ⚠️ Nền phải SÀN 0 trước khi nhân tỷ lệ. Người nghỉ trọn tháng có thu nhập 0 nhưng vẫn bị trừ
+        // phụ cấp miễn thuế ⇒ nền âm ⇒ trần âm ⇒ `0 − trần_âm` ra số DƯƠNG, tức sinh ra "tiền nhà
+        // vượt trần" từ hư không cho người không hề hưởng tiền nhà. Đo được: một dòng lệch 60.000đ.
+        Add(Cc.NhaVuotTran, "Tiền nhà vượt trần (miễn thuế)", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
+            formula: N.If(N.Cmp(">", N.Field(Fk.HousingExemptRate), N.Const(0m)),
+                N.Func(Fn.Max,
+                    N.Sub(N.Col(Cc.ThueNha),
+                        N.Mul(N.Func(Fn.Max, nenTranNha, N.Const(0m)), N.Field(Fk.HousingExemptRate))),
+                    N.Const(0m)),
+                N.Const(0m)));
+
+        // ⭐ X2c — trừ thêm các phụ cấp đã tick "không chịu thuế" trong danh mục (công tác phí khoán,
+        // trang phục…). Trước đây chỉ 2 mã có cột riêng được miễn, mọi mã khác rơi vào cột "Khác" và
+        // bị đánh thuế đủ. Cơm KHÔNG nằm trong tổng này — đã có `ANTRUA` với ngưỡng riêng.
+        // Kỳ lương cũ thiếu khoá ⇒ trừ 0 ⇒ thuế giữ nguyên.
+        // SÀN 0: thu nhập chịu thuế không thể âm. Người nghỉ trọn tháng có tổng thu nhập 0, nhưng
+        // các khoản miễn thuế vẫn mang giá trị NGUYÊN THÁNG của hợp đồng (không chia theo công) nên
+        // phép trừ đẩy cột này xuống âm — vô nghĩa trên phiếu lương, và là mồi cho lỗi dấu ở bất kỳ
+        // cột nào tính tiếp từ đây.
         Add(Cc.Tnct, "Thu nhập chịu thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
+            formula: N.Func(Fn.Max, N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(N.Sub(
                 N.Col(Cc.TongThuNhap), N.Col(Cc.DienThoai)), N.Col(Cc.ChenhLechLtg)), N.Col(Cc.ComMienThue)),
-                N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)));
+                N.Col(Cc.PhuTroiNgayNghi)), N.Col(Cc.PhuCapDem)),
+                N.Field(Fk.ContractAllowanceMienThue)),
+                N.Col(Cc.NhaVuotTran)),
+                N.Const(0m)));
         Add(Cc.Tntt, "Thu nhập tính thuế", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             formula: N.Func(Fn.Max,
                 N.Sub(N.Sub(N.Sub(N.Col(Cc.Tnct), N.Col(Cc.CongBhNld)), N.Col(Cc.GtNpt)), N.Col(Cc.GtBanThan)),
                 N.Const(0m)));
+        // Phase 7 — thuế KHOÁN của cá nhân cư trú không ký HĐLĐ / ký dưới 3 tháng (TT 111/2013
+        // Đ.25.1.i): tỷ lệ + ngưỡng khấu trừ lấy từ Compliance thay vì hằng số, để đổi luật là sửa
+        // trên màn hình PitRegulation chứ không phải deploy lại.
+        //
+        // • Tỷ lệ: kỳ lương cũ thiếu khoá ⇒ 0, mà 0 sẽ XOÁ SẠCH thuế khoán ⇒ fallback về 0.10 —
+        //   đây là ngoại lệ có chủ đích của quy ước "thiếu khoá ⇒ 0 ⇒ giữ hành vi cũ".
+        // • Ngưỡng: NĐ 253/2026 nâng 2.000.000 → 5.000.000 mỗi lần chi trả; bảng lương chi 1
+        //   lần/tháng nên so với TỔNG THU NHẬP của kỳ. Dùng `<` chứ không `<=` vì điều khoản viết
+        //   "từ 5.000.000 trở lên thì khấu trừ". Ngưỡng = 0 (kỳ cũ) ⇒ không dòng nào lọt ⇒ hành vi cũ.
+        // • Ngưỡng KHÔNG áp cho nhánh 20%: mức đó dành cho cá nhân KHÔNG cư trú (Đ.25.1.a), không
+        //   kèm ngưỡng miễn nào.
+        var flatRate = N.If(N.Cmp(">", N.Field(Fk.ShortTermFlatRate), N.Const(0m)),
+            N.Field(Fk.ShortTermFlatRate),
+            N.Const(0.10m));
+        var flatTax = N.If(
+            N.Cmp("<", N.Col(Cc.TongThuNhap), N.Field(Fk.ShortTermTaxExemptIncome)),
+            N.Const(0m),
+            N.Mul(N.Col(Cc.TongThuNhap), flatRate));
         Add(Cc.ThueTncn, "Thuế TNCN", GG, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
             rounding: RoundingMode.ToThreeDecimals,
             formula: N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.Khoan20)),
                 N.Mul(N.Col(Cc.TongThuNhap), N.Const(0.20m)),
                 N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.Khoan10)),
-                    N.Mul(N.Col(Cc.TongThuNhap), N.Const(0.10m)),
+                    flatTax,
                     N.If(N.Cmp("=", N.Col(Cc.FlagThue), N.Literal(TaxFlags.CamKet)),
                         N.Const(0m),
                         N.Func(Fn.ProgressiveTax, N.Col(Cc.Tntt))))));
@@ -272,12 +478,40 @@ public static class DefaultPayrollFormulaSet
         // mẫu 08/2023 (PayrollGoldenReconciliationTests): 14.641.000 × 2% = 292.820 đúng bằng cột
         // đoàn phí trên file, prorate vào sẽ lệch.
         var unionDuesRaw = N.Mul(N.Col(Cc.MucLuong), N.Field(Fk.UnionDuesRate));
+        var unionDuesCapped = N.If(N.Cmp(">", N.Field(Fk.UnionDuesCap), N.Const(0m)),
+            N.Func(Fn.Min, unionDuesRaw, N.Field(Fk.UnionDuesCap)),
+            unionDuesRaw);
+
+        // ⭐ X3 — đoàn phí thu trên TIỀN LƯƠNG LÀM CĂN CỨ ĐÓNG BHXH (QĐ 1908 Đ.23). Tháng nào không
+        // có căn cứ đó thì không có đoàn phí. Cột này trước đây không có tầng chặn nào — cứ là đoàn
+        // viên là thu, bất kể tình trạng của kỳ. Hai chỗ rò đo được trên dữ liệu thật:
+        //
+        //   · cờ BH nói KHÔNG — `x` (miễn phí công đoàn), `x1` (không tính bảo hiểm), `TS` (thai
+        //     sản). Cả 7 cột bảo hiểm đều tôn trọng, riêng đoàn phí vẫn thu đều. Người part-time có
+        //     HĐ ghi rõ không tham gia bảo hiểm vẫn bị trừ 70.000đ/tháng.
+        //
+        //   · KHÔNG CÓ NGÀY CÔNG NÀO thuộc diện đóng — nghỉ thai sản / nghỉ không lương trọn tháng.
+        //     Cờ vẫn là `x3` nên tầng trên không cứu được. Hậu quả dây chuyền bắt được trên DB:
+        //     thu nhập 0 → vẫn trừ đoàn phí → thực nhận âm → `PayrollNetFloor` kẹp về 0 và GHI NỢ
+        //     treo sang kỳ sau; người nghỉ đẻ đi làm lại bị đòi đoàn phí của chính tháng nghỉ đẻ.
+        //
+        // Tầng thứ hai là chặn NHỊ PHÂN, cố ý KHÔNG phải `ProrateByCong`: có ngày công đóng BH thì
+        // thu đủ đoàn phí tháng, không có ngày nào thì thôi. Đoàn phí là khoản đóng theo THÁNG —
+        // xem ghi chú ngay trên và bài đối chiếu file lương thật 08/2023.
+        //
+        // ⚠️ CỐ Ý không thêm tầng `UnlessExempt(ContractUnionFundExempt)` như 7 cột BH và KPCĐ: công
+        // tắc đó là "miễn trích KPCĐ" — nghĩa vụ của DOANH NGHIỆP. Đoàn phí là nghĩa vụ của NGƯỜI
+        // LAO ĐỘNG và đã có cổng riêng đúng tầng của nó là cờ đoàn viên trên hồ sơ NV. Gộp hai thứ
+        // vào nhau là lẫn hai nghĩa vụ khác nhau.
+        //
+        // ⭐ X7 — tầng thứ BA: công tắc BHXH của hợp đồng. Cờ không thay thế được vì HĐ tắt BHXH mà
+        // vẫn bật BHYT + BHTN sẽ ra cờ `x3` ("đóng đầy đủ") dù BHXH thực tế = 0.
         Add(Cc.PhiCongDoanVien, "Phí công đoàn viên", GH, ColumnDataType.Money, ColumnValueSource.Formula, money: true,
-            formula: N.Mul(
-                N.If(N.Cmp(">", N.Field(Fk.UnionDuesCap), N.Const(0m)),
-                    N.Func(Fn.Min, unionDuesRaw, N.Field(Fk.UnionDuesCap)),
-                    unionDuesRaw),
-                N.Field(Fk.UnionMember)));
+            formula: SkipIfFlag(Cc.FlagBh, noUnion, UnlessMonthExempt(
+                UnlessExempt(Fk.ContractNoSocialInsurance,
+                    N.If(N.Cmp(">", congCoBaoHiem, N.Const(0m)),
+                        N.Mul(unionDuesCapped, N.Field(Fk.UnionMember)),
+                        N.Const(0m))))));
         Add(Cc.ChiKhac, "Chi khác", GH, ColumnDataType.Money, ColumnValueSource.Input, money: true);
         // BS-5 — 2 cột truy lĩnh / truy thu, seed từ field do handler tạo kỳ gom sẵn (mặc định 0 khi
         // NV không có khoản chưa áp). Dấu: TRUY_LINH dương (+); TRUY_THU âm (−) — cộng đại số vào THUCNHAN.
