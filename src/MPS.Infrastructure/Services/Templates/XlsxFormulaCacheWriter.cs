@@ -227,59 +227,62 @@ internal static class XlsxFormulaCacheWriter
 
         var current = new StringBuilder();
         var depth = 0;
-        var inQuotes = false;
 
         for (var i = 0; i < formula.Length; i++)
         {
             var c = formula[i];
 
-            if (inQuotes)
+            if (c == '"')
             {
-                current.Append(c);
-
-                if (c != '"') continue;
-
-                // "" bên trong chuỗi là ký tự nháy kép, không phải kết thúc chuỗi.
-                if (i + 1 < formula.Length && formula[i + 1] == '"')
-                {
-                    current.Append(formula[++i]);
-                    continue;
-                }
-
-                inQuotes = false;
+                if (!TryCopyQuotedLiteral(formula, ref i, current)) return false;
                 continue;
             }
 
-            switch (c)
+            if (c == '(') depth++;
+            else if (c == ')' && --depth < 0) return false;
+            else if (c == '&' && depth == 0)
             {
-                case '"':
-                    inQuotes = true;
-                    current.Append(c);
-                    break;
-                case '(':
-                    depth++;
-                    current.Append(c);
-                    break;
-                case ')':
-                    depth--;
-                    if (depth < 0) return false;
-                    current.Append(c);
-                    break;
-                case '&' when depth == 0:
-                    operands.Add(current.ToString());
-                    current.Clear();
-                    break;
-                default:
-                    current.Append(c);
-                    break;
+                operands.Add(current.ToString());
+                current.Clear();
+                continue;
             }
+
+            current.Append(c);
         }
 
-        if (inQuotes || depth != 0) return false;
+        if (depth != 0) return false;
 
         operands.Add(current.ToString());
 
         return operands.All(o => o.Trim().Length > 0);
+    }
+
+    /// <summary>
+    /// Sao nguyên hằng chuỗi <c>"..."</c> sang <paramref name="target"/> và đẩy
+    /// <paramref name="i"/> tới dấu nháy đóng. False = chuỗi thiếu dấu đóng.
+    /// </summary>
+    private static bool TryCopyQuotedLiteral(string formula, ref int i, StringBuilder target)
+    {
+        target.Append(formula[i]);
+
+        for (i++; i < formula.Length; i++)
+        {
+            var c = formula[i];
+            target.Append(c);
+
+            if (c != '"') continue;
+
+            // "" bên trong chuỗi là ký tự nháy kép, không phải dấu kết thúc chuỗi.
+            if (i + 1 < formula.Length && formula[i + 1] == '"')
+            {
+                target.Append(formula[++i]);
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private static string ToText(WrittenValue value)
