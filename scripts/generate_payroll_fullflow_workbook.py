@@ -472,6 +472,9 @@ def build_workbook() -> None:
          "Đơn Approved; lớp tạm tính sinh OnLeave", "Không có giờ công hai ngày nghỉ", "Bổ sung"),
         ("7 nhân viên nhiều bộ phận", "23-25/08/2026", "WFH",
          "Đơn WFH Approved + phân ca FULLTIME; ngày có lịch sinh chấm công từ xa", "Ngày 24-25 đủ công; Chủ nhật 23/08 không tự sinh 8 giờ", "Bổ sung"),
+        ("OPS001 / OPS002 / OPS003", "08/2026", "Phòng ban mới chưa có ca",
+         "User + hồ sơ + phòng OPS-NOSHIFT + chức danh + HĐLĐ Active; không có assignment/chấm công",
+         "Màn phân ca hiển thị phòng có nhân viên chưa xếp ca; readiness tháng 08 báo thiếu dữ liệu ca", "Blocker tháng 08"),
     ]
     for i, row in enumerate(operation_rows, 1):
         operations.append([i, *row])

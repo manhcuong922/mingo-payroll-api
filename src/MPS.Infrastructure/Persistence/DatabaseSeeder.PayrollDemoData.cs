@@ -262,6 +262,10 @@ public sealed partial class DatabaseSeeder
 
         var empIds = await _context.Contracts.AsNoTracking()
             .Where(c => c.Status != ContractEnums.ContractStatus.Cancelled
+                // Nhóm HDBLOCK được dựng SAU pha chuẩn bị payroll để kiểm thử cổng thiếu dữ liệu.
+                // Loại khỏi riêng lớp auto-setup của seeder; runtime tạo kỳ vẫn nhìn thấy HĐ Active
+                // và phải báo đúng lỗi chưa phân ca cho người dùng xử lý.
+                && !c.ContractNo.StartsWith(BlockerContractNoPrefix)
                 && c.EffectiveFrom <= endDt && (c.EffectiveTo == null || c.EffectiveTo >= startDt))
             .Select(c => c.EmployeeInformationId).Distinct().ToListAsync(ct);
         if (empIds.Count == 0) return;

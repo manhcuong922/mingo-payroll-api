@@ -87,6 +87,14 @@ Toàn bộ ca chính của bộ payroll dùng mẫu `FULLTIME` 08:00-17:00, ngh�
 
 Các dòng trên là dữ liệu vận hành bổ sung cho cùng nhánh nghiệp vụ, không làm tăng số **27 case oracle tháng 07**. Mục đích là để màn hình phân ca, chấm công và đơn từ nhìn giống dữ liệu sản phẩm thật, đồng thời có nhiều nhân viên cùng đi qua một nhánh thay vì chỉ một dòng duy nhất.
 
+## Phòng ban chưa có ca để kiểm tra readiness tháng 08
+
+Phòng `OPS-NOSHIFT` — **Phòng Vận hành đơn hàng mới** có ba nhân viên `OPS001`, `OPS002`,
+`OPS003`. Cả ba có tài khoản, hồ sơ nhân sự, phòng ban/chức danh, mã số thuế, số BHXH, tài khoản
+ngân hàng và HĐLĐ Active từ 01/08/2026 nhưng cố ý không có `ScheduleTemplateEmployee`,
+`EmployeeShiftAssignment` hay `AttendanceRecord`. Nhóm dùng để kiểm tra màn phân ca chưa thiết lập và
+cổng tạo/tạm tính lương báo thiếu ca đúng theo dữ liệu nguồn; không ảnh hưởng kỳ demo tháng 07.
+
 ## Cách sử dụng
 
 1. Đăng nhập `admin` / `123`.

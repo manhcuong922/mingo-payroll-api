@@ -35,6 +35,7 @@ public sealed partial class DatabaseSeeder
 
     private const string BlockerDraftContractNo = BlockerContractNoPrefix + "R4-DRAFT";
     private const string BlockerDraftCitizenId = "038800112244";
+    private const string NoShiftDepartmentCode = "OPS-NOSHIFT";
 
     private async Task SeedReadinessBlockersAsync(CancellationToken ct)
     {
@@ -54,6 +55,82 @@ public sealed partial class DatabaseSeeder
         if (adminId == 0 || party is null) return;
 
         await SeedDraftContractBlockerAsync(month, party.Id, adminId, ct);
+        await SeedDepartmentWithoutShiftsAsync(month, party.Id, adminId, ct);
+    }
+
+    /// <summary>
+    /// Một phòng ban có đủ tài khoản, hồ sơ và HĐLĐ Active nhưng CHƯA được đưa vào bất kỳ bảng
+    /// phân ca nào. Nhóm được tạo sau pha <c>PreparePayrollMonthDataAsync</c>; những lần chạy sau
+    /// cũng được lớp auto-setup loại trừ theo tiền tố HDBLOCK để không tự chữa mất case.
+    /// </summary>
+    private async Task SeedDepartmentWithoutShiftsAsync(
+        DateOnly month, int partyId, int adminId, CancellationToken ct)
+    {
+        var department = await _context.Departments
+            .FirstOrDefaultAsync(d => d.Code == NoShiftDepartmentCode, ct);
+        if (department is null)
+        {
+            department = new Department
+            {
+                Code = NoShiftDepartmentCode,
+                Name = "Phòng Vận hành đơn hàng mới",
+                Description = "Phòng ban mới thành lập, nhân sự đã ký hợp đồng nhưng HR chưa lập bảng phân ca.",
+                IsActive = true,
+            };
+            await _context.Departments.AddAsync(department, ct);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        var position = await _context.Positions.AsNoTracking()
+            .Where(p => p.Code == "SALE")
+            .Select(p => new { p.Id })
+            .FirstOrDefaultAsync(ct);
+        var grade = await _context.SalaryGrades.AsNoTracking()
+            .Where(g => g.Code == "SALE-1")
+            .Select(g => new { g.Id, g.BaseSalary })
+            .FirstOrDefaultAsync(ct);
+        if (position is null || grade is null) return;
+
+        var configuredPassword = _configuration.GetSection("DefaultRoleUsers")["Password"];
+        var password = string.IsNullOrWhiteSpace(configuredPassword) ? "Demo@12345" : configuredPassword;
+        var people = new[]
+        {
+            (Username: "ops_noshift_1", Code: "OPS001", FullName: "Nguyễn Minh Quân"),
+            (Username: "ops_noshift_2", Code: "OPS002", FullName: "Trần Thu Trang"),
+            (Username: "ops_noshift_3", Code: "OPS003", FullName: "Lê Quốc Bảo"),
+        };
+
+        var employeeIds = new List<int>();
+        foreach (var person in people)
+        {
+            var (_, employeeId) = await EnsureStaffAsync(
+                person.Username, person.Code, DemoEmail(person.Username), person.FullName,
+                SystemRoles.EmployeeId, position.Id, department.Id, password, ct);
+            employeeIds.Add(employeeId);
+
+            var contractNo = $"{BlockerContractNoPrefix}NOSHIFT-{person.Code}";
+            if (await _context.Contracts.AsNoTracking().AnyAsync(c => c.ContractNo == contractNo, ct))
+                continue;
+
+            await _context.Contracts.AddAsync(NewTestContract(
+                contractNo,
+                ContractEnums.ContractCategory.Definite, ContractEnums.ContractStatus.Active,
+                employeeId, partyId, adminId, position.Id,
+                "Nhân viên vận hành đơn hàng — hồ sơ đã hoàn tất nhưng chưa được phân lịch làm việc",
+                "Văn phòng điều hành Mingo",
+                Utc(month), Utc(month.AddMonths(12).AddDays(-1)), grade.Id, grade.BaseSalary,
+                signedAt: Utc(month.AddDays(-5)),
+                signedPlace: "Hà Nội",
+                createdAt: Utc(month.AddDays(-7))), ct);
+        }
+
+        if (department.ManagerId is null && employeeIds.Count > 0)
+            department.ManagerId = employeeIds[0];
+
+        await _context.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Seeded phòng ban {Department} với {Employees} nhân viên HĐ Active nhưng chưa có phân ca tháng {Month:D2}/{Year}.",
+            department.Code, employeeIds.Count, month.Month, month.Year);
     }
 
     // ===== R1 — ĐÃ GỠ =====
