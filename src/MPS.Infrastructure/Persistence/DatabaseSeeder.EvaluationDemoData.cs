@@ -57,7 +57,8 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var now = VietnamClock.Now;
+        // Dùng cùng trục neo với payroll (06–08/2026), không phụ thuộc ngày bật server thực tế.
+        var now = DemoCurrentMonth.ToDateTime(new TimeOnly(9, 0));
         var totalMonthly = 0;
         for (var back = DemoMonthsBack - 1; back >= 0; back--)
         {

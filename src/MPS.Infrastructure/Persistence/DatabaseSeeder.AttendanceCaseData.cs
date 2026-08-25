@@ -90,14 +90,14 @@ public sealed partial class DatabaseSeeder
 
         // Nghỉ dài ngày + đơn từ phải có TRƯỚC khi dựng chấm công, vì trạng thái ngày công của
         // những ngày đó suy ra từ chính các đơn này.
-        var maternityFrom = DemoDay(1, 15);
+        var maternityFrom = DemoDay(2, 1);
         await EnsureLeaveRequestAsync(emps, "cn_x1_4", "MATERNITY", maternityFrom, maternityFrom.AddMonths(6).AddDays(-1),
             isPaid: false, "Nghỉ chế độ thai sản 6 tháng — quỹ BHXH chi trả, doanh nghiệp không trả lương những ngày này.",
             leaveTypeIds, adminId, ct);
-        await EnsureLeaveRequestAsync(emps, "cn_x2_4", "ANNUAL", DemoDay(1, 8), DemoDay(1, 10),
+        await EnsureLeaveRequestAsync(emps, "cn_x2_4", "ANNUAL", DemoDay(2, 8), DemoDay(2, 10),
             isPaid: true, "Nghỉ phép năm về quê giỗ họ — hưởng nguyên lương, trừ quỹ phép.",
             leaveTypeIds, adminId, ct);
-        await EnsureLeaveRequestAsync(emps, "cn_x2_4", "UNPAID", DemoDay(1, 22), DemoDay(1, 23),
+        await EnsureLeaveRequestAsync(emps, "cn_x2_4", "UNPAID", DemoDay(2, 22), DemoDay(2, 23),
             isPaid: false, "Nghỉ không hưởng lương do việc gia đình, đã hết quỹ phép trong tháng.",
             leaveTypeIds, adminId, ct);
 
@@ -128,7 +128,7 @@ public sealed partial class DatabaseSeeder
         // ⚠️ Khoảng 08→25 của kỳ giữa cho đúng 14 ngày làm việc với trục demo mặc định (06/2026 bắt
         // đầu vào thứ Hai). Đổi `Seed:DemoAnchorMonth` thì số ngày lệch đi — case vẫn còn ý nghĩa
         // (nghỉ dài ngày + trên trần) nhưng các con số kỳ vọng ở trên phải tính lại.
-        await EnsureLeaveRequestAsync(emps, "director", "SICK", DemoDay(1, 8), DemoDay(1, 25),
+        await EnsureLeaveRequestAsync(emps, "director", "SICK", DemoDay(2, 8), DemoDay(2, 28),
             isPaid: false, "Nghỉ ốm dài ngày có giấy ra viện — hưởng chế độ ốm đau do quỹ BHXH chi trả.",
             leaveTypeIds, adminId, ct);
 
@@ -198,7 +198,7 @@ public sealed partial class DatabaseSeeder
     private Dictionary<string, Dictionary<DateOnly, SpecialDay>> BuildSpecialDays(int periodIndex)
     {
         var result = new Dictionary<string, Dictionary<DateOnly, SpecialDay>>(StringComparer.OrdinalIgnoreCase);
-        if (periodIndex != 1) return result;   // toàn bộ kịch bản "tháng xấu" đặt ở kỳ giữa
+        if (periodIndex != 2) return result;   // toàn bộ kịch bản "tháng xấu" đặt ở kỳ demo chính 07/2026
 
         // ⭐ C12 — một tháng có đủ mọi sự cố chấm công.
         var badMonth = new (int Day, SpecialDay Spec)[]
@@ -227,7 +227,7 @@ public sealed partial class DatabaseSeeder
         // Dồn về ngày làm việc gần nhất có thể làm hai mốc trùng nhau (khi trục demo đổi) — giữ mốc
         // đầu tiên thay vì để bộ khởi tạo từ điển ném khoá trùng và chặn khởi động app.
         var days = new Dictionary<DateOnly, SpecialDay>();
-        foreach (var (day, spec) in badMonth) days.TryAdd(NearestWorkday(DemoDay(1, day)), spec);
+        foreach (var (day, spec) in badMonth) days.TryAdd(NearestWorkday(DemoDay(2, day)), spec);
 
         result["cn_x1_3"] = days;
         return result;
@@ -676,7 +676,7 @@ public sealed partial class DatabaseSeeder
     {
         if (!emps.TryGetValue("cn_x1_3", out var emp) || emp.UserId is not int userId) return;
 
-        var period = DemoPeriodStart(1);
+        var period = DemoPeriodStart(2);
         if (await _context.MonthlyEvaluations.AsNoTracking()
                 .AnyAsync(m => m.EmployeeUserId == userId && m.PeriodYear == period.Year
                     && m.PeriodMonth == period.Month, ct)) return;

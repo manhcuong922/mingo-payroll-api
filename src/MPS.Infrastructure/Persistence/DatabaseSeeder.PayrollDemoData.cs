@@ -145,12 +145,14 @@ public sealed partial class DatabaseSeeder
 
     private const int PayrollDemoMonths = 3;   // 3 kỳ gần nhất (đủ dữ liệu, tránh kỳ hiện tại còn thiếu).
 
-    // Chuẩn bị đủ liệu + SINH nhiều kỳ lương demo hoàn chỉnh (readiness → engine thật) cho công ty có
-    // nhiều HĐ Active nhất → màn bảng lương có sẵn số liệu, không cần HR bấm. Best-effort từng kỳ.
+    // Dựng đúng luồng demo nghiệp vụ:
+    // - 06/2026: có sẵn kỳ lương nguồn để đối chiếu và làm căn cứ truy lĩnh/truy thu.
+    // - 07/2026: chỉ có dữ liệu nguồn đầy đủ; HR tự bấm "Tạo bảng lương" khi demo.
+    // - 08/2026: có dữ liệu nguồn liên kết để tạm tính, không tạo sẵn kỳ lương.
+    //
+    // Idempotent theo (năm, tháng): bật server lại chỉ bổ sung phần còn thiếu, không sinh trùng kỳ.
     private async Task SeedPayrollDemoPeriodsAsync(int adminId, CancellationToken ct)
     {
-        if (await _context.PayrollPeriods.AsNoTracking().AnyAsync(ct)) return;
-
         if (!await _context.Contracts.AsNoTracking()
                 .AnyAsync(c => c.Status == ContractEnums.ContractStatus.Active, ct))
         {
@@ -158,7 +160,12 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        // Phải ưu tiên ca Fulltime 8 giờ. Lấy "bản ghi đầu tiên" theo Id khiến DB mới luôn chọn
+        // Ca sáng 4 giờ; hậu quả là phân ca, WFH và chấm công nền mô tả hai chế độ khác nhau.
         var shiftTemplateId = await _context.ShiftTemplates.AsNoTracking()
+            .Where(s => s.IsActive)
+            .OrderByDescending(s => s.Name == "Fulltime")
+            .ThenByDescending(s => s.StandardHours)
             .Select(s => (int?)s.Id).FirstOrDefaultAsync(ct);
         if (shiftTemplateId is null)
         {
@@ -166,34 +173,40 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        var generated = 0;
-        // Sinh từ CŨ → MỚI để law-change note kỳ sau so đúng kỳ trước. Trục thời gian NEO CỨNG
-        // (xem DatabaseSeeder.DemoCalendar.cs) để cặp kỳ 06 (luật cũ) ↔ 07 (luật mới) luôn nằm trong
-        // cửa sổ demo, thay vì trượt mất theo ngày chạy seed.
-        for (var index = 0; index < PayrollDemoMonths; index++)
-        {
-            var anchor = DemoPeriodStart(index);
-            int year = anchor.Year, month = anchor.Month;
+        // Kỳ nguồn tháng 06: chuẩn bị dữ liệu đầy đủ rồi chỉ sinh nếu chưa tồn tại.
+        var june = DemoPeriodStart(1);
+        await PreparePayrollMonthDataAsync(june.Year, june.Month, shiftTemplateId.Value, adminId, ct);
 
-            await PreparePayrollMonthDataAsync(year, month, shiftTemplateId.Value, adminId, ct);
+        var juneExists = await _context.PayrollPeriods.AsNoTracking()
+            .AnyAsync(p => p.PeriodYear == june.Year && p.PeriodMonth == june.Month, ct);
+        if (!juneExists)
+        {
             try
             {
-                var id = await _payrollGenerator.TryGenerateAsync(year, month, adminId, ct);
-                if (id is not null) generated++;
+                await _payrollGenerator.TryGenerateAsync(june.Year, june.Month, adminId, ct);
             }
             catch (Exception ex)
             {
-                // Demo: KHÔNG để lỗi sinh kỳ chặn khởi động app (vd thiếu version compliance ở tháng đó).
-                _logger.LogWarning(ex, "Payroll demo: sinh kỳ {Month:D2}/{Year} thất bại — bỏ qua.", month, year);
+                // Seeder không được làm API chết nếu dữ liệu cấu hình môi trường chưa đủ để sinh kỳ.
+                _logger.LogWarning(ex, "Payroll demo: sinh kỳ nguồn {Month:D2}/{Year} thất bại — bỏ qua.",
+                    june.Month, june.Year);
             }
-
-            // Khoản truy lĩnh/truy thu phải nằm CHEN GIỮA hai kỳ: kỳ nguồn đã chốt (để trỏ FK vào) và
-            // kỳ kế tiếp chưa sinh (để engine còn gom được). Sinh hết mọi kỳ rồi mới thêm thì hai cột
-            // TRUY_LINH/TRUY_THU vĩnh viễn bằng 0 — engine chỉ gom khoản CHƯA ÁP lúc tính kỳ mới.
-            if (index == PayrollDemoMonths - 2) await SeedPayrollAdjustmentCasesAsync(ct);
         }
 
-        _logger.LogInformation("Payroll demo: đã sinh {Count}/{Total} kỳ lương.", generated, PayrollDemoMonths);
+        // Khoản điều chỉnh phải được tạo sau kỳ nguồn 06 nhưng trước khi người dùng sinh kỳ 07.
+        await SeedPayrollAdjustmentCasesAsync(ct);
+
+        // Tháng 07 là sân khấu demo chính: tuyệt đối không gọi engine sinh kỳ tại đây.
+        var july = DemoPeriodStart(2);
+        await PreparePayrollMonthDataAsync(july.Year, july.Month, shiftTemplateId.Value, adminId, ct);
+
+        // Tháng 08 chỉ chuẩn bị dữ liệu nguồn để màn tạm tính và bảng phân ca có dữ liệu thật.
+        var august = DemoCurrentMonth;
+        await PreparePayrollMonthDataAsync(august.Year, august.Month, shiftTemplateId.Value, adminId, ct);
+
+        _logger.LogInformation(
+            "Payroll demo setup hoàn tất: kỳ nguồn {June:MM/yyyy}; dữ liệu tạo kỳ {July:MM/yyyy}; dữ liệu tạm tính {August:MM/yyyy}.",
+            june.ToDateTime(TimeOnly.MinValue), july.ToDateTime(TimeOnly.MinValue), august.ToDateTime(TimeOnly.MinValue));
     }
 
     /// <summary>
@@ -271,6 +284,35 @@ public sealed partial class DatabaseSeeder
             workdays.Add(day);
         }
 
+        // Bảng phân ca là nguồn dữ liệu thật của chấm công/WFH. Seeder cũ chỉ ghi AttendanceRecord
+        // nên màn phân ca tháng 07/08 trắng dù bảng lương vẫn có công.
+        await EnsurePayrollMonthScheduleAsync(
+            periodStart, periodEnd, shiftTemplateId, adminId, emps.Select(e => e.Id).ToList(), workdays, ct);
+
+        // Đơn WFH tháng 08 phải được áp sau khi đã có phân ca, đúng luồng repository của sản phẩm.
+        if (periodStart == DemoCurrentMonth)
+            await SeedWfhDemoCasesAsync(adminId, ct);
+
+        var assignments = await _context.EmployeeShiftAssignments.AsNoTracking()
+            .Where(a => empIds.Contains(a.EmployeeInformationId)
+                && a.WorkDate >= periodStart && a.WorkDate <= periodEnd)
+            .Select(a => new { a.EmployeeInformationId, a.WorkDate, a.ShiftTemplateId })
+            .ToListAsync(ct);
+        var assignmentsByEmployee = assignments
+            .GroupBy(a => a.EmployeeInformationId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var existingAttendanceKeys = (await _context.AttendanceRecords.AsNoTracking()
+            .Where(a => empIds.Contains(a.EmployeeInformationId)
+                && a.WorkDate >= periodStart && a.WorkDate <= periodEnd
+                && a.ShiftTemplateId != null)
+            .Select(a => new { a.EmployeeInformationId, a.WorkDate, ShiftTemplateId = a.ShiftTemplateId!.Value })
+            .ToListAsync(ct))
+            .Select(a => (a.EmployeeInformationId, a.WorkDate, a.ShiftTemplateId))
+            .ToHashSet();
+
+        var rubric = await LoadRubricTemplateAsync(ct);
+
         var now = DateTime.UtcNow;
         foreach (var emp in emps)
         {
@@ -278,31 +320,27 @@ public sealed partial class DatabaseSeeder
             if (string.IsNullOrWhiteSpace(emp.BankNumber)) emp.BankNumber = $"{190_300_000_000L + emp.Id}";
             if (string.IsNullOrWhiteSpace(emp.TaxNo)) emp.TaxNo = $"{8_000_000_000L + emp.Id}";
 
-            var hasAtt = await _context.AttendanceRecords
-                .AnyAsync(a => a.EmployeeInformationId == emp.Id && a.WorkDate >= periodStart && a.WorkDate <= periodEnd, ct);
-            if (!hasAtt)
+            // Bổ sung THEO TỪNG CA còn thiếu. Guard cũ theo cả tháng làm một đơn WFH hai ngày khiến
+            // 21 ngày còn lại không có chấm công; đồng thời dữ liệu case một ngày cũng chặn toàn bộ nền.
+            if (assignmentsByEmployee.TryGetValue(emp.Id, out var employeeAssignments))
             {
-                // Chỉ chấm công những ngày hợp đồng THỰC SỰ phủ. Người vào làm hoặc nghỉ việc giữa
-                // tháng mà vẫn có ngày công ở ngoài khoảng hiệu lực là dữ liệu mâu thuẫn với chính
-                // hợp đồng — và làm hỏng phép kiểm "trả lương theo đoạn" (Phase 4–5).
-                var (from, to) = await LoadContractWindowAsync(emp.Id, periodStart, ct);
-                if (from is null) continue;
-
-                foreach (var day in workdays)
+                foreach (var assignment in employeeAssignments)
                 {
-                    if (day < from || (to is DateOnly last && day > last)) continue;
+                    if (existingAttendanceKeys.Contains((emp.Id, assignment.WorkDate, assignment.ShiftTemplateId)))
+                        continue;
+
                     await _context.AttendanceRecords.AddAsync(new AttendanceRecord
                     {
                         EmployeeInformationId = emp.Id,
-                        WorkDate = day,
-                        ShiftTemplateId = shiftTemplateId,
+                        WorkDate = assignment.WorkDate,
+                        ShiftTemplateId = assignment.ShiftTemplateId,
                         DayHours = 8m,
                         NightHours = 0m,
                         Status = AttendanceEnums.AttendanceStatus.Present,
                         // Ngày quá khứ phải có đủ giờ vào/ra — thiếu CheckOutAt khiến bản ghi trông như
                         // nhân viên "đang làm việc" dù ngày đã qua từ lâu.
-                        CheckInAt = day.ToDateTime(new TimeOnly(8, 0)),
-                        CheckOutAt = day.ToDateTime(new TimeOnly(17, 0)),
+                        CheckInAt = assignment.WorkDate.ToDateTime(new TimeOnly(8, 0)),
+                        CheckOutAt = assignment.WorkDate.ToDateTime(new TimeOnly(17, 0)),
                         CreatedAt = now,
                         CreatedByUserId = adminId,
                     }, ct);
@@ -330,6 +368,7 @@ public sealed partial class DatabaseSeeder
                         ApprovedAt = now,
                         CreatedByUserId = adminId,
                         CreatedAt = now,
+                        Scores = rubric.Count > 0 ? ScoredLines(rubric, uid + month) : new List<EvaluationScoreLine>(),
                     }, ct);
                 }
                 else if (existingEval.Status != EvaluationEnums.EvaluationStatus.Approved)

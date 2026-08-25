@@ -223,7 +223,7 @@ public sealed partial class DatabaseSeeder
                 .Where(a => a.Code == "MEAL").Select(a => (int?)a.Id).FirstOrDefaultAsync(ct);
             if (contract is not null && mealId is int meal)
             {
-                var effective = DemoDay(1, 11);
+                var effective = DemoDay(2, 11);
                 var before = new List<ContractAllowanceSnapshot>
                 {
                     // Trước phụ lục: chỉ ăn ca ở mức trần miễn thuế CŨ (730.000).
