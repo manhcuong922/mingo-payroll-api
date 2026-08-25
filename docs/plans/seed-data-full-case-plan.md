@@ -234,8 +234,12 @@ thay vì chỉ 1 như hiện tại.
 | Thêm 1 version **lịch sử thứ 3** cho PIT (giai đoạn 2013–2020) | Tính lại một kỳ rất cũ phải ra đúng luật thời đó (tầng fallback của `GetActiveAtAsync`) |
 | Giữ nguyên các mốc 01/07/2026 | Đây là "trục" của cặp kỳ 06 ↔ 07 |
 
-> **Không** bịa version có `ValidFrom` giữa tháng chỉ để chạy nhánh trộn tỷ lệ theo ngày (mục 14 §3):
-> luật VN đổi vào ngày 01, bịa mốc 15/xx là dữ liệu sai bản chất. Nhánh đó chấp nhận chỉ có unit test.
+> ~~**Không** bịa version có `ValidFrom` giữa tháng chỉ để chạy nhánh trộn tỷ lệ theo ngày (mục 14 §3):
+> luật VN đổi vào ngày 01, bịa mốc 15/xx là dữ liệu sai bản chất. Nhánh đó chấp nhận chỉ có unit test.~~
+>
+> **ĐÃ ĐẢO — xem §10 (2026-08-25).** Tiền đề "luật VN đổi vào ngày 01" là SAI: NĐ 58/2020/NĐ-CP
+> (hạ mức đóng quỹ TNLĐ-BNN) hiệu lực 15/07/2020, và chính TT 26/2016/TT-BLĐTBXH đã seed trong
+> repo này cũng hiệu lực 15/10/2016. Mốc giữa tháng là dữ liệu ĐÚNG bản chất.
 
 ---
 
@@ -387,7 +391,102 @@ Phân bố `ContractKind` (trước đây 100% `LaborFullTime`):
 - `AllowanceType.IsBhxhBase` vẫn **không có nơi tiêu thụ** trong engine lương (chỉ
   `ExcludeFromProration` được đọc). Seed đã khai cờ này đúng nghiệp vụ cho `RESP`/`TOXIC`, nhưng cần
   quyết định: nối vào công thức nền đóng BH, hay bỏ hẳn cột.
-- Nhánh **trộn tỷ lệ BH theo trọng số ngày** khi luật đổi giữa kỳ vẫn chỉ có unit test — cố ý không
-  bịa version có `ValidFrom` giữa tháng (luật Việt Nam đổi vào ngày 01).
+- ~~Nhánh **trộn tỷ lệ BH theo trọng số ngày** khi luật đổi giữa kỳ vẫn chỉ có unit test.~~
+  **ĐÃ XONG 2026-08-25 — xem §10.**
 - Ba kỳ demo hiện ở trạng thái `Draft`. Muốn demo luồng chốt/khoá kỳ và sinh nghĩa vụ nộp BHXH/TNCN
   thì cần thêm một bước chuyển trạng thái.
+
+---
+
+## 10. Bổ sung 2026-08-25 — **đổi luật GIỮA KỲ 06/2026** (mốc 15/06)
+
+> Trạng thái: **ĐÃ THỰC HIỆN + kiểm chứng trên DB dựng mới `MPS_SeedCheck`**, chạy seed hai lần
+> liên tiếp cho **diff rỗng**. Đảo lại quyết định "không bịa mốc giữa tháng" ở §5.4.
+
+### 10.1 Vì sao đảo quyết định cũ
+
+§5.4 từ chối mốc giữa tháng với lý do "luật VN đổi vào ngày 01". Tiền đề đó **sai**:
+
+| Văn bản | Hiệu lực | Ghi chú |
+|---|---|---|
+| NĐ 58/2020/NĐ-CP — hạ mức đóng quỹ TNLĐ-BNN xuống 0,3% | **15/07/2020** | Đúng loại văn bản đang mô phỏng |
+| TT 26/2016/TT-BLĐTBXH — ngưỡng phụ cấp ăn ca | **15/10/2016** | **Đã có sẵn trong seed của repo này** |
+
+Nghị định/thông tư thường có hiệu lực sau 45 ngày kể từ ngày ký, nên rơi vào giữa tháng là chuyện
+bình thường. Mốc 15/06 vì thế là dữ liệu **đúng bản chất**, không phải dữ liệu bịa.
+
+Hệ quả của việc thiếu nó: hai nhánh đắt nhất của engine lương — `LaborLawTimeline` (tra hằng số luật
+theo **từng ngày**) và `InsurancePeriodBlender` (trộn tỷ lệ BH theo **trọng số ngày**) — chỉ sống
+trong unit test. `ChangedWithinPeriod` luôn `false` trên dữ liệu thật, nên cả hai ghi chú tự sinh của
+`MidPeriodComplianceNotes` cũng chưa bao giờ xuất hiện trên một kỳ lương nào.
+
+### 10.2 Hai văn bản mới, cùng hiệu lực 15/06/2026
+
+| Mã | Bảng version | Đổi gì | Nhánh engine kích hoạt |
+|---|---|---|---|
+| **NĐ 202/2026/NĐ-CP** | `SocialInsuranceRateVersion` (`ValidFrom=2026-06-15`) | Mức đóng quỹ TNLĐ-BNN của DN **0,5% → 0,3%** (⇒ BHXH DN 17,5% → 17,3%) | `BuildInsuranceRatesAsync` + `InsurancePeriodBlender.Blend` |
+| **NĐ 214/2026/NĐ-CP** | `LaborLawConstantsVersion` (`ValidFrom=2026-06-15`) | `OvertimeNormalUpliftPercent` **50 → 60** · `NightWorkSurchargePercent` **30 → 35** · `OvertimeMaxHoursPerMonth` **40 → 60** | `BuildLaborLawTimelineAsync` + `OvertimePayCalculator` / `RegularHoursPremiumCalculator` |
+
+**Ba ràng buộc cố ý** — sai một cái là mất khả năng đối chiếu tay hoặc vỡ case sẵn có:
+
+1. **Giữ nguyên `ReferenceAmount = 2.340.000`** ở bản 15/06. Trần đóng BHXH/BHYT phải tiếp tục đổi
+   **đúng một lần duy nhất** tại 01/07/2026 — đó là trục của case X1b (Giám đốc vượt trần) và của
+   bảng số §9.3. Ở đây chỉ đổi **tỷ lệ**, nên phép trộn tuyến tính hoàn toàn.
+2. **Không đổi `StandardWorkingDaysPerMonth` / `StandardWorkingHoursPerDay`.** Hai đại lượng đó bản
+   chất là "cả kỳ" và engine lấy tại `timeline.PeriodEnd`; đổi giữa kỳ chỉ tạo ra một đơn giá giờ
+   không ứng với nửa nào của tháng. Xem ranh giới cố ý trong `LaborLawTimeline`.
+3. **Bản 01/07/2026 phải kế thừa mức 0,3%.** NĐ 161/2026 chỉ đổi mức tham chiếu, không khôi phục mức
+   đóng đã bị bãi bỏ. Để lại 0,5% ở bản 01/07 là làm kỳ 07 hiện tỷ lệ DN **cao hơn** kỳ 06 mà không
+   văn bản nào giải thích được.
+
+Cờ `IsActive`: bản `LaborLawConstantsVersion` 01/01/2026 phải **nhường cờ** cho bản 15/06 — bảng có
+unique index lọc `IsActive=1 AND IsArchived=0` cho tối đa **một** hàng active toàn cục, hai hàng cùng
+bật cờ trong một `SaveChanges` là vi phạm index ⇒ seed ném ⇒ **API không khởi động**.
+
+### 10.3 Hai cặp tăng ca đối chứng trong CÙNG kỳ 06/2026
+
+Ý đồ: hai ca **giống hệt nhau** (cùng số giờ, cùng khung giờ, cùng loại ngày, cùng đơn giá giờ vì đơn
+giá là đại lượng cả kỳ), chỉ khác chỗ nằm hai bên mốc 15/06. Vậy nên **mọi** chênh lệch tiền chỉ có
+thể đến từ việc engine tra hằng số luật theo NGÀY.
+
+| Cặp | Người | Trước mốc | Sau mốc | Hệ số |
+|---|---|---|---|---|
+| **A — OT ngày thường** | `employee1` | 10/06, 17:30–19:30 (2h) | 18/06, 17:30–19:30 (2h) | 150% → **160%** |
+| **B — OT ban đêm** | `cn_x3_5` | 11/06, 22:00–23:30 (1,5h) | 25/06, 22:00–23:30 (1,5h) | 200% → **215%** |
+
+Hệ số đêm = hệ_số_OT_ngày + phụ_cấp_đêm + 20% × mức_nền ⇒ `150+30+20 = 200%` và `160+35+20 = 215%`.
+Ca đêm cố ý **không vắt qua nửa đêm** vì `SeedOvertimeCasesForAsync` dựng giờ vào/ra trong cùng một
+ngày lịch. `OvertimeCase` nay khai thêm tham số `NightHours` để `OtNightHours` /
+`AttendanceRecord.NightHours` khớp với phần giờ mà `OvertimeSegmentBuilder` tự tách lại từ giờ thô —
+hai đường lệch nhau là **báo cáo sai dù tiền đúng**.
+
+### 10.4 Số liệu đối chiếu tay — đã kiểm chứng trên DB
+
+Kỳ 06/2026: công chuẩn 22 ngày ⇒ giờ chuẩn 176; 30 ngày lịch = **14 ngày mức cũ** (01–14/06) +
+**16 ngày mức mới** (15–30/06).
+
+| Kiểm chứng | Tính tay | Số trên DB |
+|---|---|---|
+| **Cặp A** `employee1` (lương 8.000.000 ⇒ 45.454,55đ/giờ) | `45.454,55 × 2 × 1,50` + `45.454,55 × 2 × 1,60` = 136.363 + 145.455 | `TANGCA` = **281.818** ✅ |
+| **Cặp B** `cn_x3_5` (lương 6.800.000 ⇒ 38.636,36đ/giờ) | `38.636,36 × 1,5 × 2,00` + `38.636,36 × 1,5 × 2,15` = 115.909 + 124.602 | `TANGCA` = **240.511** ✅ |
+| **Tỷ lệ BHXH DN bình quân theo ngày** | `(14 × 17,5% + 16 × 17,3%) / 30` = **17,39333…%** | `director`: `46.800.000 × 17,39333% =` **8.140.080** ✅ |
+| **Tỷ lệ NLĐ không đổi** (8% do luật định) | `46.800.000 × 8%` | `director`: **3.744.000** ✅ |
+| **Ghi chú tự sinh** | 2 dòng `PayrollNoteType.LawChange` | *"Hằng số luật lao động đổi giữa kỳ"* + *"Tỷ lệ bảo hiểm là số bình quân theo ngày"* ✅ |
+| **Căn cứ văn bản** | Kỳ 06 phải trích **cả hai** bản của mỗi loại | `PayrollComplianceRefs`: BHXH `01/07/2025` + `15/06/2026`; luật LĐ `01/01/2026` + `15/06/2026` ✅ |
+
+**Đối chứng ngược** — nếu engine áp một mức luật cho cả kỳ (bug cũ: lấy snapshot tại `PayDate`):
+cặp A sẽ ra `45.454,55 × 4 × 1,60 =` **290.909** (bằng nhau, cùng 160% — sai hồi tố cho nửa đầu
+tháng), và BHXH DN của `director` sẽ là `46.800.000 × 17,5% =` **8.190.000**. Cả hai đều khác số
+thực tế ⇒ bộ dữ liệu này **phân biệt được** đúng/sai, không chỉ "chạy không lỗi".
+
+### 10.5 Lưu ý khi đọc lại §9
+
+- **§9.2 đã lệch**: seed hiện chỉ tự sinh **một** kỳ lương (06/2026) — 32 dòng NV + 1 dòng tổng.
+  Tháng 07 và 08 chỉ chuẩn bị dữ liệu nguồn để HR tự bấm "Tạo bảng lương" / tạm tính
+  (xem `SeedPayrollDemoPeriodsAsync`). Đây là thay đổi có từ trước đợt này, không phải hệ quả của §10.
+- **Số OT kỳ 07 trong §9.3 sẽ đổi**: NĐ 214/2026 có hiệu lực từ 15/06 nên **còn hiệu lực sang kỳ 07**
+  — đó là hành vi đúng của một mốc luật, không phải hồi quy. Con số `totruong_x1` kỳ 07
+  `TANGCA = 1.122.283` ghi ở §9.3 là số của thời điểm trước đợt này.
+- **Seed compliance không bao giờ tới được prod** (`if (await ....AnyAsync(ct)) return;` +
+  `SEED_RESET_ON_STARTUP=false`). Muốn đưa hai văn bản này lên prod phải viết **data migration** —
+  mẫu để copy: `20260810160000_BackfillOvertimeTaxExemptionCompliance`.

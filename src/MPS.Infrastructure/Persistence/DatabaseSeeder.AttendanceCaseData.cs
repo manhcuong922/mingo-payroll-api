@@ -664,8 +664,15 @@ public sealed partial class DatabaseSeeder
         Holiday,
     }
 
+    /// <param name="NightHours">
+    /// Số giờ của ca rơi vào khung ĐÊM (22:00–06:00). Khai tường minh thay vì tự suy: cột
+    /// <c>OtNightHours</c>/<c>AttendanceRecord.NightHours</c> là dữ liệu hiển thị cho kế toán, còn
+    /// tiền thì <c>PayrollDataCollector</c> tự tách lại từ giờ vào/ra THÔ qua
+    /// <c>OvertimeSegmentBuilder</c> — hai đường phải khớp nhau, khai sai là báo cáo sai dù tiền đúng.
+    /// </param>
     private sealed record OvertimeCase(
-        int PeriodIndex, int Day, OvertimeDayKind DayKind, TimeOnly Start, TimeOnly End, string Reason);
+        int PeriodIndex, int Day, OvertimeDayKind DayKind, TimeOnly Start, TimeOnly End, string Reason,
+        decimal NightHours = 0m);
 
     private async Task SeedOvertimeCasesAsync(
         IReadOnlyDictionary<string, (int Id, int? UserId)> emps, int adminId, CancellationToken ct)
@@ -691,6 +698,16 @@ public sealed partial class DatabaseSeeder
         if (emps.ContainsKey("cn_x3_5"))
             byPerson.Add(("cn_x3_5", new List<OvertimeCase>
             {
+                // ⭐ MID-06 (cặp B) — cùng ý đồ với cặp A nhưng cho giờ ĐÊM, vì mốc 15/06 đổi hai con
+                // số khác nhau và chúng cộng vào hệ số đêm theo hai đường khác nhau:
+                //   OT đêm = hệ_số_OT_ngày + phụ_cấp_đêm + 20% × mức_nền
+                //   11/06: 150 + 30 + 20 = 200%   ·   25/06: 160 + 35 + 20 = 215%
+                // Ca 22:00–23:30 nằm TRỌN trong khung đêm và KHÔNG vắt qua nửa đêm — cố ý, vì
+                // SeedOvertimeCasesForAsync dựng giờ vào/ra trong cùng một ngày lịch.
+                new(1, 11, OvertimeDayKind.Workday, new TimeOnly(22, 0), new TimeOnly(23, 30),
+                    "Tăng ca đêm chạy nốt mẻ sơn cho kịp lịch giao đầu tuần", NightHours: 1.5m),
+                new(1, 25, OvertimeDayKind.Workday, new TimeOnly(22, 0), new TimeOnly(23, 30),
+                    "Tăng ca đêm bù sản lượng ca ngày do sự cố máy nén khí", NightHours: 1.5m),
                 new(2, 12, OvertimeDayKind.Sunday, new TimeOnly(8, 0), new TimeOnly(12, 0),
                     "Xử lý lô sơn cần giao gấp vào đầu tuần"),
             }));
@@ -716,6 +733,17 @@ public sealed partial class DatabaseSeeder
             {
                 new(0, 1, OvertimeDayKind.Holiday, new TimeOnly(8, 0), new TimeOnly(12, 0),
                     "Hỗ trợ kiểm kê kho nguyên liệu trong ngày Quốc tế Lao động"),
+                // ⭐ MID-06 (cặp A) — HAI ca tăng ca GIỐNG HỆT NHAU trong CÙNG kỳ 06/2026, chỉ khác
+                // chỗ nằm hai bên mốc đổi luật 15/06: cùng 2 giờ, cùng khung 17:30–19:30, cùng ngày
+                // thường, cùng đơn giá giờ (đơn giá là đại lượng cả kỳ). Vậy nên MỌI chênh lệch tiền
+                // giữa hai ca chỉ có thể do engine tra hằng số luật theo NGÀY — đây là phép thử
+                // trực tiếp cho `LaborLawTimeline.For(ngày)`:
+                //   10/06 (luật cũ, NĐ chưa hiệu lực) → hệ số 150%
+                //   18/06 (NĐ 214/2026 đã hiệu lực)   → hệ số 160%
+                // Nếu engine áp một mức cho cả kỳ (bug cũ: lấy snapshot tại PayDate), hai ca sẽ ra
+                // BẰNG NHAU và ở mức 160% — sai hồi tố cho nửa đầu tháng.
+                new(1, 10, OvertimeDayKind.Workday, new TimeOnly(17, 30), new TimeOnly(19, 30),
+                    "Tăng ca hoàn thiện hồ sơ nghiệm thu đợt giao hàng giữa tháng"),
                 new(1, 18, OvertimeDayKind.Workday, new TimeOnly(17, 30), new TimeOnly(19, 30),
                     "Hoàn tất biên bản nghiệm thu cuối ngày theo yêu cầu khách hàng"),
             }));
@@ -781,16 +809,18 @@ public sealed partial class DatabaseSeeder
             if (await _context.OvertimeRequests.AsNoTracking()
                     .AnyAsync(o => o.EmployeeInformationId == leader.Id && o.WorkDate == day, ct)) continue;
 
-            var dayHours = decimal.Round((decimal)(c.End - c.Start).TotalHours, 2);
+            var totalHours = decimal.Round((decimal)(c.End - c.Start).TotalHours, 2);
+            var nightHours = c.NightHours;
+            var dayHours = totalHours - nightHours;
             var request = new OvertimeRequest
             {
                 EmployeeInformationId = leader.Id,
                 WorkDate = day,
                 OtStartTime = c.Start,
                 OtEndTime = c.End,
-                OtHours = dayHours,
+                OtHours = totalHours,
                 OtDayHours = dayHours,
-                OtNightHours = 0m,
+                OtNightHours = nightHours,
                 Status = AttendanceEnums.OtRequestStatus.Approved,
                 ApproverRoute = AttendanceEnums.OvertimeApproverRoute.DepartmentManager,
                 Reason = c.Reason,
@@ -816,11 +846,11 @@ public sealed partial class DatabaseSeeder
                 OvertimeRequestId = request.Id,
                 ShiftTemplateId = null,
                 DayHours = dayHours,
-                NightHours = 0m,
+                NightHours = nightHours,
                 Status = AttendanceEnums.AttendanceStatus.Present,
                 CheckInAt = checkIn,
                 CheckOutAt = checkOut,
-                Notes = "Chấm công ca tăng ca",
+                Notes = nightHours > 0m ? "Chấm công ca tăng ca ban đêm" : "Chấm công ca tăng ca",
                 CreatedAt = now,
                 CreatedByUserId = adminId,
             }, ct);
