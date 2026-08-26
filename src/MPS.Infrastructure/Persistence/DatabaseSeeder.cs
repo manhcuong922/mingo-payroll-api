@@ -918,6 +918,7 @@ public sealed partial class DatabaseSeeder
             new() { Code = "LUAT-BHXH-41-2024", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "41/2024/QH15", Title = "Luật Bảo hiểm xã hội", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2024, 6, 29), EffectiveDate = new DateOnly(2025, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "ND-158-2025", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "158/2025/NĐ-CP", Title = "Hướng dẫn Luật BHXH 2024", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2025, 6, 15), EffectiveDate = new DateOnly(2025, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "ND-161-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "161/2026/NĐ-CP", Title = "Mức tham chiếu BHXH 2,530,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 1), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "ND-202-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "202/2026/NĐ-CP", Title = "Giảm mức đóng quỹ tai nạn lao động - bệnh nghề nghiệp còn 0,3% từ 15/6/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 4, 28), EffectiveDate = new DateOnly(2026, 6, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "LUAT-BHYT-56-2024", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "56/2024/QH15", Title = "Luật Bảo hiểm y tế", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2024, 11, 27), EffectiveDate = new DateOnly(2025, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "LUAT-VIECLAM-74-2025", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "74/2025/QH15", Title = "Luật Việc làm", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2025, 6, 25), EffectiveDate = new DateOnly(2025, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "LUAT-TNCN-109-2025", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "109/2025/QH15", Title = "Luật Thuế thu nhập cá nhân", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2025, 11, 28), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
@@ -925,6 +926,7 @@ public sealed partial class DatabaseSeeder
             new() { Code = "ND-293-2025", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "293/2025/NĐ-CP", Title = "Lương tối thiểu vùng 2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2025, 12, 20), EffectiveDate = new DateOnly(2026, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "TT-26-2016", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "26/2016/TT-BLĐTBXH", Title = "Ngưỡng phụ cấp ăn ca 730,000 (hết hiệu lực 15/06/2025)", IssuedBy = "Bộ LĐTBXH", IssuedDate = new DateOnly(2016, 9, 1), EffectiveDate = new DateOnly(2016, 10, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "ND-253-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "253/2026/NĐ-CP", Title = "Ngưỡng phụ cấp ăn ca/ăn trưa miễn thuế 1,200,000 + ngưỡng khấu trừ thuế khoán 10% lên 5,000,000 từ 1/7/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 6, 30), EffectiveDate = new DateOnly(2026, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
+            new() { Code = "ND-214-2026", DocumentType = LegalDocumentTypes.NghiDinh, DocumentNumber = "214/2026/NĐ-CP", Title = "Nâng mức trả thêm khi làm thêm giờ ngày thường lên 160%, phụ cấp làm đêm lên 35%, trần làm thêm 60 giờ/tháng từ 15/6/2026", IssuedBy = "Chính phủ", IssuedDate = new DateOnly(2026, 5, 20), EffectiveDate = new DateOnly(2026, 6, 15), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "TT-111-2013", DocumentType = LegalDocumentTypes.ThongTu, DocumentNumber = "111/2013/TT-BTC", Title = "Hướng dẫn Luật Thuế TNCN — khoán điện thoại/xăng xe theo mức chi thực tế", IssuedBy = "Bộ Tài chính", IssuedDate = new DateOnly(2013, 8, 15), EffectiveDate = new DateOnly(2013, 10, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "NQ-954-2020", DocumentType = LegalDocumentTypes.NghiQuyet, DocumentNumber = "954/2020/UBTVQH14", Title = "Giảm trừ gia cảnh 11,000,000 / 4,400,000 (áp dụng từ kỳ tính thuế 2020)", IssuedBy = "UBTVQH", IssuedDate = new DateOnly(2020, 6, 2), EffectiveDate = new DateOnly(2020, 7, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
             new() { Code = "BLLD-2019", DocumentType = LegalDocumentTypes.Luat, DocumentNumber = "(không số)", Title = "Bộ luật Lao động 2019", IssuedBy = "Quốc hội", IssuedDate = new DateOnly(2019, 11, 20), EffectiveDate = new DateOnly(2021, 1, 1), IsActive = true, CreatedAt = now, CreatedByUserId = adminId },
@@ -961,12 +963,18 @@ public sealed partial class DatabaseSeeder
         await _context.SaveChangesAsync(ct);
     }
 
-    private static List<SocialInsuranceFundEntry> CreateDefaultSocialInsuranceFunds() =>
+    /// <param name="occupationalPercent">
+    /// Mức đóng quỹ TNLĐ-BNN của DOANH NGHIỆP. Tách thành tham số vì đây là con số DUY NHẤT
+    /// trong khối bảo hiểm mà nghị định thực sự hay đổi (0,5% → 0,3% cho DN đủ điều kiện) —
+    /// các tỷ lệ còn lại do luật định không đổi theo nghị định.
+    /// </param>
+    private static List<SocialInsuranceFundEntry> CreateDefaultSocialInsuranceFunds(
+        decimal occupationalPercent = 0.50m) =>
         new()
         {
             new() { FundCode = SocialInsuranceFundCodes.Ht, FundName = "Hưu trí, tử tuất", EmployeePercent = 8.00m, EmployerPercent = 14.00m },
             new() { FundCode = SocialInsuranceFundCodes.OdTs, FundName = "Ốm đau, thai sản", EmployeePercent = 0.00m, EmployerPercent = 3.00m },
-            new() { FundCode = SocialInsuranceFundCodes.TnldBnn, FundName = "Tai nạn lao động, bệnh nghề nghiệp", EmployeePercent = 0.00m, EmployerPercent = 0.50m },
+            new() { FundCode = SocialInsuranceFundCodes.TnldBnn, FundName = "Tai nạn lao động, bệnh nghề nghiệp", EmployeePercent = 0.00m, EmployerPercent = occupationalPercent },
         };
 
 #pragma warning disable CS0618 // Obsolete — backward-compat columns, intentionally still seeded for legacy readers
@@ -979,9 +987,10 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
-        // Row 1: historical (ValidFrom=2025-07-01) · Row 2: mức tham chiếu mới (ValidFrom=2026-07-01).
-        // Cả 2 tạo ra với IsActive=false; ReconcileActiveComplianceVersionAsync ở cuối
-        // SeedDefaultComplianceAsync mới bật cờ cho bản đã tới hiệu lực tại NGÀY CHẠY seed.
+        // Ba mốc: row1 lịch sử (01/07/2025) · rowMid ĐỔI GIỮA KỲ (15/06/2026, hạ mức đóng TNLĐ-BNN)
+        // · row2 mức tham chiếu mới (01/07/2026). Cả 3 tạo ra với IsActive=false;
+        // ReconcileActiveComplianceVersionAsync ở cuối SeedDefaultComplianceAsync mới bật cờ cho bản
+        // đã tới hiệu lực tại NGÀY CHẠY seed.
         var row1 = new SocialInsuranceRateVersion
         {
             ValidFrom = new DateOnly(2025, 7, 1),
@@ -1008,14 +1017,59 @@ public sealed partial class DatabaseSeeder
             CreatedByUserId = adminId,
             Funds = CreateDefaultSocialInsuranceFunds(),
         };
+        // ⭐ MID-06 — ĐỔI LUẬT GIỮA KỲ 06/2026. Mức đóng quỹ TNLĐ-BNN của DN 0,5% → 0,3% từ
+        // 15/06/2026 (NĐ 202/2026/NĐ-CP), tức mốc hiệu lực rơi vào GIỮA THÁNG chứ không phải ngày 01.
+        //
+        // <para><b>Vì sao mốc giữa tháng là dữ liệu ĐÚNG bản chất, không phải bịa.</b> Nghị định hạ
+        // mức đóng quỹ TNLĐ-BNN có tiền lệ thật là NĐ 58/2020/NĐ-CP — hiệu lực 15/07/2020, cũng giữa
+        // tháng; TT 26/2016/TT-BLĐTBXH đã seed sẵn trong file này cũng hiệu lực 15/10/2016. Luật Việt
+        // Nam KHÔNG chỉ đổi vào ngày 01.</para>
+        //
+        // <para><b>Nhánh engine mà dòng này kích hoạt:</b> `PayrollDataCollector.BuildInsuranceRatesAsync`
+        // gom cặp (BHXH, LTT vùng) của TỪNG NGÀY rồi `InsurancePeriodBlender.Blend` trộn theo trọng số
+        // ngày lịch. Kỳ 06/2026 có 30 ngày = 14 ngày mức cũ (01–14/06) + 16 ngày mức mới (15–30/06) ⇒
+        // BHXH DN = (14 × 17,5% + 16 × 17,3%) / 30 = <b>17,3933…%</b>, một con số KHÔNG có trong bất kỳ
+        // văn bản nào — đúng như `MidPeriodComplianceNotes.ForInsurance` cảnh báo cho kế toán. Kỳ 05 và
+        // kỳ 07 mỗi kỳ vẫn chỉ một mức ⇒ là ĐỐI CHỨNG cho thấy trộn chỉ xảy ra đúng kỳ có đổi luật.</para>
+        //
+        // <para><b>Cố ý GIỮ NGUYÊN `ReferenceAmount` = 2.340.000</b>: trần đóng BHXH/BHYT phải tiếp tục
+        // đổi đúng một lần duy nhất tại 01/07/2026 — đó là trục của case X1b (Giám đốc vượt trần) và
+        // của bảng số liệu đối chiếu tay trong `docs/plans/seed-data-full-case-plan.md`. Ở đây chỉ đổi
+        // TỶ LỆ nên phép trộn tuyến tính hoàn toàn, đối chiếu tay ra số chẵn.</para>
+        var rowMid = new SocialInsuranceRateVersion
+        {
+            ValidFrom = new DateOnly(2026, 6, 15),
+            IsActive = false,
+            IsArchived = false,
+            EmployeeSocialPercent = 8.00m,
+            EmployerSocialPercent = 17.30m,           // 14% HT + 3% ỐĐ-TS + 0,3% TNLĐ-BNN
+            EmployerOccupationalDiseasePercent = 0.30m,
+            EmployeeHealthPercent = 1.50m,
+            EmployerHealthPercent = 3.00m,
+            EmployeeUnemploymentPercent = 1.00m,
+            EmployerUnemploymentPercent = 1.00m,
+            EmployerUnionFundPercent = 2.00m,
+            EmployeeUnionDuesPercent = 1.00m,
+            EmployeeUnionDuesCapPercent = 10.00m,
+            ReferenceAmount = 2_340_000m,             // GIỮ NGUYÊN — trần chỉ đổi tại 01/07/2026
+            SocialCapMultiplier = 20,
+            HealthCapMultiplier = 20,
+            UnemploymentCapMultiplier = 20,
+            EligibilityMode = SocialInsuranceEligibilityModes.ByContractSubtype,
+            EligibleContractSubtypesCsv = "Probation,Official",
+            LegalReference = "NĐ 202/2026/NĐ-CP (giảm mức đóng quỹ TNLĐ-BNN còn 0,3% từ 15/06/2026 — đổi giữa kỳ)",
+            CreatedAt = now,
+            CreatedByUserId = adminId,
+            Funds = CreateDefaultSocialInsuranceFunds(occupationalPercent: 0.30m),
+        };
         var row2 = new SocialInsuranceRateVersion
         {
             ValidFrom = new DateOnly(2026, 7, 1),
             IsActive = false,
             IsArchived = false,
             EmployeeSocialPercent = 8.00m,
-            EmployerSocialPercent = 17.50m,
-            EmployerOccupationalDiseasePercent = 0.50m,
+            EmployerSocialPercent = 17.30m,
+            EmployerOccupationalDiseasePercent = 0.30m,
             EmployeeHealthPercent = 1.50m,
             EmployerHealthPercent = 3.00m,
             EmployeeUnemploymentPercent = 1.00m,
@@ -1032,20 +1086,29 @@ public sealed partial class DatabaseSeeder
             LegalReference = "NĐ 161/2026/NĐ-CP (mức tham chiếu mới 2,530,000 từ 01/07/2026)",
             CreatedAt = now,
             CreatedByUserId = adminId,
-            Funds = CreateDefaultSocialInsuranceFunds(),
+            // Mức đóng TNLĐ-BNN 0,3% do NĐ 202/2026 đặt từ 15/06 vẫn còn hiệu lực — NĐ 161/2026 chỉ
+            // đổi mức tham chiếu. Để lại 0,5% ở đây là vô tình "khôi phục" mức đã bị bãi bỏ, và kỳ 07
+            // sẽ hiện tỷ lệ DN cao hơn kỳ 06 mà không văn bản nào giải thích được.
+            Funds = CreateDefaultSocialInsuranceFunds(occupationalPercent: 0.30m),
         };
 
-        await _context.SocialInsuranceRateVersions.AddRangeAsync(new[] { row1, row2 }, ct);
+        await _context.SocialInsuranceRateVersions.AddRangeAsync(new[] { row1, rowMid, row2 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 2 SocialInsuranceRateVersion rows (cờ hiệu lực do bước reconcile đặt theo ngày chạy).");
+        _logger.LogInformation(
+            "Seeded 3 SocialInsuranceRateVersion rows (01/07/2025, 15/06/2026 đổi GIỮA KỲ, 01/07/2026); "
+            + "cờ hiệu lực do bước reconcile đặt theo ngày chạy.");
 
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.SocialInsuranceRate, row1.Id,
             new[] { "LUAT-BHXH-41-2024", "ND-158-2025", "LUAT-BHYT-56-2024", "LUAT-VIECLAM-74-2025" },
             legalDocumentIdsByCode, adminId, now, ct);
         await LinkLegalDocumentsAsync(
+            ComplianceEntityTypes.SocialInsuranceRate, rowMid.Id,
+            new[] { "LUAT-BHXH-41-2024", "ND-202-2026" },
+            legalDocumentIdsByCode, adminId, now, ct);
+        await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.SocialInsuranceRate, row2.Id,
-            new[] { "LUAT-BHXH-41-2024", "ND-161-2026" },
+            new[] { "LUAT-BHXH-41-2024", "ND-161-2026", "ND-202-2026" },
             legalDocumentIdsByCode, adminId, now, ct);
     }
 #pragma warning restore CS0618
@@ -1251,14 +1314,17 @@ public sealed partial class DatabaseSeeder
         // Row 2: áp dụng cho thu nhập tiền lương của kỳ tính thuế 2026. Luật TNCN 109/2025/QH15
         // quy định nhóm tiền lương áp dụng từ kỳ tính thuế năm 2026, dù luật/NĐ 253 có hiệu lực
         // hành chính từ 01/07/2026; vì vậy không được để nửa đầu năm vẫn chỉ miễn phần chênh OT.
-        // — miễn thuế TOÀN BỘ tiền tăng ca (Luật TNCN 109/2025 + NĐ 253/2026). Phải bật cờ ngay tại
-        // seed, không chờ ComplianceActivationJob: GetActiveAtAsync ưu tiên hàng CÓ cờ IsActive trước
-        // khi fallback theo ValidFrom, nên để row1 giữ cờ thì payroll sẽ ăn luật CŨ tới lần chạy job
-        // đầu tiên (nửa đêm UTC kế tiếp).
+        // — miễn thuế TOÀN BỘ tiền tăng ca (Luật TNCN 109/2025 + NĐ 253/2026).
+        //
+        // KHÔNG còn giữ cờ IsActive kể từ khi có row3 (15/06/2026): bảng này có unique index lọc
+        // `IsActive=1 AND IsArchived=0` cho tối đa MỘT hàng active toàn cục, hai hàng cùng bật cờ
+        // trong một SaveChanges là vi phạm index ⇒ seed ném ⇒ API không khởi động. Bản này vẫn phải
+        // giữ lại để tính lại kỳ 05/2026 và nửa đầu kỳ 06/2026 ra đúng hệ số của thời điểm đó qua
+        // tầng fallback theo ValidFrom của GetActiveAtAsync.
         var row2 = new LaborLawConstantsVersion
         {
             ValidFrom = new DateOnly(2026, 1, 1),
-            IsActive = true,
+            IsActive = false,
             IsArchived = false,
             ProbationSalaryMinPercent = 85.00m,
             OvertimeNightExtraPercent = 20.00m,
@@ -1282,9 +1348,68 @@ public sealed partial class DatabaseSeeder
             CreatedByUserId = adminId,
         };
 
-        await _context.LaborLawConstantsVersions.AddRangeAsync(new[] { row1, row2 }, ct);
+        // Row 3: ⭐ MID-06 — ĐỔI LUẬT GIỮA KỲ 06/2026, hiệu lực 15/06/2026 (NĐ 214/2026/NĐ-CP).
+        //
+        // <para><b>Nhánh engine mà dòng này kích hoạt.</b> `PayrollDataCollector.BuildLaborLawTimelineAsync`
+        // dựng bảng tra hằng số luật theo TỪNG NGÀY của kỳ; `OvertimePayCalculator` và
+        // `RegularHoursPremiumCalculator` gọi `timeline.For(ngày)` cho từng khối giờ. Trước bản này
+        // mọi kỳ demo chỉ có MỘT mức luật nên `LaborLawTimeline.ChangedWithinPeriod` luôn false và
+        // toàn bộ nhánh "luật theo ngày" chỉ sống trong unit test. Nay kỳ 06/2026 có hai mức ⇒ giờ OT
+        // ngày 01–14/06 ăn 150%, ngày 15–30/06 ăn 160% TRÊN CÙNG MỘT DÒNG LƯƠNG, và kỳ lương tự sinh
+        // ghi chú `MidPeriodComplianceNotes.ForLaborLaw`.</para>
+        //
+        // <para><b>Ba con số đổi — cố ý chỉ đúng ba.</b> Mọi trường còn lại giữ y hệt row2 để đối
+        // chiếu tay được: chênh lệch tiền của kỳ 06 CHỈ có thể đến từ mốc 15/06.
+        // <list type="bullet">
+        //   <item>`OvertimeNormalUpliftPercent` 50 → 60 ⇒ OT ngày thường 150% → 160%.</item>
+        //   <item>`NightWorkSurchargePercent` 30 → 35 ⇒ phụ cấp làm đêm (Đ.98.2) cho cả giờ thường
+        //     lẫn giờ OT.</item>
+        //   <item>`OvertimeMaxHoursPerMonth` 40 → 60 ⇒ trần làm thêm tháng, có tiền lệ thật là
+        //     NQ 17/2022/UBTVQH15. Không đổi tiền, nhưng cho `OvertimeCapChecker` một mốc đổi theo
+        //     ngày để kiểm.</item>
+        // </list></para>
+        //
+        // <para><b>Cố ý KHÔNG đổi</b> `StandardWorkingDaysPerMonth` / `StandardWorkingHoursPerDay`:
+        // hai đại lượng đó bản chất là "cả kỳ" (đơn giá giờ = lương / (công chuẩn × giờ chuẩn)) và
+        // engine lấy chúng tại `timeline.PeriodEnd` — đổi giữa kỳ chỉ tạo ra một đơn giá không ứng
+        // với nửa nào của tháng. Xem ranh giới cố ý trong `LaborLawTimeline`.</para>
+        //
+        // <para>Bật cờ IsActive ngay tại seed thay vì chờ ComplianceActivationJob: GetActiveAtAsync
+        // ưu tiên hàng CÓ cờ trước khi fallback theo ValidFrom, nên để row2 giữ cờ thì payroll ăn
+        // luật CŨ tới lần job chạy đầu tiên (nửa đêm UTC kế tiếp). Nếu seed chạy TRƯỚC 15/06/2026 thì
+        // ReconcileActiveComplianceVersionAsync ở cuối SeedDefaultComplianceAsync sẽ trả cờ về row2.</para>
+        var row3 = new LaborLawConstantsVersion
+        {
+            ValidFrom = new DateOnly(2026, 6, 15),
+            IsActive = true,
+            IsArchived = false,
+            ProbationSalaryMinPercent = 85.00m,
+            OvertimeNightExtraPercent = 20.00m,
+            NightWorkSurchargePercent = 35.00m,       // ⭐ 30 → 35
+            OvertimeNormalUpliftPercent = 60.00m,     // ⭐ 50 → 60 (OT ngày thường 160%)
+            NightStartTime = new TimeOnly(22, 0),
+            NightEndTime = new TimeOnly(6, 0),
+            StandardWorkingHoursPerDay = 8.00m,
+            MaxRegularHoursPerWeek = 48.00m,
+            StandardWorkingDaysPerMonth = 26.00m,
+            AnnualLeaveMinDays = 12,
+            WorkRateNormalFloor = 100.00m,
+            WorkRateWeeklyRestFloor = 200.00m,
+            WorkRateHolidayFloor = 300.00m,
+            OvertimeMaxHoursPerDay = 4.00m,
+            OvertimeMaxHoursPerMonth = 60.00m,        // ⭐ 40 → 60
+            OvertimeMaxHoursPerYear = 200,
+            OvertimeIncomeFullyTaxExempt = true,
+            LegalReference = "NĐ 214/2026/NĐ-CP — làm thêm ngày thường 160%, phụ cấp làm đêm 35%, trần 60 giờ/tháng từ 15/06/2026",
+            CreatedAt = now,
+            CreatedByUserId = adminId,
+        };
+
+        await _context.LaborLawConstantsVersions.AddRangeAsync(new[] { row1, row2, row3 }, ct);
         await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seeded 2 LaborLawConstantsVersion rows (row1 historical đến 2025, row2 áp dụng kỳ tính thuế từ 01/01/2026).");
+        _logger.LogInformation(
+            "Seeded 3 LaborLawConstantsVersion rows (row1 đến 2025, row2 từ 01/01/2026, "
+            + "row3 ĐỔI GIỮA KỲ từ 15/06/2026).");
 
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.LaborLawConstants, row1.Id,
@@ -1293,6 +1418,10 @@ public sealed partial class DatabaseSeeder
         await LinkLegalDocumentsAsync(
             ComplianceEntityTypes.LaborLawConstants, row2.Id,
             new[] { "LUAT-TNCN-109-2025", "ND-253-2026" },
+            legalDocumentIdsByCode, adminId, now, ct);
+        await LinkLegalDocumentsAsync(
+            ComplianceEntityTypes.LaborLawConstants, row3.Id,
+            new[] { "BLLD-2019", "ND-214-2026" },
             legalDocumentIdsByCode, adminId, now, ct);
     }
 
